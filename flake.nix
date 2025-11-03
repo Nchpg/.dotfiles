@@ -3,32 +3,71 @@
   description = "Nchpg configuration";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+
     home-manager.url = "github:nix-community/home-manager/release-25.05";
-    home-manager.inputs.nixpkgs.follows = "nixpkgs";
+    home-manager.inputs.nixpkgs.follows = "nixpkgs-stable";
   };
 
-  outputs = { self, nixpkgs, home-manager, ... }:
-  let
-    systemSettings = {
-      hostname = "nixos";
-      profile = "personal";
-      host = "lg-gram";
-      system = "x86_64-linux"; 
-      timeZone = "Europe/Paris";
-      keyboardLayout = "fr";
-    };
+  outputs = inputs@{ self, ... }:
+    let
+      system = "x86_64-linux";
+      
+      pkgs-stable = import inputs.nixpkgs-stable {
+        inherit system;
+        config = {
+          allowUnfree = true;
+          allowUnfreePredicate = (_: true);
+        };
+      };
 
-    userSettings = rec {
-      username = "nchpg";
-      name = "nathan";
-      email = "nathanchampagne49@gmail.com";
-      homeDir = "/home/${username}";
-    };
+      pkgs-unstable = import inputs.nixpkgs-unstable {
+        inherit system;
+        config = {
+          allowUnfree = true;
+          allowUnfreePredicate = (_: true);
+        };
+      };
 
-  in
-  {
-    nixosConfigurations.${systemSettings.hostname} = import ./profile/${systemSettings.profile} { inherit self nixpkgs home-manager systemSettings userSettings; };
-  };
+      lib = inputs.nixpkgs-stable.lib;
+      profiles = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./profile));
+      hosts    = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./host));
+
+      targets = lib.concatMap (profile: map (host: { profile = profile; host = host; }) hosts) profiles;
+    in
+    {
+      nixosConfigurations = builtins.listToAttrs
+        (map (target: {
+          name = "${target.profile}.${target.host}";
+          value = lib.nixosSystem {
+            inherit system;
+            modules = [
+               # build host
+              ./host
+               # build profile
+              ./profile
+               # system modules
+              ./modules/system
+              
+              inputs.home-manager.nixosModules.home-manager
+              ({ config, ... }: {
+                home-manager.extraSpecialArgs = {
+                  inherit pkgs-unstable;
+                  inherit pkgs-stable;
+                  inherit inputs;
+                  systemSettings = config.systemSettings; 
+                };
+              })
+            ];
+            specialArgs = {
+              inherit pkgs-stable;
+              inherit inputs;
+              inherit target;
+            };
+          };
+        }) targets);
+
+    };
 }
 

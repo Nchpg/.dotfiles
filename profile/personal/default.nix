@@ -1,40 +1,30 @@
-{ self, nixpkgs, home-manager,systemSettings, userSettings, ... }:
+{ config, lib, ... }:
 
-let
-  profileSettings = {
-    terminal = "kitty";
-    shell = "zsh";
-  };
-  
-  finalSystemSettings = systemSettings // profileSettings;
-in
-  nixpkgs.lib.nixosSystem {
-    inherit (systemSettings) system;
+{
+  imports = (lib.optional (builtins.pathExists ./private.nix) ./private.nix);
 
-    specialArgs = {
-      inherit self userSettings;
-      systemSettings = finalSystemSettings; 
+  config = {
+    systemSettings = {
+      # uncomment to disable user password check
+      # verify_all_users_have_passwd = false;
+
+      users = [ 
+        {
+          name = "nchpg";
+          isAdmin = true;
+          allowDocker = true;
+        }
+        {
+          name = "guest";
+          isAdmin = false;
+          allowDocker = false;
+        }
+      ];
+
+      window-manager = {
+        sway.enable = true;
+        gnome.enable = true;
+      };
     };
-
-    modules = [
-      ./configuration.nix
-
-      home-manager.nixosModules.home-manager
-      ({ pkgs, ... }:
-      {
-        nixpkgs.config.allowUnfree = true; 
-        home-manager = {
-          extraSpecialArgs = {
-            inherit self userSettings;
-            systemSettings = finalSystemSettings; 
-          };
-          useGlobalPkgs = true;
-          useUserPackages = true;
-          backupFileExtension = "bak";
-          users.${userSettings.username}.imports = [
-            ./home.nix
-          ];
-        };
-      })
-    ];
-  }
+  };
+}

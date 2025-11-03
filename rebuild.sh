@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+set -e
+
+./private-switch.sh rebuild
+
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -38,7 +42,7 @@ fi
 
 echo "🚀 Starting NixOS system rebuild..."
 
-sudo nixos-rebuild switch --flake . --impure
+sudo nixos-rebuild switch --flake .#personal.gram --impure --show-trace
 
 if [ $? -eq 0 ]; then
     echo "✅ System rebuild successful."
