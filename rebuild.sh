@@ -2,6 +2,33 @@
 
 set -e
 
+HOST=""
+PROFILE=""
+
+# Parsing simple des arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --host)
+            HOST="$2"
+            shift 2
+            ;;
+        --profile)
+            PROFILE="$2"
+            shift 2
+            ;;
+        *)
+            echo "Argument inconnu : $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Vérification obligatoire
+if [[ -z "$HOST" || -z "$PROFILE" ]]; then
+    echo "Usage: $0 --host <host> --profile <profile>"
+    exit 1
+fi
+
 ./private-switch.sh rebuild
 
 YELLOW='\033[1;33m'
@@ -42,7 +69,7 @@ fi
 
 echo "🚀 Starting NixOS system rebuild..."
 
-sudo nixos-rebuild switch --flake .#personal.gram --impure --show-trace
+sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" --impure --show-trace
 
 if [ $? -eq 0 ]; then
     echo "✅ System rebuild successful."

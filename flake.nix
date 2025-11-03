@@ -39,7 +39,7 @@
     {
       nixosConfigurations = builtins.listToAttrs
         (map (target: {
-          name = "${target.profile}.${target.host}";
+          name = "${target.profile}-${target.host}";
           value = lib.nixosSystem {
             inherit system;
             modules = [

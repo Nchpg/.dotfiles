@@ -57,6 +57,7 @@ in
             };
           };
         });
+        default = [];
       };
 
       verify_all_users_have_passwd = lib.mkOption {
