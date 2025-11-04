@@ -11,7 +11,11 @@
 
       vim.enable = true;
 
-      git.enable = true;
+      git = {
+        enable = true;
+        userName = "nathan.champagne";
+        userEmail = "nathan.champagne@epita.fr";
+      };
 
       shell = {
         zsh.enable = true;

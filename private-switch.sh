@@ -96,7 +96,6 @@ git_unexclude_file() {
     [ -f "$exclude_file" ] || return
 
     sed -i "/^$(printf '%s\n' "$file" | sed 's/[^^]/[&]/g')$/d" "$exclude_file"
-
 }
 
 # Choisir la commande Git selon l'action

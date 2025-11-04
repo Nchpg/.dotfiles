@@ -31,8 +31,8 @@
       };
 
       lib = inputs.nixpkgs-stable.lib;
-      profiles = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./profile));
-      hosts    = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./host));
+      profiles = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./profiles));
+      hosts    = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./hosts));
 
       targets = lib.concatMap (profile: map (host: { profile = profile; host = host; }) hosts) profiles;
     in
@@ -44,9 +44,9 @@
             inherit system;
             modules = [
                # build host
-              ./host
+              ./hosts
                # build profile
-              ./profile
+              ./profiles
                # system modules
               ./modules/system
               
