@@ -11,7 +11,7 @@
 
       stylix = {
         enable = true;
-        theme = "custom";
+        theme = "gruvbox-dark-medium";
       };
 
       vim = {
@@ -44,7 +44,7 @@
         bash = {
           enable = true;
         };
-        default = "zsh";
+        default = "fish";
       };
 
 

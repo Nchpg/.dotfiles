@@ -42,7 +42,7 @@ in {
 
         set -x LS_COLORS "di=0;34:ln=0;36:ex=0;32:*.tar=0;31:*.zip=0;31"
 
-        alias ls='ls --color=auto'
+        alias ls='eza --icons=auto'
         alias grep='grep --color=auto'
         alias fgrep='fgrep --color=auto'
         alias egrep='egrep --color=auto'
@@ -73,7 +73,7 @@ in {
             set_color cyan
             echo -n (whoami)@(hostname -s)" "
             set_color blue
-            echo -n (prompt_pwd)
+            echo -n (pwd)
             set_color normal
 
             set gitb (git_branch)
@@ -112,9 +112,12 @@ in {
     };
 
     home.packages = with cfg.pkgs; [
-      fzf
       fishPlugins.fzf-fish
       ripgrep
     ];
+
+    programs.fzf = {
+      enable = true;
+    };
   };
 }

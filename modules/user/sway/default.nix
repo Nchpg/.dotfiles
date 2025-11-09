@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, systemSettings, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, systemSettings, stylix, ... }:
 
 let
   cfg = systemSettings.window-manager.sway;
@@ -42,5 +42,7 @@ in {
       # Lock screen
       swaylock-effects
     ];
+
+    stylix.targets.sway.enable = true;
   };
 }

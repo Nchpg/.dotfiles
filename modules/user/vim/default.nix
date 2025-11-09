@@ -37,7 +37,7 @@ in {
         execute 'set runtimepath+=' . expand('~/.vim/airline')
         let g:airline_theme='base16_${lib.strings.replaceStrings ["-"] ["_"] config.userSettings.stylix.theme}'
         
-        ${lib.optionalString (config.userSettings.stylix.theme == "custom") ''
+        ${lib.optionalString (config.userSettings.stylix.theme == "custom" || builtins.match ".*gruvbox(-.*)?*" config.userSettings.stylix.theme != null) ''
           set background=dark
           colorscheme gruvbox
           let g:airline_theme='powerline'
