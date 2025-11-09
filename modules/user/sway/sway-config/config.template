@@ -1,5 +1,6 @@
 input * {
     xkb_layout fr
+     xkb_variant azerty
 }
 
 input type:touchpad {

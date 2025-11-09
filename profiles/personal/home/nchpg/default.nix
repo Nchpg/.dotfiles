@@ -38,6 +38,9 @@
         zsh = {
           enable = true;
         };
+        fish = {
+          enable = true;
+        };
         bash = {
           enable = true;
         };
@@ -50,7 +53,7 @@
           enable = true;
         };
         foot = {
-          enable = false;
+          enable = true;
         };
         alacritty = {
           enable = true;

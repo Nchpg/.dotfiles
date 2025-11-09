@@ -44,9 +44,6 @@
     LC_TIME = "fr_FR.UTF-8";
   };
 
-  # Enable the X11 windowing system.
-  services.xserver.enable = true;
-
   # Enable the GNOME GDM.
   services.xserver.displayManager.gdm.enable = true;
 
@@ -64,25 +61,29 @@
     jack.enable = true;
   };
 
-  # Enable touchpad support (enabled default in most desktopManager).
-  services.libinput.enable = true;
-
   # Enable Docker
   virtualisation.docker = {
     enable = true;
   };
 
-  # Configure keymap in X11
-  services.xserver.xkb = {
-    layout = "fr";
-    variant = "azerty";
-    options = "numpad:mac";
-  };
+  # Enable touchpad support (enabled default in most desktopManager).
+  services.libinput.enable = true;
 
-  hardware.bluetooth.enable = true;
+  # Configure keymap in X11
+  services.xserver = {
+    enable = true;
+
+    xkb = {
+      layout = "fr";
+      variant = "azerty";
+    };
+  };
 
   # Configure console keymap
   console.keyMap = "fr";
+
+
+  hardware.bluetooth.enable = true;
 
   # Enable thunar
   programs.thunar.enable = true;

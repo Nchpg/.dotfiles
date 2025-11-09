@@ -39,9 +39,9 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
-alias ll='ls -lh --color=auto'
 alias la='ls -A --color=auto'
 alias l='ls -CF --color=auto'
+alias ll='eza -lha --icons=auto  --sort=name --group-directories-first'
 
 alias su='sudo su -s "$0"'
 
@@ -69,3 +69,6 @@ RPROMPT='%F{yellow}%*%f'
 # Main prompt (two lines)
 PROMPT='%F{cyan}%n@%m%f %F{blue}%~%f $(git_branch)
 %(?..%F{red}✘%?%f )%F{green}❯%f '
+
+# bindkey '^?' delete-char
+bindkey '^[[3~' delete-char

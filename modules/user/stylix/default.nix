@@ -18,6 +18,11 @@ in
         type = lib.types.attrsOf lib.types.str;
         description = "Theme config";
       };
+      pkgs = lib.mkOption {
+        type = lib.types.attrs;
+        default = config.userSettings.defaultPkgs;
+        description = "Pkgs to use";
+      };
     };
   };
 
@@ -32,16 +37,16 @@ in
         gnome.enable = true;
       };
       polarity = theme.polarity;
-      image = pkgs-stable.fetchurl {
+      image = cfg.pkgs.fetchurl {
         url = theme.backgroundUrl;
         sha256 = theme.backgroundSha256 or theme.backgroundUrlSha256;
       };
       base16Scheme = theme;
       fonts = {
-        monospace.name = "monospace";
-        sansSerif.name = "Inter";
-        serif.name = "Noto Serif";
-        emoji.name = "Noto Color Emoji";
+        monospace.name = "FiraCode Nerd Font";
+        sansSerif.name = "Fira Sans";
+        serif.name = "Fira Sans";
+        emoji.name = "Twitter Color Emoji";
         sizes = {
           terminal = 16;
           applications = 10;

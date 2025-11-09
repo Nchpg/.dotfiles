@@ -25,7 +25,7 @@ in {
     home.file.".config/sway/wallpaper.png".source = ./sway-config/wallpaper.png;
 
     
-    home.packages = with pkgs-stable; [
+    home.packages = with cfg.pkgs; [
       dmenu # mod + d menu
 
       # Sway bar dependencies
