@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, stylix, ... }:
 
 let
   cfg = config.userSettings.terminal.alacritty;
@@ -25,10 +25,9 @@ in {
 
       settings = {
         terminal.shell.program = "${cfg.pkgs."${cfg.shell}"}/bin/${cfg.shell}";
-        font = {
-          size = 16.0;
-        };
       };
     };
+
+    stylix.targets.alacritty.enable = true;
   };
 }

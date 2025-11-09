@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkg-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, stylix, ... }:
 
 let
   cfg = config.userSettings.vim;
@@ -35,7 +35,15 @@ in {
       extraConfig = ''
         ${builtins.readFile ./vim-config/.vimrc}
         execute 'set runtimepath+=' . expand('~/.vim/airline')
+        let g:airline_theme='base16_${lib.strings.replaceStrings ["-"] ["_"] config.userSettings.stylix.theme}'
+        
+        ${lib.optionalString (config.userSettings.stylix.theme == "custom") ''
+          set background=dark
+          colorscheme gruvbox
+          let g:airline_theme='powerline'
+        ''}
       '';
+
     };
 
     home.packages = with cfg.pkgs; [
@@ -63,5 +71,7 @@ in {
       ".vim/coc-settings.json".source = ./vim-config/coc-settings.json;
       ".clang-format".source = ./vim-config/.clang-format;
     };
+
+    stylix.targets.vim.enable = true;
   };
 }

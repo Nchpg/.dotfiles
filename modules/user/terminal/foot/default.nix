@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, stylix, ... }:
 
 let
   cfg = config.userSettings.terminal.foot;
@@ -26,9 +26,10 @@ in {
       settings = {
         main = {
           shell = "${cfg.pkgs."${cfg.shell}"}/bin/${cfg.shell}";
-          font = "monospace:size=16";
         };
       };
     };
+
+    stylix.targets.foot.enable = true;
   };
 }

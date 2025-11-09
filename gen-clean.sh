@@ -38,7 +38,7 @@ fi
 
 # Garbage collection pour libérer l'espace
 echo "Exécution de la garbage collection..."
-sudo nix-collect-garbage -d
+# sudo nix-collect-garbage -d
 
 # Optionnel : rebuild du système pour mettre à jour GRUB et Home Manager
 echo "Rebuilding le système et Home Manager via la flake..."

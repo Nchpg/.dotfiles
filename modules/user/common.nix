@@ -9,6 +9,7 @@
       discord
       btop
       bat
+      pavucontrol
     ])
     ++
     (with pkgs-unstable; [

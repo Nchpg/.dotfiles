@@ -9,6 +9,11 @@
     userSettings = {
       defaultPkgs = pkgs-stable;
 
+      stylix = {
+        enable = true;
+        theme = "custom";
+      };
+
       vim = {
         enable = true;
       };
@@ -49,7 +54,6 @@
         };
         alacritty = {
           enable = true;
-          shell = "bash";
         };
         default = "kitty";
       };

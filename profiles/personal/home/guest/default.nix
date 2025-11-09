@@ -8,6 +8,11 @@
 
     userSettings = {
       defaultPkgs = pkgs-stable;
+      
+      stylix = {
+        enable = true;
+        theme = "gruvbox-light-medium";
+      };
 
       vim = {
         enable = true;

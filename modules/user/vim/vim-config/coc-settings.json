@@ -1,5 +1,5 @@
 {
-    "suggest.noselect": true,
+    "suggest.noselect": false,
     "languageserver": {
         "c": {
             "command": "clangd",

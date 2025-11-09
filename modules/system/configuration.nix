@@ -1,6 +1,7 @@
 { lib, pkgs-stable, target, ... }:
 
 {
+  home-manager.backupFileExtension = "hm-backup";
   nixpkgs.config.allowUnfree = true;
 
   # Bootloader.

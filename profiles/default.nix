@@ -1,4 +1,4 @@
-{ config, target, ... }:
+{ config, target, inputs, ... }:
 
 {
   imports = [
@@ -11,6 +11,8 @@
         name = user.name;
         value = {
           imports = [ 
+            # stylix
+            inputs.stylix.homeModules.stylix
             # build user
             (./. + "/${target.profile}/home/${user.name}") 
             # user modules
