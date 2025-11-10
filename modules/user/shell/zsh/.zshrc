@@ -44,6 +44,8 @@ alias l='ls -CF --color=auto'
 alias ll='eza -lha --icons=auto  --sort=name --group-directories-first'
 
 alias su='sudo su -s "$0"'
+alias cat="bat --paging=never"
+alias cls="clear"
 
 export EDITOR=vim
 export VISUAL=vim
@@ -66,6 +68,12 @@ git_branch() {
   fi
 }
 
+if [ "$SHLVL" -eq 1 ]; then
+    FIRST_PROMPT=1
+else
+    FIRST_PROMPT=0
+fi
+
 # Fonction pour construire le prompt
 build_prompt() {
   local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f $(git_branch)"
@@ -85,9 +93,15 @@ build_prompt() {
 
   FIRST_PROMPT=0
 
+  if [ "$SHLVL" -gt 1 ]; then
+    SHELL_DEPTH="$SHLVL"
+  else
+    SHELL_DEPTH=""
+  fi
+
   # Prompt principal (deux lignes)
   PROMPT="${new_line}${left_prompt}
-${last_status}%F{green}❯%f "
+${last_status}%F{green}$SHELL_DEPTH❯%f "
 
   # Heure à droite
   RPROMPT="%F{yellow}%*%f"
@@ -97,9 +111,25 @@ ${last_status}%F{green}❯%f "
 precmd_functions+=(build_prompt)
 
 # Alias cls pour clear + reset FIRST_PROMPT
-cls() {
-  clear
-  FIRST_PROMPT=1
+clear() {
+    command clear
+    FIRST_PROMPT=1
+}
+
+nix-shell() {
+    local has_run=0
+    for arg in "$@"; do
+        if [ "$arg" = "--run" ]; then
+            has_run=1
+            break
+        fi
+    done
+
+    if [ $has_run -eq 1 ]; then
+        command nix-shell "$@"
+    else
+        command nix-shell "$@" --run "exec zsh"
+    fi
 }
 
 # bindkey '^?' delete-char

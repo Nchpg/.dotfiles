@@ -50,10 +50,12 @@ in {
         alias l='ls -CF --color=auto'
         alias ll='eza -lha --icons=auto --sort=name --group-directories-first'
         alias su='sudo su -s (which fish)'
-        alias cls='set -g __fish_prompt_shown_before 0 && clear'
+        alias cls='set -g __fish_first_prompt 1 && clear'
+        alias cat="bat --paging=never"
 
         export EDITOR=vim
         export VISUAL=vim
+        export 0=fish
 
         function git_branch
             # Vérifie si on est dans un dépôt Git
@@ -71,13 +73,20 @@ in {
             end
         end
 
-       
+         
+        if test "$SHLVL" -eq 1
+          set -g __fish_first_prompt 1
+        else
+          set -g __fish_first_prompt 0
+        end
 
         function fish_prompt
-            if test "$__fish_prompt_shown_before" = "1"
+            set -l last_status $status
+
+            if test "$__fish_first_prompt" = "0"
               echo ""
             else
-              set -g __fish_prompt_shown_before 1
+              set -g __fish_first_prompt 0
             end
             set_color cyan
             echo -n (whoami)@(hostname -s)" "
@@ -91,12 +100,17 @@ in {
             end
             echo ""
 
-            if test $status -ne 0
-                set_color red
-                echo -n "✘"(echo $status)" "
-                set_color normal
+            if test $last_status -ne 0
+              set_color red
+              echo -n "✘$last_status "
+              set_color normal
             end
+
             set_color green
+
+            if test "$SHLVL" -gt 1
+              echo -n "$SHLVL"
+            end
             echo -n "❯ "
             set_color normal
         end
@@ -109,6 +123,22 @@ in {
 
         set -g fish_greeting ""
         set -g fish_term24bit 1
+
+        function nix-shell
+          set has_run 0
+          for arg in $argv
+              if test "$arg" = "--run"
+                  set has_run 1
+                  break
+              end
+          end
+
+          if test $has_run -eq 1
+              command nix-shell $argv
+          else
+              command nix-shell $argv --run "exec fish"
+          end
+        end
 
         fzf_configure_bindings \
         --directory=\e\cf \

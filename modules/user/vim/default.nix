@@ -35,11 +35,15 @@ in {
       extraConfig = ''
         ${builtins.readFile ./vim-config/.vimrc}
         execute 'set runtimepath+=' . expand('~/.vim/airline')
+        colorscheme base16-stylix
         let g:airline_theme='base16_${lib.strings.replaceStrings ["-"] ["_"] config.userSettings.stylix.theme}'
         
-        ${lib.optionalString (config.userSettings.stylix.theme == "custom" || builtins.match ".*gruvbox(-.*)?*" config.userSettings.stylix.theme != null) ''
+        ${lib.optionalString (config.userSettings.stylix.theme == "custom") ''
           set background=dark
           colorscheme gruvbox
+          let g:airline_theme='powerline'
+        ''}
+        ${lib.optionalString (config.userSettings.stylix.theme == "gruvbox-dark-custom") ''
           let g:airline_theme='powerline'
         ''}
       '';

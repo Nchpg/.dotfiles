@@ -66,9 +66,13 @@ set colorcolumn=80
 highlight Normal ctermfg=black ctermbg=lightgrey
 
 " color schema
+if has("termguicolors")
+  set termguicolors
+endif
 syntax on
 " set background=dark
 " colorscheme gruvbox
+:hi Comment None
 
 " duplicate line
 nnoremap <C-d> yyp:-1<CR>

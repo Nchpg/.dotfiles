@@ -30,6 +30,7 @@ alias la='ls -A'
 alias l='ls -CF'
 alias cls="clear"
 alias su='sudo su -s "$0"'
+alias cat="bat --paging=never"
 
 export EDITOR=vim
 export VISUAL=vim
@@ -47,7 +48,11 @@ export VISUAL=vim
 # PROMPT_COMMAND='LAST_STATUS=$?; PS1="\n\[\e[0;36m\]\u@\h\[\e[0m\] \[\e[0;34m\]\w\[\e[0m\] $(parse_git_branch)
 # $(if [ $LAST_STATUS -ne 0 ]; then echo -e "\[\e[91m\]✘$LAST_STATUS \[\e[0m\]"; fi)\[\e[0;32m\]❯ \[\e[0m\]"'
 
-FIRST_PROMPT=1
+if [ "$SHLVL" -eq 1 ]; then
+    FIRST_PROMPT=1
+else
+    FIRST_PROMPT=0
+fi
 # Fonction pour construire le prompt avec l'heure alignée à droite
 set_bash_prompt() {
     local last_status=$?
@@ -76,13 +81,30 @@ set_bash_prompt() {
         NEW_LINE="\n"
     fi
 
+    if [ "$SHLVL" -gt 1 ]; then
+        SHELL_DEPTH="$SHLVL"
+    else
+        SHELL_DEPTH=""
+    fi
+
     # Construire la ligne finale
-    PS1="$NEW_LINE$left_prompt$(printf '%*s' "$padding")$time\n$status\[\e[0;32m\]❯ \[\e[0m\]"
+    PS1="$NEW_LINE$left_prompt$(printf '%*s' "$padding")$time\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
 }
 
 clear() {
     command clear
     FIRST_PROMPT=1
+}
+
+nix-shell() {
+    for arg in "$@"; do
+        if [ "$arg" = "--run" ]; then
+            command nix-shell "$@"
+            return
+        fi
+    done
+
+    command nix-shell "$@" --run "exec bash"
 }
 
 PROMPT_COMMAND=set_bash_prompt
