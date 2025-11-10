@@ -60,5 +60,7 @@
             }
         }
     },
-    "coc.preferences.formatOnSave": true
+    "coc.preferences.formatOnSave": true,
+    "inlayHint.enableParameterNames": false, 
+    "inlayHint.enable": false
 }

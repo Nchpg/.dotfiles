@@ -45,6 +45,9 @@ alias ll='eza -lha --icons=auto  --sort=name --group-directories-first'
 
 alias su='sudo su -s "$0"'
 
+export EDITOR=vim
+export VISUAL=vim
+
 autoload -Uz colors && colors
 autoload -Uz compinit && compinit
 zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
@@ -63,12 +66,41 @@ git_branch() {
   fi
 }
 
-# Right prompt: time
-RPROMPT='%F{yellow}%*%f'
+# Fonction pour construire le prompt
+build_prompt() {
+  local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f $(git_branch)"
+  local last_status=""
 
-# Main prompt (two lines)
-PROMPT='%F{cyan}%n@%m%f %F{blue}%~%f $(git_branch)
-%(?..%F{red}✘%?%f )%F{green}❯%f '
+  # Code de sortie de la dernière commande
+  if [[ $? -ne 0 ]]; then
+    last_status="%F{red}✘$?%f "
+  fi
+
+  # Retour à la ligne seulement si ce n'est pas le premier prompt
+  local new_line=""
+  if [[ $FIRST_PROMPT -eq 0 ]]; then
+    new_line="
+"
+  fi
+
+  FIRST_PROMPT=0
+
+  # Prompt principal (deux lignes)
+  PROMPT="${new_line}${left_prompt}
+${last_status}%F{green}❯%f "
+
+  # Heure à droite
+  RPROMPT="%F{yellow}%*%f"
+}
+
+# Lancer la construction du prompt avant chaque commande
+precmd_functions+=(build_prompt)
+
+# Alias cls pour clear + reset FIRST_PROMPT
+cls() {
+  clear
+  FIRST_PROMPT=1
+}
 
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char

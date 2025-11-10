@@ -50,6 +50,10 @@ in {
         alias l='ls -CF --color=auto'
         alias ll='eza -lha --icons=auto --sort=name --group-directories-first'
         alias su='sudo su -s (which fish)'
+        alias cls='set -g __fish_prompt_shown_before 0 && clear'
+
+        export EDITOR=vim
+        export VISUAL=vim
 
         function git_branch
             # Vérifie si on est dans un dépôt Git
@@ -70,10 +74,15 @@ in {
        
 
         function fish_prompt
+            if test "$__fish_prompt_shown_before" = "1"
+              echo ""
+            else
+              set -g __fish_prompt_shown_before 1
+            end
             set_color cyan
             echo -n (whoami)@(hostname -s)" "
             set_color blue
-            echo -n (pwd)
+            echo -n (pwd | string replace -r "^$HOME" "~")
             set_color normal
 
             set gitb (git_branch)
@@ -114,10 +123,7 @@ in {
     home.packages = with cfg.pkgs; [
       fishPlugins.fzf-fish
       ripgrep
+      fzf
     ];
-
-    programs.fzf = {
-      enable = true;
-    };
   };
 }

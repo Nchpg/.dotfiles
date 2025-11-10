@@ -13,6 +13,8 @@
       ripgrep
       lazydocker
       lazysql
+      delta
+      broot
     ])
     ++
     (with pkgs-unstable; [
@@ -37,7 +39,6 @@
     programs.neovim = {
       enable = true;
     };
-
 
     stylix.targets.yazi.enable = true;
     stylix.targets.bat.enable = true;

@@ -43,10 +43,22 @@ in
       };
       base16Scheme = theme;
       fonts = {
-        monospace.name = "FiraCode Nerd Font";
-        sansSerif.name = "Fira Sans";
-        serif.name = "Fira Sans";
-        emoji.name = "Twitter Color Emoji";
+        monospace = {
+          name = "FiraCode Nerd Font";
+          package = cfg.pkgs.nerd-fonts.fira-code;
+        };
+        serif = {
+          name = "Fira Sans";
+          package = cfg.pkgs.fira-sans;
+        };
+        sansSerif = {
+          name = "Fira Sans";
+          package = cfg.pkgs.fira-sans;
+        };
+        emoji = {
+          name = "Twitter Color Emoji";
+          package = cfg.pkgs.twitter-color-emoji;
+        };
         sizes = {
           terminal = 16;
           applications = 10;

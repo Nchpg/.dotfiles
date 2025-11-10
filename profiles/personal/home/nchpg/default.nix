@@ -11,7 +11,7 @@
 
       stylix = {
         enable = true;
-        theme = "gruvbox-dark-medium";
+        theme = "gruvbox-dark-custom";
       };
 
       vim = {
