@@ -47,6 +47,17 @@ in {
         push = {
           autoSetupRemote = true;
         };
+        core.pager = "delta";
+        interactive.diffFilter = "delta --color-only";
+
+        delta = {
+          navigate = true;
+          side-by-side = true;
+          line-numbers = true;
+          syntax-theme = "base16-stylix";
+          diff-stat = true;
+          hunk-header-style = "syntax bold";
+        };
       };
       ignores = [
         "*.swp"

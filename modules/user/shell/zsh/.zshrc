@@ -34,18 +34,24 @@ fi
 
 export LS_COLORS="di=0;34:ln=0;36:ex=0;32:*.tar=0;31:*.zip=0;31"
 
-alias ls='ls --color=auto'
+alias ls='eza --icons --sort=name --group-directories-first --color=always'
+alias ll='eza -lh --icons --sort=name --group-directories-first --color=always'
+alias la='eza -lha --icons --sort=name --group-directories-first --color=always'
+alias tree='eza --tree --icons --sort=name --color=always'
+
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
-alias la='ls -A --color=auto'
-alias l='ls -CF --color=auto'
-alias ll='eza -lha --icons=auto  --sort=name --group-directories-first'
-
 alias su='sudo su -s "$0"'
-alias cat="bat --paging=never"
+alias cat="bat --paging=never --style=plain"
 alias cls="clear"
+
+alias diff="delta \
+          --side-by-side \
+          --line-numbers \
+          --syntax-theme 'base16-stylix' \
+          --hunk-header-style 'bold syntax'"
 
 export EDITOR=vim
 export VISUAL=vim

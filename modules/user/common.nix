@@ -2,7 +2,6 @@
 {
   home.packages =
     (with pkgs-stable; [
-      tree
       curl
       wget
       ncdu
