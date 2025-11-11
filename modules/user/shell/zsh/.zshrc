@@ -1,4 +1,4 @@
-# NIXOS BASE ZSH
+# BASE CONFIG
 
 typeset -U path cdpath fpath manpath
 for profile in ${(z)NIX_PROFILES}; do
@@ -12,16 +12,15 @@ HISTFILE="$HOME/.zsh_history"
 mkdir -p "$(dirname "$HISTFILE")"
 
 setopt HIST_FCNTL_LOCK
-unsetopt APPEND_HISTORY
 setopt HIST_IGNORE_DUPS
+setopt HIST_IGNORE_SPACE
+setopt SHARE_HISTORY
+setopt EXTENDED_HISTORY
+unsetopt APPEND_HISTORY
 unsetopt HIST_IGNORE_ALL_DUPS
 unsetopt HIST_SAVE_NO_DUPS
 unsetopt HIST_FIND_NO_DUPS
-setopt HIST_IGNORE_SPACE
 unsetopt HIST_EXPIRE_DUPS_FIRST
-setopt SHARE_HISTORY
-setopt EXTENDED_HISTORY
-
 
 if test -n "$KITTY_INSTALLATION_DIR"; then
   export KITTY_SHELL_INTEGRATION="no-rc"
@@ -30,38 +29,12 @@ if test -n "$KITTY_INSTALLATION_DIR"; then
   unfunction kitty-integration
 fi
 
-# CUSTOM CONFIG
-
-export LS_COLORS="di=0;34:ln=0;36:ex=0;32:*.tar=0;31:*.zip=0;31"
-
-alias ls='eza --icons --sort=name --group-directories-first --color=always'
-alias ll='eza -lh --icons --sort=name --group-directories-first --color=always'
-alias la='eza -lha --icons --sort=name --group-directories-first --color=always'
-alias tree='eza --tree --icons --sort=name --color=always'
-
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
-
-alias su='sudo su -s "$0"'
-alias cat="bat --paging=never --style=plain"
-alias cls="clear"
-
-alias diff="delta \
-          --side-by-side \
-          --line-numbers \
-          --syntax-theme 'base16-stylix' \
-          --hunk-header-style 'bold syntax'"
-
-export EDITOR=vim
-export VISUAL=vim
-
 autoload -Uz colors && colors
 autoload -Uz compinit && compinit
-zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
-setopt PROMPT_SUBST   # allow command substitution in PROMPT
-
+setopt PROMPT_SUBST
 setopt NO_BEEP
+
+# CUSTOM CONFIG
 
 # PS1
 
@@ -108,9 +81,6 @@ build_prompt() {
   # Prompt principal (deux lignes)
   PROMPT="${new_line}${left_prompt}
 ${last_status}%F{green}$SHELL_DEPTH❯%f "
-
-  # Heure à droite
-  RPROMPT="%F{yellow}%*%f"
 }
 
 # Lancer la construction du prompt avant chaque commande

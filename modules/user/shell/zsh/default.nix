@@ -22,7 +22,7 @@ in {
         ignoreDups = true;
         extended = true;
       };
-      initContent = builtins.readFile ./.zshrc;
+      initContent = (builtins.readFile ../common) + (builtins.readFile ./.zshrc);
     };
   };
 }

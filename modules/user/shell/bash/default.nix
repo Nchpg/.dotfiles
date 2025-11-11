@@ -17,7 +17,7 @@ in {
     programs.bash = {
       enable = true;
       package = cfg.pkgs.bash;
-      bashrcExtra = (builtins.readFile ./.bashrc);
+      bashrcExtra = (builtins.readFile ../common) + (builtins.readFile ./.bashrc); 
     };
   };
 }

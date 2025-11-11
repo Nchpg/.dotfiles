@@ -17,11 +17,64 @@ in {
           readOnly = true;
           description = "List of available shells";
       };
+      pkgs = lib.mkOption {
+        type = lib.types.attrs;
+        default = config.userSettings.defaultPkgs;
+        description = "Pkgs to use";
+      };
     };
   };
 
   config = {
     userSettings.shell.list = shells;
+
+    home.packages = with cfg.pkgs; [
+      delta
+      eza
+      ripgrep
+      fd
+      curl
+      wget
+      ncdu
+      broot
+      lazydocker
+      lazysql
+    ];
+
+    programs = {
+      bat = {
+        enable = true;
+        package = cfg.pkgs.bat;
+      };
+      yazi = {
+        enable = true;
+        package = cfg.pkgs.yazi;
+      };
+      btop = {
+        enable = true;
+        package = cfg.pkgs.btop;
+      };
+      feh = {
+        enable = true;
+        package = cfg.pkgs.feh;
+      };
+      lazygit = {
+        enable = true;
+        package = cfg.pkgs.lazygit;
+      };
+      fzf = {
+        enable = true;
+        package = cfg.pkgs.fzf;
+      };
+    };
+
+    stylix.targets = {
+      yazi.enable = true;
+      bat.enable = true;
+      btop.enable = true;
+      feh.enable = true;
+      lazygit.enable = true;
+    };
 
     # ERROR HANDLING
     assertions = [
