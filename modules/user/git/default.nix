@@ -28,6 +28,11 @@ in {
     };
   };
   config = lib.mkIf cfg.enable {
+
+    home.packages = with cfg.pkgs; [
+      git-graph
+    ];
+
     programs.git = {
       enable = true;
       package = cfg.pkgs.git;
@@ -38,7 +43,8 @@ in {
         co = "checkout";
         br = "branch";
         ci = "commit";
-        lg = "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit";
+        #lg = "!f() { git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\"; }; f";
+        lg = "!f() { case \"$*\" in *--format*|*-f*) git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
       };
       extraConfig = {
         init = {

@@ -77,6 +77,8 @@ in {
         enable_audio_bell no
         map ctrl+equal change_font_size all +2.0
         map ctrl+minus change_font_size all -2.0
+        map ctrl+kp_add change_font_size all +2.0
+        map ctrl+kp_subtract change_font_size all -2.0
         map ctrl+c copy_or_interrupt
         map ctrl+alt+c copy_to_clipboard
         map ctrl+shift+v paste_from_clipboard

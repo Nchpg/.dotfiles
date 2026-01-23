@@ -34,18 +34,21 @@ end
     
 if test "$SHLVL" -eq 1
     set -g __fish_first_prompt 1
+    set -g __fish_nb_prompt 0
 else
     set -g __fish_first_prompt 0
+    set -g __fish_nb_prompt 10000000
 end
 
 function fish_prompt
     set -l last_status $status
 
-    if test "$__fish_first_prompt" = "0"
+    if test "$__fish_first_prompt" = "0" && test "$__fish_nb_prompt" != "0"
         echo ""
     else
         set -g __fish_first_prompt 0
     end
+    set -g __fish_nb_prompt (math $__fish_nb_prompt + 1)
     set_color cyan
     echo -n (whoami)@(hostname -s)" "
     set_color blue
@@ -92,40 +95,16 @@ function nix-shell
     end
 end
 
-function clear
-    set -g __fish_first_prompt 1
-    command clear
+function fish_preexec --on-event fish_preexec
+    set -g __fish_last_cmd $argv[1]
+    echo $__fish_last_cmd >> ~/last_cmd.txt
 end
 
-function searchf
-      set -l pattern $argv
-
-      # Recherche avec ripgrep et affichage via fzf (input en haut)
-      set results (rg --column --line-number --no-heading --color=always "$pattern" . | fzf --ansi \
-                                  --multi \
-                                  --layout=reverse \
-                                  --preview "file=\$(echo {} | cut -d: -f1); line=\$(echo {} | cut -d: -f2); bat --style=numbers --color=always --highlight-line=\$line \$file" \
-                                  --preview-window=right:60% \
-                                  --nth 4.. \
-                                  --height=90% \
-                                  --border \
-                                  --prompt='Recherche > '\
-                                  --exact)
-
-      if test -n "$results"
-          for line in $results
-              # Récupère le fichier et le numéro de ligne
-              set file (echo $line | cut -d: -f1)
-              set lineno (echo $line | cut -d: -f2)
-              # Ouvre vim à la ligne correspondante
-              vim +$lineno $file
-          end
-      end
-  end
-
-bind \e\cc searchf
-
-
+function clear
+    set -g __fish_first_prompt 1
+    set -g __fish_nb_prompt 0
+    command clear
+end
 
 fzf_configure_bindings \
 --directory=\e\cf \
@@ -134,3 +113,6 @@ fzf_configure_bindings \
 --history=\cr \
 --processes=\e\cp \
 --variables=\e\cv
+
+fzf_custom_bindings \e\cr 'searchf'
+fzf_custom_bindings \em 'man_wrapper'

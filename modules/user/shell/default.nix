@@ -30,6 +30,7 @@ in {
 
     home.packages = with cfg.pkgs; [
       delta
+      file
       eza
       ripgrep
       fd
@@ -39,17 +40,14 @@ in {
       broot
       lazydocker
       lazysql
+      gnugrep
     ];
 
+    home.sessionVariables = {
+      LS_COLORS = "$(dircolors --print-database)";
+    };
+
     programs = {
-      bat = {
-        enable = true;
-        package = cfg.pkgs.bat;
-      };
-      yazi = {
-        enable = true;
-        package = cfg.pkgs.yazi;
-      };
       btop = {
         enable = true;
         package = cfg.pkgs.btop;
@@ -64,12 +62,11 @@ in {
       };
       fzf = {
         enable = true;
-        package = cfg.pkgs.fzf;
+        package = pkgs-unstable.fzf;
       };
     };
 
     stylix.targets = {
-      yazi.enable = true;
       bat.enable = true;
       btop.enable = true;
       feh.enable = true;

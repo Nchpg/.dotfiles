@@ -33,6 +33,13 @@
         pkgs = pkgs-unstable;
       };
 
+      tig = {
+        enable = true;
+      };
+
+      yazi = {
+        enable = true;
+      };
 
       shell = {
         zsh = {
