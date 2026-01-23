@@ -122,6 +122,9 @@ let
 
   ] ++ marketplaceExtensions;
 
+  settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
+  finalConfigContent = lib.replaceStrings ["@shell@"] [config.userSettings.shell.default] settingsTemplateContent;
+
 in {
   options = {
     userSettings.vscode = {
@@ -136,12 +139,13 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [
       (cfg.pkgs.vscode-with-extensions.override {
+        vscode = cfg.pkgs.vscode-fhs;
         vscodeExtensions = allVscodeExtensions;
       })
     ];
 
     home.file = {
-      ".config/Code/User/settings.json".source = ./vscode-config/settings.json;
+      ".config/Code/User/settings.json".text = finalConfigContent;
       ".config/Code/User/keybindings.json".source = ./vscode-config/keybindings.json;
     };
   };

@@ -5,7 +5,7 @@ parse_git_branch() {
   if [[ -r "$head_file" ]]; then
     local branch
     branch=$(sed -n 's|ref: refs/heads/||p' "$head_file")
-    [[ -n "$branch" ]] && echo "\[\e[91m\] $branch\[\e[0m\]"
+    [[ -n "$branch" ]] && echo "\[\e[31m\] $branch\[\e[0m\]"
   fi
 }
 
@@ -25,9 +25,9 @@ set_bash_prompt() {
     local last_status=$?
     local user_host="\[\e[0;36m\]\u@\h\[\e[0m\]"
     local cwd="\[\e[0;34m\]\w\[\e[0m\]"
-    local git_branch="\[\e[91m\]$(parse_git_branch)\[\e[0m\]"
+    local git_branch="\[\e[31m\]$(parse_git_branch)\[\e[0m\]"
     local status=""
-    [ $last_status -ne 0 ] && status="\[\e[91m\]✘$last_status \[\e[0m\]"
+    [ $last_status -ne 0 ] && status="\[\e[31m\]✘$last_status \[\e[0m\]"
     
     # Heure
     local time="\[\e[33m\]\t\[\e[0m\]"
@@ -48,9 +48,13 @@ set_bash_prompt() {
         NEW_LINE="\n"
     fi
 
-    if [ "$SHLVL" -gt 1 ]; then
-        SHELL_DEPTH="$SHLVL"
+    if [ "$TERM_PROGRAM" = "vscode" ]; then
+        SHELL_DEPTH=$((SHLVL - 1))
     else
+        SHELL_DEPTH="$SHLVL"
+    fi
+
+    if [ "$SHELL_DEPTH" -le 1 ]; then
         SHELL_DEPTH=""
     fi
 
