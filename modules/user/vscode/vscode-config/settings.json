@@ -4,6 +4,9 @@
     "explorer.compactFolders": false,
     "window.zoomLevel": 2,
     "database-client.autoSync": true,
+    "terminal.integrated.shellArgs.linux": [],
+    "terminal.integrated.fontFamily": "'FiraCode Nerd Font', 'Twitter Color Emoji'",
+    "terminal.integrated.defaultProfile.linux": "@shell@",
     "[dockercompose]": {
         "editor.insertSpaces": true,
         "editor.tabSize": 2,

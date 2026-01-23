@@ -69,9 +69,21 @@ function fish_prompt
 
     set_color green
 
-    if test "$SHLVL" -gt 1
-        echo -n "$SHLVL"
+    set -l shlvl_display $SHLVL
+
+    if test "$TERM_PROGRAM" = "vscode"
+        set shlvl_display (math "$shlvl_display" - 1)
     end
+
+    # si vide -> 0
+    if test -z "$shlvl_display"
+        set shlvl_display 0
+    end
+
+    if test "$shlvl_display" -gt 1
+        echo -n "$shlvl_display"
+    end
+
     echo -n "❯ "
     set_color normal
 end

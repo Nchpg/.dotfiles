@@ -72,9 +72,13 @@ build_prompt() {
 
   FIRST_PROMPT=0
 
-  if [ "$SHLVL" -gt 1 ]; then
-    SHELL_DEPTH="$SHLVL"
+  if [ "$TERM_PROGRAM" = "vscode" ]; then
+    SHELL_DEPTH=$((SHLVL - 1))
   else
+    SHELL_DEPTH="$SHLVL"
+  fi
+
+  if [ "$SHELL_DEPTH" -le 1 ]; then
     SHELL_DEPTH=""
   fi
 

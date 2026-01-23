@@ -95,7 +95,7 @@
     options = "--delete-older-than 14d"; # What to delete
   };
 
-  fonts.fonts = [
+  fonts.packages = [
     pkgs-stable.nerd-fonts.fira-code
     pkgs-stable.twitter-color-emoji
     pkgs-stable.fira-sans
