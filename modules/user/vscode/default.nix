@@ -68,6 +68,14 @@ let
       version = "1.388.0";
       sha256 = "sha256-7RjK8+PNI+rIuRQfCwpvswAiz991dacRO2qYhcv1vhk=";
     }
+
+    # icons
+    {
+      name = "gruvbox-material-icon-theme";
+      publisher = "jonathanharty";
+      version = "1.1.5";
+      sha256 = "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY=";
+    }
   ];
 
 
@@ -105,6 +113,7 @@ let
 
     # themes & icons
     dracula-theme.theme-dracula
+    jdinhlife.gruvbox
     pkief.material-icon-theme
 
     # databases

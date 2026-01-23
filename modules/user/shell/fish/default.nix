@@ -25,10 +25,10 @@ in {
         interactiveShellInit = ''
           set -a fish_function_path ${cfg.pkgs.fishPlugins.fzf-fish}/functions
           set -a fish_complete_path ${cfg.pkgs.fishPlugins.fzf-fish}/completions
-        '' + (builtins.readFile ../common) + (builtins.readFile ./.fish) ;
+        '' + (builtins.readFile ../common) + (builtins.readFile ./fzf_wrapper.fish) + (builtins.readFile ./.fish) ;
     };
 
-    home.packages = with cfg.pkgs; [
+    home.packages = with pkgs-unstable; [
       fishPlugins.fzf-fish
     ];
   };

@@ -15,6 +15,7 @@ alias diff="delta \
           --line-numbers \
           --syntax-theme 'base16-stylix' \
           --hunk-header-style 'bold syntax'"
+alias man="batman"
 
 export EDITOR=vim
 export VISUAL=vim

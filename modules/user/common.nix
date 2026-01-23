@@ -4,16 +4,19 @@
     (with pkgs-stable; [
       discord
       pavucontrol
+
+      # Basic utilities
+      util-linux
+      coreutils
+      man-db
+      man-pages  
+      man-pages-posix
     ])
     ++
     (with pkgs-unstable; [
 
     ]);
 
-    programs.neovim = {
-      enable = true;
-    };
 
-    stylix.targets.neovim.enable = true;
 }
 
