@@ -42,6 +42,8 @@ in
         sha256 = theme.backgroundSha256 or theme.backgroundUrlSha256;
       };
       base16Scheme = theme;
+
+      #/!\ fonts must be installed in modules/system/configuration.nix fonts.fonts /!\
       fonts = {
         monospace = {
           name = "FiraCode Nerd Font";
