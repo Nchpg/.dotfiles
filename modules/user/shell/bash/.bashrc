@@ -79,4 +79,17 @@ nix-shell() {
     command nix-shell "$@" --run "exec bash"
 }
 
+nix() {
+  if [[ "$1" == "develop" ]]; then
+    if [[ " $* " == *" --command "* ]]; then
+      command nix "$@"
+    else
+      command nix develop "${@:2}" --command bash
+    fi
+  else
+    command nix "$@"
+  fi
+}
+
+
 PROMPT_COMMAND=set_bash_prompt

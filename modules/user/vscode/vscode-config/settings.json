@@ -7,6 +7,9 @@
     "terminal.integrated.shellArgs.linux": [],
     "terminal.integrated.fontFamily": "'FiraCode Nerd Font', 'Twitter Color Emoji'",
     "terminal.integrated.defaultProfile.linux": "@shell@",
+    "python.languageServer": "Pylance",
+    "python.analysis.typeCheckingMode": "basic",
+    "python.disableInstallationPrompt": true,
     "[dockercompose]": {
         "editor.insertSpaces": true,
         "editor.tabSize": 2,

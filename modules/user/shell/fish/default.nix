@@ -22,10 +22,15 @@ in {
           fish_add_path ${cfg.pkgs.fishPlugins.fzf-fish}/bin
         '';
 
-        interactiveShellInit = ''
-          set -a fish_function_path ${cfg.pkgs.fishPlugins.fzf-fish}/functions
-          set -a fish_complete_path ${cfg.pkgs.fishPlugins.fzf-fish}/completions
-        '' + (builtins.readFile ../common) + (builtins.readFile ./fzf_wrapper.fish) + (builtins.readFile ./.fish) ;
+        interactiveShellInit = builtins.concatStringsSep "\n" [
+          ''
+            set -a fish_function_path ${cfg.pkgs.fishPlugins.fzf-fish}/functions
+            set -a fish_complete_path ${cfg.pkgs.fishPlugins.fzf-fish}/completions
+          ''
+          (builtins.readFile ../common)
+          (builtins.readFile ./fzf_wrapper.fish)
+          (builtins.readFile ./.fish)
+        ];
     };
 
     home.packages = with pkgs-unstable; [

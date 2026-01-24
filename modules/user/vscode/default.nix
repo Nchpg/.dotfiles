@@ -31,14 +31,6 @@ let
       sha256 = "sha256-fZa5PpIfYo8FIrEqVIW4uQPRv8tCf9WMLp5jZb1uhno=";
     }
 
-    # python
-    {
-      name = "vscode-python-envs";
-      publisher = "ms-python";
-      version = "1.10.0";
-      sha256 = "sha256-fhrV9sPjgwp1+ZDMu7iU7To2R0hcAF388w99yCMiHQA=";
-    }
-
     # c/cpp
     {
       name = "cpptools-themes";
@@ -81,11 +73,11 @@ let
 
   allVscodeExtensions = with cfg.pkgs.vscode-extensions; [
     # python
-    ms-python.python
-    ms-python.debugpy
-    ms-python.python
+    #ms-python.python
+    #ms-python.debugpy
     ms-python.vscode-pylance
-    ms-toolsai.jupyter-keymap
+    #ms-toolsai.jupyter-keymap
+    ms-toolsai.jupyter
 
     # c/cpp
     llvm-vs-code-extensions.vscode-clangd

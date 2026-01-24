@@ -22,7 +22,10 @@ in {
         ignoreDups = true;
         extended = true;
       };
-      initContent = (builtins.readFile ../common) + (builtins.readFile ./.zshrc);
+      initContent = builtins.concatStringsSep "\n" [
+        (builtins.readFile ../common)
+        (builtins.readFile ./.zshrc)
+      ];
     };
   };
 }

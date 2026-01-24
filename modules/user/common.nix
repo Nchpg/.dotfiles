@@ -17,6 +17,7 @@
 
     ]);
 
+  programs.direnv.enable = true;
 
 }
 
