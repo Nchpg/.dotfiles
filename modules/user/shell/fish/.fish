@@ -40,6 +40,8 @@ else
     set -g __fish_nb_prompt 10000000
 end
 
+set -g VIRTUAL_ENV_DISABLE_PROMPT 1
+
 function fish_prompt
     set -l last_status $status
 
@@ -54,6 +56,13 @@ function fish_prompt
     set_color blue
     echo -n (pwd | string replace -r "^$HOME" "~")
     set_color normal
+
+    if test -n "$VIRTUAL_ENV"
+        set -l venv_name (basename "$VIRTUAL_ENV")
+        set_color yellow
+        echo -n " ($venv_name)"
+        set_color normal
+    end
 
     set gitb (git_branch)
     if test -n "$gitb"
