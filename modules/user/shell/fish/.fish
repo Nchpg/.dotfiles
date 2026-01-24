@@ -140,6 +140,11 @@ function clear
     command clear
 end
 
+function setenvdir
+      echo "use flake \"\$MY_FLAKE#$argv[1]\"" > .envrc
+      direnv allow
+end
+
 fzf_configure_bindings \
 --directory=\e\cf \
 --git_log=\e\cl \

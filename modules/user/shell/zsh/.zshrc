@@ -130,5 +130,10 @@ nix() {
   fi
 }
 
+setenvdir() {
+  echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
+  direnv allow
+}
+
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char

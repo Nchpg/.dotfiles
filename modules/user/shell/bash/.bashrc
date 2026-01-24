@@ -84,5 +84,9 @@ nix() {
   fi
 }
 
+setenvdir() {
+  echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
+  direnv allow
+}
 
 PROMPT_COMMAND=set_bash_prompt
