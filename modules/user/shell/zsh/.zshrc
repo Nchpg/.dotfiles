@@ -55,7 +55,13 @@ fi
 
 # Fonction pour construire le prompt
 build_prompt() {
-  local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f $(git_branch)"
+  venv_name=""
+
+  if [[ -n "$VIRTUAL_ENV" ]]; then
+    venv_name="%F{yellow}($(basename $VIRTUAL_ENV))%f "
+  fi
+
+  local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f ${venv_name}$(git_branch)"
   local last_status=""
 
   # Code de sortie de la dernière commande

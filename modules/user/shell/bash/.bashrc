@@ -28,19 +28,13 @@ set_bash_prompt() {
     local git_branch="\[\e[31m\]$(parse_git_branch)\[\e[0m\]"
     local status=""
     [ $last_status -ne 0 ] && status="\[\e[31m\]✘$last_status \[\e[0m\]"
+
+        # Afficher le venv si actif
+    local venv=""
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        venv="\[\e[33m\](\$(basename \"$VIRTUAL_ENV\"))\[\e[0m\] "
+    fi
     
-    # Heure
-    local time="\[\e[33m\]\t\[\e[0m\]"
-
-    # Calcul de la longueur du prompt pour aligner l'heure à droite
-    local cols=$(tput cols)
-    # Prompt sans l'heure
-    local left_prompt="$user_host $cwd $git_branch"
-    # Retirer les séquences ANSI pour calculer la longueur
-    #local clean_left=$(echo -e "$left_prompt" | sed 's/\x1b\[[0-9;]*m//g')
-    #local padding=$((cols - ${#clean_left}))
-    #[ $padding -lt 1 ] && padding=1
-
     if [ "$FIRST_PROMPT" -eq 1 ]; then
         NEW_LINE=""
         FIRST_PROMPT=0
@@ -59,8 +53,7 @@ set_bash_prompt() {
     fi
 
     # Construire la ligne finale
-    #PS1="$NEW_LINE$left_prompt$(printf '%*s' "$padding")$time\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
-    PS1="$NEW_LINE$left_prompt\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
+    PS1="$NEW_LINE$user_host $cwd $venv$git_branch\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
 }
 
 clear() {
