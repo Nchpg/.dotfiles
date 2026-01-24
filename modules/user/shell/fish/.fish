@@ -107,6 +107,19 @@ function nix-shell
     end
 end
 
+function nix
+  if test $argv[1] = "develop"
+    if contains -- "--command" $argv
+      command nix $argv
+    else
+      command nix develop $argv[2..-1] --command fish
+    end
+  else
+    command nix $argv
+  end
+end
+
+
 function fish_preexec --on-event fish_preexec
     set -g __fish_last_cmd $argv[1]
     echo $__fish_last_cmd >> ~/last_cmd.txt

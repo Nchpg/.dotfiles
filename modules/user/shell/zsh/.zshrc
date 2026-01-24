@@ -112,5 +112,17 @@ nix-shell() {
     fi
 }
 
+nix() {
+  if [[ "$1" == "develop" ]]; then
+    if [[ " $* " == *" --command "* ]]; then
+      command nix "$@"
+    else
+      command nix develop "${@:2}" --command bash
+    fi
+  else
+    command nix "$@"
+  fi
+}
+
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char

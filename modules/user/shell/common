@@ -22,3 +22,6 @@ export VISUAL=vim
 export NIX_SHELL_PRESERVE_PROMPT=1
 
 alias code='env -u SHLVL code'
+
+alias dev-python="nix develop $MY_FLAKE#python"
+alias dev-c="nix develop $MY_FLAKE#c"

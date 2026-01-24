@@ -62,6 +62,7 @@
                   inherit pkgs-unstable;
                   inherit pkgs-stable;
                   inherit inputs;
+                  inherit self;
                   systemSettings = config.systemSettings; 
                 };
               })
@@ -73,6 +74,11 @@
             };
           };
         }) targets);
+
+      devShells.${system} = {
+        python = import ./devshells/python.nix { pkgs = pkgs-stable; };
+        c      = import ./devshells/c.nix { pkgs = pkgs-stable; };
+      };
 
     };
 }

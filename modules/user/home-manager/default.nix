@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, self, ... }:
 
 let
   cfg = config.userSettings.defaultPkgs;
@@ -24,6 +24,7 @@ in {
     home.sessionVariables = {
       EDITOR = "vim";
       VISUAL = "vim";
+      MY_FLAKE = "${builtins.toPath self}";
     };
 
     # This value determines the Home Manager release that your
