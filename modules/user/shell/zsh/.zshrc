@@ -58,8 +58,20 @@ build_prompt() {
   venv_name=""
 
   if [[ -n "$VIRTUAL_ENV" ]]; then
-    venv_name="%F{yellow}($(basename $VIRTUAL_ENV))%f "
+    venv_name="($(basename "$(dirname "$VIRTUAL_ENV")")/$(basename "$VIRTUAL_ENV")) "
+  elif [[ -n "$NIX_DEV_SHELL_PYTHON" ]]; then
+    venv_name="($NIX_DEV_SHELL_PYTHON) "
   fi
+
+  for var in ${(k)parameters}; do
+    [[ $var == NIX_DEV_SHELL_* ]] || continue
+    [[ $var == NIX_DEV_SHELL_PYTHON ]] && continue
+
+    current=${(P)var}
+    venv_name="${venv_name}($current) "
+  done
+
+  venv_name="%F{yellow}$venv_name%f"
 
   local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f ${venv_name}$(git_branch)"
   local last_status=""
@@ -123,17 +135,22 @@ nix() {
     if [[ " $* " == *" --command "* ]]; then
       command nix "$@"
     else
-      command nix develop "${@:2}" --command bash
+      command nix develop "${@:2}" --command zsh
     fi
   else
     command nix "$@"
   fi
 }
 
-setenvdir() {
+setdev() {
   echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
   direnv allow
 }
 
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char
+
+if [[ -n "$PATH_NIX" && "$(basename $FROM)" == "fish" ]]; then
+  export PATH="$PATH_NIX:$PATH"
+  export PATH_NIX=""
+fi

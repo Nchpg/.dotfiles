@@ -29,11 +29,26 @@ set_bash_prompt() {
     local status=""
     [ $last_status -ne 0 ] && status="\[\e[31m\]✘$last_status \[\e[0m\]"
 
-        # Afficher le venv si actif
-    local venv=""
-    if [[ -n "$VIRTUAL_ENV" ]]; then
-        venv="\[\e[33m\](\$(basename \"$VIRTUAL_ENV\"))\[\e[0m\] "
+    venv_name=""
+
+    if [ -n "$VIRTUAL_ENV" ]; then
+        venv_name="($(basename "$(dirname "$VIRTUAL_ENV")")/$(basename "$VIRTUAL_ENV")) "
+    elif [ -n "$NIX_DEV_SHELL_PYTHON" ]; then
+        venv_name="($NIX_DEV_SHELL_PYTHON) "
     fi
+
+    for var in ${!NIX_DEV_SHELL_*}; do
+        if [ "$var" = "NIX_DEV_SHELL_PYTHON" ]; then
+            continue
+        fi
+
+        current="${!var}"
+        venv_name="${venv_name}($current) "
+    done
+
+    # couleur jaune (bash)
+    venv_name="\e[33m$venv_name\e[0m"
+
     
     if [ "$FIRST_PROMPT" -eq 1 ]; then
         NEW_LINE=""
@@ -53,7 +68,7 @@ set_bash_prompt() {
     fi
 
     # Construire la ligne finale
-    PS1="$NEW_LINE$user_host $cwd $venv$git_branch\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
+    PS1="$NEW_LINE$user_host $cwd $venv_name$git_branch\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
 }
 
 clear() {
@@ -69,24 +84,17 @@ nix-shell() {
         fi
     done
 
-    command nix-shell "$@" --run "exec bash"
+    command nix-shell "$@" --run "exec $SHELL"
 }
 
-nix() {
-  if [[ "$1" == "develop" ]]; then
-    if [[ " $* " == *" --command "* ]]; then
-      command nix "$@"
-    else
-      command nix develop "${@:2}" --command bash
-    fi
-  else
-    command nix "$@"
-  fi
-}
-
-setenvdir() {
+setdev() {
   echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
   direnv allow
 }
 
 PROMPT_COMMAND=set_bash_prompt
+
+if [[ -n "$PATH_NIX" && "$(basename $FROM)" == "fish" ]]; then
+  export PATH="$PATH_NIX:$PATH"
+  export PATH_NIX=""
+fi
