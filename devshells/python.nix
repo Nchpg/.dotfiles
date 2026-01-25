@@ -105,7 +105,7 @@ pkgs.mkShell {
   shellHook = ''
     echo "🐍 Python dev shell ready"
     echo "📓 Run: jupyter lab/notebook"
-    export NIX_DEV_SHELL_NAME="python"
+    export NIX_DEV_SHELL_PYTHON="python"
     poetry config virtualenvs.in-project true --local 2>/dev/null || true
   '';
 }

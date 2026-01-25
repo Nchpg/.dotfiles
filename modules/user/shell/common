@@ -23,5 +23,9 @@ export NIX_SHELL_PRESERVE_PROMPT=1
 
 alias code='env -u SHLVL code'
 
-alias dev-python="nix develop $MY_FLAKE#python"
+# share the PATH between shells (especially when launching from fish)
+alias bash='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/bash'
+alias zsh='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/zsh'
+
+alias dev-python="VIRTUAL_ENV="" nix develop $MY_FLAKE#python"
 alias dev-c="nix develop $MY_FLAKE#c"

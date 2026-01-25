@@ -57,12 +57,27 @@ function fish_prompt
     echo -n (pwd | string replace -r "^$HOME" "~")
     set_color normal
 
+    set venv_name ""
+
     if test -n "$VIRTUAL_ENV"
-        set -l venv_name (basename "$VIRTUAL_ENV")
-        set_color yellow
-        echo -n " ($venv_name)"
-        set_color normal
+        set venv_name "($(basename "$(dirname "$VIRTUAL_ENV")")/$(basename "$VIRTUAL_ENV")) "
+    else if test -n "$NIX_DEV_SHELL_PYTHON"
+        set venv_name "($NIX_DEV_SHELL_PYTHON) "
     end
+
+    for var in (set -n | grep '^NIX_DEV_SHELL_')
+        if test "$var" = "NIX_DEV_SHELL_PYTHON"
+            continue
+        end
+
+        set current (eval echo \$$var)
+        set venv_name "$venv_name($current) "
+    end
+
+    set_color yellow
+    echo -n " $venv_name"
+    set_color normal
+
 
     set gitb (git_branch)
     if test -n "$gitb"
@@ -140,7 +155,7 @@ function clear
     command clear
 end
 
-function setenvdir
+function setdev
       echo "use flake \"\$MY_FLAKE#$argv[1]\"" > .envrc
       direnv allow
 end

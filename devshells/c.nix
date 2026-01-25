@@ -12,6 +12,6 @@ pkgs.mkShell {
 
   shellHook = ''
     echo "⚙️ C dev shell ready"
-    export NIX_DEV_SHELL_NAME="c"
+    export NIX_DEV_SHELL_C="c"
   '';
 }
