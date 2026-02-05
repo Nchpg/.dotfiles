@@ -1,0 +1,131 @@
+FROM ubuntu:24.04
+
+SHELL ["/bin/bash", "-c"]
+ENV PIP_NO_CACHE_DIR=1
+
+# Python intel dep
+RUN apt-get update && apt-get install -y software-properties-common && \
+      add-apt-repository -y ppa:kobuk-team/intel-graphics && \
+      apt-get install -y \
+        libze-intel-gpu1 \
+        libze1 intel-metrics-discovery \
+        intel-opencl-icd \
+        clinfo \
+        intel-gsc \
+        intel-media-va-driver-non-free \
+        libmfx-gen1 \
+        libvpl2 \
+        libvpl-tools \
+        libva-glx2 \
+        va-driver-all \
+        vainfo \
+        libze-dev \
+        intel-ocloc \
+        libze-intel-gpu-raytracing
+
+# Create venv and install xpu torch
+RUN apt-get install -y python3.12-venv && \
+    python3 -m venv /venv-ubuntu && \
+    /venv-ubuntu/bin/pip install --upgrade pip && \
+    /venv-ubuntu/bin/pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/xpu
+  
+
+# Utils
+RUN apt-get install -y \
+        fish \
+        git \
+        fzf \
+        bat \
+        curl \
+        eza \
+        vim \
+        jq \
+        && fish -c 'curl -sL https://raw.githubusercontent.com/jorgebucaran/fisher/main/functions/fisher.fish | source && fisher install jorgebucaran/fisher' && fish -c 'fisher install PatrickF1/fzf.fish' && \
+        export FISH_COMPLETE_PATH=/dev/null
+
+RUN apt-get update && apt-get install -y locales && \
+    locale-gen fr_FR.UTF-8
+
+ENV LANG=fr_FR.UTF-8 \
+    LC_ALL=fr_FR.UTF-8
+
+# Other python packages
+RUN /venv-ubuntu/bin/pip install \
+      pandas \
+      datasets \
+      transformers \
+      transformers[torch] \
+      ipykernel \
+      jupyterlab \
+      notebook
+
+RUN cat <<'EOF' > /usr/local/bin/mkkernel
+#!/usr/bin/env bash
+read -p "Nom du kernel : " KERNEL_NAME
+python -m ipykernel install --user --name="$KERNEL_NAME" --display-name="Python ($KERNEL_NAME)"
+echo "✔️ Kernel '$KERNEL_NAME' créé."
+EOF
+
+RUN cat <<'EOF' > /usr/local/bin/rmkernel
+#!/usr/bin/env bash
+read -p "Nom du kernel : " KERNEL_NAME
+jupyter kernelspec uninstall -f "$KERNEL_NAME"
+echo "✔️ Kernel '$KERNEL_NAME' supprimé."
+EOF
+
+RUN cat <<'EOF' > /usr/local/bin/lskernel
+#!/usr/bin/env bash
+jupyter kernelspec list --json \
+  | jq -r '.kernelspecs | to_entries[] | "\(.key)\t\(.value.spec.argv[0])\t\(.value.resource_dir)"' \
+  | column -t
+EOF
+
+RUN chmod +x /usr/local/bin/mkkernel /usr/local/bin/rmkernel /usr/local/bin/lskernel
+
+# Entrypoint intelligent
+RUN cat <<'EOF' > /entrypoint.sh
+#!/usr/bin/env bash
+set -e
+
+# bat
+if [ -x /usr/bin/batcat ] && [ ! -e /usr/local/bin/bat ]; then
+  ln -s /usr/bin/batcat /usr/local/bin/bat
+fi
+
+# btop
+if [ -n "$BTOP" ] && [ -x "$BTOP" ] && [ ! -e /usr/local/bin/btop ]; then
+  ln -s "$BTOP" /usr/local/bin/btop
+fi
+
+
+
+if [ "$#" -gt 0 ]; then
+  source /venv-ubuntu/bin/activate
+  exec "$@"
+fi
+
+
+HOST_SHELL=$(basename "${SHELL:-bash}")
+
+
+case "$HOST_SHELL" in 
+  fish) 
+    exec fish -c "source /venv-ubuntu/bin/activate.fish; exec fish" 
+    ;; 
+  zsh) 
+    exec zsh -c "source /venv-ubuntu/bin/activate; exec zsh" 
+    ;; 
+  bash) 
+    exec bash -c "source /venv-ubuntu/bin/activate; exec bash" 
+    ;; 
+  *) 
+    exec bash -c "source /venv-ubuntu/bin/activate; exec bash" 
+    ;; 
+esac 
+EOF
+
+RUN chmod +x /entrypoint.sh
+
+WORKDIR /root
+
+ENTRYPOINT ["/entrypoint.sh"]

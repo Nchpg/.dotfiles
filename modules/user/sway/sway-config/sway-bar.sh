@@ -137,7 +137,7 @@ resources() {
 MAX_TITLE_LENGTH=30
 media_title() {
     if command -v playerctl &>/dev/null; then
-        title=$(playerctl metadata title)
+        title=$(playerctl metadata title 2>/dev/null)
         if [[ -n "$title" ]]; then
             # Truncate the title if it exceeds MAX_TITLE_LENGTH
             if [[ ${#title} -gt $MAX_TITLE_LENGTH ]]; then

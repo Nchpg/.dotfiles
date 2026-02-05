@@ -38,6 +38,8 @@ setopt NO_BEEP
 
 # PS1
 
+export SH=zsh
+
 git_branch() {
   local head_file="$PWD/.git/HEAD"
   if [[ -r "$head_file" ]]; then

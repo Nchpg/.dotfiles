@@ -12,6 +12,16 @@
   hardware.graphics.enable = true;
   services.xserver.videoDrivers = [ "modesetting" ];
 
+  boot.kernelModules = [ "i915" ];
+
+  hardware.graphics.extraPackages = with pkgs-stable; [
+    intel-compute-runtime
+    level-zero
+    intel-media-driver
+    clinfo
+  ];
+
+
   # Active Flake
   nix = {
     package = pkgs-stable.nix;
