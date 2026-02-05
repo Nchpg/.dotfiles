@@ -1,7 +1,7 @@
 { config, lib, pkgs-stable, pkgs-unstable, self, ... }:
 
 let
-  cfg = config.userSettings.defaultPkgs;
+  cfg = config.userSettings;
 in {
   options = {
     userSettings = {
@@ -24,7 +24,8 @@ in {
     home.sessionVariables = {
       EDITOR = "vim";
       VISUAL = "vim";
-      MY_FLAKE = "${builtins.toPath self}";
+      #MY_FLAKE = "${builtins.toPath self}";
+      MY_FLAKE = "/home/${cfg.user}/.dotfiles";
     };
 
     # This value determines the Home Manager release that your

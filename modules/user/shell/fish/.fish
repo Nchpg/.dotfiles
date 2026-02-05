@@ -15,6 +15,7 @@ if test -n "$KITTY_INSTALLATION_DIR"
 end
 
 export 0=fish
+export SH=fish
 
 function git_branch
     if not command git rev-parse --is-inside-work-tree >/dev/null 2>&1
@@ -60,7 +61,12 @@ function fish_prompt
     set venv_name ""
 
     if test -n "$VIRTUAL_ENV"
-        set venv_name "($(basename "$(dirname "$VIRTUAL_ENV")")/$(basename "$VIRTUAL_ENV")) "
+        set venv_base (dirname "$VIRTUAL_ENV")
+        if test "$venv_base" = "/"
+            set venv_name "($(basename "$VIRTUAL_ENV")) "
+        else
+            set venv_name "($(basename "$venv_base")/$(basename "$VIRTUAL_ENV")) "
+        end
     else if test -n "$NIX_DEV_SHELL_PYTHON"
         set venv_name "($NIX_DEV_SHELL_PYTHON) "
     end
@@ -159,6 +165,21 @@ function setdev
       echo "use flake \"\$MY_FLAKE#$argv[1]\"" > .envrc
       direnv allow
 end
+
+function fanstatus
+    set val (sudo ec_probe read 0xCF | awk '{print $2}')
+    switch $val
+        case "(00)"
+            echo "Fan Mode: Optimal"
+        case "(11)"
+            echo "Fan Mode: Silent"
+        case "(22)"
+            echo "Fan Mode: Performance"
+        case '*'
+            echo "Fan Mode: N/A"
+    end
+end
+
 
 fzf_configure_bindings \
 --directory=\e\cf \

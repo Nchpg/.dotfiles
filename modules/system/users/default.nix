@@ -95,7 +95,7 @@ in
         name = user.name;
         value = {
           isNormalUser = true;
-          extraGroups = [ "networkmanager"] ++ lib.optional user.isAdmin "wheel" ++ lib.optional user.allowDocker "docker";
+          extraGroups = [ "networkmanager" "video" "render"] ++ lib.optional user.isAdmin "wheel" ++ lib.optional user.allowDocker "docker";
           createHome = true;
           description = user.name;
           hashedPassword = lib.mkIf (user.hashedPassword != null) user.hashedPassword;

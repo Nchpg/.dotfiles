@@ -15,6 +15,8 @@ HISTFILESIZE=6000
 shopt -s histappend
 shopt -s checkwinsize
 
+export SH=bash
+
 if [ "$SHLVL" -eq 1 ]; then
     FIRST_PROMPT=1
 else
