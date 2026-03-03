@@ -72,9 +72,14 @@
   };
 
   # Enable Docker
-  virtualisation.docker = {
-    enable = true;
+  virtualisation = {
+    docker.enable = true;
+    libvirtd.enable = true;
   };
+
+  environment.systemPackages = with pkgs-stable; [
+    virt-manager
+  ];
 
   # Enable touchpad support (enabled default in most desktopManager).
   services.libinput.enable = true;
