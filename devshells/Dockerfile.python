@@ -82,21 +82,19 @@ EOF
 
 RUN chmod +x /usr/local/bin/mkkernel /usr/local/bin/rmkernel /usr/local/bin/lskernel
 
+RUN if [ -x /usr/bin/batcat ] && [ ! -e /usr/local/bin/bat ]; then \
+      ln -s /usr/bin/batcat /usr/local/bin/bat; \
+    fi
+
+RUN if [ -n "$BTOP" ] && [ -x "$BTOP" ] && [ ! -e /usr/local/bin/btop ]; then \
+      ln -s "$BTOP" /usr/local/bin/btop; \
+    fi
+
+
 # Entrypoint intelligent
 RUN cat <<'EOF' > /entrypoint.sh
 #!/usr/bin/env bash
 set -e
-
-# bat
-if [ -x /usr/bin/batcat ] && [ ! -e /usr/local/bin/bat ]; then
-  ln -s /usr/bin/batcat /usr/local/bin/bat
-fi
-
-# btop
-if [ -n "$BTOP" ] && [ -x "$BTOP" ] && [ ! -e /usr/local/bin/btop ]; then
-  ln -s "$BTOP" /usr/local/bin/btop
-fi
-
 
 
 if [ "$#" -gt 0 ]; then
