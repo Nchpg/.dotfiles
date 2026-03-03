@@ -3,11 +3,12 @@
 let
   python = pkgs.python3.withPackages (ps: with ps; [
     # interactive plots
-    #matplotlib
+    matplotlib
 
     # lib gcc needed for some packages
-    #numpy
-    #torch
+    numpy
+    torch
+    pybullet
     
     # Jupyter
     ipykernel
@@ -108,6 +109,8 @@ let
           --device /dev/dri \
           -e SHELL=$SH \
           -e BTOP=$(whereis btop | awk '{print $2}') \
+          -e DISPLAY=$DISPLAY \
+          -v /tmp/.X11-unix:/tmp/.X11-unix \
           -v $HOME:/root \
           -v /tmp/ubuntu-kernel:/root/.local/share/jupyter \
           -v /tmp/ubuntu-cache:/root/.cache \

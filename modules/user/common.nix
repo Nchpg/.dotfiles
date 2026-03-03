@@ -11,6 +11,8 @@
       man-db
       man-pages  
       man-pages-posix
+  
+      nbfc-linux
     ])
     ++
     (with pkgs-unstable; [
