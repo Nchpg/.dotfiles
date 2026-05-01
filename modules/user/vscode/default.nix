@@ -68,6 +68,21 @@ let
       version = "1.1.5";
       sha256 = "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY=";
     }
+
+    # cypher
+    {
+      name = "cypher-query-language";
+      publisher = "jakeboone02";
+      version = "2.0.0";
+      sha256 = "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc=";
+    }
+
+    {
+      name = "pdf";
+      publisher = "tomoki1207";
+      version = "1.2.2";
+      sha256 = "sha256-i3Rlizbw4RtPkiEsodRJEB3AUzoqI95ohyqZ0ksROps=";
+    }
   ];
 
 
@@ -80,7 +95,8 @@ let
     ms-toolsai.jupyter
 
     # c/cpp
-    llvm-vs-code-extensions.vscode-clangd
+    #llvm-vs-code-extensions.vscode-clangd
+    ms-vscode.cpptools
 
     # go
     golang.go
@@ -111,6 +127,7 @@ let
     # databases
     cweijan.dbclient-jdbc
 
+    tomoki1207.pdf
 
   ] ++ marketplaceExtensions;
 
