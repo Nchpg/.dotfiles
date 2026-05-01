@@ -1,4 +1,4 @@
-{ lib, pkgs-stable, target, ... }:
+{ lib, pkgs-stable, pkgs-unstable, target, ... }:
 
 {
   home-manager.backupFileExtension = "hm-backup";
@@ -7,18 +7,28 @@
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  boot.kernelPackages = pkgs-stable.linuxPackages_latest;
 
   # GPU
-  hardware.graphics.enable = true;
   services.xserver.videoDrivers = [ "modesetting" ];
 
-  boot.kernelModules = [ "i915" ];
+  boot.kernelParams = [ "i915.force_probe=!7d55" "xe.force_probe=7d55" ];
+  boot.kernelModules = [ "xe" ];
 
-  hardware.graphics.extraPackages = with pkgs-stable; [
-    intel-compute-runtime
-    level-zero
-    intel-media-driver
-    clinfo
+  hardware.graphics = {
+    enable = true;
+    extraPackages = with pkgs-unstable; [
+      intel-compute-runtime
+      intel-media-driver
+      vpl-gpu-rt
+      level-zero
+      intel-gpu-tools
+      clinfo
+    ];
+  };
+
+  hardware.firmware = with pkgs-stable; [
+    sof-firmware
   ];
 
 
@@ -79,7 +89,22 @@
 
   environment.systemPackages = with pkgs-stable; [
     virt-manager
+    udiskie
+    xdg-desktop-portal
+    xdg-desktop-portal-wlr
+    xdg-desktop-portal-gtk
+    nvtopPackages.full
   ];
+
+  # Manage external disks
+  services.udisks2.enable = true;
+  boot.supportedFilesystems = [ "ntfs" ];
+
+  systemd.user.services.udiskie = {
+    description = "udiskie automounter";
+    wantedBy = [ "default.target" ];
+    serviceConfig.ExecStart = "${pkgs-stable.udiskie}/bin/udiskie --tray"; # --tray affiche l'icône en bas à droite
+  };
 
   # Enable touchpad support (enabled default in most desktopManager).
   services.libinput.enable = true;
@@ -109,6 +134,46 @@
     dates = "weekly"; # How often to run it
     options = "--delete-older-than 14d"; # What to delete
   };
+
+  services.ollama = {
+    enable = true;
+    package = pkgs-unstable.ollama-vulkan;
+    environmentVariables = {
+      ZES_ENABLE_SYSMAN = "1";
+      OLLAMA_INTEL_GPU = "1";
+    };
+  };
+
+
+  # services.elasticsearch = {
+  #   enable = true;
+  #   package = pkgs-stable.elasticsearch; # Compatible with 8.0.x for the TP
+
+  #   listenAddress = "127.0.0.1";
+
+
+  #   # Disable security as per the subject
+  #   extraConf = ''
+  #     xpack.security.enabled: false
+  #   '';
+
+  #   # Adjust JVM heap if needed (e.g., for low RAM)
+  #   extraJavaOptions = [ "-Xms1g" "-Xmx1g" ];
+  # };
+
+
+  # services.redis.servers.default.enable = true;
+
+  # services.neo4j= {
+  #    enable = true;
+  #    bolt = {
+  #      tlsLevel = "DISABLED";
+  #    };
+  #    https = {
+  #      enable = false;
+  #    };
+  #  };
+
 
   fonts.packages = [
     pkgs-stable.nerd-fonts.fira-code

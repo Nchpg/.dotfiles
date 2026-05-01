@@ -33,3 +33,8 @@ alias zsh='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/zsh'
 
 alias dev-python="VIRTUAL_ENV="" nix develop $MY_FLAKE#python"
 alias dev-c="nix develop $MY_FLAKE#c"
+
+alias gemini="nix run github:nixos/nixpkgs/nixpkgs-unstable#gemini-cli"
+alias opencode="nix run github:nixos/nixpkgs/nixpkgs-unstable#opencode"
+alias codex="nix run github:nixos/nixpkgs/nixpkgs-unstable#codex"
+alias claude="NIXPKGS_ALLOW_UNFREE=1 nix run --impure github:nixos/nixpkgs/nixpkgs-unstable#claude-code"

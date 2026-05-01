@@ -1,7 +1,7 @@
 { pkgs }:
 
 let
-  python = pkgs.python3.withPackages (ps: with ps; [
+  python = pkgs.python313.withPackages (ps: with ps; [
     # interactive plots
     matplotlib
 
@@ -131,6 +131,18 @@ let
     docker stop ubuntu-xpu || echo "🚫 Le conteneur n'était pas en cours d'exécution."
   '';
 
+  uvmkvenv = pkgs.writeShellScriptBin "uvmkvenv" ''
+    #!/usr/bin/env bash
+
+    SITE=$(python -c "import site; print(site.getsitepackages()[0])")
+    PY_VER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+
+    uv venv --python $(which python)
+    echo "$SITE" > ".venv/lib/python$PY_VER/site-packages/nix-site-packages.pth"
+
+    echo "✔️ .venv créé et connecté au site-packages Nix."
+  '';
+
 in
 pkgs.mkShell {
   name = "python-dev";
@@ -146,7 +158,9 @@ pkgs.mkShell {
     buildubuntu
     runubuntu
     stopubuntu
+    uvmkvenv
 
+    pkgs.uv
     pkgs.poetry
     pkgs.jq
 
