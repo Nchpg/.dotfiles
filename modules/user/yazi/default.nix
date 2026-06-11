@@ -21,16 +21,9 @@ in {
       package = cfg.pkgs.yazi;
     };
 
-    xdg.configFile."yazi/theme.toml".text = ''
-    [flavor]
-    dark = "gruvbox-dark"
-    '';
-
-    xdg.configFile."yazi/flavors/gruvbox-dark.yazi".source = cfg.pkgs.fetchFromGitHub {
-      owner = "bennyyip";
-      repo = "gruvbox-dark.yazi";
-      rev = "main";
-      sha256 = "1x8gmkjl0a1n0wl5y2bpqy130z2837p25y20mj47qmacv028zrrm";
-    };
+    # Yazi thémé par Stylix : il utilise exactement la même palette base16 que
+    # le shell (et suit le toggle dark/light). On NE met PAS de flavor manuel
+    # ici, sinon il écrirait le même theme.toml → conflit avec Stylix.
+    stylix.targets.yazi.enable = true;
   };
 }

@@ -1,6 +1,7 @@
 input * {
     xkb_layout fr
      xkb_variant azerty
+    xkb_numlock enabled
 }
 
 input type:touchpad {
@@ -12,8 +13,22 @@ output * bg ~/.config/sway/wallpaper.png fill
 seat * xcursor_theme Adwaita 24
 
 #
+# Environnement de session
+#
+# Importer WAYLAND_DISPLAY/XDG_CURRENT_DESKTOP/XDG_SESSION_TYPE dans le
+# gestionnaire user systemd + le bus D-Bus, puis redémarrer le portail.
+# Sans ça, xdg-desktop-portal et ses backends (gtk/wlr) démarrent sans
+# display → "cannot open display", et le partage d'écran (Discord/Chrome)
+# se ferme au bout de quelques secondes. Chaîné avec && pour garantir
+# l'ordre (les exec de sway sont sinon concurrents).
+#
+    exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
+         dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
+         systemctl --user restart xdg-desktop-portal.service
+
+#
 # Mod & Terminal
-# 
+#
     set $mod Mod4
     set $term @terminal@
 
@@ -25,9 +40,10 @@ seat * xcursor_theme Adwaita 24
     set $up k
     set $right l
     set $menu dmenu_path | dmenu | xargs swaymsg exec --
-    bindsym $mod+Shift+c reload
+    bindsym $mod+Shift+s reload
 
     bindsym $mod+Return exec $term
+    @tmuxBind@
     bindsym $mod+Shift+q kill
     bindsym $mod+d exec $menu
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
@@ -158,6 +174,7 @@ client.focused  #285577 #285577 #ffffff #323232 #323232
 # Extra launchers
 #
 bindsym $mod+Shift+f exec firefox
+bindsym $mod+Shift+c exec google-chrome-stable
 
 # Sound and other keyboard control
 #

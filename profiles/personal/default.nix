@@ -1,12 +1,14 @@
 { config, lib, ... }:
 
 {
-  imports = (lib.optional (builtins.pathExists ./private.nix) ./private.nix);
-
   config = {
     systemSettings = {
-      # check user password
-      verify_all_users_have_passwd = false;
+      stylix = {
+        enable = true;
+        variant = "dark";                  # ← interrupteur dark / light
+        darkTheme = "gruvbox-dark-custom";
+        lightTheme = "gruvbox-light-hard";
+      };
 
       users = [ 
         {

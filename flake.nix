@@ -14,6 +14,15 @@
       url = "github:nix-community/stylix/release-25.05";
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
+
+    claude-desktop = {
+      url = "github:k3d3/claude-desktop-linux-flake";
+      inputs.nixpkgs.follows = "nixpkgs-stable";
+    };
+
+    claude-code = {
+      url = "git+https://github.com/sadjow/claude-code-nix";
+    };
   };
 
   outputs = inputs@{ self, ... }:

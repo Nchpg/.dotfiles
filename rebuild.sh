@@ -29,14 +29,16 @@ if [[ -z "$HOST" || -z "$PROFILE" ]]; then
     exit 1
 fi
 
-./private-switch.sh rebuild
-
 YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 cd "$(dirname "$0")"
+
+echo "⬆️  Updating claude-code flake input to latest..."
+# Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
+nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
 
 echo "🔎 Checking Git status before rebuild..."
 

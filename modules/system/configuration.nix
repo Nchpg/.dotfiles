@@ -46,7 +46,8 @@
 
   # Enable networking
   networking.networkmanager.enable = true;
-    
+  networking.useDHCP = false;
+
   # Set your time zone.
   time.timeZone = "Europe/Paris";
 
@@ -83,18 +84,26 @@
 
   # Enable Docker
   virtualisation = {
-    docker.enable = true;
+    docker = {
+      enable = true;
+      daemon.settings = {
+        dns = [ "8.8.8.8" "1.1.1.1" ];
+      };
+    };
     libvirtd.enable = true;
   };
 
   environment.systemPackages = with pkgs-stable; [
     virt-manager
     udiskie
-    xdg-desktop-portal
-    xdg-desktop-portal-wlr
-    xdg-desktop-portal-gtk
+    # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
     nvtopPackages.full
   ];
+
+  environment.sessionVariables = {                                                                         
+    LIBVA_DRIVER_NAME = "iHD";
+    MOZ_DISABLE_RDD_SANDBOX = "1";
+  };
 
   # Manage external disks
   services.udisks2.enable = true;

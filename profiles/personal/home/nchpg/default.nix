@@ -1,9 +1,14 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, inputs, ... }:
 
 {
-  imports = (lib.optional (builtins.pathExists ./private.nix) ./private.nix);
+  config = lib.mkMerge [
+    {
+      home.packages = [
+        inputs.claude-desktop.packages.x86_64-linux.claude-desktop
+      ];
+    }
 
-  config = lib.mkDefault {
+    (lib.mkDefault {
     nixpkgs.config.allowUnfree = true;
 
     userSettings = {
@@ -11,11 +16,26 @@
 
       stylix = {
         enable = true;
-        theme = "gruvbox-dark-custom";
       };
 
       vim = {
         enable = true;
+      };
+
+      neovim = {
+        enable = true;
+        pkgs = pkgs-unstable;
+      };
+
+      tmux = {
+        enable = true;
+      };
+
+      btop = {
+        enable = true;
+        # GPU Intel piloté par le driver `xe` (non supporté par btop amont).
+        # Voir modules/user/btop pour le détail (PR #1457).
+        xeGpuSupport = true;
       };
 
       git = {
@@ -25,6 +45,10 @@
       };
 
       firefox = {
+        enable = true;
+      };
+
+      chrome = {
         enable = true;
       };
 
@@ -68,5 +92,6 @@
         default = "kitty";
       };
     };
-  };
+    })
+  ];
 }
