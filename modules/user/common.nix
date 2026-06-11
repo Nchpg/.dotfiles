@@ -1,4 +1,4 @@
-{ lib, pkgs-stable, pkgs-unstable, stylix,... }:
+{ lib, pkgs-stable, pkgs-unstable, stylix, inputs, ... }:
 {
   home.packages =
     (with pkgs-stable; [
@@ -14,10 +14,10 @@
   
       nbfc-linux
     ])
-    ++
-    (with pkgs-unstable; [
-
-    ]);
+    ++ [
+      # Claude Code via le flake dédié (toujours à jour, cf. flake.nix)
+      inputs.claude-code.packages.x86_64-linux.default
+    ];
 
   programs.direnv.enable = true;
 

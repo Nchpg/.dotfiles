@@ -77,12 +77,6 @@ in {
     };
 
     stylix.targets.vim.enable = true;
-
-    programs.neovim = {
-      enable = true;
-    };
-
-    stylix.targets.neovim.enable = true;
   };
 
 }

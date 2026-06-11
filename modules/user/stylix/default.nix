@@ -1,4 +1,4 @@
-{ lib, config, pkgs-stable, pkgs-unstable, stylix, ... }:
+{ lib, config, pkgs-stable, pkgs-unstable, stylix, systemSettings, ... }:
 
 let
   cfg = config.userSettings.stylix;
@@ -9,7 +9,10 @@ in
     userSettings.stylix = {
       enable = lib.mkEnableOption "Enable stylix theming";
       theme = lib.mkOption {
-        default = "orichalcum";
+        # Par défaut, on suit le thème système (systemSettings.stylix.theme) :
+        # ainsi basculer le thème système flippe aussi la session de l'user.
+        # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
+        default = systemSettings.stylix.theme;
         type = lib.types.enum (builtins.attrNames (lib.filterAttrs (name: type: type == "directory") (builtins.readDir ../../themes)));
         description = "Theme for stylix to use system wide. A list of themes can be found in the `themes` directory.";
       };

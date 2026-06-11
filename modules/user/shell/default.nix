@@ -48,10 +48,8 @@ in {
     };
 
     programs = {
-      btop = {
-        enable = true;
-        package = cfg.pkgs.btop;
-      };
+      # btop est géré par son propre module (modules/user/btop) pour permettre
+      # l'override du support GPU Intel xe.
       feh = {
         enable = true;
         package = cfg.pkgs.feh;
@@ -64,11 +62,16 @@ in {
         enable = true;
         package = pkgs-unstable.fzf;
       };
+      zoxide = {
+        enable = true;
+        package = cfg.pkgs.zoxide;
+        # Intégration shell (fish/bash/zsh) activée automatiquement.
+        # `z <terme>` saute vers un dossier fréquent, `zi` ouvre un sélecteur fzf.
+      };
     };
 
     stylix.targets = {
       bat.enable = true;
-      btop.enable = true;
       feh.enable = true;
       lazygit.enable = true;
     };

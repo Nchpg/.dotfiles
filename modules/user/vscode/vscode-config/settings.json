@@ -33,5 +33,7 @@
         "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
     },
     "editor.formatOnSaveMode": "file",
-    "files.autoSave": "afterDelay"
+    "files.autoSave": "afterDelay",
+    "claudeCode.preferredLocation": "panel",
+    "claudeCode.claudeProcessWrapper": "@claudeWrapper@"
 }

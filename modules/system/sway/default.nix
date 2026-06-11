@@ -19,5 +19,15 @@ in {
       enable = true;
       wrapperFeatures.gtk = true;
     };
+
+    # Partage d'écran (Discord/Chrome) sur Wayland : active xdg-desktop-portal
+    # avec le backend wlroots + PipeWire. programs.sway route déjà ScreenCast/
+    # Screenshot vers wlr ; ici on active le portail et on s'assure que gtk est
+    # présent pour le reste (FileChooser, etc.).
+    xdg.portal = {
+      enable = true;
+      wlr.enable = true; # backend Screencast/Screenshot pour wlroots
+      extraPortals = [ pkgs-stable.xdg-desktop-portal-gtk ];
+    };
   };
 }

@@ -1,8 +1,6 @@
 { config, lib, pkgs-stable, pkgs-unstable, ... }:
 
 {
-  imports = (lib.optional (builtins.pathExists ./private.nix) ./private.nix);
-
   config = lib.mkDefault {
     nixpkgs.config.allowUnfree = true;
 
@@ -11,7 +9,8 @@
       
       stylix = {
         enable = true;
-        theme = "gruvbox-light-medium";
+        # Pas de `theme` : suit le thème système (systemSettings.stylix.theme),
+        # donc bascule avec `theme dark|light`.
       };
 
       vim = {

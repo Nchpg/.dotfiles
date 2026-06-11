@@ -1,8 +1,17 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, pkgs-unstable, inputs, ... }:
 
 let
   cfg = config.userSettings.vscode;
   marketplaceExtensions = cfg.pkgs.vscode-utils.extensionsFromVscodeMarketplace [
+    # claude code
+    {
+      name = "claude-code";
+      publisher = "anthropic";
+      version = "2.1.142";
+      sha256 = "sha256-McB/QmUFCskObXh/AHjX4xVydRiKS5dkCylP7PpMbK8=";
+      targetPlatform = "linux-x64";
+    }
+
     # outils
     {
       name = "shift-shift";
@@ -131,8 +140,19 @@ let
 
   ] ++ marketplaceExtensions;
 
+  # Wrapper script to bypass the macOS arm64 binary bundled in the linux-x64 VSIX.
+  # The extension calls: wrapper <bundled_binary> [actual_flags...]
+  # We skip the unusable binary and forward remaining args to the system claude.
+  claudeWrapper = pkgs-unstable.writeShellScript "claude-vscode-wrapper" ''
+    shift
+    exec ${inputs.claude-code.packages.x86_64-linux.default}/bin/claude "$@"
+  '';
+
   settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
-  finalConfigContent = lib.replaceStrings ["@shell@"] [config.userSettings.shell.default] settingsTemplateContent;
+  finalConfigContent = lib.replaceStrings
+    ["@shell@" "@claudeWrapper@"]
+    [config.userSettings.shell.default "${claudeWrapper}"]
+    settingsTemplateContent;
 
 in {
   options = {

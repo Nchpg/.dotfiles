@@ -8,6 +8,12 @@ pkgs.mkShell {
     pkgs.gdb
     pkgs.cmake
     pkgs.valgrind
+
+
+    pkgs.pkg-config
+    pkgs.opencv
+    pkgs.openblas
+    pkgs.nlohmann_json
   ];
 
   shellHook = ''
