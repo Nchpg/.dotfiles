@@ -36,23 +36,23 @@ in {
     programs.git = {
       enable = true;
       package = cfg.pkgs.git;
-      userName = cfg.userName;
-      userEmail = cfg.userEmail;
-      aliases = {
-        st = "status";
-        co = "checkout";
-        br = "branch";
-        ci = "commit";
-        #lg = "!f() { git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\"; }; f";
-        lg = "!f() { case \"$*\" in *--format*|*-f*) git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
-      };
-      extraConfig = {
-        init = {
-          defaultBranch = "main";
+      # HM 26.05 : aliases/extraConfig/userName/userEmail fusionnés dans `settings`
+      # (freeform → sections gitconfig). user.* n'accepte plus null → on ne les
+      # définit que s'ils sont renseignés (profils guest/root les laissent vides).
+      settings = {
+        user.name = lib.mkIf (cfg.userName != null) cfg.userName;
+        user.email = lib.mkIf (cfg.userEmail != null) cfg.userEmail;
+
+        alias = {
+          st = "status";
+          co = "checkout";
+          br = "branch";
+          ci = "commit";
+          lg = "!f() { case \"$*\" in *--format*|*-f*) git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
         };
-        push = {
-          autoSetupRemote = true;
-        };
+
+        init.defaultBranch = "main";
+        push.autoSetupRemote = true;
         core.pager = "delta";
         interactive.diffFilter = "delta --color-only";
 

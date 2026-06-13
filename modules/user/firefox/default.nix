@@ -17,6 +17,9 @@ in {
     programs.firefox = {
       enable = true;
       package = cfg.pkgs.firefox;
+      # 26.05 a changé le défaut vers $XDG_CONFIG_HOME/mozilla/firefox. On garde
+      # le chemin historique pour ne pas avoir à déplacer ~/.mozilla.
+      configPath = ".mozilla/firefox";
       profiles.default = {
         extensions.force = lib.mkForce true;
         settings = {

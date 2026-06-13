@@ -2,12 +2,6 @@
 
 {
   config = lib.mkMerge [
-    {
-      home.packages = [
-        inputs.claude-desktop.packages.x86_64-linux.claude-desktop
-      ];
-    }
-
     (lib.mkDefault {
     nixpkgs.config.allowUnfree = true;
 
@@ -24,7 +18,9 @@
 
       neovim = {
         enable = true;
-        pkgs = pkgs-unstable;
+        # Aligné sur pkgs-stable : sinon le wrapper neovim (stable, via HM) et les
+        # plugins (unstable) tirent deux luajit différents → conflit de buildEnv.
+        # neovim est en 0.12.2 sur la 26.05, donc rien à gagner côté unstable.
       };
 
       tmux = {

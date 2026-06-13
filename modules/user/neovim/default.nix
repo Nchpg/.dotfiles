@@ -23,6 +23,9 @@ in {
       enable = true;
       viAlias = true;
       vimAlias = true;
+      # 26.05 a basculé ces défauts à false ; on garde l'ancien comportement.
+      withRuby = true;
+      withPython3 = true;
 
       plugins = with cfg.pkgs.vimPlugins; [
         # telescope + deps
@@ -72,7 +75,7 @@ in {
         fd
       ];
 
-      extraLuaConfig = ''
+      initLua = ''
         -- Options de base
         vim.opt.number = true
         vim.opt.relativenumber = true

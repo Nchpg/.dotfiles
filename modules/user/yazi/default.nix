@@ -19,6 +19,8 @@ in {
     programs.yazi = {
       enable = true;
       package = cfg.pkgs.yazi;
+      # 26.05 a changé le défaut du wrapper "yy" → "y" ; on garde "yy".
+      shellWrapperName = "yy";
     };
 
     # Yazi thémé par Stylix : il utilise exactement la même palette base16 que
