@@ -56,6 +56,10 @@
         enable = true;
       };
 
+      cliphist = {
+        enable = true;
+      };
+
       vscode = {
         enable = true;
         pkgs = pkgs-unstable;

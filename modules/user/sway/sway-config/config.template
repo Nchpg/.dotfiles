@@ -29,7 +29,8 @@ seat * xcursor_theme Adwaita 24
     exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
          dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
          systemctl --user reset-failed xdg-desktop-portal.service xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service; \
-         systemctl --user restart xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service xdg-desktop-portal.service
+         systemctl --user restart xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service xdg-desktop-portal.service; \
+         systemctl --user restart cliphist.service
 
 # Daemon flameshot (Wayland natif) : indispensable pour le bouton Copier.
 # Le « gui » envoie l'image au daemon via DBus, et c'est lui qui la pose dans le
@@ -115,11 +116,6 @@ seat * xcursor_theme Adwaita 24
 #
 # Layout stuff:
 #
-    # You can "split" the current object of your focus with
-    # $mod+b or $mod+v, for horizontal and vertical splits
-    # respectively.
-    bindsym $mod+b splith
-    bindsym $mod+v splitv
 
     # Switch the current container between different layout styles
     bindsym $mod+s layout stacking
@@ -217,3 +213,6 @@ bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
 # L'overlay flameshot doit être flottant/sans bordure (sinon tilé et cassé).
 for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
 for_window [class="flameshot"] floating enable, border none, fullscreen disable
+
+# Modules additionnels
+include ~/.config/sway/conf.d/*.conf
