@@ -8,7 +8,7 @@ let
       name = "claude-code";
       publisher = "anthropic";
       version = "2.1.142";
-      sha256 = "sha256-McB/QmUFCskObXh/AHjX4xVydRiKS5dkCylP7PpMbK8=";
+      sha256 = "sha256-EZqihuVQZUVtW8lTM2nIvdX/CxMoS4Z2Cyu0ir4sALw=";
       targetPlatform = "linux-x64";
     }
 
