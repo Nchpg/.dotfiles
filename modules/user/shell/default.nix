@@ -32,6 +32,7 @@ in {
       delta
       file
       eza
+      duf
       ripgrep
       fd
       curl

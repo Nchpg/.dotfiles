@@ -52,6 +52,14 @@
         enable = true;
       };
 
+      flameshot = {
+        enable = true;
+      };
+
+      notifications = {
+        enable = true;
+      };
+
       vscode = {
         enable = true;
         pkgs = pkgs-unstable;

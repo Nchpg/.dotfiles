@@ -4,6 +4,7 @@
     (with pkgs-stable; [
       discord
       pavucontrol
+      mpv
 
       # Basic utilities
       util-linux

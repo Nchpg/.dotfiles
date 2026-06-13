@@ -28,6 +28,16 @@ in {
       enable = true;
       wlr.enable = true; # backend Screencast/Screenshot pour wlroots
       extraPortals = [ pkgs-stable.xdg-desktop-portal-gtk ];
+
+      # Routage des interfaces de portail. Sans ça, avec XDG_CURRENT_DESKTOP=sway
+      # et plusieurs backends, FileChooser n'est servi par personne (dialogue Qt
+      # moche dans flameshot). On met gtk par défaut (joli sélecteur de fichiers)
+      # tout en gardant wlr pour la capture/partage d'écran.
+      config.common = {
+        default = [ "gtk" ];
+        "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
+        "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
+      };
     };
   };
 }

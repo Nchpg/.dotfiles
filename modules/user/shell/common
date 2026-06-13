@@ -2,6 +2,10 @@ alias ls='eza --icons --sort=name --group-directories-first --color=always'
 alias ll='eza -lh --icons --sort=name --group-directories-first --color=always'
 alias la='eza -lha --icons --sort=name --group-directories-first --color=always'
 alias tree='eza --tree --icons --sort=name --color=always'
+alias df='duf'
+
+alias mpv='mpv --keep-open=yes'
+alias mpvt='mpv --keep-open=yes --vo=kitty'
 
 alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'

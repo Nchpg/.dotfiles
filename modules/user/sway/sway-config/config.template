@@ -16,15 +16,25 @@ seat * xcursor_theme Adwaita 24
 # Environnement de session
 #
 # Importer WAYLAND_DISPLAY/XDG_CURRENT_DESKTOP/XDG_SESSION_TYPE dans le
-# gestionnaire user systemd + le bus D-Bus, puis redémarrer le portail.
-# Sans ça, xdg-desktop-portal et ses backends (gtk/wlr) démarrent sans
-# display → "cannot open display", et le partage d'écran (Discord/Chrome)
-# se ferme au bout de quelques secondes. Chaîné avec && pour garantir
-# l'ordre (les exec de sway sont sinon concurrents).
+# gestionnaire user systemd + le bus D-Bus, PUIS (re)démarrer les portails.
+# Sans display, xdg-desktop-portal-gtk meurt sur "cannot open display" et
+# entraîne le timeout du frontend → plus de FileChooser NI de ScreenCast
+# (partage d'écran Discord/Chrome cassé).
+#
+# Important : on redémarre AUSSI les backends (gtk + wlr), pas seulement le
+# frontend. S'ils ont démarré trop tôt (sans env) et sont en échec, un restart
+# du seul frontend ne les récupère pas ; reset-failed efface le backoff systemd.
+# Tout est chaîné pour garantir l'ordre (les exec de sway sont concurrents).
 #
     exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
          dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
-         systemctl --user restart xdg-desktop-portal.service
+         systemctl --user reset-failed xdg-desktop-portal.service xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service; \
+         systemctl --user restart xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service xdg-desktop-portal.service
+
+# Daemon flameshot (Wayland natif) : indispensable pour le bouton Copier.
+# Le « gui » envoie l'image au daemon via DBus, et c'est lui qui la pose dans le
+# presse-papier et la maintient en vie après fermeture de l'éditeur.
+    exec QT_QPA_PLATFORM=wayland flameshot
 
 #
 # Mod & Terminal
@@ -191,4 +201,19 @@ bindsym XF86MonBrightnessUp exec ~/.config/sway/brightness.sh up
 
 bindsym XF86Search exec $menu
 
-bindsym Print exec grim -g "$(slurp -d)" - | wl-copy
+# Ouvre/ferme le centre de notifications swaync
+bindsym $mod+n exec swaync-client -t -sw
+
+# Print : flameshot (capture via grim → éditeur : annoter, sauver, copier).
+# QT_QPA_PLATFORM=wayland INDISPENSABLE : la copie passe par KSystemClipboard
+# (protocole wlr-data-control) qui n'est actif qu'en Wayland natif. Le bouton
+# Copier transmet l'image au daemon flameshot (lancé plus haut) qui la conserve.
+# QT_QPA_PLATFORMTHEME=xdgdesktopportal : la boîte « Save » utilise le sélecteur
+# de fichiers GTK (via xdg-desktop-portal-gtk) au lieu du dialogue Qt par défaut.
+bindsym Print exec QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui
+# Shift+Print : sélection d'une zone → copie directe dans le presse-papier
+bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
+
+# L'overlay flameshot doit être flottant/sans bordure (sinon tilé et cassé).
+for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
+for_window [class="flameshot"] floating enable, border none, fullscreen disable
