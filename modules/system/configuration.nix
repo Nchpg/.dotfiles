@@ -22,7 +22,6 @@
       intel-media-driver
       vpl-gpu-rt
       level-zero
-      intel-gpu-tools
       clinfo
     ];
   };
@@ -99,7 +98,6 @@
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
     nvtopPackages.full
     lm_sensors
-    intel-gpu-tools
   ];
 
   environment.sessionVariables = {                                                                         

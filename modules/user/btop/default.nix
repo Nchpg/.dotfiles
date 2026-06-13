@@ -30,6 +30,11 @@ let
       rev = "0785ff37592458cc3b48a4b705e86e378efdf222"; # PR #1457, tip du 17 avr. 2026
       sha256 = "01wfqhpc6zfkag07cdvs41435pq6shqq2xmwp70pd17zjaylxz6h";
     };
+
+    # La source PR #1457 est basée sur btop 1.4.6 ; le paquet amont est passé en
+    # 1.4.7 → le versionCheckPhase échoue (binaire 1.4.6 ≠ 1.4.7 attendu). On le
+    # désactive : on utilise sciemment une source différente de l'amont.
+    doInstallCheck = false;
   });
 in {
   options = {
