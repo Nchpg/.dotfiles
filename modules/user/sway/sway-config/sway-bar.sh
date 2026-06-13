@@ -113,6 +113,17 @@ volume() {
     fi
 }
 
+# Fonction pour récupérer l'état Do Not Disturb de swaync
+dnd() {
+    if command -v swaync-client &>/dev/null; then
+        if [[ "$(swaync-client -D 2>/dev/null)" == "true" ]]; then
+            echo "🔕"
+        else
+            echo "🔔"
+        fi
+    fi
+}
+
 # Fonction pour récupérer le niveau de luminosité
 brightness() {
     if command -v light &>/dev/null; then
@@ -130,7 +141,41 @@ resources() {
     # RAM usage (en pourcentage)
     mem_used=$(free | awk '/Mem:/ {printf("%.0f"), $3/$2 * 100}')
 
-    echo "🖥️ RAM : ${mem_used}%  CPU ${cpu%%.*}%"
+    echo "🖥️ RAM : ${mem_used}%  CPU ${cpu%%.*}%  $(gpu)"
+}
+
+# Utilisation GPU (Intel, driver xe) : pas de gpu_busy_percent en sysfs, mais
+# le driver expose le temps d'inactivité cumulé (gtidle/idle_residency_ms). On
+# calcule le % occupé sur l'intervalle écoulé depuis le dernier passage (état
+# stocké dans un fichier), ce qui évite d'ajouter un sleep dans la boucle.
+gpu() {
+    # Glob bash natif (évite l'alias ls→eza qui injecterait des codes couleur).
+    idle_file=""
+    for f in /sys/class/drm/card*/device/tile0/gt0/gtidle/idle_residency_ms; do
+        [[ -r "$f" ]] && { idle_file="$f"; break; }
+    done
+    if [[ -z "$idle_file" ]]; then
+        echo "GPU N/A"
+        return
+    fi
+
+    state="${XDG_RUNTIME_DIR:-/tmp}/sway-bar-gpu.state"
+    now_idle=$(<"$idle_file")   # lecture bash native (évite l'alias cat→bat)
+    now_ms=$(date +%s%3N)
+
+    busy=0
+    if [[ -r "$state" ]]; then
+        read -r prev_idle prev_ms < "$state"
+        d_idle=$((now_idle - prev_idle))
+        d_ms=$((now_ms - prev_ms))
+        if [[ "$d_ms" -gt 0 ]]; then
+            busy=$(( (d_ms - d_idle) * 100 / d_ms ))
+            (( busy < 0 )) && busy=0
+            (( busy > 100 )) && busy=100
+        fi
+    fi
+    echo "$now_idle $now_ms" > "$state"
+    echo "GPU ${busy}%"
 }
 
 # Fonction pour récupérer le titre du média en cours de lecture
@@ -159,7 +204,7 @@ disk(){
 
 while true; do
     # Compose la barre
-    status="$(media_title) $(bluetooth) | $(wifi) | $(resources) | $(brightness) | $(volume) | $(disk) | $(battery) | $(datetime)"
+    status="$(media_title) $(bluetooth) | $(wifi) | $(resources) | $(brightness) | $(volume) $(dnd) | $(disk) | $(battery) | $(datetime)"
 
     # Affiche dans swaybar (output standard)
     echo "$status"

@@ -48,6 +48,14 @@ in {
     programs.btop = {
       enable = true;
       package = if cfg.xeGpuSupport then btopXe else cfg.pkgs.btop;
+
+      # Affiche le GPU dans sa propre box (gpu0) au lieu de le mixer dans la box
+      # CPU — équivalent d'appuyer sur « 5 » dans btop, mais par défaut.
+      # show_gpu_info=Off évite le doublon (GPU à la fois dans le CPU et sa box).
+      settings = lib.mkIf cfg.xeGpuSupport {
+        shown_boxes = "cpu gpu0 mem net proc";
+        show_gpu_info = "Off";
+      };
     };
 
     # Stylix applique la palette base16 du système au thème btop.
