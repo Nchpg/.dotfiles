@@ -126,9 +126,11 @@ dnd() {
 
 # Fonction pour récupérer le niveau de luminosité
 brightness() {
-    if command -v light &>/dev/null; then
-        level=$(light -G | cut -d. -f1)
-        echo "🔆 $level%"
+    if command -v brightnessctl &>/dev/null; then
+        cur=$(brightnessctl get)
+        max=$(brightnessctl max)
+        level=$((100 * cur / max))
+        echo "🔆 ${level}%"
     else
         echo "🔆 N/A"
     fi

@@ -66,7 +66,7 @@
   };
 
   # Enable the GNOME GDM.
-  services.xserver.displayManager.gdm.enable = true;
+  services.displayManager.gdm.enable = true;
 
   # Enable CUPS to print documents.
   services.printing.enable = true;
@@ -98,6 +98,8 @@
     udiskie
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
     nvtopPackages.full
+    lm_sensors
+    intel-gpu-tools
   ];
 
   environment.sessionVariables = {                                                                         

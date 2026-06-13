@@ -54,7 +54,7 @@ in {
       # Sway bar dependencies
       acpi # Power battery
       alsa-utils # Sound
-      light # Brightness
+      brightnessctl # Brightness (remplace `light`, retiré en nixpkgs 26.05)
       playerctl # Audio player
 
       # Lock screen

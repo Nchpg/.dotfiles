@@ -73,7 +73,6 @@ in {
       };
 
       extraConfig = ''
-        bell none
         enable_audio_bell no
         map ctrl+equal change_font_size all +2.0
         map ctrl+minus change_font_size all -2.0
