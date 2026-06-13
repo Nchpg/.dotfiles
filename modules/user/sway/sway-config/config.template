@@ -50,7 +50,7 @@ seat * xcursor_theme Adwaita 24
     set $down j
     set $up k
     set $right l
-    set $menu dmenu_path | dmenu | xargs swaymsg exec --
+    set $menu rofi -show drun
     bindsym $mod+Shift+s reload
 
     bindsym $mod+Return exec $term
@@ -165,6 +165,8 @@ bar {
     position top
 
     status_command bash ~/.config/sway/sway-bar.sh
+    tray_output *
+    tray_padding 4
 
     colors {
         statusline #ffffff
