@@ -30,7 +30,7 @@ let
     .notification:hover { background-color: ${c.base02}; }
     .notification.critical { border: 1px solid ${c.base08}; }
 
-    .notification-content { padding: 12px; border-radius: 12px; }
+    .notification-content { padding: 12px; border-radius: 12px; gap: 18px; }
 
     .summary { font-weight: bold; font-size: 1.15em; color: ${c.base05}; }
     .time    { color: ${c.base04}; font-size: 0.85em; }
@@ -40,8 +40,10 @@ let
       background: transparent;
       color: ${c.base04};
       border-radius: 50%;
-      margin: 4px;
-      padding: 2px;
+      margin: 8px 12px 8px 8px;
+      padding: 4px;
+      min-width: 24px;
+      min-height: 24px;
     }
     .close-button:hover { background-color: ${c.base08}; color: ${c.base00}; }
 
@@ -110,16 +112,19 @@ let
     state="''${XDG_RUNTIME_DIR:-/tmp}/battery-alert.state"
     last=$(cat "$state" 2>/dev/null || echo ok)
 
+    icon_low=${cfg.pkgs.adwaita-icon-theme}/share/icons/Adwaita/symbolic/status/battery-low-symbolic.svg
+    icon_caution=${cfg.pkgs.adwaita-icon-theme}/share/icons/Adwaita/symbolic/status/battery-caution-symbolic.svg
+
     # Détermine le palier courant (du plus grave au moins grave).
-    bucket=ok; urgency=normal; icon=battery-low; title=""; body=""
+    bucket=ok; urgency=normal; icon="$icon_low"; title=""; body=""
     if [ "$cap" -le "$crit" ]; then
-      bucket=crit; urgency=critical; icon=battery-caution
+      bucket=crit; urgency=critical; icon="$icon_caution"
       title="Batterie critique"; body="Batterie à $cap% — branche le chargeur !"
     elif [ "$cap" -le "$verylow" ]; then
-      bucket=verylow; urgency=critical; icon=battery-low
+      bucket=verylow; urgency=critical; icon="$icon_low"
       title="Batterie très faible"; body="Batterie à $cap%"
     elif [ "$cap" -le "$low" ]; then
-      bucket=low; urgency=normal; icon=battery-low
+      bucket=low; urgency=normal; icon="$icon_low"
       title="Batterie faible"; body="Batterie à $cap%"
     fi
 
