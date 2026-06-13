@@ -13,14 +13,12 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.wofi ];
-
     # Daemon : surveille le presse-papier et stocke chaque entrée dans l'historique.
     services.cliphist.enable = true;
 
-    # Raccourci sway : $mod+v ouvre l'historique dans wofi, la sélection est copiée.
+    # Raccourci sway : $mod+v ouvre l'historique dans rofi, la sélection est copiée.
     home.file.".config/sway/conf.d/cliphist.conf".text = ''
-      bindsym $mod+v exec cliphist list | wofi --dmenu --prompt "Clipboard" | cliphist decode | wl-copy
+      bindsym $mod+v exec cliphist list | cut -f2- | rofi -dmenu -p "  Clipboard" -theme-str 'window { width: 700px; } * { font: "sans 16"; } element-icon { size: 0px; }' | wl-copy
     '';
   };
 }

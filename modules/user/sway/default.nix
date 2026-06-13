@@ -49,7 +49,6 @@ in {
     # modules/user/flameshot. Les binds Print/Shift+Print, le daemon et les
     # règles for_window restent dans sway-config/config.template.
     home.packages = with cfg.pkgs; [
-      dmenu # mod + d menu
 
       # Sway bar dependencies
       acpi # Power battery

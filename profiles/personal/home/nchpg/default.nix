@@ -60,6 +60,14 @@
         enable = true;
       };
 
+      wifiPicker = {
+        enable = true;
+      };
+
+      rofi = {
+        enable = true;
+      };
+
       vscode = {
         enable = true;
         pkgs = pkgs-unstable;
