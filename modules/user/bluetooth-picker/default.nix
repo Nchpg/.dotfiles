@@ -29,8 +29,17 @@ in {
       esc_quit = true
     '';
 
+    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
+    home.file.".config/sway/launchers/bluetooth" = {
+      text = ''
+        #!/bin/sh
+        exec ${termCmd}
+      '';
+      executable = true;
+    };
+
     home.file.".config/sway/conf.d/bluetooth-picker.conf".text = ''
-      bindsym $mod+b exec ${termCmd}
+      bindsym $mod+b exec ~/.config/sway/launchers/bluetooth
       for_window [title="bluetui"] floating enable, resize set 1200 850, border pixel 2
     '';
   };
