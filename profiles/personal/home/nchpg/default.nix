@@ -81,6 +81,10 @@
         enable = true;
       };
 
+      posting = {
+        enable = true;
+      };
+
       shell = {
         zsh = {
           enable = true;
