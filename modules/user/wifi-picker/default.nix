@@ -23,9 +23,18 @@ let
     + "actbutton=white,black:"
     + "compactbutton=white,black";
 
+  # kitty intercepte la touche AVANT de l'envoyer à l'app : on mappe q vers la
+  # fermeture de la fenêtre flottante pour unifier la sortie de tous les TUIs
+  # (nmtui ne quitte nativement qu'avec Esc, jamais avec q). Conséquence : q est
+  # capturé par kitty et n'atteint plus nmtui — sans impact en usage courant,
+  # mais on ne peut plus taper un « q » littéral (ex. mot de passe wifi).
+  # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
+  kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
   termCmd =
     if term == "alacritty"
     then "${term} --title nmtui-wifi -e nmtui"
+    else if term == "kitty"
+    then "${term} ${kittyQuit} --title nmtui-wifi nmtui"
     else "${term} --title nmtui-wifi nmtui";
 
 in {

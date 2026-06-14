@@ -33,6 +33,15 @@ let
 
     build-system = [ py.setuptools ];
 
+    # Unifier la sortie avec les autres TUIs : Esc quitte comme q. On ajoute
+    # le code touche 27 (Esc) à la condition de quit. On passe ainsi par le
+    # MÊME chemin propre que q (synchro vers Google AVANT de fermer), contrairement
+    # à une fermeture forcée de la fenêtre qui perdrait les modifs non synchronisées.
+    postPatch = ''
+      substituteInPlace tasks_tui/main.py \
+        --replace "[ord('q'), ord('Q')]" "[ord('q'), ord('Q'), 27]"
+    '';
+
     dependencies = with py; [
       google-api-python-client
       google-auth-oauthlib
