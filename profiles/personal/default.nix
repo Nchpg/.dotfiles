@@ -27,6 +27,11 @@
         sway.enable = true;
         gnome.enable = true;
       };
+
+      lgLaptop = {
+        enable = true;
+        batteryCareLimit = 80;
+      };
     };
   };
 }

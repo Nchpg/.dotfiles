@@ -240,6 +240,7 @@ handle_click() {
         brightness:4) brightnessctl set 5%+ >/dev/null ;;
         brightness:5) brightnessctl set 5%- >/dev/null ;;
         dnd:1)        swaync-client -d >/dev/null ;;
+        battery:1)    swaymsg exec "$launchers/lg-control" ;;
     esac
 }
 

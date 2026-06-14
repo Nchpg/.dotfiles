@@ -72,6 +72,10 @@
         enable = true;
       };
 
+      lgControl = {
+        enable = true;
+      };
+
       rofi = {
         enable = true;
       };
