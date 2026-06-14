@@ -97,6 +97,10 @@
         enable = true;
       };
 
+      taskTui = {
+        enable = true;
+      };
+
       shell = {
         zsh = {
           enable = true;
