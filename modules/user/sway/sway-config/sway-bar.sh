@@ -51,13 +51,21 @@ bluetooth() {
     
     # Lit ligne par ligne la liste des appareils connectés
     while IFS= read -r line; do
+        mac=$(echo "$line" | awk '{print $2}')
         device_name=$(echo "$line" | awk '{ $1=""; $2=""; print $0 }' | xargs)
-        
+
         # Troncation
         if [[ ${#device_name} -gt $MAX_BT_NAME_LENGTH ]]; then
             device_name="${device_name:0:$MAX_BT_NAME_LENGTH}..."
         fi
-        
+
+        # Niveau de batterie si l'appareil le rapporte (nécessite Experimental=true côté BlueZ)
+        battery_pct=$(bluetoothctl info "$mac" 2>/dev/null \
+            | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+')
+        if [[ -n "$battery_pct" ]]; then
+            device_name="$device_name 🔋${battery_pct}%"
+        fi
+
         # Ajoute le nom à la liste, séparé par une virgule
         if [[ -z "$device_list" ]]; then
             device_list="$device_name"
@@ -180,25 +188,6 @@ gpu() {
     echo "GPU ${busy}%"
 }
 
-# Fonction pour récupérer le titre du média en cours de lecture
-MAX_TITLE_LENGTH=30
-media_title() {
-    if command -v playerctl &>/dev/null; then
-        title=$(playerctl metadata title 2>/dev/null)
-        if [[ -n "$title" ]]; then
-            # Truncate the title if it exceeds MAX_TITLE_LENGTH
-            if [[ ${#title} -gt $MAX_TITLE_LENGTH ]]; then
-                title="${title:0:$MAX_TITLE_LENGTH}..."
-            fi
-            echo "🎶 $title |"
-        else
-            echo ""
-        fi
-    else
-        echo ""
-    fi
-}
-
 disk(){
     disk_info=$(df -h / | awk 'NR==2 {print $3 "o : " $5}')
     echo "$disk_info 📁"
@@ -206,7 +195,7 @@ disk(){
 
 while true; do
     # Compose la barre
-    status="$(media_title) $(bluetooth) | $(wifi) | $(resources) | $(brightness) | $(volume) $(dnd) | $(disk) | $(battery) | $(datetime)"
+    status="$(bluetooth) | $(wifi) | $(resources) | $(brightness) | $(volume) $(dnd) | $(disk) | $(battery) | $(datetime)"
 
     # Affiche dans swaybar (output standard)
     echo "$status"

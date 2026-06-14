@@ -79,6 +79,16 @@
     pulse.enable = true;
     wireplumber.enable = true;
     jack.enable = true;
+
+    # Le périphérique par défaut suit la priorité (priority.session) au lieu d'être
+    # épinglé. Les sorties Bluetooth ont une priorité plus haute que le haut-parleur
+    # interne : à la connexion elles deviennent donc la sortie par défaut, et les
+    # binds sway (wpctl ... @DEFAULT_AUDIO_SINK@) les contrôlent automatiquement.
+    wireplumber.extraConfig."51-default-follow-priority" = {
+      "wireplumber.settings" = {
+        "node.restore-default-targets" = false;
+      };
+    };
   };
 
   # Enable Docker
@@ -132,7 +142,11 @@
   console.keyMap = "fr";
 
 
-  hardware.bluetooth.enable = true;
+  hardware.bluetooth = {
+    enable = true;
+    # Experimental active le report du niveau de batterie des appareils BT (via D-Bus).
+    settings.General.Experimental = true;
+  };
 
   # Enable thunar
   programs.thunar.enable = true;

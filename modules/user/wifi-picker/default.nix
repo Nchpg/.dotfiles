@@ -41,7 +41,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     home.file.".config/sway/conf.d/wifi-picker.conf".text = ''
-      bindsym $mod+Shift+w exec ${launchCmd}
+      bindsym $mod+w exec ${launchCmd}
       for_window [title="nmtui-wifi"] floating enable, resize set 1200 850, border pixel 2
     '';
   };
