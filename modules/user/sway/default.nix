@@ -45,6 +45,20 @@ in {
 
     home.file.".config/sway/wallpaper.png".source = ./sway-config/wallpaper.png;
 
+    # Cible de session graphique pour l'intégration systemd. Démarrée au lancement
+    # de sway (cf. config.template), elle active graphical-session.target via BindsTo,
+    # ce qui démarre automatiquement les services Wayland liés (cliphist, etc.) et
+    # les arrête proprement à la sortie de sway.
+    systemd.user.targets.sway-session = {
+      Unit = {
+        Description = "sway compositor session";
+        Documentation = [ "man:systemd.special(7)" ];
+        BindsTo = [ "graphical-session.target" ];
+        Wants = [ "graphical-session-pre.target" ];
+        After = [ "graphical-session-pre.target" ];
+      };
+    };
+
     # Capture d'écran (flameshot + grim/slurp/wl-clipboard) : module dédié
     # modules/user/flameshot. Les binds Print/Shift+Print, le daemon et les
     # règles for_window restent dans sway-config/config.template.

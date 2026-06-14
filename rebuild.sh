@@ -71,7 +71,11 @@ fi
 
 echo "🚀 Starting NixOS system rebuild..."
 
-sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" --impure --show-trace
+# Pas de --impure : la config est pure (aucun getEnv/lecture impure), et --impure
+# désactiverait le cache d'évaluation -> chaque rebuild réévaluerait tout de zéro.
+# Pas de --show-trace par défaut : il ralentit nettement l'éval. Pour déboguer une
+# erreur d'éval, relancer ponctuellement avec : NIX_DEBUG=1 ... --show-trace.
+sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" ${REBUILD_EXTRA_ARGS:-}
 
 if [ $? -eq 0 ]; then
     echo "✅ System rebuild successful."
