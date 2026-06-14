@@ -25,8 +25,17 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.pkgs.ncpamixer ];
 
+    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
+    home.file.".config/sway/launchers/volume-mixer" = {
+      text = ''
+        #!/bin/sh
+        exec ${termCmd}
+      '';
+      executable = true;
+    };
+
     home.file.".config/sway/conf.d/volume-mixer.conf".text = ''
-      bindsym $mod+p exec ${termCmd}
+      bindsym $mod+p exec ~/.config/sway/launchers/volume-mixer
       for_window [title="ncpamixer"] floating enable, resize set 1200 850, border pixel 2
     '';
   };

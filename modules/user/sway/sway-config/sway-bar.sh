@@ -193,13 +193,81 @@ disk(){
     echo "$disk_info 📁"
 }
 
-while true; do
-    # Compose la barre
-    status="$(bluetooth) | $(wifi) | $(resources) | $(brightness) | $(volume) $(dnd) | $(disk) | $(battery) | $(datetime)"
+# --- Protocole i3bar (JSON) : permet les blocs cliquables -------------------
 
-    # Affiche dans swaybar (output standard)
-    echo "$status"
+# Échappe les caractères spéciaux JSON dans le texte d'un bloc.
+json_escape() {
+    s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    printf '%s' "$s"
+}
 
-    sleep 2
+# Construit un bloc JSON : nom (pour identifier le clic) + texte affiché.
+# On désactive le séparateur natif de swaybar : le visuel (les « | ») est géré
+# dans le texte des blocs pour rester identique à l'ancienne barre texte.
+block() {
+    printf '{"name":"%s","full_text":"%s","separator":false,"separator_block_width":0}' \
+        "$1" "$(json_escape "$2")"
+}
+
+# Compose la ligne complète (tableau JSON de blocs).
+# Les " | " (et l'espace volume/dnd) reproduisent exactement l'ancien rendu.
+blocks() {
+    printf '[%s,%s,%s,%s,%s,%s,%s,%s,%s]' \
+        "$(block bluetooth "$(bluetooth) | ")" \
+        "$(block wifi "$(wifi) | ")" \
+        "$(block resources "$(resources) | ")" \
+        "$(block brightness "$(brightness) | ")" \
+        "$(block volume "$(volume) ")" \
+        "$(block dnd "$(dnd) | ")" \
+        "$(block disk "$(disk) | ")" \
+        "$(block battery "$(battery) | ")" \
+        "$(block datetime "$(datetime)")"
+}
+
+# Réaction aux clics. $1 = nom du bloc, $2 = bouton (1 gauche, 2 milieu, 3 droite,
+# 4 molette haut, 5 molette bas).
+launchers="$HOME/.config/sway/launchers"
+handle_click() {
+    case "$1:$2" in
+        bluetooth:1)  swaymsg exec "$launchers/bluetooth" ;;
+        wifi:1)       swaymsg exec "$launchers/wifi" ;;
+        volume:1)     swaymsg exec "$launchers/volume-mixer" ;;
+        volume:2)     wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle ;;
+        volume:4)     wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+ ;;
+        volume:5)     wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%- ;;
+        brightness:4) brightnessctl set 5%+ >/dev/null ;;
+        brightness:5) brightnessctl set 5%- >/dev/null ;;
+        dnd:1)        swaync-client -d >/dev/null ;;
+    esac
+}
+
+# En-tête du protocole + ouverture du tableau infini.
+echo '{"version":1,"click_events":true}'
+echo '['
+echo '[]'
+
+# Émission périodique de l'état (en arrière-plan).
+(
+    while true; do
+        printf ',%s\n' "$(blocks)"
+        sleep 2
+    done
+) &
+status_pid=$!
+trap 'kill "$status_pid" 2>/dev/null' EXIT
+
+# Lecture des événements de clic envoyés par swaybar sur stdin.
+while IFS= read -r line; do
+    line=${line#[}        # 1re ligne = '[' du flux d'événements
+    line=${line#,}        # lignes suivantes préfixées d'une virgule
+    [ -z "$line" ] && continue
+    name=$(printf '%s' "$line" | grep -oP '"name"\s*:\s*"\K[^"]+')
+    button=$(printf '%s' "$line" | grep -oP '"button"\s*:\s*\K[0-9]+')
+    [ -z "$name" ] && continue
+    # IMPORTANT : rediriger toute sortie des actions, sinon le résultat de
+    # swaymsg/wpctl se mêle au flux JSON de la barre et la casse.
+    handle_click "$name" "$button" >/dev/null 2>&1
 done
 

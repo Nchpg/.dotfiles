@@ -28,7 +28,6 @@ let
     then "${term} --title nmtui-wifi -e nmtui"
     else "${term} --title nmtui-wifi nmtui";
 
-  launchCmd = "sh -c '${newtColors} ${termCmd}'";
 in {
   options.userSettings.wifiPicker = {
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)";
@@ -40,8 +39,17 @@ in {
   };
 
   config = lib.mkIf cfg.enable {
+    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
+    home.file.".config/sway/launchers/wifi" = {
+      text = ''
+        #!/bin/sh
+        ${newtColors} exec ${termCmd}
+      '';
+      executable = true;
+    };
+
     home.file.".config/sway/conf.d/wifi-picker.conf".text = ''
-      bindsym $mod+w exec ${launchCmd}
+      bindsym $mod+w exec ~/.config/sway/launchers/wifi
       for_window [title="nmtui-wifi"] floating enable, resize set 1200 850, border pixel 2
     '';
   };
