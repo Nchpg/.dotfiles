@@ -82,9 +82,16 @@ let
     '';
   };
 
+  # kitty mappe q vers la fermeture de la fenêtre pour unifier la sortie de tous
+  # les TUIs (gum ne quitte qu'avec Esc / Ctrl-C / l'entrée « Quitter », jamais
+  # avec q). Esc reste géré nativement par gum (annule / revient en arrière).
+  # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
+  kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
   termCmd =
     if term == "alacritty"
     then "${term} --title lg-control -e ${lg-control}/bin/lg-control"
+    else if term == "kitty"
+    then "${term} ${kittyQuit} --title lg-control ${lg-control}/bin/lg-control"
     else "${term} --title lg-control ${lg-control}/bin/lg-control";
 in {
   options.userSettings.lgControl = {
