@@ -64,6 +64,14 @@
         enable = true;
       };
 
+      bluetoothPicker = {
+        enable = true;
+      };
+
+      volumeMixer = {
+        enable = true;
+      };
+
       rofi = {
         enable = true;
       };
