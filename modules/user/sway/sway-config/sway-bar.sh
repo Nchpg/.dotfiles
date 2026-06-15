@@ -241,6 +241,7 @@ handle_click() {
         brightness:5) brightnessctl set 5%- >/dev/null ;;
         dnd:1)        swaync-client -d >/dev/null ;;
         battery:1)    swaymsg exec "$launchers/lg-control" ;;
+        datetime:1)   swaymsg exec "$launchers/calendar" ;;
     esac
 }
 
@@ -271,4 +272,3 @@ while IFS= read -r line; do
     # swaymsg/wpctl se mêle au flux JSON de la barre et la casse.
     handle_click "$name" "$button" >/dev/null 2>&1
 done
-
