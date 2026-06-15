@@ -101,6 +101,10 @@
         enable = true;
       };
 
+      calendarTui = {
+        enable = true;
+      };
+
       shell = {
         zsh = {
           enable = true;
