@@ -30,7 +30,12 @@ let
     .notification:hover { background-color: ${c.base02}; }
     .notification.critical { border: 1px solid ${c.base08}; }
 
-    .notification-content { padding: 12px; border-radius: 12px; gap: 18px; }
+    .notification-content { padding: 12px; border-radius: 12px; }
+
+    /* Espace icône ↔ texte : GTK ignore `gap`, on met une marge sur l'icône.
+       `.image` = icône/avatar principal, `.text-box` = bloc résumé+corps. */
+    .notification-content .image { margin-right: 18px; }
+    .notification-content .text-box { margin-left: 4px; }
 
     .summary { font-weight: bold; font-size: 1.15em; color: ${c.base05}; }
     .time    { color: ${c.base04}; font-size: 0.85em; }

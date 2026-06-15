@@ -17,6 +17,19 @@ in {
     programs.firefox = {
       enable = true;
       package = cfg.pkgs.firefox;
+      # Permissions de notification accordées d'office (policy entreprise), sans
+      # passer par la bannière « ce site souhaite afficher des notifications ».
+      # Les permissions par site vivent normalement dans permissions.sqlite (non
+      # reproductible) ; cette policy les rend déclaratives. Origines = schéma +
+      # host, sans slash final.
+      policies.Permissions.Notifications = {
+        Allow = [
+          "https://discord.com"
+          "https://claude.ai"
+        ];
+        # false = on continue d'autoriser les autres sites à demander la permission.
+        BlockNewRequests = false;
+      };
       # 26.05 a changé le défaut vers $XDG_CONFIG_HOME/mozilla/firefox. On garde
       # le chemin historique pour ne pas avoir à déplacer ~/.mozilla.
       configPath = ".mozilla/firefox";
