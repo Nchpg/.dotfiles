@@ -85,13 +85,6 @@ let
       version = "2.0.0";
       sha256 = "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc=";
     }
-
-    {
-      name = "pdf";
-      publisher = "tomoki1207";
-      version = "1.2.2";
-      sha256 = "sha256-i3Rlizbw4RtPkiEsodRJEB3AUzoqI95ohyqZ0ksROps=";
-    }
   ];
 
 
@@ -119,6 +112,9 @@ let
     # git
     eamodio.gitlens
 
+    # latex (compile + preview pdf auto)
+    james-yu.latex-workshop
+
     # outils
     arjun.swagger-viewer
     redhat.vscode-yaml
@@ -135,8 +131,6 @@ let
 
     # databases
     cweijan.dbclient-jdbc
-
-    tomoki1207.pdf
 
   ] ++ marketplaceExtensions;
 
@@ -171,6 +165,8 @@ in {
         vscode = cfg.pkgs.vscode-fhs;
         vscodeExtensions = allVscodeExtensions;
       })
+      # distribution LaTeX (latexmk, pdflatex, ...) utilisée par LaTeX Workshop
+      cfg.pkgs.texliveMedium
     ];
 
     home.file = {
