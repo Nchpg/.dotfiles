@@ -17,20 +17,30 @@ let
     ${vdirsyncerBin} sync
   '';
 
+  # L'ID de collection (= adresse/identifiant Google, PII) vient de sops : on
+  # insère un placeholder, remplacé par la vraie valeur à l'activation. La config
+  # khal est donc générée via sops.templates (cf. plus bas), pas xdg.configFile.
   khalCalendars = concatStringsSep "\n"
     (mapAttrsToList
       (name: calendar: ''
           [[${name}]]
-            path = ~/.calendars/google/${calendar.collection}/
+            path = ~/.calendars/google/${config.sops.placeholder.${calendar.collectionSecret}}/
             color = ${calendar.color}
             readonly = ${if calendar.readonly then "True" else "False"}
       '')
       cfg.calendars);
 
+  # Secrets sops a declarer pour chaque calendrier (nom = collectionSecret).
+  calendarSecrets = lib.listToAttrs
+    (mapAttrsToList
+      (_: calendar: lib.nameValuePair calendar.collectionSecret { })
+      cfg.calendars);
+
   # vdirsyncer a besoin du client_id/client_secret Google directement dans sa
-  # config. On fournit donc un template, mais pas le vrai fichier, pour éviter
-  # de pousser des secrets OAuth dans Git ou dans le store Nix.
-  vdirsyncerExample = ''
+  # config. On genere le fichier final via un template sops : les placeholders
+  # ci-dessous sont remplaces a l'activation par les vraies valeurs dechiffrees.
+  # Rien de secret ne transite par Git ni par le Nix store.
+  vdirsyncerConfig = ''
     [general]
     status_path = "~/.local/state/vdirsyncer/status/"
 
@@ -48,8 +58,8 @@ let
     [storage google_calendar_remote]
     type = "google_calendar"
     token_file = "~/.config/vdirsyncer/google-token.json"
-    client_id = "REMPLACE_MOI.apps.googleusercontent.com"
-    client_secret = "REMPLACE_MOI"
+    client_id = "${config.sops.placeholder."google/client_id"}"
+    client_secret = "${config.sops.placeholder."google/client_secret"}"
     start_date = "datetime.now() - timedelta(days=${toString cfg.syncPastDays})"
     end_date = "datetime.now() + timedelta(days=${toString cfg.syncFutureDays})"
     item_types = ["VEVENT"]
@@ -86,9 +96,14 @@ in {
     calendars = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule {
         options = {
-          collection = lib.mkOption {
+          collectionSecret = lib.mkOption {
             type = lib.types.str;
-            description = "Nom de collection vdirsyncer sous ~/.calendars/google.";
+            description = ''
+              Nom du secret sops contenant l'ID de collection (= identifiant Google,
+              PII) de cet agenda. La valeur est insérée dans la config khal à
+              l'activation, jamais en clair dans le repo.
+            '';
+            example = "calendars/perso";
           };
           color = lib.mkOption {
             type = lib.types.str;
@@ -103,21 +118,21 @@ in {
       });
       default = {
         perso = {
-          collection = "nathanchampagne49@gmail.com";
+          collectionSecret = "calendars/perso";
           color = "light green";
         };
         epita = {
-          collection = "0lp4mj4mb0vh4i10orso9rq697ng5q87@import.calendar.google.com";
+          collectionSecret = "calendars/epita";
           color = "light blue";
           readonly = true;
         };
         feries = {
-          collection = "cpp2spjicln66q13d1nmoqb4c5sk0pridtqn0bjm5phm2r35dpi62shectnmuprcckn66rrd@virtual";
+          collectionSecret = "calendars/feries";
           color = "yellow";
           readonly = true;
         };
       };
-      description = "Agendas Google exposés à khal, avec couleur par type.";
+      description = "Agendas Google exposés à khal (ID via sops), avec couleur par type.";
     };
   };
 
@@ -127,7 +142,12 @@ in {
       vdirsyncer
     ];
 
-    xdg.configFile."khal/config".text = ''
+    # Config khal generee via sops (les chemins de calendriers contiennent des
+    # placeholders -> IDs injectes a l'activation). Les couleurs Stylix, elles,
+    # sont resolues a l'eval (mix placeholder runtime + interpolation build OK).
+    sops.templates."khal-config" = {
+      path = "${config.home.homeDirectory}/.config/khal/config";
+      content = ''
       [calendars]
       ${khalCalendars}
 
@@ -186,9 +206,22 @@ in {
         popupbg = white, black, default, '${c.base05}', '${c.base00}'
         popupper = black, light blue, bold, '${c.base06}', '${c.base02}'
         caption = light blue, black, bold, '${c.base05}', '${c.base00}'
-    '';
+      '';
+    };
 
-    xdg.configFile."vdirsyncer/config.example".text = vdirsyncerExample;
+    # Secrets OAuth Google (partages avec task-tui) dechiffres depuis
+    # secrets/secrets.yaml. Le template ci-dessous genere
+    # ~/.config/vdirsyncer/config avec les vraies valeurs a l'activation
+    # home-manager (jamais en clair dans le store ni dans Git).
+    # google/* = creds OAuth ; calendars/* = IDs d'agendas (PII), un par calendrier.
+    sops.secrets = calendarSecrets // {
+      "google/client_id" = { };
+      "google/client_secret" = { };
+    };
+    sops.templates."vdirsyncer-config" = {
+      content = vdirsyncerConfig;
+      path = "${config.home.homeDirectory}/.config/vdirsyncer/config";
+    };
 
     home.file.".calendars/google/.keep".text = "";
 
@@ -233,18 +266,19 @@ in {
       Install.WantedBy = [ "timers.target" ];
     };
 
-    # Setup OAuth, hors repo :
-    #
-    #   mkdir -p ~/.config/vdirsyncer
-    #   cp ~/.config/vdirsyncer/config.example ~/.config/vdirsyncer/config
-    #   chmod 600 ~/.config/vdirsyncer/config
+    # Setup OAuth (le fichier ~/.config/vdirsyncer/config est desormais genere
+    # automatiquement par sops a chaque `nixos-rebuild switch`) :
     #
     # Dans Google Cloud Console :
     #   1. Activer l'API CalDAV (pas seulement Google Calendar API)
     #   2. Créer un OAuth Client ID de type "Desktop application"
-    #   3. Coller client_id/client_secret dans ~/.config/vdirsyncer/config
-    #   4. Lancer `vdirsyncer discover`, puis `vdirsyncer sync`
     #
+    # Puis renseigner les secrets une fois (depuis la racine du repo) :
+    #   sops secrets/secrets.yaml
+    #     -> google.client_id / google.client_secret / google.project_id
+    #     -> calendars.perso / calendars.epita / calendars.feries (IDs agendas)
+    #
+    # Apres `switch`, lancer une fois :  vdirsyncer discover && vdirsyncer sync
     # Ensuite : Mod+c ouvre ikhal. La synchro tourne aussi via timer user.
   };
 }

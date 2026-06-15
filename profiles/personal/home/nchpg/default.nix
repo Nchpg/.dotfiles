@@ -37,7 +37,7 @@
       git = {
         enable = true;
         userName = "nathan.champagne";
-        userEmail = "nathan.champagne@epita.fr";
+        userEmailSops = "git/email";
       };
 
       firefox = {

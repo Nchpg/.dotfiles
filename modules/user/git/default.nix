@@ -22,12 +22,24 @@ in {
       userEmail = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
-        description = "Adresse e-mail pour les commits git.";
+        description = "Adresse e-mail pour les commits git (littérale, en clair dans le repo).";
         example = "john.doe@example.com";
+      };
+
+      userEmailSops = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        description = ''
+          Nom du secret sops contenant l'email git. Si défini, l'email est injecté
+          via un include gitconfig généré par sops (jamais en clair dans le repo)
+          et prend le pas sur `userEmail`.
+        '';
+        example = "git/email";
       };
     };
   };
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+  {
 
     home.packages = with cfg.pkgs; [
       git-graph
@@ -41,7 +53,8 @@ in {
       # définit que s'ils sont renseignés (profils guest/root les laissent vides).
       settings = {
         user.name = lib.mkIf (cfg.userName != null) cfg.userName;
-        user.email = lib.mkIf (cfg.userEmail != null) cfg.userEmail;
+        # L'email littéral n'est posé que si on NE passe PAS par sops.
+        user.email = lib.mkIf (cfg.userEmail != null && cfg.userEmailSops == null) cfg.userEmail;
 
         alias = {
           st = "status";
@@ -69,5 +82,18 @@ in {
         "*.swp"
       ];
     };
-  };
+  }
+
+  # Email git via sops : on génère un fragment gitconfig `[user] email = …` et on
+  # l'inclut. Le vrai email n'apparaît ni dans le repo ni dans le Nix store.
+  (lib.mkIf (cfg.userEmailSops != null) {
+    sops.secrets.${cfg.userEmailSops} = { };
+    sops.templates."git-user-email".content = ''
+      [user]
+        email = ${config.sops.placeholder.${cfg.userEmailSops}}
+    '';
+    programs.git.settings.include.path =
+      config.sops.templates."git-user-email".path;
+  })
+  ]);
 }
