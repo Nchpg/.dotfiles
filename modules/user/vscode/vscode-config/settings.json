@@ -35,5 +35,14 @@
     "editor.formatOnSaveMode": "file",
     "files.autoSave": "afterDelay",
     "claudeCode.preferredLocation": "panel",
-    "claudeCode.claudeProcessWrapper": "@claudeWrapper@"
+    "claudeCode.claudeProcessWrapper": "@claudeWrapper@",
+    "latex-workshop.latex.autoBuild.run": "onSave",
+    "latex-workshop.latex.recipe.default": "lastUsed",
+    "latex-workshop.view.pdf.viewer": "tab",
+    "latex-workshop.latex.autoClean.run": "onBuilt",
+    "latex-workshop.message.error.show": false,
+    "latex-workshop.message.warning.show": false,
+    "workbench.editorAssociations": {
+        "*.pdf": "latex-workshop-pdf-hook"
+    }
 }
