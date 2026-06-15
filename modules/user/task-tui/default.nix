@@ -90,16 +90,34 @@ in {
       for_window [title="tasks-tui"] floating enable, resize set 1200 850, border pixel 2
     '';
 
-    # NOTE secret Google (OAuth) :
-    # L'app lit ~/.gtask/client_secrets.json et écrit ~/.gtask/token.json au
-    # premier lancement (flux navigateur). Comme tu n'as pas de gestionnaire de
-    # secrets (sops/agenix), ce JSON n'est PAS géré par Nix : dépose-le
-    # toi-même, hors du repo git :
+    # Secrets OAuth Google (les MEMES que vdirsyncer/calendar-tui : source de
+    # verite unique dans secrets/secrets.yaml sous `google:`). On ne stocke pas
+    # le client_secrets.json complet : on le GENERE a partir des sous-cles, pour
+    # eviter toute duplication des identifiants.
+    sops.secrets."google/client_id" = { };
+    sops.secrets."google/client_secret" = { };
+    sops.secrets."google/project_id" = { };
+    sops.templates."gtask-client-secrets" = {
+      path = "${config.home.homeDirectory}/.gtask/client_secrets.json";
+      content = builtins.toJSON {
+        installed = {
+          client_id = config.sops.placeholder."google/client_id";
+          client_secret = config.sops.placeholder."google/client_secret";
+          project_id = config.sops.placeholder."google/project_id";
+          auth_uri = "https://accounts.google.com/o/oauth2/auth";
+          token_uri = "https://oauth2.googleapis.com/token";
+          auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs";
+          redirect_uris = [ "http://localhost" ];
+        };
+      };
+    };
+    # L'app lit ce client_secrets.json, puis ecrit ~/.gtask/token.json au 1er
+    # lancement (flux navigateur) -- token runtime mutable, hors sops.
     #
-    #   1. Google Cloud Console → API « Google Tasks » activée
-    #   2. Identifiants → OAuth client ID, type « Application de bureau »
-    #   3. Télécharge le JSON → ~/.gtask/client_secrets.json
-    #   4. `tasks-tui` (1er lancement ouvre le navigateur pour autoriser)
+    # Setup (une fois) : memes identifiants OAuth que calendar-tui, dans un projet
+    # Google Cloud ou l'API « Google Tasks » est aussi activee. Renseigner via
+    #   sops secrets/secrets.yaml   ->   google.client_id / client_secret / project_id
+    # puis `nixos-rebuild switch`, puis `tasks-tui` (1er lancement = navigateur).
     #
     # Raccourcis : j/k naviguer, o ajouter, c cocher, w sync, q quitter, ? aide.
   };

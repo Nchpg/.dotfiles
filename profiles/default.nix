@@ -10,13 +10,15 @@
       (map (user: {
         name = user.name;
         value = {
-          imports = [ 
+          imports = [
             # stylix
             inputs.stylix.homeModules.stylix
+            # sops-nix (secrets chiffres -> fichiers $HOME a l'activation)
+            inputs.sops-nix.homeManagerModules.sops
             # build user
-            (./. + "/${target.profile}/home/${user.name}") 
+            (./. + "/${target.profile}/home/${user.name}")
             # user modules
-            ../modules/user 
+            ../modules/user
           ];
           config = { 
             userSettings.user = user.name; 
