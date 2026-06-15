@@ -36,7 +36,10 @@ bluetooth() {
     fi
 
     # 2. L'adaptateur est On. On cherche maintenant les périphériques connectés.
-    connected_devices=$(bluetoothctl devices Connected)
+    # bluetoothctl injecte des codes couleur ANSI (ex. « \e[0m ») dans sa sortie :
+    # on les retire, sinon ils gonflent la longueur du nom et déclenchent une
+    # troncature parasite (nom complet + « ... ») dans la barre.
+    connected_devices=$(bluetoothctl devices Connected | sed 's/\x1b\[[0-9;]*m//g')
     
     # Si la variable est vide, aucun appareil n'est connecté
     if [[ -z "$connected_devices" ]]; then
@@ -193,6 +196,35 @@ disk(){
     echo "$disk_info 📁"
 }
 
+# Morceau Spotify en cours (via MPRIS/playerctl) : permet de voir et contrôler
+# la lecture sans ouvrir la fenêtre Spotify. Sortie vide si Spotify est fermé,
+# pour que le bloc disparaisse (largeur 0) plutôt que d'afficher un « | » seul.
+nowplaying() {
+    command -v playerctl &>/dev/null || return
+
+    status=$(playerctl -p spotify status 2>/dev/null)
+    [[ -z "$status" ]] && return   # Spotify n'est pas lancé
+
+    case "$status" in
+        Playing) icon="▶" ;;
+        Paused)  icon="⏸" ;;
+        *)       icon="⏹" ;;
+    esac
+
+    meta=$(playerctl -p spotify metadata --format '{{ artist }} - {{ title }}' 2>/dev/null)
+    # Repli si pas d'artiste (podcast, pub, etc.) -> juste le titre.
+    [[ -z "$meta" || "$meta" == " - "* ]] && \
+        meta=$(playerctl -p spotify metadata --format '{{ title }}' 2>/dev/null)
+    [[ -z "$meta" ]] && return
+
+    MAX_NP_LENGTH=35
+    if [[ ${#meta} -gt $MAX_NP_LENGTH ]]; then
+        meta="${meta:0:$MAX_NP_LENGTH}…"
+    fi
+
+    echo "🎵 $icon $meta | "
+}
+
 # --- Protocole i3bar (JSON) : permet les blocs cliquables -------------------
 
 # Échappe les caractères spéciaux JSON dans le texte d'un bloc.
@@ -214,7 +246,8 @@ block() {
 # Compose la ligne complète (tableau JSON de blocs).
 # Les " | " (et l'espace volume/dnd) reproduisent exactement l'ancien rendu.
 blocks() {
-    printf '[%s,%s,%s,%s,%s,%s,%s,%s,%s]' \
+    printf '[%s,%s,%s,%s,%s,%s,%s,%s,%s,%s]' \
+        "$(block nowplaying "$(nowplaying)")" \
         "$(block bluetooth "$(bluetooth) | ")" \
         "$(block wifi "$(wifi) | ")" \
         "$(block resources "$(resources) | ")" \
@@ -231,6 +264,9 @@ blocks() {
 launchers="$HOME/.config/sway/launchers"
 handle_click() {
     case "$1:$2" in
+        nowplaying:1) playerctl -p spotify play-pause ;;
+        nowplaying:4) playerctl -p spotify next ;;
+        nowplaying:5) playerctl -p spotify previous ;;
         bluetooth:1)  swaymsg exec "$launchers/bluetooth" ;;
         wifi:1)       swaymsg exec "$launchers/wifi" ;;
         volume:1)     swaymsg exec "$launchers/volume-mixer" ;;

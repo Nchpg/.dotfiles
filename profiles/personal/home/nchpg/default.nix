@@ -85,6 +85,11 @@
         pkgs = pkgs-unstable;
       };
 
+      spotify = {
+        enable = true;
+        theme = "default";
+      };
+
       tig = {
         enable = true;
       };

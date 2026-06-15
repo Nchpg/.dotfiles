@@ -15,6 +15,8 @@
             inputs.stylix.homeModules.stylix
             # sops-nix (secrets chiffres -> fichiers $HOME a l'activation)
             inputs.sops-nix.homeManagerModules.sops
+            # spicetify (Spotify patché, cf. modules/user/spotify)
+            inputs.spicetify-nix.homeManagerModules.default
             # build user
             (./. + "/${target.profile}/home/${user.name}")
             # user modules

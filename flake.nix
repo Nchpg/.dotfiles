@@ -23,6 +23,11 @@
     claude-code = {
       url = "git+https://github.com/sadjow/claude-code-nix";
     };
+
+    spicetify-nix = {
+      url = "github:Gerg-L/spicetify-nix";
+      inputs.nixpkgs.follows = "nixpkgs-stable";
+    };
   };
 
   outputs = inputs@{ self, ... }:
