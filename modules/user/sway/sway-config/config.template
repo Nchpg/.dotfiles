@@ -167,6 +167,9 @@ bar {
     tray_output *
     tray_padding 4
 
+    # Pas d'onglet de mode (ex. le "displays" rouge) affiché dans la barre.
+    binding_mode_indicator no
+
     colors {
         statusline #ffffff
         background #323232
