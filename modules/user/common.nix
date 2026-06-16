@@ -10,10 +10,13 @@
       util-linux
       coreutils
       man-db
-      man-pages  
+      man-pages
       man-pages-posix
-  
+
       nbfc-linux
+
+      # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF
+      poppler-utils
     ])
     ++ [
       # Claude Code via le flake dédié (toujours à jour, cf. flake.nix)
