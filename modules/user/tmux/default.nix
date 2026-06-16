@@ -89,6 +89,10 @@ in {
         # Couleurs true color
         set -ga terminal-overrides ",*256col*:Tc"
 
+        # Laisse passer les séquences graphiques (Kitty graphics protocol) à
+        # travers tmux : requis par image.nvim pour afficher les images.
+        set -gq allow-passthrough on
+
         # Renumérote les fenêtres quand on en ferme une
         set -g renumber-windows on
 
