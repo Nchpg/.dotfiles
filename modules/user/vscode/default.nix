@@ -166,7 +166,14 @@ in {
         vscodeExtensions = allVscodeExtensions;
       })
       # distribution LaTeX (latexmk, pdflatex, ...) utilisée par LaTeX Workshop
-      cfg.pkgs.texliveMedium
+      # avec les paquets supplémentaires (enumitem, titlesec, eurosym, parskip, ...)
+      # manquants utilisés par le CV
+      (cfg.pkgs.texliveMedium.withPackages (ps: with ps; [
+        enumitem
+        titlesec
+        eurosym
+        parskip
+      ]))
     ];
 
     home.file = {
