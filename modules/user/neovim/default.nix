@@ -51,6 +51,7 @@ in {
         # ui
         lualine-nvim
         nvim-tree-lua
+        image-nvim   # rendu d'images (backend kitty) dans Markdown + API
 
         # git
         vim-fugitive
@@ -73,7 +74,16 @@ in {
         # telescope live grep
         ripgrep
         fd
+        # image.nvim : traitement d'images, + ghostscript pour rasteriser PDF/EPS.
+        # (pdftoppm/pdftotext viennent de poppler-utils, cf. modules/user/common.nix)
+        imagemagick
+        ghostscript
       ];
+
+      # image.nvim a besoin du rock lua `magick` sur le luapath de Neovim.
+      # extraLuaPackages fournit le set lua qui matche la version de Neovim,
+      # donc pas de conflit luajit (cf. note pkgs-stable plus haut).
+      extraLuaPackages = ps: [ ps.magick ];
 
       initLua = ''
         -- Options de base
@@ -125,6 +135,54 @@ in {
         })
         telescope.load_extension("fzf")
 
+        -- Telescope ne suit pas la palette base16 de Stylix par défaut
+        -- (base16-nvim ne définit pas ses highlight groups), on les mappe
+        -- explicitement sur les couleurs Stylix pour rester cohérent.
+        local c = {
+          base00 = "#${config.lib.stylix.colors.base00}", -- fond
+          base01 = "#${config.lib.stylix.colors.base01}", -- fond clair
+          base02 = "#${config.lib.stylix.colors.base02}", -- sélection
+          base03 = "#${config.lib.stylix.colors.base03}", -- commentaires / bordures
+          base05 = "#${config.lib.stylix.colors.base05}", -- texte
+          base0A = "#${config.lib.stylix.colors.base0A}", -- match
+          base0D = "#${config.lib.stylix.colors.base0D}", -- titres
+        }
+        local function tshl()
+          local set = vim.api.nvim_set_hl
+          -- fenêtres / fonds
+          set(0, "TelescopeNormal",          { fg = c.base05, bg = c.base00 })
+          set(0, "TelescopeResultsNormal",   { fg = c.base05, bg = c.base00 })
+          set(0, "TelescopePreviewNormal",   { fg = c.base05, bg = c.base00 })
+          set(0, "TelescopePromptNormal",    { fg = c.base05, bg = c.base01 })
+          -- bordures (toutes mappées sur base03, plus aucun accent par défaut)
+          set(0, "TelescopeBorder",          { fg = c.base03, bg = c.base00 })
+          set(0, "TelescopeResultsBorder",   { fg = c.base03, bg = c.base00 })
+          set(0, "TelescopePreviewBorder",   { fg = c.base03, bg = c.base00 })
+          set(0, "TelescopePromptBorder",    { fg = c.base03, bg = c.base01 })
+          -- titres
+          set(0, "TelescopePromptTitle",     { fg = c.base00, bg = c.base0D, bold = true })
+          set(0, "TelescopeResultsTitle",    { fg = c.base00, bg = c.base0D, bold = true })
+          set(0, "TelescopePreviewTitle",    { fg = c.base00, bg = c.base0D, bold = true })
+          -- prompt : préfixe et compteur (orange base09 par défaut → base0D)
+          set(0, "TelescopePromptPrefix",    { fg = c.base0D, bg = c.base01 })
+          set(0, "TelescopePromptCounter",   { fg = c.base03, bg = c.base01 })
+          -- sélection
+          set(0, "TelescopeSelection",       { fg = c.base05, bg = c.base02 })
+          set(0, "TelescopeSelectionCaret",  { fg = c.base0D, bg = c.base02 })
+          set(0, "TelescopeMultiSelection",  { fg = c.base05, bg = c.base02 })
+          set(0, "TelescopeMultiIcon",       { fg = c.base0D })
+          -- match
+          set(0, "TelescopeMatching",        { fg = c.base0A, bold = true })
+        end
+        tshl()
+        -- Stylix charge son colorscheme (base16-nvim) potentiellement APRÈS ce
+        -- bloc : on réapplique sur ColorScheme, et une fois l'UI prête, pour
+        -- garantir qu'on passe en dernier.
+        vim.api.nvim_create_autocmd("ColorScheme", { callback = tshl })
+        vim.api.nvim_create_autocmd("VimEnter", {
+          callback = function() vim.schedule(tshl) end,
+        })
+
         local builtin = require("telescope.builtin")
         vim.keymap.set("n", "<leader>ff", builtin.find_files,       { desc = "Find files" })
         vim.keymap.set("n", "<leader>fg", builtin.live_grep,        { desc = "Live grep" })
@@ -161,6 +219,25 @@ in {
         })
         vim.keymap.set("n", "<leader>gh", ":Gitsigns preview_hunk<CR>",  { desc = "Preview hunk" })
         vim.keymap.set("n", "<leader>gb", ":Gitsigns blame_line<CR>",    { desc = "Blame line" })
+
+        -- image.nvim : rendu d'images via le protocole graphique kitty.
+        -- tmux_show_only_in_active_window + le passthrough tmux (cf. module tmux)
+        -- sont nécessaires pour que les images traversent tmux correctement.
+        require("image").setup({
+          backend = "kitty",
+          processor = "magick_rock",
+          integrations = {
+            markdown = {
+              enabled = true,
+              only_render_image_at_cursor = false,
+              filetypes = { "markdown", "vimwiki" },
+            },
+          },
+          max_width = nil,
+          max_height = nil,
+          window_overlap_clear_enabled = true,
+          tmux_show_only_in_active_window = true,
+        })
 
         -- Comment
         require("Comment").setup()
