@@ -52,6 +52,10 @@
         enable = true;
       };
 
+      displays = {
+        enable = true;
+      };
+
       notifications = {
         enable = true;
       };
