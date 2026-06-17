@@ -40,6 +40,12 @@
         userEmailSops = "git/email";
       };
 
+      gh = {
+        enable = true;
+        # Renseigne ton login GitHub si tu veux qu'il apparaisse dans hosts.yml.
+        # user = "nchpg";
+      };
+
       firefox = {
         enable = true;
       };
