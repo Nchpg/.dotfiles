@@ -61,7 +61,9 @@ in {
         comment-nvim
         nvim-autopairs
         vim-surround
-      ];
+      ]
+      # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+      ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
       extraPackages = with pkgs-stable; [
         # language servers

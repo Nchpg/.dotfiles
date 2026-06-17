@@ -132,7 +132,9 @@ let
     # databases
     cweijan.dbclient-jdbc
 
-  ] ++ marketplaceExtensions;
+  ] ++ marketplaceExtensions
+  # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+  ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vscode-extensions.wakatime.vscode-wakatime;
 
   # Wrapper script to bypass the macOS arm64 binary bundled in the linux-x64 VSIX.
   # The extension calls: wrapper <bundled_binary> [actual_flags...]

@@ -46,6 +46,10 @@
         # user = "nchpg";
       };
 
+      wakatime = {
+        enable = true;
+      };
+
       firefox = {
         enable = true;
       };

@@ -24,13 +24,14 @@ in {
         vim-polyglot
         vim-airline
         vim-airline-themes
-        vim-wakatime
         vim-fugitive
         vim-gitgutter
         vim-commentary
         nerdtree
         coc-nvim
-      ];
+      ]
+      # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+      ++ lib.optional config.userSettings.wakatime.enable vim-wakatime;
 
       extraConfig = ''
         ${builtins.readFile ./vim-config/.vimrc}
