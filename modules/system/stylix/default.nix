@@ -94,6 +94,14 @@ in
 
         echo "→ variant = $target ; rebuild en cours…"
         sudo nixos-rebuild switch --flake "$flake#$(hostname)" --impure
+
+        # Le changement de thème modifie les couleurs de waybar, mais le rebuild
+        # (root) ne peut pas relancer le service systemd --user. On le redémarre
+        # ici, côté utilisateur, pour qu'il reprenne la nouvelle palette.
+        # try-restart = no-op s'il ne tourne pas.
+        if [ -n "''${SWAYSOCK:-}" ]; then
+          systemctl --user try-restart waybar.service 2>/dev/null || true
+        fi
       '')
     ];
 

@@ -39,6 +39,10 @@ in {
     # NB : l'intégration Sway (bind Print/Shift+Print, daemon flameshot lancé au
     # démarrage, règles for_window) vit dans modules/user/sway/sway-config, car
     # c'est de la syntaxe de config Sway, pas du Nix.
+    # NB : flameshot.ini ne tolère PAS de commentaires (# rejeté : « Unrecognized
+    # setting »), d'où la doc ici. Réglages Wayland du .ini :
+    #   useGrimAdapter=true     -> capture via grim (flameshot compilé wlrSupport)
+    #   disabledGrimWarning=true -> coupe le warning « grim = wlroots » (flameshot 13+)
     home.file.".config/flameshot/flameshot.ini".source = ./flameshot.ini;
   };
 }

@@ -27,10 +27,77 @@ let
     notification-error  = c.base08;
     misc                = c.base03;
   };
+  # Adblock niveau RÉSEAU (LD_PRELOAD) : abba23/spotify-adblock, compilé depuis
+  # la source (pas dans nixpkgs). Contrairement aux extensions spicetify qui
+  # manipulent le player (et cassaient la lecture de certaines pistes, ex.
+  # « you're not able to play this content »), il bloque juste les domaines de
+  # pub -> aucune incidence sur la lecture. config.toml fourni (allowlist).
+  spotifyAdblock = cfg.pkgs.rustPlatform.buildRustPackage {
+    pname = "spotify-adblock";
+    version = "1.1.0";
+    src = cfg.pkgs.fetchFromGitHub {
+      owner = "abba23";
+      repo = "spotify-adblock";
+      rev = "v1.1.0";
+      hash = "sha256-Em8ICO+GtA1k/urBA7e9+OdZmHvthTy+iRWueUz4+40=";
+    };
+    cargoHash = "sha256-gxGetdqaoJa/ZF1VnW6UXJyJfLBGZxZnyKpT/Qk/8Og=";
+    doCheck = false; # pas de tests amont
+    # cdylib -> on installe le .so et la config nous-mêmes.
+    installPhase = ''
+      runHook preInstall
+      install -Dm644 target/*/release/libspotifyadblock.so $out/lib/libspotifyadblock.so
+      install -Dm644 config.toml $out/share/spotify-adblock/config.toml
+      runHook postInstall
+    '';
+  };
+  adblockLib = "${spotifyAdblock}/lib/libspotifyadblock.so";
+
+  # Indicateur SNI Spotify : script Python (pygobject) enrobé avec les bons
+  # typelibs GObject-Introspection (gtk3 + ayatana-appindicator) via
+  # wrapGAppsHook, et le PATH runtime (playerctl + swaymsg).
+  pyEnv = cfg.pkgs.python3.withPackages (ps: [ ps.pygobject3 ]);
+  spotifyTray = cfg.pkgs.stdenv.mkDerivation {
+    pname = "spotify-tray-custom";
+    version = "1";
+    dontUnpack = true;
+    nativeBuildInputs = [
+      cfg.pkgs.wrapGAppsHook3
+      cfg.pkgs.gobject-introspection
+      cfg.pkgs.makeWrapper
+    ];
+    buildInputs = [
+      cfg.pkgs.gtk3
+      cfg.pkgs.libayatana-appindicator
+      cfg.pkgs.libdbusmenu-gtk3
+    ];
+    installPhase = ''
+      runHook preInstall
+      install -Dm644 ${./spotify-tray.py} $out/libexec/spotify-tray.py
+      makeWrapper ${pyEnv}/bin/python3 $out/bin/spotify-tray-custom \
+        --add-flags $out/libexec/spotify-tray.py \
+        ${lib.optionalString cfg.adblock "--set SPOTIFY_ADBLOCK_LIB ${adblockLib}"} \
+        --prefix PATH : ${lib.makeBinPath [
+          cfg.pkgs.playerctl
+          cfg.pkgs.sway
+        ]}
+      runHook postInstall
+    '';
+  };
 in
 {
   options.userSettings.spotify = {
     enable = lib.mkEnableOption "Spotify patché via spicetify (sans pub)";
+
+    adblock = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Blocage des pubs via spotify-adblock (LD_PRELOAD, niveau réseau), injecté
+        au lancement de Spotify par le tray. Mettre à false pour lancer Spotify
+        SANS aucun bloqueur (utile pour diagnostiquer un souci de lecture).
+      '';
+    };
 
     pkgs = lib.mkOption {
       type = lib.types.attrs;
@@ -56,6 +123,12 @@ in
         effet si `theme = ""`. Désactiver si le rendu casse après une MAJ.
       '';
     };
+
+    tray.enable = lib.mkEnableOption ''
+      indicateur SNI maison pour Spotify (icône de tray native, visible dans
+      waybar quand Spotify tourne). Contourne l'absence de tray du client
+      officiel via libayatana-appindicator (vrai StatusNotifierItem, contrairement
+      à spotify-tray qui ne fait que du XEmbed invisible sous Sway)'';
   };
 
   config = lib.mkIf cfg.enable {
@@ -63,17 +136,40 @@ in
       enable = true;
       spotifyPackage = cfg.pkgs.spotify;
 
-      # Blocage des pubs. adblockify est le successeur le plus à jour ;
-      # adblock (classique) est gardé en complément.
-      enabledExtensions = with spicePkgs.extensions; [
-        adblockify
-        adblock
-      ];
+      # Pas d'extension adblock spicetify : elles manipulent le player et
+      # cassaient la lecture de certaines pistes. Le blocage de pub est fait par
+      # spotify-adblock (LD_PRELOAD, niveau réseau) injecté au lancement.
+      # spicetify ne sert donc plus qu'au thème.
+      enabledExtensions = [ ];
     }
     # Theming optionnel : seulement si un thème est demandé.
     // lib.optionalAttrs (cfg.theme != "") {
       theme = spicePkgs.themes.${cfg.theme};
       customColorScheme = lib.mkIf cfg.stylixColors stylixColorScheme;
+    };
+
+    # Indicateur SNI : PAS de démon au login. Il est lancé à l'ouverture de
+    # Spotify, puis persiste (icône en tray) jusqu'à « Quitter », exactement
+    # comme Teams. On l'embarque + on redirige l'entrée de menu « Spotify »
+    # vers lui (le binaire spotify-tray-custom ouvre Spotify et reste en tray ;
+    # un 2e lancement se contente de focus/relancer Spotify).
+    home.packages = lib.mkIf cfg.tray.enable [ spotifyTray ];
+
+    xdg.desktopEntries = lib.mkIf cfg.tray.enable {
+      spotify = {
+        name = "Spotify";
+        genericName = "Music Player";
+        exec = "spotify-tray-custom";
+        icon = "spotify-client";
+        terminal = false;
+        categories = [ "Audio" "Music" "Player" "AudioVideo" ];
+        settings.StartupWMClass = "Spotify";
+      };
+    };
+
+    # Liste de domaines pub/allowlist lue par spotify-adblock au runtime.
+    xdg.configFile."spotify-adblock/config.toml" = lib.mkIf cfg.adblock {
+      source = "${spotifyAdblock}/share/spotify-adblock/config.toml";
     };
   };
 }

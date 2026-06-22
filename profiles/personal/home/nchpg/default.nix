@@ -12,6 +12,12 @@
         enable = true;
       };
 
+      # Barre waybar (remplace la swaybar native, reproduit les mêmes infos +
+      # taskbar pour distinguer les fenêtres, dont les 2 instances Teams).
+      waybar = {
+        enable = true;
+      };
+
       vim = {
         enable = true;
       };
@@ -40,6 +46,12 @@
         userEmailSops = "git/email";
       };
 
+      claude = {
+        enable = true;
+        # Coupe les notifs desktop de Claude Code (popups « kitty »).
+        settings.preferredNotifChannel = "notifications_disabled";
+      };
+
       gh = {
         enable = true;
         # Renseigne ton login GitHub si tu veux qu'il apparaisse dans hosts.yml.
@@ -56,6 +68,16 @@
 
       chrome = {
         enable = true;
+      };
+
+      teams = {
+        enable = true;
+        # Instance isolée dédiée au tenant invité Bouygues SA, deep-linkée sur
+        # son tenantId pour atterrir direct dans Bouygues (le switcher d'orga de
+        # Teams v2 ne sait pas basculer vers un tenant invité dans Electron).
+        # Lancée via `teams-for-linux-bouygues`. GUID issu du lien
+        # d'invitation reçu (paramètre `tenant=`).
+        profiles.bouygues.tenantId = "bf2ec9bc-d21e-420c-8acf-29441b9f4d45";
       };
 
       flameshot = {
@@ -102,6 +124,9 @@
       spotify = {
         enable = true;
         theme = "default";
+        # Icône de tray Spotify (SNI maison, visible dans waybar quand Spotify
+        # tourne).
+        tray.enable = true;
       };
 
       tig = {
