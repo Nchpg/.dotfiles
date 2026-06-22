@@ -74,11 +74,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1781990783,
-        "narHash": "sha256-yfxxFMOkTbGnzCaim7h+H92Cb9DgeyVTtWtVrtDqs80=",
+        "lastModified": 1782162468,
+        "narHash": "sha256-6VBM4CkIC5Ywi3Wx5YESW2q/DxWSMkMxUMeUBp4Hnr0=",
         "ref": "refs/heads/main",
-        "rev": "a020d210d15807efebdf18aa1ff84f893956b714",
-        "revCount": 353,
+        "rev": "075350441d0b6bdeff8d8e7f146a07018ce10026",
+        "revCount": 354,
         "type": "git",
         "url": "https://github.com/sadjow/claude-code-nix"
       },

@@ -68,6 +68,13 @@ if sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" ${REBUILD_EXTRA_ARGS:-
         echo "💨 Sway session detected. Reloading configuration..."
         swaymsg reload
         echo "🎉 Sway reloaded."
+
+        # waybar tourne en service systemd --user : le rebuild (root) ne peut
+        # pas le relancer, donc les X-Restart-Triggers / onChange du module HM
+        # sont sautés. On le redémarre ici, côté utilisateur, pour qu'il reprenne
+        # sa nouvelle config/couleurs. try-restart = no-op s'il ne tourne pas.
+        echo "📊 Restarting waybar..."
+        systemctl --user try-restart waybar.service 2>/dev/null || true
     fi
 else
     echo -e "${RED}❌ System rebuild failed. Please check the errors above.${NC}" >&2

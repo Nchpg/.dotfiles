@@ -26,8 +26,8 @@ seat * xcursor_theme Adwaita 24
 # du seul frontend ne les récupère pas ; reset-failed efface le backoff systemd.
 # Tout est chaîné pour garantir l'ordre (les exec de sway sont concurrents).
 #
-    exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
-         dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && \
+    exec systemctl --user import-environment WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE SWAYSOCK && \
+         dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE SWAYSOCK && \
          systemctl --user start sway-session.target && \
          systemctl --user reset-failed xdg-desktop-portal.service xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service; \
          systemctl --user restart xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service xdg-desktop-portal.service
@@ -160,21 +160,7 @@ bindsym $mod+r mode "resize"
 #
 # Status Bar:
 #
-bar {
-    position top
-
-    status_command bash ~/.config/sway/sway-bar.sh
-    tray_output *
-    tray_padding 4
-
-    # Pas d'onglet de mode (ex. le "displays" rouge) affiché dans la barre.
-    binding_mode_indicator no
-
-    colors {
-        statusline #ffffff
-        background #323232
-    }
-}
+@bar@
 
 
 

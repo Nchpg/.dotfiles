@@ -23,9 +23,31 @@ let
     lib.optionalString config.userSettings.tmux.enable
       "bindsym Control+Return exec ${tmuxLaunch}";
 
+  # Barre : si waybar est activé (module dédié), il fournit sa propre barre via
+  # systemd → on n'émet PAS de bloc `bar {}` natif (sinon deux barres). Sinon on
+  # garde la swaybar maison (sway-bar.sh).
+  useWaybar = config.userSettings.waybar.enable;
+  swaybarBlock = ''
+    bar {
+        position top
+
+        status_command bash ~/.config/sway/sway-bar.sh
+        tray_output *
+        tray_padding 4
+
+        # Pas d'onglet de mode (ex. le "displays" rouge) affiché dans la barre.
+        binding_mode_indicator no
+
+        colors {
+            statusline #ffffff
+            background #323232
+        }
+    }'';
+  barBlock = if useWaybar then "" else swaybarBlock;
+
   finalConfigContent = lib.replaceStrings
-    ["@terminal@" "@tmuxBind@"]
-    [config.userSettings.terminal.default tmuxBind]
+    ["@terminal@" "@tmuxBind@" "@bar@"]
+    [config.userSettings.terminal.default tmuxBind barBlock]
     templateContent;
 in {
   config = lib.mkIf cfg.enable {
