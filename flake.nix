@@ -93,6 +93,9 @@
       devShells.${system} = {
         python = import ./devshells/python.nix { pkgs = pkgs-stable; };
         c      = import ./devshells/c.nix { pkgs = pkgs-stable; };
+        # Intel Arc / XPU PyTorch — uses pkgs-unstable to match the system
+        # graphics stack (intel-compute-runtime / level-zero).
+        xpu    = import ./devshells/xpu.nix { pkgs = pkgs-unstable; };
       };
 
     };
