@@ -124,6 +124,10 @@
         enable = true;
       };
 
+      systemdManagerTui = {
+        enable = true;
+      };
+
       shell = {
         zsh = {
           enable = true;

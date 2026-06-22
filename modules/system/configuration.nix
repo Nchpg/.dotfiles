@@ -18,7 +18,8 @@
   hardware.graphics = {
     enable = true;
     extraPackages = with pkgs-unstable; [
-      intel-compute-runtime
+      intel-compute-runtime            # OpenCL driver (libigdrcl.so)
+      intel-compute-runtime.drivers    # Level-Zero GPU driver (libze_intel_gpu.so) -> /run/opengl-driver/lib
       intel-media-driver
       vpl-gpu-rt
       level-zero
@@ -170,7 +171,11 @@
     package = pkgs-unstable.ollama-vulkan;
     environmentVariables = {
       ZES_ENABLE_SYSMAN = "1";
-      OLLAMA_INTEL_GPU = "1";
+      # Offload the model to the Arc iGPU via Vulkan. NOTE: the `xe` driver can
+      # intermittently hang GPU compute on this Meteor Lake (TLB invalidation
+      # fence timeouts) — if ollama freezes at "warming up", remove this line to
+      # fall back to CPU, or switch the GPU from xe -> i915 for stability.
+      OLLAMA_IGPU_ENABLE = "1";
     };
   };
 
