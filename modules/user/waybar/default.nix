@@ -154,9 +154,9 @@ in {
 
         network = {
           interval = 5;
-          format-wifi = labeled "f1eb" "{essid} : {signalStrength}";
-          format-ethernet = labeled "f1eb" "{ifname}";
-          format-disconnected = labeled "f1eb" "Off";
+          format-wifi = labeled "f05a9" "{essid} : {signalStrength}";
+          format-ethernet = labeled "f05a9" "{ifname}";
+          format-disconnected = labeled "f05a9" "Off";
           tooltip-format = "{ifname} {ipaddr}";
           on-click = launcher "wifi";
         };
@@ -168,7 +168,7 @@ in {
         };
 
         backlight = {
-          format = labeled "f185" "{percent}%";
+          format = labeled "f00e0" "{percent}%";
           on-scroll-up = "${brightnessctl} set 5%+";
           on-scroll-down = "${brightnessctl} set 5%-";
         };
@@ -217,15 +217,30 @@ in {
         battery = {
           interval = 30;
           states = { warning = 20; critical = 10; };
-          format = labeled "f240" "{capacity}%"; # md/fa-battery
-          format-charging = labeled "f0e7" "{capacity}%"; # éclair
-          format-plugged = labeled "f0e7" "{capacity}%";
-          format-full = labeled "f240" "{capacity}%";
+          # Icône dynamique selon le niveau (waybar mappe {capacity} sur le
+          # tableau format-icons : outline=0% ... pleine=100%).
+          format = "{icon}   {capacity}%";
+          format-charging = labeled "f0084" "{capacity}%"; # md-battery-charging
+          format-plugged = labeled "f0084" "{capacity}%";
+          format-full = labeled "f0079" "{capacity}%"; # md-battery pleine
+          format-icons = map mkIcon [
+            "f008e" # 0%   md-battery-outline
+            "f007a" # 10%  md-battery-10
+            "f007b" # 20%
+            "f007c" # 30%
+            "f007d" # 40%
+            "f007e" # 50%
+            "f007f" # 60%
+            "f0080" # 70%
+            "f0081" # 80%
+            "f0082" # 90%
+            "f0079" # 100% md-battery
+          ];
           on-click = launcher "lg-control";
         };
 
         clock = {
-          format = labeled "f073" "{:%a %d-%m-%Y %H:%M}"; # calendrier
+          format = labeled "f0e8f" "{:%a %d-%m-%Y %H:%M}"; # md-calendar-clock
           tooltip-format = "<tt>{calendar}</tt>";
           on-click = launcher "calendar";
         };

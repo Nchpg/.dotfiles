@@ -34,7 +34,7 @@ while IFS= read -r line; do
     battery_pct=$(bluetoothctl info "$mac" 2>/dev/null \
         | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+')
     if [[ -n "$battery_pct" ]]; then
-        device_name="$device_name    ${battery_pct}%"
+        device_name="$device_name 󰁹   ${battery_pct}%"
     fi
 
     if [[ -z "$device_list" ]]; then
