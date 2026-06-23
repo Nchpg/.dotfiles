@@ -120,6 +120,46 @@ in {
       };
     };
 
+    # Icônes SVG maison, colorées avec la couleur de texte du thème (base05).
+    # Adwaita ne fournit que des variantes -symbolic en #2e3436, invisibles sur
+    # le fond foncé de rofi : on génère donc nos propres glyphes visibles.
+    xdg.dataFile."icons/rofi-shutdown.svg".text = ''
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+        <path fill="none" stroke="${c.base05}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              d="M12 3 v9 M7.05 7.05 a7 7 0 1 0 9.9 0"/>
+      </svg>
+    '';
+    xdg.dataFile."icons/rofi-reboot.svg".text = ''
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+        <path fill="none" stroke="${c.base05}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              d="M21 12 a9 9 0 1 1 -2.64 -6.36 M21 3 v5 h-5"/>
+      </svg>
+    '';
+
+    # Entrée "Shutdown" visible dans rofi drun ($mod+d).
+    # systemctl poweroff : pas besoin de sudo, autorisé par polkit pour la
+    # session graphique active (contrairement à `shutdown now` qui exige root).
+    xdg.dataFile."applications/shutdown.desktop".text = ''
+      [Desktop Entry]
+      Type=Application
+      Name=Shutdown
+      Comment=Éteindre la machine immédiatement
+      Icon=${config.xdg.dataHome}/icons/rofi-shutdown.svg
+      Exec=systemctl poweroff
+      Terminal=false
+    '';
+
+    # Entrée "Reboot" visible dans rofi drun ($mod+d).
+    xdg.dataFile."applications/reboot.desktop".text = ''
+      [Desktop Entry]
+      Type=Application
+      Name=Reboot
+      Comment=Redémarrer la machine immédiatement
+      Icon=${config.xdg.dataHome}/icons/rofi-reboot.svg
+      Exec=systemctl reboot
+      Terminal=false
+    '';
+
     # Fenêtre rofi flottante dans sway.
     home.file.".config/sway/conf.d/rofi.conf".text = ''
       for_window [app_id="rofi"] floating enable, border none
