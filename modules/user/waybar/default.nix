@@ -61,17 +61,25 @@ let
   scriptDir = "${home}/.config/waybar/scripts";
   scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" ];
 
-  # Molette = volume, partagée par l'icône (mute) et le % (mixer).
+  # Commandes volume (wpctl), réutilisées par la molette, le clic et le menu.
+  volUp = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
+  volDown = "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ 5%-";
+  volMute = "${wpctl} set-mute @DEFAULT_AUDIO_SINK@ toggle";
   volScroll = {
-    on-scroll-up = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
-    on-scroll-down = "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ 5%-";
+    on-scroll-up = volUp;
+    on-scroll-down = volDown;
   };
 
-  # Base commune aux deux modules swaync (icône cloche + nombre).
+  # Menus GTK au clic droit : fichiers XML installés dans menuDir, chaque entrée
+  # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
+  menuDir = "${home}/.config/waybar/menus";
+  menuNames = [ "volume.xml" "notifications.xml" ];
+
+  # Base du module swaync (cloche + nombre). Le tooltip natif de swaync
+  # (« N Notification(s) ») est laissé actif.
   swayncBase = {
     exec = "${swaync} -swb";
     return-type = "json";
-    tooltip = false;
   };
   bell = mkIcon "f009a"; # md-bell
   bellOff = mkIcon "f009b"; # md-bell-off
@@ -94,12 +102,18 @@ in {
     # scripts — bluetoothctl, top, free, df — viennent du système).
     home.packages = [ pkgs.playerctl ];
 
-    home.file = lib.listToAttrs (map
-      (n: lib.nameValuePair ".config/waybar/scripts/${n}" {
-        source = ./scripts + "/${n}";
-        executable = true;
-      })
-      scriptNames);
+    home.file = lib.listToAttrs (
+      (map
+        (n: lib.nameValuePair ".config/waybar/scripts/${n}" {
+          source = ./scripts + "/${n}";
+          executable = true;
+        })
+        scriptNames)
+      ++ (map
+        (n: lib.nameValuePair ".config/waybar/menus/${n}" {
+          source = ./menus + "/${n}";
+        })
+        menuNames));
 
     programs.waybar = {
       enable = true;
@@ -121,10 +135,8 @@ in {
           "network"
           "custom/resources"
           "backlight"
-          "wireplumber#icon"
-          "wireplumber#pct"
+          "wireplumber"
           "custom/swaync"
-          "custom/swayncount"
           "custom/disk"
           "battery"
           "clock"
@@ -138,7 +150,9 @@ in {
 
         "custom/nowplaying" = {
           exec = "${scriptDir}/nowplaying.sh";
-          interval = 2;
+          # Piloté par événements (playerctl --follow) : pas d'interval, on
+          # relance juste le flux continu s'il s'arrête (redémarrage dbus, etc.).
+          restart-interval = 1;
           tooltip = false;
           on-click = "${playerctl} -p spotify play-pause";
           on-scroll-up = "${playerctl} -p spotify next";
@@ -148,13 +162,14 @@ in {
         "custom/bluetooth" = {
           exec = "${scriptDir}/bluetooth.sh";
           interval = 5;
-          tooltip = false;
+          # Sortie JSON : barre = noms tronqués, tooltip = noms complets.
+          return-type = "json";
           on-click = launcher "bluetooth";
         };
 
         network = {
           interval = 5;
-          format-wifi = labeled "f05a9" "{essid} : {signalStrength}";
+          format-wifi = labeled "f05a9" "{essid} : {signalStrength}%";
           format-ethernet = labeled "f05a9" "{ifname}";
           format-disconnected = labeled "f05a9" "Off";
           tooltip-format = "{ifname} {ipaddr}";
@@ -164,7 +179,9 @@ in {
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
           interval = 2;
-          tooltip = false;
+          # Sortie JSON : texte compact (inchangé) dans la barre + détail
+          # RAM/CPU/GPU et charge système en tooltip.
+          return-type = "json";
         };
 
         backlight = {
@@ -173,23 +190,27 @@ in {
           on-scroll-down = "${brightnessctl} set 5%-";
         };
 
-        # Volume scindé : l'icône (clic = mute) et le % (clic = mixer, comme
-        # mod+p). La molette (volScroll) règle le volume sur les deux.
-        "wireplumber#icon" = volScroll // {
-          format = mkIcon "f057e"; # md-volume-high
-          format-muted = mkIcon "f075f"; # md-volume-mute (haut-parleur + croix)
-          on-click = "${wpctl} set-mute @DEFAULT_AUDIO_SINK@ toggle";
-        };
-        "wireplumber#pct" = volScroll // {
-          format = "{volume}%";
-          format-muted = "{volume}%";
-          on-click = launcher "volume-mixer";
+        # Volume (module unique -> tooltip stable). Clic gauche = mute, clic
+        # droit = menu (mute / mixer / +5 / -5), molette = volume.
+        wireplumber = volScroll // {
+          format = "{icon}  {volume}%";
+          format-muted = "${mkIcon "f075f"}  {volume}%"; # md-volume-mute
+          format-icons = [ (mkIcon "f057e") ]; # md-volume-high (toujours)
+          on-click = volMute;
+          menu = "on-click-right";
+          menu-file = "${menuDir}/volume.xml";
+          menu-actions = {
+            mute = volMute; # toggle mute/unmute
+            mixer = launcher "volume-mixer";
+            volup = volUp;
+            voldown = volDown;
+          };
         };
 
-        # Cloche scindée : l'icône (clic = bascule DND) et le nombre (clic =
-        # ouvre le panneau, comme mod+n).
+        # Notifications (module unique -> tooltip stable) : cloche + nombre.
+        # Clic gauche = ouvre le panneau, clic droit = menu (DND / panneau).
         "custom/swaync" = swayncBase // {
-          format = "{icon}";
+          format = "{icon}  {text}";
           format-icons = {
             notification = bell;
             none = bell;
@@ -201,28 +222,35 @@ in {
             "dnd-inhibited-none" = bellOff;
             default = bell;
           };
-          on-click = "${swaync} -d -sw";
-        };
-        "custom/swayncount" = swayncBase // {
-          format = "{text}";
           on-click = "${swaync} -t -sw";
+          menu = "on-click-right";
+          menu-file = "${menuDir}/notifications.xml";
+          menu-actions = {
+            dnd = "${swaync} -d -sw"; # toggle ne pas déranger
+            panel = "${swaync} -t -sw";
+          };
         };
 
         "custom/disk" = {
           exec = "${scriptDir}/disk.sh";
           interval = 30;
-          tooltip = false;
+          # Sortie JSON : texte compact + détail (utilisé / total / libre).
+          return-type = "json";
         };
 
         battery = {
           interval = 30;
           states = { warning = 20; critical = 10; };
+          # Temps avant vide/plein au survol ({time} vide si plein/inconnu).
+          tooltip-format = "{capacity}%  ·  {time}";
           # Icône dynamique selon le niveau (waybar mappe {capacity} sur le
           # tableau format-icons : outline=0% ... pleine=100%).
-          format = "{icon}   {capacity}%";
-          format-charging = labeled "f0084" "{capacity}%"; # md-battery-charging
-          format-plugged = labeled "f0084" "{capacity}%";
-          format-full = labeled "f0079" "{capacity}%"; # md-battery pleine
+          # Espacement icône->% resserré (2 espaces) propre à la batterie ;
+          # les autres modules gardent l'espacement standard de `labeled` (3).
+          format = "{icon}  {capacity}%";
+          format-charging = "${mkIcon "f0084"}  {capacity}%"; # md-battery-charging
+          format-plugged = "${mkIcon "f0084"}  {capacity}%";
+          format-full = "${mkIcon "f0079"}  {capacity}%"; # md-battery pleine
           format-icons = map mkIcon [
             "f008e" # 0%   md-battery-outline
             "f007a" # 10%  md-battery-10
@@ -302,20 +330,6 @@ in {
           margin: 2px 2px;
         }
 
-        /* Paires icône+valeur scindées (volume, cloche) : on resserre l'écart
-           ENTRE les deux éléments, tout en gardant l'écart normal avec les
-           modules voisins. */
-        #wireplumber.icon,
-        #custom-swaync {
-          padding-right: 3px;
-          margin-right: 0;
-        }
-        #wireplumber.pct,
-        #custom-swayncount {
-          padding-left: 1px;
-          margin-left: 0;
-        }
-
         /* Un accent de couleur par module (base16 Stylix). */
         #custom-nowplaying { color: ${c.base0B}; }  /* vert    */
         #custom-bluetooth  { color: ${c.base0D}; }  /* bleu    */
@@ -323,8 +337,7 @@ in {
         #custom-resources  { color: ${c.base0A}; }  /* jaune   */
         #backlight         { color: ${c.base09}; }  /* orange  */
         #wireplumber       { color: ${c.base0E}; }  /* magenta (icône + %) */
-        #custom-swaync,
-        #custom-swayncount { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
+        #custom-swaync     { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
         #custom-disk       { color: ${c.base0C}; }  /* cyan    */
         #battery           { color: ${c.base0B}; }  /* vert    */
         #clock             { color: ${c.base05}; font-weight: bold; }

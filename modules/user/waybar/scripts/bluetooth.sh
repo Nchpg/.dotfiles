@@ -1,47 +1,88 @@
 #!/usr/bin/env bash
-# État Bluetooth + appareils connectés (nom tronqué + batterie si rapportée).
-# Logique reprise telle quelle de sway-bar.sh.
+# État Bluetooth + appareils connectés. Sortie JSON :
+#   - barre   : icône + noms TRONQUÉS (15 car.) + batterie
+#   - tooltip : noms COMPLETS + batterie, un par ligne
+# Logique reprise de sway-bar.sh.
+
+# Force la locale C : les libellés grepés ('Powered: yes', 'Battery
+# Percentage') sont en anglais, on ne dépend pas de la locale de session.
+export LC_ALL=C
+
+# Icônes batterie Nerd Font (Material Design) : mêmes 11 niveaux que le module
+# batterie du PC (codepoints f008e..f0079, cf. waybar default.nix). Index =
+# pourcentage arrondi à la dizaine (0% -> outline 󰂎 ... 100% -> pleine 󰁹).
+# Glyphes littéraux (et non printf '\U…') : insensibles à LC_ALL=C, qui en
+# locale ASCII ne sait pas encoder ces codepoints du plan astral.
+bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
+bat_icon() { # $1 = pourcentage -> glyphe
+    local idx=$(( ($1 + 5) / 10 ))
+    (( idx < 0 )) && idx=0
+    (( idx > 10 )) && idx=10
+    printf '%s' "${bat_icons[idx]}"
+}
+
+# Échappe une chaîne pour l'insérer dans une valeur JSON (backslash, guillemet,
+# et retours à la ligne -> \n pour le tooltip multi-lignes).
+json_escape() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    printf '%s' "$s"
+}
+
+# Émet le JSON waybar { texte barre, tooltip (peut être vide) }.
+emit() {
+    printf '{"text":"%s","tooltip":"%s"}\n' "$(json_escape "$1")" "$(json_escape "$2")"
+}
 
 if ! command -v bluetoothctl &>/dev/null; then
-    echo "󰂯  N/A"
+    emit "󰂯  N/A" ""
     exit 0
 fi
 
 powered=$(bluetoothctl show | grep -E 'Powered: yes')
 if [[ -z "$powered" ]]; then
-    echo "󰂯  Off"
+    emit "󰂯  Off" ""
     exit 0
 fi
 
 # bluetoothctl injecte des codes ANSI : on les retire (sinon troncature parasite).
 connected_devices=$(bluetoothctl devices Connected | sed 's/\x1b\[[0-9;]*m//g')
 if [[ -z "$connected_devices" ]]; then
-    echo "󰂯  On"
+    emit "󰂯  On" ""
     exit 0
 fi
 
 MAX_BT_NAME_LENGTH=15
-device_list=""
+bar_list=""  # noms tronqués (barre)
+tip_list=""  # noms complets (tooltip), séparés par de vraies nouvelles lignes
 
-while IFS= read -r line; do
-    mac=$(echo "$line" | awk '{print $2}')
-    device_name=$(echo "$line" | awk '{ $1=""; $2=""; print $0 }' | xargs)
+# Format des lignes : « Device AA:BB:CC:DD:EE:FF Nom de l'appareil ». On
+# découpe en bash (read) : _ = "Device", mac = adresse, full_name = le reste.
+while read -r _ mac full_name; do
+    [[ -z "$mac" ]] && continue
 
-    if [[ ${#device_name} -gt $MAX_BT_NAME_LENGTH ]]; then
-        device_name="${device_name:0:$MAX_BT_NAME_LENGTH}..."
+    short_name=$full_name
+    if [[ ${#short_name} -gt $MAX_BT_NAME_LENGTH ]]; then
+        short_name="${short_name:0:$MAX_BT_NAME_LENGTH}..."
     fi
 
+    # Suffixe batterie (icône dynamique + %), identique barre et tooltip.
     battery_pct=$(bluetoothctl info "$mac" 2>/dev/null \
         | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+')
-    if [[ -n "$battery_pct" ]]; then
-        device_name="$device_name 󰁹   ${battery_pct}%"
-    fi
+    suffix=""
+    [[ -n "$battery_pct" ]] && suffix="  $(bat_icon "$battery_pct")  ${battery_pct}%"
 
-    if [[ -z "$device_list" ]]; then
-        device_list="$device_name"
+    if [[ -z "$bar_list" ]]; then
+        bar_list="${short_name}${suffix}"
+        tip_list="${full_name}${suffix}"
     else
-        device_list="$device_list, $device_name"
+        bar_list="$bar_list, ${short_name}${suffix}"
+        tip_list="$tip_list"$'\n'"${full_name}${suffix}"
     fi
 done <<< "$connected_devices"
 
-echo "󰂯  On : $device_list"
+# Au moins un appareil connecté : le nom + batterie parle de lui-même, on
+# laisse tomber le « On : » redondant.
+emit "󰂯  $bar_list" "$tip_list"
