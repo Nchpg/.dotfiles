@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Menu clic droit du module volume. Chaque id correspond à une clé de
+     `menu-actions` dans modules/user/waybar/default.nix. -->
+<interface>
+  <object class="GtkMenu" id="menu">
+    <child>
+      <object class="GtkMenuItem" id="mute">
+        <property name="label">Mute / Unmute</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep1"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="mixer">
+        <property name="label">Ouvrir le mixer</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep2"/>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="volup">
+        <property name="label">Volume +5 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="voldown">
+        <property name="label">Volume -5 %</property>
+      </object>
+    </child>
+  </object>
+</interface>

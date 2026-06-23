@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
-# Stockage racine. On utilise `df -h` (unités courtes : "12G" -> "12Go")
-# plutôt que le module disk natif de waybar qui affiche du "GiB".
-# Repris de sway-bar.sh. Icône au début pour rester homogène avec les autres.
+# Stockage racine. Texte compact dans la barre (icône + utilisé + %) + détail
+# en tooltip.
+#
+# Le TOTAL affiché est l'espace UTILISABLE (utilisé + libre), donc hors ~5% de
+# blocs réservés à root qu'on ne peut pas remplir. Du coup utilisé+libre = total
+# (pas de "trou" déroutant), et c'est cohérent avec le % de df, lui-même calculé
+# sur utilisé/(utilisé+libre). On lit les octets (`df -B1`) puis on formate avec
+# `numfmt` -> l'addition reste juste. LC_ALL=C pour des sorties stables.
 
-df -h / | awk 'NR==2 {print "󰉋   " $3 "o : " $5}'
+export LC_ALL=C
+
+read -r size_b used_b avail_b pct < <(
+    df -B1 --output=size,used,avail,pcent / | tail -1
+)
+usable_b=$((used_b + avail_b))
+
+fmt() { numfmt --to=iec "$1"; } # 161337651200 -> 151G
+
+used_h=$(fmt "$used_b")
+avail_h=$(fmt "$avail_b")
+usable_h=$(fmt "$usable_b")
+size_h=$(fmt "$size_b")
+
+# Réserve root dérivée des valeurs AFFICHÉES (Gio arrondis au supérieur, comme
+# numfmt) et non des octets bruts : sinon le double arrondi indépendant fait
+# que usable + réserve ≠ partition à l'écran (ex. 190 + 11 = 201 ≠ 200).
+g=$((1024 * 1024 * 1024))
+reserve_g=$(( (size_b + g - 1) / g - (usable_b + g - 1) / g ))
+
+text="󰉋   ${used_h}o : ${pct}"
+tooltip="Utilisé    ${used_h}o / ${usable_h}o  (${pct})"
+tooltip+="\nLibre      ${avail_h}o"
+tooltip+="\nPartition  ${size_h}o  (réserve root ${reserve_g}Go)"
+printf '{"text":"%s","tooltip":"%s"}\n' "$text" "$tooltip"
