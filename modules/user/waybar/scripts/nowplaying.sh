@@ -8,9 +8,9 @@ status=$(playerctl -p spotify status 2>/dev/null)
 [[ -z "$status" ]] && exit 0
 
 case "$status" in
-    Playing) icon="" ;;
-    Paused)  icon="" ;;
-    *)       icon="" ;;
+    Playing) icon="󰐊" ;;
+    Paused)  icon="󰏤" ;;
+    *)       icon="󰓛" ;;
 esac
 
 meta=$(playerctl -p spotify metadata --format '{{ artist }} - {{ title }}' 2>/dev/null)

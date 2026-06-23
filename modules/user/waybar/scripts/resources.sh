@@ -35,4 +35,4 @@ gpu() {
     echo "GPU ${busy}%"
 }
 
-echo "   RAM : ${mem_used}%  CPU ${cpu%%.*}%  $(gpu)"
+echo "󰍛   RAM : ${mem_used}%  CPU ${cpu%%.*}%  $(gpu)"
