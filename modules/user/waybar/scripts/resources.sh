@@ -82,9 +82,9 @@ read -r load1_pct load5_pct load15_pct < <(
         'BEGIN { printf "%d %d %d", a/n*100+0.5, b/n*100+0.5, c/n*100+0.5 }'
 )
 
-# --- Sortie JSON ---
+# --- Sortie JSON (emit + json_escape : cf. lib.sh) ---
 text="󰍛   RAM : ${mem_pct}%  CPU ${cpu_pct}%  GPU ${gpu_val}"
 tooltip="RAM   ${mem_used_gb} / ${mem_total_gb} Gio  (${mem_pct}%)"
-tooltip+="\nCPU   ${cpu_pct}%  ·  charge 1 min : ${load1_pct}%   5 min : ${load5_pct}%   15 min : ${load15_pct}%"
-tooltip+="\nGPU   ${gpu_val}"
-printf '{"text":"%s","tooltip":"%s"}\n' "$text" "$tooltip"
+tooltip+=$'\n'"CPU   ${cpu_pct}%  ·  charge 1 min : ${load1_pct}%   5 min : ${load5_pct}%   15 min : ${load15_pct}%"
+tooltip+=$'\n'"GPU   ${gpu_val}"
+emit "$text" "$tooltip"
