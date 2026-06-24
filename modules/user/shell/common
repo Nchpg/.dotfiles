@@ -29,8 +29,6 @@ alias fanauto="sudo ec_probe write 0xCF 0x00"
 alias fansilent="sudo ec_probe write 0xCF 0x11"
 alias fanperf="sudo ec_probe write 0xCF 0x22"
 
-alias code='env -u SHLVL code'
-
 # share the PATH between shells (especially when launching from fish)
 alias bash='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/bash'
 alias zsh='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/zsh'

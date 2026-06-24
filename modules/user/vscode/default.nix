@@ -144,6 +144,28 @@ let
     exec ${inputs.claude-code.packages.x86_64-linux.default}/bin/claude "$@"
   '';
 
+  # Paquet VS Code complet (avec extensions). Référencé par le wrapper ci-dessous
+  # et conservé dans home.packages pour le fichier .desktop, les icônes, etc.
+  vscodePkg = cfg.pkgs.vscode-with-extensions.override {
+    vscode = cfg.pkgs.vscode-fhs;
+    vscodeExtensions = allVscodeExtensions;
+  };
+
+  # Wrapper `code` qui masque les warnings cosmétiques émis sur stderr par le
+  # binaire VS Code au démarrage (flags Wayland injectés par nixpkgs via
+  # NIXOS_OZONE_WL : ozone-platform-hint, enable-features, enable-wayland-ime,
+  # wayland-text-input-version). Ces flags fonctionnent quand même ; seul le
+  # validateur d'arguments de VS Code râle. On ne filtre QUE ces lignes, les
+  # vraies erreurs passent toujours.
+  codeWrapper = pkgs-unstable.writeShellScriptBin "code" ''
+    # Réinitialise SHLVL pour que le terminal intégré de VS Code reparte d'un
+    # niveau bas (le prompt fish soustrait 1 quand TERM_PROGRAM=vscode).
+    # Remplace l'ancien alias `code='env -u SHLVL code'` de shell/common.
+    unset SHLVL
+    exec ${vscodePkg}/bin/code "$@" \
+      2> >(grep -v -F -- "is not in the list of known options, but still passed to Electron/Chromium" >&2)
+  '';
+
   settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
   finalConfigContent = lib.replaceStrings
     ["@shell@" "@claudeWrapper@"]
@@ -163,10 +185,10 @@ in {
   };
   config = lib.mkIf cfg.enable {
     home.packages = [
-      (cfg.pkgs.vscode-with-extensions.override {
-        vscode = cfg.pkgs.vscode-fhs;
-        vscodeExtensions = allVscodeExtensions;
-      })
+      vscodePkg
+      # priorité haute : le `code` du wrapper l'emporte sur celui du paquet
+      # dans le PATH (sinon collision de bin/code)
+      (lib.hiPrio codeWrapper)
       # distribution LaTeX (latexmk, pdflatex, ...) utilisée par LaTeX Workshop
       # avec les paquets supplémentaires (enumitem, titlesec, eurosym, parskip, ...)
       # manquants utilisés par le CV
