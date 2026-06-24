@@ -59,7 +59,7 @@ let
   # Scripts custom (logique reprise de sway-bar.sh), installés dans la conf
   # waybar puis exécutés par chemin absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
-  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" ];
+  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" ];
 
   # Commandes volume (wpctl), réutilisées par la molette, le clic et le menu.
   volUp = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
@@ -74,6 +74,41 @@ let
   # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
   menuDir = "${home}/.config/waybar/menus";
   menuNames = [ "volume.xml" "notifications.xml" ];
+
+  # Villes proposées au clic droit du module météo. Source unique : le menu XML
+  # et les actions sont générés à partir de cette liste -> ajouter une ville =
+  # ajouter une chaîne ici (rebuild). Le choix courant est lui persisté hors du
+  # store (cf. weather.sh), donc il survit aux reboots et rebuilds.
+  weatherCities = [ "Angers" "Paris" ];
+
+  # Action de menu : écrit la ville dans l'état persistant puis réveille le
+  # module (signal 8) pour un switch immédiat sans attendre l'intervalle.
+  # `\''${…}` = ${…} littéral dans le shell ; `$HOME` reste littéral aussi.
+  weatherStateDir = "\${XDG_STATE_HOME:-$HOME/.local/state}/waybar";
+  mkWeatherAction = city:
+    "mkdir -p \"${weatherStateDir}\""
+    + " && printf '%s' '${city}' > \"${weatherStateDir}/weather-city\""
+    + " && pkill -RTMIN+8 waybar";
+  weatherMenuActions = lib.listToAttrs
+    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities);
+
+  # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
+  # relié à `weatherMenuActions` par cet id).
+  weatherMenuXml = ''
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!-- Généré depuis `weatherCities` dans modules/user/waybar/default.nix. -->
+    <interface>
+      <object class="GtkMenu" id="menu">
+  '' + lib.concatMapStrings (c: ''
+        <child>
+          <object class="GtkMenuItem" id="${c}">
+            <property name="label">${c}</property>
+          </object>
+        </child>
+  '') weatherCities + ''
+      </object>
+    </interface>
+  '';
 
   # Base du module swaync (cloche + nombre). Le tooltip natif de swaync
   # (« N Notification(s) ») est laissé actif.
@@ -99,8 +134,9 @@ in {
     stylix.targets.waybar.enable = false;
 
     # playerctl : appelé depuis le PATH par nowplaying.sh (les autres outils des
-    # scripts — bluetoothctl, top, free, df — viennent du système).
-    home.packages = [ pkgs.playerctl ];
+    # scripts — bluetoothctl, top, free, df — viennent du système). curl + jq :
+    # utilisés par weather.sh (requête wttr.in + parsing JSON).
+    home.packages = [ pkgs.playerctl pkgs.curl pkgs.jq ];
 
     home.file = lib.listToAttrs (
       (map
@@ -113,7 +149,13 @@ in {
         (n: lib.nameValuePair ".config/waybar/menus/${n}" {
           source = ./menus + "/${n}";
         })
-        menuNames));
+        menuNames)
+      ++ [
+        # Menu météo généré depuis `weatherCities` (cf. let), pas un fichier source.
+        (lib.nameValuePair ".config/waybar/menus/weather.xml" {
+          text = weatherMenuXml;
+        })
+      ]);
 
     programs.waybar = {
       enable = true;
@@ -139,6 +181,7 @@ in {
           "custom/swaync"
           "custom/disk"
           "battery"
+          "custom/weather"
           "clock"
           "tray"
         ];
@@ -208,7 +251,7 @@ in {
         };
 
         # Notifications (module unique -> tooltip stable) : cloche + nombre.
-        # Clic gauche = ouvre le panneau, clic droit = menu (DND / panneau).
+        # Clic gauche = toggle « ne pas déranger », clic droit = menu (DND / panneau).
         "custom/swaync" = swayncBase // {
           format = "{icon}  {text}";
           format-icons = {
@@ -222,7 +265,7 @@ in {
             "dnd-inhibited-none" = bellOff;
             default = bell;
           };
-          on-click = "${swaync} -t -sw";
+          on-click = "${swaync} -d -sw"; # toggle ne pas déranger
           menu = "on-click-right";
           menu-file = "${menuDir}/notifications.xml";
           menu-actions = {
@@ -265,6 +308,36 @@ in {
             "f0079" # 100% md-battery
           ];
           on-click = launcher "lg-control";
+        };
+
+        # Météo (wttr.in via weather.sh). Le script émet une catégorie dans "alt",
+        # mappée ici sur l'icône Material Design correspondante (jour/nuit inclus).
+        "custom/weather" = {
+          exec = "${scriptDir}/weather.sh";
+          interval = 900; # 15 min : la météo bouge lentement, on ménage wttr.in
+          signal = 8; # réveillé par le menu (pkill -RTMIN+8) pour un switch immédiat
+          return-type = "json";
+          format = "{icon}  {text}";
+          # Clic droit : choisir la ville (menu généré depuis weatherCities).
+          menu = "on-click-right";
+          menu-file = "${menuDir}/weather.xml";
+          menu-actions = weatherMenuActions;
+          format-icons = {
+            clear-day = mkIcon "f0599"; # md-weather-sunny
+            clear-night = mkIcon "f0594"; # md-weather-night
+            partly-day = mkIcon "f0595"; # md-weather-partly-cloudy
+            partly-night = mkIcon "f0f31"; # md-weather-night-partly-cloudy
+            cloudy = mkIcon "f0590"; # md-weather-cloudy
+            fog = mkIcon "f0591"; # md-weather-fog
+            rain-light = mkIcon "f0597"; # md-weather-rainy
+            rain = mkIcon "f0596"; # md-weather-pouring
+            sleet = mkIcon "f067f"; # md-weather-snowy-rainy
+            snow = mkIcon "f0598"; # md-weather-snowy
+            snow-heavy = mkIcon "f0f36"; # md-weather-snowy-heavy
+            hail = mkIcon "f0592"; # md-weather-hail
+            thunder = mkIcon "f067e"; # md-weather-lightning-rainy
+            offline = mkIcon "f0f2f"; # md-weather-cloudy-alert
+          };
         };
 
         clock = {
@@ -340,6 +413,10 @@ in {
         #custom-swaync     { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
         #custom-disk       { color: ${c.base0C}; }  /* cyan    */
         #battery           { color: ${c.base0B}; }  /* vert    */
+        #custom-weather    { color: ${c.base0C}; }  /* cyan : partiellement/défaut */
+        #custom-weather.sunny  { color: ${c.base0A}; }  /* jaune : soleil / ciel clair  */
+        #custom-weather.cloudy { color: ${c.base04}; }  /* gris neutre : couvert / brume */
+        #custom-weather.rain   { color: ${c.base0D}; }  /* bleu : pluie / neige / orage  */
         #clock             { color: ${c.base05}; font-weight: bold; }
 
         #battery.warning  { color: ${c.base0A}; }
