@@ -118,9 +118,16 @@
     lm_sensors
   ];
 
-  environment.sessionVariables = {                                                                         
+  environment.sessionVariables = {
     LIBVA_DRIVER_NAME = "iHD";
     MOZ_DISABLE_RDD_SANDBOX = "1";
+    # Force les apps Electron/Chromium (Discord, Spotify, VSCode, ...) à utiliser
+    # Wayland nativement. Sans ça elles tombent en mode X11 et meurent ("Missing
+    # X server or $DISPLAY") quand le chemin XWayland est cassé (DISPLAY hérité
+    # de GDM pointant sur un serveur X inexistant).
+    NIXOS_OZONE_WL = "1";
+    # Firefox en Wayland natif (il auto-détecte déjà, mais on le garantit).
+    MOZ_ENABLE_WAYLAND = "1";
   };
 
   # Manage external disks

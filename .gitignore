@@ -1,0 +1,4 @@
+
+# Bytecode Python (artefacts de compilation)
+__pycache__/
+*.pyc
