@@ -9,10 +9,11 @@
 export LC_ALL=C
 
 # Icônes batterie Nerd Font (Material Design) : mêmes 11 niveaux que le module
-# batterie du PC (codepoints f008e..f0079, cf. waybar default.nix). Index =
-# pourcentage arrondi à la dizaine (0% -> outline 󰂎 ... 100% -> pleine 󰁹).
-# Glyphes littéraux (et non printf '\U…') : insensibles à LC_ALL=C, qui en
-# locale ASCII ne sait pas encoder ces codepoints du plan astral.
+# batterie du PC (codepoints f008e..f0079, cf. format-icons dans waybar
+# default.nix -> garder les DEUX listes synchronisées). Index = pourcentage
+# arrondi à la dizaine (0% -> outline 󰂎 ... 100% -> pleine 󰁹). Glyphes
+# littéraux (et non printf '\U…') : insensibles à LC_ALL=C, qui en locale ASCII
+# ne sait pas encoder ces codepoints du plan astral.
 bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
 bat_icon() { # $1 = pourcentage -> glyphe
     local idx=$(( ($1 + 5) / 10 ))
@@ -21,20 +22,7 @@ bat_icon() { # $1 = pourcentage -> glyphe
     printf '%s' "${bat_icons[idx]}"
 }
 
-# Échappe une chaîne pour l'insérer dans une valeur JSON (backslash, guillemet,
-# et retours à la ligne -> \n pour le tooltip multi-lignes).
-json_escape() {
-    local s=$1
-    s=${s//\\/\\\\}
-    s=${s//\"/\\\"}
-    s=${s//$'\n'/\\n}
-    printf '%s' "$s"
-}
-
-# Émet le JSON waybar { texte barre, tooltip (peut être vide) }.
-emit() {
-    printf '{"text":"%s","tooltip":"%s"}\n' "$(json_escape "$1")" "$(json_escape "$2")"
-}
+# json_escape / emit : fournis par lib.sh (inliné en tête au build).
 
 if ! command -v bluetoothctl &>/dev/null; then
     emit "󰂯  N/A" ""

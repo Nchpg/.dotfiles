@@ -55,11 +55,47 @@ let
   brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
   wpctl = "${pkgs.wireplumber}/bin/wpctl";
   swaync = "${pkgs.swaynotificationcenter}/bin/swaync-client";
+  systemctl = "${pkgs.systemd}/bin/systemctl";
+
+  # Terminal de l'utilisateur (même convention que le module sway) : alacritty
+  # exige `-e` pour lancer un programme, kitty/foot l'acceptent directement.
+  term = config.userSettings.terminal.default;
+  termExec = prog: if term == "alacritty" then "${term} -e ${prog}" else "${term} ${prog}";
+  # btop configuré par l'utilisateur (programs.btop), donc avec le support GPU
+  # Intel xe (PR #1457) si activé. NE PAS prendre `pkgs.btop` : c'est le btop
+  # amont (driver i915 only), qui n'affiche PAS le GPU xe de cette machine.
+  btop = "${config.programs.btop.package}/bin/btop";
+  thunar = "${pkgs.xfce.thunar}/bin/thunar"; # gestionnaire de fichiers (GUI)
 
   # Scripts custom (logique reprise de sway-bar.sh), installés dans la conf
   # waybar puis exécutés par chemin absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
-  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" ];
+  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" "backlight.sh" "wlsunset-geo.sh" ];
+
+  # Helpers JSON communs (json_escape/emit), inlinés en tête de chaque script.
+  libSh = builtins.readFile ./scripts/lib.sh;
+
+  # Dépendances runtime épinglées par script : on préfixe le PATH avec leurs
+  # binaires (store), donc les scripts ne dépendent plus du PATH ambiant pour
+  # leurs outils (robuste si la session change de PATH). Le PATH ambiant reste
+  # ajouté en repli pour le reste. coreutils couvre cat/date/df/numfmt/nproc/...
+  scriptDeps = {
+    "resources.sh" = [ pkgs.coreutils pkgs.gawk ];
+    "bluetooth.sh" = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.bluez ];
+    "nowplaying.sh" = [ pkgs.coreutils pkgs.playerctl ];
+    "disk.sh" = [ pkgs.coreutils ];
+    "weather.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq ];
+    "backlight.sh" = [ pkgs.coreutils pkgs.brightnessctl pkgs.systemd ];
+    "wlsunset-geo.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq pkgs.wlsunset ];
+  };
+
+  # Script final = shebang vers un bash épinglé + PATH déterministe + lib.sh +
+  # corps du script source. (Le `#!/usr/bin/env bash` du corps devient un simple
+  # commentaire une fois en milieu de fichier.)
+  mkScript = name: ''
+    #!${pkgs.bash}/bin/bash
+    export PATH=${lib.makeBinPath scriptDeps.${name}}:$PATH
+  '' + libSh + builtins.readFile (./scripts + "/${name}");
 
   # Commandes volume (wpctl), réutilisées par la molette, le clic et le menu.
   volUp = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
@@ -81,19 +117,33 @@ let
   # store (cf. weather.sh), donc il survit aux reboots et rebuilds.
   weatherCities = [ "Angers" "Paris" ];
 
+  # Signal temps-réel qui réveille le module météo (relance weather.sh sans
+  # attendre l'intervalle). Source unique : utilisé pour `signal` côté waybar ET
+  # pour le `pkill` des actions de menu -> les deux restent forcément cohérents.
+  weatherSignal = 8;
+  weatherWake = "pkill -RTMIN+${toString weatherSignal} waybar";
+
   # Action de menu : écrit la ville dans l'état persistant puis réveille le
-  # module (signal 8) pour un switch immédiat sans attendre l'intervalle.
+  # module pour un switch immédiat.
   # `\''${…}` = ${…} littéral dans le shell ; `$HOME` reste littéral aussi.
   weatherStateDir = "\${XDG_STATE_HOME:-$HOME/.local/state}/waybar";
+  # Écrit la ville, réveille la météo, et relance le night light s'il tourne
+  # (try-restart = no-op si wlsunset est coupé) pour qu'il adopte les coords de
+  # la nouvelle ville. Le wrapper wlsunset-geo.sh géocode lui-même au besoin.
   mkWeatherAction = city:
     "mkdir -p \"${weatherStateDir}\""
     + " && printf '%s' '${city}' > \"${weatherStateDir}/weather-city\""
-    + " && pkill -RTMIN+8 waybar";
+    + " && ${weatherWake}"
+    + " && ${systemctl} --user try-restart wlsunset";
+  # En plus des villes : une entrée « Actualiser » qui réveille juste le module
+  # pour relancer weather.sh -> nouvelle requête réseau immédiate.
   weatherMenuActions = lib.listToAttrs
-    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities);
+    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities)
+    // { refresh = weatherWake; };
 
   # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
-  # relié à `weatherMenuActions` par cet id).
+  # relié à `weatherMenuActions` par cet id), puis un séparateur et l'entrée
+  # « Actualiser » (id=refresh) bien détachée des villes.
   weatherMenuXml = ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- Généré depuis `weatherCities` dans modules/user/waybar/default.nix. -->
@@ -106,6 +156,61 @@ let
           </object>
         </child>
   '') weatherCities + ''
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sep"/>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="refresh">
+            <property name="label">Actualiser</property>
+          </object>
+        </child>
+      </object>
+    </interface>
+  '';
+
+  # Le night light (service wlsunset) est piloté depuis le module luminosité
+  # (custom/backlight) : son icône reflète l'état on/off. Ce signal réveille ce
+  # module pour rafraîchir l'icône/le % aussitôt (clic ou molette).
+  backlightSignal = 9;
+  refreshBacklight = "pkill -RTMIN+${toString backlightSignal} waybar";
+  # Clic gauche : bascule le service wlsunset (start/stop) puis rafraîchit l'icône.
+  nightlightToggle =
+    "if ${systemctl} --user is-active --quiet wlsunset;"
+    + " then ${systemctl} --user stop wlsunset;"
+    + " else ${systemctl} --user start wlsunset; fi;"
+    + " ${refreshBacklight}";
+
+  # Menu clic-droit du module luminosité : presets de niveau (sautent directement
+  # via brightnessctl, puis refresh du %), un séparateur, et « Changer de mode »
+  # qui bascule le night light. Source unique = backlightPresets. Id GTK préfixé
+  # "pct" (pas de chiffre en tête) ; "mode" relié à la bascule night light.
+  backlightPresets = [ 1 25 50 75 100 ];
+  backlightMenuActions = lib.listToAttrs
+    (map
+      (p: lib.nameValuePair "pct${toString p}"
+        "${brightnessctl} set ${toString p}%; ${refreshBacklight}")
+      backlightPresets)
+    // { mode = nightlightToggle; };
+  backlightMenuXml = ''
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!-- Généré depuis `backlightPresets` dans modules/user/waybar/default.nix. -->
+    <interface>
+      <object class="GtkMenu" id="menu">
+  '' + lib.concatMapStrings (p: ''
+        <child>
+          <object class="GtkMenuItem" id="pct${toString p}">
+            <property name="label">${toString p} %</property>
+          </object>
+        </child>
+  '') backlightPresets + ''
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sep"/>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="mode">
+            <property name="label">Changer de mode (night light)</property>
+          </object>
+        </child>
       </object>
     </interface>
   '';
@@ -133,15 +238,36 @@ in {
     # On gère nous-mêmes le style (palette Stylix) pour coller à l'ancienne barre.
     stylix.targets.waybar.enable = false;
 
-    # playerctl : appelé depuis le PATH par nowplaying.sh (les autres outils des
-    # scripts — bluetoothctl, top, free, df — viennent du système). curl + jq :
-    # utilisés par weather.sh (requête Open-Meteo + parsing JSON).
+    # Night light : wlsunset réchauffe la température de couleur de l'écran le
+    # soir/nuit (gamma wlroots) pour les yeux, automatiquement selon le soleil.
+    # Démarré avec la session graphique ; piloté au clic depuis le module
+    # luminosité (custom/backlight). Le lieu n'est PAS en dur : le wrapper
+    # wlsunset-geo.sh lit la ville/coords du cache météo (cf. lib.sh) -> changer
+    # de ville météo change aussi le lieu du night light. Températures : jour
+    # 6500 K (neutre), nuit 3800 K (chaud). wlsunset rétablit le gamma à l'arrêt.
+    systemd.user.services.wlsunset = {
+      Unit = {
+        Description = "wlsunset – température de couleur jour/nuit";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        ExecStart = "${scriptDir}/wlsunset-geo.sh";
+        Restart = "on-failure";
+      };
+    };
+
+    # Les scripts épinglent eux-mêmes leurs dépendances dans leur PATH (cf.
+    # scriptDeps / mkScript), donc ces paquets ne sont plus requis ICI par
+    # waybar. On les garde uniquement comme CLI pratiques pour l'utilisateur
+    # (playerctl pilote aussi Spotify via les on-click/on-scroll du module).
     home.packages = [ pkgs.playerctl pkgs.curl pkgs.jq ];
 
     home.file = lib.listToAttrs (
       (map
         (n: lib.nameValuePair ".config/waybar/scripts/${n}" {
-          source = ./scripts + "/${n}";
+          text = mkScript n;
           executable = true;
         })
         scriptNames)
@@ -151,9 +277,12 @@ in {
         })
         menuNames)
       ++ [
-        # Menu météo généré depuis `weatherCities` (cf. let), pas un fichier source.
+        # Menus générés (cf. let), pas des fichiers source.
         (lib.nameValuePair ".config/waybar/menus/weather.xml" {
           text = weatherMenuXml;
+        })
+        (lib.nameValuePair ".config/waybar/menus/backlight.xml" {
+          text = backlightMenuXml;
         })
       ]);
 
@@ -176,7 +305,7 @@ in {
           "custom/bluetooth"
           "network"
           "custom/resources"
-          "backlight"
+          "custom/backlight"
           "wireplumber"
           "custom/swaync"
           "custom/disk"
@@ -221,16 +350,32 @@ in {
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
-          interval = 2;
+          interval = 3; # 3 s plutôt que 2 : moins de réveils/forks, gain batterie
           # Sortie JSON : texte compact (inchangé) dans la barre + détail
           # RAM/CPU/GPU et charge système en tooltip.
           return-type = "json";
+          on-click = termExec btop; # détail des process dans btop
         };
 
-        backlight = {
-          format = labeled "f00e0" "{percent}%";
-          on-scroll-up = "${brightnessctl} set 5%+";
-          on-scroll-down = "${brightnessctl} set 5%-";
+        # Luminosité (custom : le % vient de brightnessctl, l'icône reflète
+        # l'état du night light). Molette = ±5 % (puis refresh du %), clic =
+        # bascule le night light (wlsunset). Couleur fixe orange (cf. CSS).
+        "custom/backlight" = {
+          exec = "${scriptDir}/backlight.sh";
+          interval = 3; # filet pour capter les touches clavier de luminosité
+          signal = backlightSignal; # refresh immédiat au clic/molette
+          return-type = "json";
+          format = "{icon}   {text}";
+          format-icons = {
+            on = mkIcon "f0594"; # md-weather-night (lune) : night light actif
+            off = mkIcon "f00e0"; # md-brightness (luminosité) : night light off
+          };
+          on-click = nightlightToggle;
+          on-scroll-up = "${brightnessctl} set 5%+; ${refreshBacklight}";
+          on-scroll-down = "${brightnessctl} set 5%-; ${refreshBacklight}";
+          menu = "on-click-right";
+          menu-file = "${menuDir}/backlight.xml";
+          menu-actions = backlightMenuActions;
         };
 
         # Volume (module unique -> tooltip stable). Clic gauche = mute, clic
@@ -279,21 +424,25 @@ in {
           interval = 30;
           # Sortie JSON : texte compact + détail (utilisé / total / libre).
           return-type = "json";
+          on-click = thunar; # ouvre le gestionnaire de fichiers
         };
 
         battery = {
           interval = 30;
           states = { warning = 20; critical = 10; };
           # Temps avant vide/plein au survol ({time} vide si plein/inconnu).
-          tooltip-format = "{capacity}%  ·  {time}";
+          # 2e ligne : santé batterie ({health} = capacité pleine / d'origine ;
+          # usure = 100 − santé) et nombre de cycles de charge.
+          tooltip-format = "{capacity}%  ·  {time}\nSanté {health}%  ·  {cycles} cycles";
           # Icône dynamique selon le niveau (waybar mappe {capacity} sur le
           # tableau format-icons : outline=0% ... pleine=100%).
           # Espacement icône->% resserré (2 espaces) propre à la batterie ;
           # les autres modules gardent l'espacement standard de `labeled` (3).
           format = "{icon}  {capacity}%";
-          format-charging = "${mkIcon "f0084"}  {capacity}%"; # md-battery-charging
-          format-plugged = "${mkIcon "f0084"}  {capacity}%";
+          format-charging = "${mkIcon "f0241"}  {capacity}%"; # md-flash (éclair)
+          format-plugged = "${mkIcon "f0241"}  {capacity}%";
           format-full = "${mkIcon "f0079"}  {capacity}%"; # md-battery pleine
+          # Mêmes 11 niveaux que bluetooth.sh (bat_icons) : garder synchronisé.
           format-icons = map mkIcon [
             "f008e" # 0%   md-battery-outline
             "f007a" # 10%  md-battery-10
@@ -315,7 +464,7 @@ in {
         "custom/weather" = {
           exec = "${scriptDir}/weather.sh";
           interval = 900; # 15 min : la météo bouge lentement, on ménage l'API
-          signal = 8; # réveillé par le menu (pkill -RTMIN+8) pour un switch immédiat
+          signal = weatherSignal; # réveillé par le menu (cf. weatherWake) pour un switch immédiat
           return-type = "json";
           format = "{icon}  {text}";
           # Clic droit : choisir la ville (menu généré depuis weatherCities).
@@ -408,7 +557,7 @@ in {
         #custom-bluetooth  { color: ${c.base0D}; }  /* bleu    */
         #network           { color: ${c.base0C}; }  /* cyan    */
         #custom-resources  { color: ${c.base0A}; }  /* jaune   */
-        #backlight         { color: ${c.base09}; }  /* orange  */
+        #custom-backlight  { color: ${c.base09}; }  /* orange (toujours, quel que soit l'état night light) */
         #wireplumber       { color: ${c.base0E}; }  /* magenta (icône + %) */
         #custom-swaync     { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
         #custom-disk       { color: ${c.base0C}; }  /* cyan    */

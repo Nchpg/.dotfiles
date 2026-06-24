@@ -17,28 +17,22 @@
 
 export LC_ALL=C
 
-# Ville choisie via le menu clic-droit, persistée hors du store Nix (survit aux
-# reboots et rebuilds). Défaut : Angers.
-state="${XDG_STATE_HOME:-$HOME/.local/state}/waybar/weather-city"
-location=$(cat "$state" 2>/dev/null)
-[[ -z "$location" ]] && location="Angers"
+# Répertoire d'état persistant (survit aux reboots et rebuilds) : il porte la
+# ville choisie ET les caches (coords + relevé). Auparavant coords/relevé
+# vivaient dans $XDG_RUNTIME_DIR (tmpfs, effacé au reboot) -> après un reboot
+# hors-ligne on perdait tout (affichage "--"). En state, le dernier relevé
+# connu reste affichable et on évite même un géocodage au premier lancement.
+statedir="${XDG_STATE_HOME:-$HOME/.local/state}/waybar"
+mkdir -p "$statedir"
 
-# Caches par ville : switcher de ville hors-ligne n'affiche pas un vieux relevé
-# d'une autre ville. On cache les coordonnées (géocodage) ET le relevé.
+# Ville courante + ses coordonnées : logique partagée avec le night light (cf.
+# weather_city / weather_coords dans lib.sh). weather_coords réutilise le cache
+# de coords par ville et ne géocode qu'au premier affichage d'une ville (ou si
+# le cache a disparu) -> une requête HTTP en moins par cycle.
+location=$(weather_city)
 safe=${location//[^A-Za-z0-9]/_}
-cache="${XDG_RUNTIME_DIR:-/tmp}/waybar-weather-${safe}.json"
-coordcache="${XDG_RUNTIME_DIR:-/tmp}/waybar-weather-${safe}.coords"
-
-# --- Géocodage ville -> lat/lon (API geocoding Open-Meteo, sans clé) ---
-geo=$(curl -fsS --max-time 8 -G "https://geocoding-api.open-meteo.com/v1/search" \
-    --data-urlencode "name=${location}" \
-    --data "count=1&language=fr&format=json" 2>/dev/null)
-read -r lat lon <<<"$(jq -r '.results[0] | "\(.latitude) \(.longitude)"' <<<"$geo" 2>/dev/null)"
-if [[ -n "$lat" && "$lat" != "null" ]]; then
-    printf '%s %s' "$lat" "$lon" >"$coordcache"
-else
-    read -r lat lon <<<"$(cat "$coordcache" 2>/dev/null)"
-fi
+cache="$statedir/weather-${safe}.json"     # cache du relevé courant (par ville)
+read -r lat lon <<<"$(weather_coords "$location")"
 
 # --- Relevé courant pour ces coordonnées ; à défaut on bascule sur le cache ---
 if [[ -n "$lat" && "$lat" != "null" ]]; then
@@ -121,10 +115,17 @@ case "$cat" in
 esac
 
 text="${temp}°"
+# Dernière actualisation = date d'écriture du cache (mtime). En cas de relevé
+# frais c'est « maintenant » ; hors-ligne, c'est le dernier relevé réussi.
+updated=$(date -r "$cache" '+%d/%m %H:%M' 2>/dev/null)
 # En-tête = le preset choisi (et non le lieu géocodé renvoyé par l'API).
+# Tooltip multi-lignes en VRAIES nouvelles lignes ; json_escape (lib.sh) les
+# convertit en \n.
 tooltip="${location} · ${desc}"
-tooltip+="\nRessenti ${feels}°  ·  Humidité ${humidity}%"
-tooltip+="\nVent ${wind} km/h ${winddir}"
-tooltip+="\n<i>Clic droit : changer de ville</i>"
+tooltip+=$'\n'"Ressenti ${feels}°  ·  Humidité ${humidity}%"
+tooltip+=$'\n'"Vent ${wind} km/h ${winddir}"
+[[ -n "$updated" ]] && tooltip+=$'\n'"Maj ${updated}"
+tooltip+=$'\n'"<i>Clic droit : changer de ville / actualiser</i>"
 
-printf '{"text":"%s","alt":"%s","class":"%s","tooltip":"%s"}\n' "$text" "$cat" "$class" "$tooltip"
+printf '{"text":"%s","alt":"%s","class":"%s","tooltip":"%s"}\n' \
+    "$(json_escape "$text")" "$cat" "$class" "$(json_escape "$tooltip")"

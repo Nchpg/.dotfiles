@@ -28,8 +28,9 @@ size_h=$(fmt "$size_b")
 g=$((1024 * 1024 * 1024))
 reserve_g=$(( (size_b + g - 1) / g - (usable_b + g - 1) / g ))
 
+# Sortie JSON (emit + json_escape : cf. lib.sh).
 text="󰉋   ${used_h}o : ${pct}"
 tooltip="Utilisé    ${used_h}o / ${usable_h}o  (${pct})"
-tooltip+="\nLibre      ${avail_h}o"
-tooltip+="\nPartition  ${size_h}o  (réserve root ${reserve_g}Go)"
-printf '{"text":"%s","tooltip":"%s"}\n' "$text" "$tooltip"
+tooltip+=$'\n'"Libre      ${avail_h}o"
+tooltip+=$'\n'"Partition  ${size_h}o  (réserve root ${reserve_g}Go)"
+emit "$text" "$tooltip"
