@@ -135,7 +135,7 @@ in {
 
     # playerctl : appelé depuis le PATH par nowplaying.sh (les autres outils des
     # scripts — bluetoothctl, top, free, df — viennent du système). curl + jq :
-    # utilisés par weather.sh (requête wttr.in + parsing JSON).
+    # utilisés par weather.sh (requête Open-Meteo + parsing JSON).
     home.packages = [ pkgs.playerctl pkgs.curl pkgs.jq ];
 
     home.file = lib.listToAttrs (
@@ -265,7 +265,7 @@ in {
             "dnd-inhibited-none" = bellOff;
             default = bell;
           };
-          on-click = "${swaync} -d -sw"; # toggle ne pas déranger
+          on-click = "${swaync} -t -sw"; # afficher le panneau de notifications
           menu = "on-click-right";
           menu-file = "${menuDir}/notifications.xml";
           menu-actions = {
@@ -310,11 +310,11 @@ in {
           on-click = launcher "lg-control";
         };
 
-        # Météo (wttr.in via weather.sh). Le script émet une catégorie dans "alt",
-        # mappée ici sur l'icône Material Design correspondante (jour/nuit inclus).
+        # Météo (Open-Meteo via weather.sh). Le script émet une catégorie dans
+        # "alt", mappée ici sur l'icône Material Design (jour/nuit inclus).
         "custom/weather" = {
           exec = "${scriptDir}/weather.sh";
-          interval = 900; # 15 min : la météo bouge lentement, on ménage wttr.in
+          interval = 900; # 15 min : la météo bouge lentement, on ménage l'API
           signal = 8; # réveillé par le menu (pkill -RTMIN+8) pour un switch immédiat
           return-type = "json";
           format = "{icon}  {text}";
