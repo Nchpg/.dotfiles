@@ -15,6 +15,7 @@
           name = "nchpg";
           isAdmin = true;
           allowDocker = true;
+          allowLibvirt = true;
         }
         {
           name = "guest";

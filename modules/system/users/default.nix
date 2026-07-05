@@ -21,6 +21,11 @@
               default = false;
               description = "If true, the user will have access to docker";
             };
+            allowLibvirt = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "If true, the user will be in the libvirtd group (VM management, quasi root-equivalent)";
+            };
           };
         });
       };
@@ -49,7 +54,13 @@
         name = user.name;
         value = {
           isNormalUser = true;
-          extraGroups = [ "networkmanager" "video" "render" "libvirtd" ] ++ lib.optional user.isAdmin "wheel" ++ lib.optional user.allowDocker "docker";
+          # libvirtd n'est PAS dans la base commune : le groupe est quasi
+          # équivalent root (une VM peut monter le disque hôte) → opt-in,
+          # comme docker.
+          extraGroups = [ "networkmanager" "video" "render" ]
+            ++ lib.optional user.isAdmin "wheel"
+            ++ lib.optional user.allowDocker "docker"
+            ++ lib.optional user.allowLibvirt "libvirtd";
           createHome = true;
           description = user.name;
         };

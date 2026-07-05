@@ -45,7 +45,12 @@ in {
     ];
 
     home.sessionVariables = {
-      LS_COLORS = "$(dircolors --print-database)";
+      # `dircolors -b` sort `LS_COLORS='…'; export LS_COLORS` : on extrait la
+      # chaîne entre quotes. (L'ancien `--print-database` remplissait la
+      # variable avec la BASE DE CONFIG, format invalide → eza/ls retombaient
+      # sur leurs couleurs par défaut.) La valeur est posée verbatim dans
+      # hm-session-vars.sh, donc la substitution s'exécute à l'init du shell.
+      LS_COLORS = ''$(dircolors -b | sed -n "s/^LS_COLORS='\(.*\)';$/\1/p")'';
     };
 
     programs = {
