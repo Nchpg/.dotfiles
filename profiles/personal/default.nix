@@ -33,6 +33,13 @@
         enable = true;
         batteryCareLimit = 80;
       };
+
+      swap = {
+        # Pas de swap disque sur gram : zram (rapide, sans usure SSD) + earlyoom
+        # (kill anticipé et ciblé plutôt qu'un freeze puis un OOM noyau aveugle).
+        zram.enable = true;
+        earlyoom.enable = true;
+      };
     };
   };
 }
