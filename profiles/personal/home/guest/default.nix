@@ -2,7 +2,6 @@
 
 {
   config = lib.mkDefault {
-    nixpkgs.config.allowUnfree = true;
 
     userSettings = {
       defaultPkgs = pkgs-stable;

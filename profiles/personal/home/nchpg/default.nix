@@ -3,7 +3,6 @@
 {
   config = lib.mkMerge [
     (lib.mkDefault {
-    nixpkgs.config.allowUnfree = true;
 
     userSettings = {
       defaultPkgs = pkgs-stable;
