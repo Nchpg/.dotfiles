@@ -66,7 +66,7 @@ while read -r _ mac full_name; do
         bar_list="${short_name}${suffix}"
         tip_list="${full_name}${suffix}"
     else
-        bar_list="$bar_list, ${short_name}${suffix}"
+        bar_list="$bar_list  •  ${short_name}${suffix}"
         tip_list="$tip_list"$'\n'"${full_name}${suffix}"
     fi
 done <<< "$connected_devices"

@@ -20,6 +20,34 @@
       <object class="GtkSeparatorMenuItem" id="sep2"/>
     </child>
     <child>
+      <object class="GtkMenuItem" id="vol10">
+        <property name="label">10 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="vol25">
+        <property name="label">25 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="vol50">
+        <property name="label">50 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="vol75">
+        <property name="label">75 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="vol100">
+        <property name="label">100 %</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkSeparatorMenuItem" id="sep3"/>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="volup">
         <property name="label">Volume +5 %</property>
       </object>
