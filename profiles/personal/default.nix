@@ -40,6 +40,13 @@
         zram.enable = true;
         earlyoom.enable = true;
       };
+
+      virtualisation = {
+        docker.enable = true;
+        libvirt.enable = true;
+      };
+
+      ollama.enable = true;
     };
   };
 }

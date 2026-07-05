@@ -131,7 +131,7 @@ in
 
       # Mêmes polices que le module user, pour un rendu cohérent sur GDM.
       # /!\ les polices doivent être installées dans
-      #     modules/system/configuration.nix (fonts.packages).
+      #     modules/system/fonts (fonts.packages).
       fonts = {
         monospace = {
           name = "FiraCode Nerd Font";

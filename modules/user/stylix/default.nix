@@ -46,7 +46,7 @@ in
       };
       base16Scheme = theme;
 
-      #/!\ fonts must be installed in modules/system/configuration.nix fonts.fonts /!\
+      #/!\ fonts must be installed in modules/system/fonts (fonts.packages) /!\
       fonts = {
         monospace = {
           name = "FiraCode Nerd Font";

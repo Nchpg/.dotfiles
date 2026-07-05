@@ -1,176 +1,23 @@
-{ lib, pkgs-stable, pkgs-unstable, target, ... }:
+{ pkgs-stable, ... }:
 
+# Core du système : Nix lui-même, firmware, et le petit reliquat qui n'a pas
+# (encore) de module dédié. Tout le reste vit dans modules/system/<sujet>/ :
+# boot, locale, network, audio, bluetooth, gdm, disks, fonts, swap, users,
+# et les modules à option (intel-graphics, virtualisation, ollama, sway,
+# gnome, stylix, lg-laptop) activés par le host ou le profil.
 {
   home-manager.backupFileExtension = "hm-backup";
+
   # Réutilise l'instance nixpkgs du flake (allowUnfree inclus) au lieu d'en
   # instancier une nouvelle → évaluation plus rapide. Toute option nixpkgs.*
   # (config/overlays) serait ignorée : les poser sur pkgs-stable dans flake.nix.
   nixpkgs.pkgs = pkgs-stable;
-
-  # Bootloader.
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-  boot.kernelPackages = pkgs-stable.linuxPackages_latest;
-
-  # GPU
-  services.xserver.videoDrivers = [ "modesetting" ];
-
-  boot.kernelParams = [ "i915.force_probe=!7d55" "xe.force_probe=7d55" ];
-  boot.kernelModules = [ "xe" ];
-
-  hardware.graphics = {
-    enable = true;
-    extraPackages = with pkgs-unstable; [
-      intel-compute-runtime            # OpenCL driver (libigdrcl.so)
-      intel-compute-runtime.drivers    # Level-Zero GPU driver (libze_intel_gpu.so) -> /run/opengl-driver/lib
-      intel-media-driver
-      vpl-gpu-rt
-      level-zero
-    ];
-  };
-
-  hardware.firmware = with pkgs-stable; [
-    sof-firmware
-  ];
-
 
   # Active Flake
   nix = {
     package = pkgs-stable.nix;
     settings.experimental-features = [ "nix-command" "flakes" ];
   };
-
-  # Define your hostname.
-  networking.hostName = "${target.profile}-${target.host}"; 
-
-  # Use all available firmware (needed for sound)
-  hardware.enableAllFirmware = true;
-
-  # Enable networking
-  networking.networkmanager.enable = true;
-  networking.useDHCP = false;
-
-  # Set your time zone.
-  time.timeZone = "Europe/Paris";
-
-  # Select internationalisation properties.
-  i18n.defaultLocale = "en_US.UTF-8";
-  i18n.extraLocaleSettings = {
-    LC_ADDRESS = "fr_FR.UTF-8";
-    LC_IDENTIFICATION = "fr_FR.UTF-8";
-    LC_MEASUREMENT = "fr_FR.UTF-8";
-    LC_MONETARY = "fr_FR.UTF-8";
-    LC_NAME = "fr_FR.UTF-8";
-    LC_NUMERIC = "fr_FR.UTF-8";
-    LC_PAPER = "fr_FR.UTF-8";
-    LC_TELEPHONE = "fr_FR.UTF-8";
-    LC_TIME = "fr_FR.UTF-8";
-  };
-
-  # Enable the GNOME GDM.
-  services.displayManager.gdm.enable = true;
-
-  # Trousseau de secrets (mots de passe Chrome, Wi-Fi, etc.). Le démon stocke la
-  # clé qui chiffre les secrets ; le hook PAM sur gdm-password déverrouille le
-  # trousseau « login » avec ton mot de passe de session à la connexion, sinon
-  # Chrome réclame « Authentication required » au démarrage.
-  services.gnome.gnome-keyring.enable = true;
-  security.pam.services.gdm-password.enableGnomeKeyring = true;
-
-  # Enable CUPS to print documents.
-  services.printing.enable = true;
-
-  # Enable sound with pipewire.
-  security.rtkit.enable = true;
-  services.pipewire = {
-    enable = true;
-    alsa.enable = true;
-    alsa.support32Bit = true;
-    pulse.enable = true;
-    wireplumber.enable = true;
-    jack.enable = true;
-
-    # Le périphérique par défaut suit la priorité (priority.session) au lieu d'être
-    # épinglé. Les sorties Bluetooth ont une priorité plus haute que le haut-parleur
-    # interne : à la connexion elles deviennent donc la sortie par défaut, et les
-    # binds sway (wpctl ... @DEFAULT_AUDIO_SINK@) les contrôlent automatiquement.
-    wireplumber.extraConfig."51-default-follow-priority" = {
-      "wireplumber.settings" = {
-        "node.restore-default-targets" = false;
-      };
-    };
-  };
-
-  # Enable Docker
-  virtualisation = {
-    docker = {
-      enable = true;
-      daemon.settings = {
-        dns = [ "8.8.8.8" "1.1.1.1" ];
-      };
-    };
-    libvirtd.enable = true;
-  };
-
-  environment.systemPackages = with pkgs-stable; [
-    virt-manager
-    # udiskie n'est pas listé ici : le service systemd user (plus bas) référence
-    # directement son chemin dans le store.
-    # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
-    nvtopPackages.full
-    lm_sensors
-    clinfo # diagnostic OpenCL (dans extraPackages il n'était pas dans le PATH)
-  ];
-
-  environment.sessionVariables = {
-    LIBVA_DRIVER_NAME = "iHD";
-    MOZ_DISABLE_RDD_SANDBOX = "1";
-    # Force les apps Electron/Chromium (Discord, Spotify, VSCode, ...) à utiliser
-    # Wayland nativement. Sans ça elles tombent en mode X11 et meurent ("Missing
-    # X server or $DISPLAY") quand le chemin XWayland est cassé (DISPLAY hérité
-    # de GDM pointant sur un serveur X inexistant).
-    NIXOS_OZONE_WL = "1";
-    # Firefox en Wayland natif (il auto-détecte déjà, mais on le garantit).
-    MOZ_ENABLE_WAYLAND = "1";
-  };
-
-  # Swap : géré par modules/system/swap (systemSettings.swap : zram + earlyoom).
-
-  # Manage external disks
-  services.udisks2.enable = true;
-  boot.supportedFilesystems = [ "ntfs" ];
-
-  systemd.user.services.udiskie = {
-    description = "udiskie automounter";
-    wantedBy = [ "default.target" ];
-    serviceConfig.ExecStart = "${pkgs-stable.udiskie}/bin/udiskie --tray"; # --tray affiche l'icône en bas à droite
-  };
-
-  # Enable touchpad support (enabled default in most desktopManager).
-  services.libinput.enable = true;
-
-  # Configure keymap in X11
-  services.xserver = {
-    enable = true;
-
-    xkb = {
-      layout = "fr";
-      variant = "azerty";
-    };
-  };
-
-  # Configure console keymap
-  console.keyMap = "fr";
-
-
-  hardware.bluetooth = {
-    enable = true;
-    # Experimental active le report du niveau de batterie des appareils BT (via D-Bus).
-    settings.General.Experimental = true;
-  };
-
-  # Enable thunar
-  programs.thunar.enable = true;
 
   # Enable automatic garbage collection
   nix.gc = {
@@ -179,19 +26,28 @@
     options = "--delete-older-than 14d"; # What to delete
   };
 
-  services.ollama = {
-    enable = true;
-    package = pkgs-unstable.ollama-vulkan;
-    environmentVariables = {
-      ZES_ENABLE_SYSMAN = "1";
-      # Offload the model to the Arc iGPU via Vulkan. NOTE: the `xe` driver can
-      # intermittently hang GPU compute on this Meteor Lake (TLB invalidation
-      # fence timeouts) — if ollama freezes at "warming up", remove this line to
-      # fall back to CPU, or switch the GPU from xe -> i915 for stability.
-      OLLAMA_IGPU_ENABLE = "1";
-    };
-  };
+  # Use all available firmware (needed for sound)
+  hardware.enableAllFirmware = true;
 
+  # Enable CUPS to print documents.
+  services.printing.enable = true;
+
+  environment.systemPackages = with pkgs-stable; [
+    # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
+    nvtopPackages.full
+    lm_sensors
+    clinfo # diagnostic OpenCL (dans extraPackages il n'était pas dans le PATH)
+  ];
+
+  environment.sessionVariables = {
+    # Force les apps Electron/Chromium (Discord, Spotify, VSCode, ...) à utiliser
+    # Wayland nativement. Sans ça elles tombent en mode X11 et meurent ("Missing
+    # X server or $DISPLAY") quand le chemin XWayland est cassé (DISPLAY hérité
+    # de GDM pointant sur un serveur X inexistant).
+    NIXOS_OZONE_WL = "1";
+    # Firefox en Wayland natif (il auto-détecte déjà, mais on le garantit).
+    MOZ_ENABLE_WAYLAND = "1";
+  };
 
   # services.elasticsearch = {
   #   enable = true;
@@ -221,13 +77,6 @@
   #      enable = false;
   #    };
   #  };
-
-
-  fonts.packages = [
-    pkgs-stable.nerd-fonts.fira-code
-    pkgs-stable.twitter-color-emoji
-    pkgs-stable.fira-sans
-  ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
