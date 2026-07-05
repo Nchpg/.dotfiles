@@ -66,6 +66,11 @@
               
               inputs.home-manager.nixosModules.home-manager
               ({ config, ... }: {
+                # Chaque user HM réutilise le `pkgs` du système au lieu
+                # d'instancier son propre nixpkgs (~1 instanciation économisée
+                # par user à l'éval). Corollaire : plus de `nixpkgs.*` dans les
+                # configs home (ça devient une erreur d'éval).
+                home-manager.useGlobalPkgs = true;
                 home-manager.extraSpecialArgs = {
                   inherit pkgs-unstable;
                   inherit pkgs-stable;

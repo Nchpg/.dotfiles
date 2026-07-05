@@ -2,7 +2,10 @@
 
 {
   home-manager.backupFileExtension = "hm-backup";
-  nixpkgs.config.allowUnfree = true;
+  # Réutilise l'instance nixpkgs du flake (allowUnfree inclus) au lieu d'en
+  # instancier une nouvelle → évaluation plus rapide. Toute option nixpkgs.*
+  # (config/overlays) serait ignorée : les poser sur pkgs-stable dans flake.nix.
+  nixpkgs.pkgs = pkgs-stable;
 
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
