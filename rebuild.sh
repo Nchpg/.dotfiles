@@ -4,12 +4,14 @@ set -euo pipefail
 
 HOST=""
 PROFILE=""
+UPDATE=0
 
 # Parsing simple des arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --host)    HOST="$2";    shift 2 ;;
         --profile) PROFILE="$2"; shift 2 ;;
+        --update)  UPDATE=1;     shift ;;
         *) echo "Argument inconnu : $1" >&2; exit 1 ;;
     esac
 done
@@ -27,9 +29,14 @@ NC='\033[0m' # No Color
 
 cd "$(dirname "$0")"
 
-echo "⬆️  Updating claude-code flake input to latest..."
-# Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
-nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
+# Bump claude-code seulement sur demande (--update / rebuild -u) : le faire à
+# chaque rebuild salissait flake.lock (→ warning git systématique) et
+# re-téléchargeait claude-code inutilement.
+if [[ "$UPDATE" -eq 1 ]]; then
+    echo "⬆️  Updating claude-code flake input to latest..."
+    # Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
+    nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
+fi
 
 echo "🔎 Checking Git status before rebuild..."
 
@@ -43,7 +50,9 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "------------------------------------------------------------------"
     git status --short
     echo "------------------------------------------------------------------"
-    echo -e "Nix builds from your last commit: these changes ${RED}will NOT be included${NC} unless committed."
+    # Rappel du comportement flake : les modifs des fichiers TRACKÉS sont bien
+    # incluses même non commitées ; seuls les fichiers NON TRACKÉS sont ignorés.
+    echo -e "Note: modified tracked files ${GREEN}ARE included${NC} in the build; ${RED}untracked files are NOT${NC} (git add them first)."
     echo
     read -p "Continue anyway? [y/N] " -n 1 -r
     echo

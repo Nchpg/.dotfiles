@@ -1,37 +1,39 @@
-{ pkgs-stable, ... }:
+{ pkgs-stable, target, ... }:
 
 {
   # Commande `rebuild` : enrobe le script ./rebuild.sh du dépôt.
-  # Par défaut, profil et host sont déduits du hostname courant ($(hostname) =
-  # "${profile}-${host}"), donc sans rien changer :
+  # Profil et host par défaut sont ceux de la config qui a construit ce système
+  # (specialArg `target`, injectés à la génération du script — plus robuste que
+  # de parser le hostname, qui casse si un profil contient un tiret) :
   #   rebuild                  → ./rebuild.sh --profile personal --host gram
   #   rebuild -p work          → ./rebuild.sh --profile work     --host gram
   #   rebuild -H portable      → ./rebuild.sh --profile personal --host portable
-  #   rebuild -p work -H srv   → ./rebuild.sh --profile work     --host srv
-  # rebuild.sh garde toute sa logique (bump claude-code, check git + confirmation,
-  # --show-trace, swaymsg reload).
+  #   rebuild -u               → idem + bump de l'input claude-code avant build
+  # rebuild.sh garde toute sa logique (check git + confirmation, swaymsg reload).
   environment.systemPackages = [
     (pkgs-stable.writeShellScriptBin "rebuild" ''
       set -euo pipefail
       flake="''${MY_FLAKE:-$HOME/.dotfiles}"
 
-      host_name="$(hostname)"
-      profile="''${host_name%%-*}"   # avant le 1er '-'  → "personal"
-      host="''${host_name#*-}"       # après le 1er '-'  → "gram"
+      profile="${target.profile}"
+      host="${target.host}"
+      extra=()
 
       while [ $# -gt 0 ]; do
         case "$1" in
           -p|--profile) profile="$2"; shift 2 ;;
           -H|--host)    host="$2";    shift 2 ;;
+          -u|--update)  extra+=(--update); shift ;;
           -h|--help)
-            echo "usage: rebuild [-p PROFILE] [-H HOST]"
-            echo "  défaut déduit du hostname : --profile $profile --host $host"
+            echo "usage: rebuild [-p PROFILE] [-H HOST] [-u|--update]"
+            echo "  défaut (cible de ce système) : --profile $profile --host $host"
+            echo "  -u : met à jour l'input claude-code avant le rebuild"
             exit 0 ;;
           *) echo "argument inconnu : $1" >&2; exit 1 ;;
         esac
       done
 
-      exec "$flake/rebuild.sh" --profile "$profile" --host "$host"
+      exec "$flake/rebuild.sh" --profile "$profile" --host "$host" ''${extra[@]+"''${extra[@]}"}
     '')
   ];
 }

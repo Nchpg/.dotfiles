@@ -23,7 +23,6 @@
       intel-media-driver
       vpl-gpu-rt
       level-zero
-      clinfo
     ];
   };
 
@@ -112,10 +111,12 @@
 
   environment.systemPackages = with pkgs-stable; [
     virt-manager
-    udiskie
+    # udiskie n'est pas listé ici : le service systemd user (plus bas) référence
+    # directement son chemin dans le store.
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
     nvtopPackages.full
     lm_sensors
+    clinfo # diagnostic OpenCL (dans extraPackages il n'était pas dans le PATH)
   ];
 
   environment.sessionVariables = {
@@ -129,6 +130,10 @@
     # Firefox en Wayland natif (il auto-détecte déjà, mais on le garantit).
     MOZ_ENABLE_WAYLAND = "1";
   };
+
+  # Swap compressé en RAM : évite l'OOM-kill brutal sur pic mémoire (pas de
+  # partition swap sur ce laptop). Quasi gratuit tant qu'il n'y a pas de pression.
+  zramSwap.enable = true;
 
   # Manage external disks
   services.udisks2.enable = true;

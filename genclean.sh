@@ -115,6 +115,26 @@ else
     echo "Purge home-manager ignorée."
 fi
 
+# --- 2bis. Fichiers *.hm-backup (optionnel) ----------------------------------
+# home-manager.backupFileExtension = "hm-backup" : à chaque collision, HM
+# renomme l'ancien fichier en *.hm-backup au lieu d'échouer. Ils s'accumulent.
+if ask_yn "Supprimer les fichiers *.hm-backup laissés par home-manager ?"; then
+    for d in /home/*/ /root/; do
+        [ -d "$d" ] || continue
+        u="$(stat -c %U "$d")"
+        echo "→ hm-backup[$u] : recherche dans $d ..."
+        run_as "$u" bash -c '
+            found=$(find "$HOME" -xdev -name "*.hm-backup" -type f 2>/dev/null)
+            if [ -z "$found" ]; then echo "   aucun fichier."; exit 0; fi
+            echo "$found" | sed "s/^/   /"
+            echo "$found" | xargs -d "\n" rm -f
+            echo "   supprimés."
+        ' || warn "   ⚠️  nettoyage hm-backup[$u] échoué, on continue."
+    done
+else
+    echo "Nettoyage hm-backup ignoré."
+fi
+
 # --- 3. Garbage collection (optionnel) --------------------------------------
 # Sans -d : les générations ont déjà été purgées ci-dessus à la granularité
 # voulue. Le GC libère juste l'espace des chemins devenus orphelins.

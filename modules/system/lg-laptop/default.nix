@@ -43,6 +43,9 @@ in {
     systemd.services.lg-battery-care-limit = lib.mkIf (cfg.batteryCareLimit != null) {
       description = "Applique la limite de charge batterie LG";
       wantedBy = [ "multi-user.target" ];
+      # Si le driver lg-laptop n'est pas chargé, on skip proprement au lieu
+      # d'avoir une unit `failed` au boot.
+      unitConfig.ConditionPathExists = threshold;
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

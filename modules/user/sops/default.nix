@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 # Configuration globale sops-nix cote home-manager. Les secrets individuels
 # (et templates) sont declares dans les modules qui les consomment
@@ -11,8 +11,11 @@
 #
 # Editer les secrets :  sops secrets/secrets.yaml   (depuis la racine du repo)
 {
-  # Outils pour editer les secrets et enroler de nouvelles machines.
-  home.packages = with pkgs; [ sops age ssh-to-age ];
+  # Outils pour editer les secrets et enroler de nouvelles machines. Seulement
+  # pour nchpg : c'est lui qui detient la cle (keyFile ci-dessous) ; guest/root
+  # n'editent pas les secrets.
+  home.packages = lib.mkIf (config.userSettings.user == "nchpg")
+    (with pkgs; [ sops age ssh-to-age ]);
 
   sops = {
     defaultSopsFile = ../../../secrets/secrets.yaml;
