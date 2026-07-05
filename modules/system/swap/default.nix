@@ -95,9 +95,11 @@ in {
         # Notification desktop au kill (via le daemon de notifs de la session).
         enableNotifications = true;
         extraArgs = [
-          # Sacrifier un onglet navigateur ou un serveur de dev,
-          # jamais la session elle-même (sway/waybar/gdm).
-          "--prefer" "^(chrome|chromium|firefox|node|next-server)$"
+          # Sacrifier un navigateur en priorité, jamais la session elle-même
+          # (sway/waybar/gdm). Pas de `node` ici : Claude Code et les serveurs
+          # de dev sont des process node — on les laisse en cibles ordinaires
+          # (earlyoom prend alors le plus gros consommateur).
+          "--prefer" "^(chrome|chromium|firefox)$"
           "--avoid" "^(sway|waybar|gdm|Xwayland|systemd|dbus-daemon)$"
         ];
       };
