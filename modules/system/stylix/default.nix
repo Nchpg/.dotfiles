@@ -93,7 +93,9 @@ in
         esac
 
         echo "→ variant = $target ; rebuild en cours…"
-        sudo nixos-rebuild switch --flake "$flake#$(hostname)" --impure
+        # Pas de --impure : la config est pure, et --impure désactiverait le
+        # cache d'évaluation (cf. rebuild.sh).
+        sudo nixos-rebuild switch --flake "$flake#$(hostname)"
 
         # Le changement de thème modifie les couleurs de waybar, mais le rebuild
         # (root) ne peut pas relancer le service systemd --user. On le redémarre

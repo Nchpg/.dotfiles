@@ -36,18 +36,12 @@
 
       pkgs-stable = import inputs.nixpkgs-stable {
         inherit system;
-        config = {
-          allowUnfree = true;
-          allowUnfreePredicate = (_: true);
-        };
+        config.allowUnfree = true;
       };
 
       pkgs-unstable = import inputs.nixpkgs-unstable {
         inherit system;
-        config = {
-          allowUnfree = true;
-          allowUnfreePredicate = (_: true);
-        };
+        config.allowUnfree = true;
       };
 
       lib = inputs.nixpkgs-stable.lib;
