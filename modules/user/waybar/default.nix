@@ -65,12 +65,12 @@ let
   # Intel xe (PR #1457) si activé. NE PAS prendre `pkgs.btop` : c'est le btop
   # amont (driver i915 only), qui n'affiche PAS le GPU xe de cette machine.
   btop = "${config.programs.btop.package}/bin/btop";
-  thunar = "${pkgs.xfce.thunar}/bin/thunar"; # gestionnaire de fichiers (GUI)
+  thunar = "${pkgs.thunar}/bin/thunar"; # gestionnaire de fichiers (GUI)
 
   # Scripts custom (logique reprise de sway-bar.sh), installés dans la conf
   # waybar puis exécutés par chemin absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
-  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" "backlight.sh" "wlsunset-geo.sh" ];
+  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" "backlight.sh" "wlsunset-geo.sh" "battery.sh" ];
 
   # Helpers JSON communs (json_escape/emit), inlinés en tête de chaque script.
   libSh = builtins.readFile ./scripts/lib.sh;
@@ -87,6 +87,7 @@ let
     "weather.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq ];
     "backlight.sh" = [ pkgs.coreutils pkgs.brightnessctl pkgs.systemd ];
     "wlsunset-geo.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq pkgs.wlsunset ];
+    "battery.sh" = [ pkgs.coreutils pkgs.power-profiles-daemon ];
   };
 
   # Script final = shebang vers un bash épinglé + PATH déterministe + lib.sh +
@@ -105,6 +106,13 @@ let
     on-scroll-up = volUp;
     on-scroll-down = volDown;
   };
+  # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N> dans
+  # menus/volume.xml ; chaque action fixe le volume absolu via wpctl.
+  volPresets = [ 10 25 50 75 100 ];
+  volPresetActions = lib.listToAttrs (map
+    (p: lib.nameValuePair "vol${toString p}"
+      "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%")
+    volPresets);
 
   # Menus GTK au clic droit : fichiers XML installés dans menuDir, chaque entrée
   # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
@@ -135,15 +143,13 @@ let
     + " && printf '%s' '${city}' > \"${weatherStateDir}/weather-city\""
     + " && ${weatherWake}"
     + " && ${systemctl} --user try-restart wlsunset";
-  # En plus des villes : une entrée « Actualiser » qui réveille juste le module
-  # pour relancer weather.sh -> nouvelle requête réseau immédiate.
+  # Le menu clic droit ne sert qu'à changer de ville : une action par ville.
+  # (L'actualisation est passée au clic GAUCHE -> on-click = weatherWake.)
   weatherMenuActions = lib.listToAttrs
-    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities)
-    // { refresh = weatherWake; };
+    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities);
 
   # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
-  # relié à `weatherMenuActions` par cet id), puis un séparateur et l'entrée
-  # « Actualiser » (id=refresh) bien détachée des villes.
+  # relié à `weatherMenuActions` par cet id).
   weatherMenuXml = ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- Généré depuis `weatherCities` dans modules/user/waybar/default.nix. -->
@@ -156,14 +162,6 @@ let
           </object>
         </child>
   '') weatherCities + ''
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sep"/>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="refresh">
-            <property name="label">Actualiser</property>
-          </object>
-        </child>
       </object>
     </interface>
   '';
@@ -180,22 +178,41 @@ let
     + " else ${systemctl} --user start wlsunset; fi;"
     + " ${refreshBacklight}";
 
-  # Menu clic-droit du module luminosité : presets de niveau (sautent directement
-  # via brightnessctl, puis refresh du %), un séparateur, et « Changer de mode »
-  # qui bascule le night light. Source unique = backlightPresets. Id GTK préfixé
-  # "pct" (pas de chiffre en tête) ; "mode" relié à la bascule night light.
+  # Pas de luminosité ±5 % (molette ET menu). La hausse plafonne d'elle-même à
+  # 100 % (brightnessctl). La BAISSE plancher à 1 % et JAMAIS 0 % : on lit le %
+  # courant (champ 4 du CSV `-m`) et on garde max(1, %−5), comme le bind clavier
+  # sway (brightness.sh : son plus petit palier est 1, pas 0).
+  backlightUp = "${brightnessctl} set 5%+; ${refreshBacklight}";
+  backlightDown =
+    "p=$(${brightnessctl} -m | ${pkgs.coreutils}/bin/cut -d, -f4 | ${pkgs.coreutils}/bin/tr -d '%');"
+    + " n=$(( p - 5 )); n=$(( n < 1 ? 1 : n ));"
+    + " ${brightnessctl} set \${n}%; ${refreshBacklight}";
+
+  # Menu clic-droit du module luminosité, dans l'ordre : « Changer de mode »
+  # (bascule night light), séparateur, presets de niveau (saut direct via
+  # brightnessctl), séparateur, et le pas ±5 % (mêmes commandes que la molette,
+  # baisse plancher à 1 %). Source unique = backlightPresets. Id GTK préfixé
+  # "pct" (pas de chiffre en tête) ; "mode"/"inc"/"dec" reliés aux actions.
   backlightPresets = [ 1 25 50 75 100 ];
   backlightMenuActions = lib.listToAttrs
     (map
       (p: lib.nameValuePair "pct${toString p}"
         "${brightnessctl} set ${toString p}%; ${refreshBacklight}")
       backlightPresets)
-    // { mode = nightlightToggle; };
+    // { mode = nightlightToggle; inc = backlightUp; dec = backlightDown; };
   backlightMenuXml = ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- Généré depuis `backlightPresets` dans modules/user/waybar/default.nix. -->
     <interface>
       <object class="GtkMenu" id="menu">
+        <child>
+          <object class="GtkMenuItem" id="mode">
+            <property name="label">Changer de mode (night light)</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sepMode"/>
+        </child>
   '' + lib.concatMapStrings (p: ''
         <child>
           <object class="GtkMenuItem" id="pct${toString p}">
@@ -204,11 +221,16 @@ let
         </child>
   '') backlightPresets + ''
         <child>
-          <object class="GtkSeparatorMenuItem" id="sep"/>
+          <object class="GtkSeparatorMenuItem" id="sepStep"/>
         </child>
         <child>
-          <object class="GtkMenuItem" id="mode">
-            <property name="label">Changer de mode (night light)</property>
+          <object class="GtkMenuItem" id="inc">
+            <property name="label">+5 %</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="dec">
+            <property name="label">−5 %</property>
           </object>
         </child>
       </object>
@@ -309,7 +331,7 @@ in {
           "wireplumber"
           "custom/swaync"
           "custom/disk"
-          "battery"
+          "custom/battery"
           "custom/weather"
           "clock"
           "tray"
@@ -371,15 +393,15 @@ in {
             off = mkIcon "f00e0"; # md-brightness (luminosité) : night light off
           };
           on-click = nightlightToggle;
-          on-scroll-up = "${brightnessctl} set 5%+; ${refreshBacklight}";
-          on-scroll-down = "${brightnessctl} set 5%-; ${refreshBacklight}";
+          on-scroll-up = backlightUp;
+          on-scroll-down = backlightDown; # plancher à 1 % (cf. backlightDown)
           menu = "on-click-right";
           menu-file = "${menuDir}/backlight.xml";
           menu-actions = backlightMenuActions;
         };
 
         # Volume (module unique -> tooltip stable). Clic gauche = mute, clic
-        # droit = menu (mute / mixer / +5 / -5), molette = volume.
+        # droit = menu (mute / mixer / presets 10-100 % / +5 / -5), molette = volume.
         wireplumber = volScroll // {
           format = "{icon}  {volume}%";
           format-muted = "${mkIcon "f075f"}  {volume}%"; # md-volume-mute
@@ -392,7 +414,7 @@ in {
             mixer = launcher "volume-mixer";
             volup = volUp;
             voldown = volDown;
-          };
+          } // volPresetActions;
         };
 
         # Notifications (module unique -> tooltip stable) : cloche + nombre.
@@ -427,35 +449,15 @@ in {
           on-click = thunar; # ouvre le gestionnaire de fichiers
         };
 
-        battery = {
-          interval = 30;
-          states = { warning = 20; critical = 10; };
-          # Temps avant vide/plein au survol ({time} vide si plein/inconnu).
-          # 2e ligne : santé batterie ({health} = capacité pleine / d'origine ;
-          # usure = 100 − santé) et nombre de cycles de charge.
-          tooltip-format = "{capacity}%  ·  {time}\nSanté {health}%  ·  {cycles} cycles";
-          # Icône dynamique selon le niveau (waybar mappe {capacity} sur le
-          # tableau format-icons : outline=0% ... pleine=100%).
-          # Espacement icône->% resserré (2 espaces) propre à la batterie ;
-          # les autres modules gardent l'espacement standard de `labeled` (3).
-          format = "{icon}  {capacity}%";
-          format-charging = "${mkIcon "f0241"}  {capacity}%"; # md-flash (éclair)
-          format-plugged = "${mkIcon "f0241"}  {capacity}%";
-          format-full = "${mkIcon "f0079"}  {capacity}%"; # md-battery pleine
-          # Mêmes 11 niveaux que bluetooth.sh (bat_icons) : garder synchronisé.
-          format-icons = map mkIcon [
-            "f008e" # 0%   md-battery-outline
-            "f007a" # 10%  md-battery-10
-            "f007b" # 20%
-            "f007c" # 30%
-            "f007d" # 40%
-            "f007e" # 50%
-            "f007f" # 60%
-            "f0080" # 70%
-            "f0081" # 80%
-            "f0082" # 90%
-            "f0079" # 100% md-battery
-          ];
+        # Batterie (module custom via battery.sh). On a quitté le module natif
+        # pour pouvoir afficher, en plus de %/temps/santé/cycles, le profil
+        # d'alimentation et le régime des ventilateurs — infos impossibles avec
+        # le tooltip-format figé du module natif. Icône, %, classe (couleur) et
+        # tooltip sont entièrement produits par le script.
+        "custom/battery" = {
+          exec = "${scriptDir}/battery.sh";
+          interval = 10; # profil/ventilo bougent plus vite que le niveau
+          return-type = "json";
           on-click = launcher "lg-control";
         };
 
@@ -465,8 +467,15 @@ in {
           exec = "${scriptDir}/weather.sh";
           interval = 900; # 15 min : la météo bouge lentement, on ménage l'API
           signal = weatherSignal; # réveillé par le menu (cf. weatherWake) pour un switch immédiat
+          # Sans ça, waybar re-exécute weather.sh après CHAQUE événement souris
+          # (défaut exec-on-event = true) : ouvrir le menu au clic droit relançait
+          # une requête réseau (la date « Maj » bougeait). On ne rafraîchit donc
+          # que sur le signal (clic gauche = weatherWake, ou choix de ville).
+          exec-on-event = false;
           return-type = "json";
           format = "{icon}  {text}";
+          # Clic gauche : actualiser (réveille weather.sh -> requête réseau).
+          on-click = weatherWake;
           # Clic droit : choisir la ville (menu généré depuis weatherCities).
           menu = "on-click-right";
           menu-file = "${menuDir}/weather.xml";
@@ -561,15 +570,15 @@ in {
         #wireplumber       { color: ${c.base0E}; }  /* magenta (icône + %) */
         #custom-swaync     { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
         #custom-disk       { color: ${c.base0C}; }  /* cyan    */
-        #battery           { color: ${c.base0B}; }  /* vert    */
+        #custom-battery    { color: ${c.base0B}; }  /* vert    */
         #custom-weather    { color: ${c.base0C}; }  /* cyan : partiellement/défaut */
         #custom-weather.sunny  { color: ${c.base0A}; }  /* jaune : soleil / ciel clair  */
         #custom-weather.cloudy { color: ${c.base04}; }  /* gris neutre : couvert / brume */
         #custom-weather.rain   { color: ${c.base0D}; }  /* bleu : pluie / neige / orage  */
         #clock             { color: ${c.base05}; font-weight: bold; }
 
-        #battery.warning  { color: ${c.base0A}; }
-        #battery.critical { color: ${c.base08}; }
+        #custom-battery.warning  { color: ${c.base0A}; }
+        #custom-battery.critical { color: ${c.base08}; }
 
         #tray {
           padding: 0 8px;

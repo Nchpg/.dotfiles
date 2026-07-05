@@ -125,7 +125,6 @@ tooltip="${location} · ${desc}"
 tooltip+=$'\n'"Ressenti ${feels}°  ·  Humidité ${humidity}%"
 tooltip+=$'\n'"Vent ${wind} km/h ${winddir}"
 [[ -n "$updated" ]] && tooltip+=$'\n'"Maj ${updated}"
-tooltip+=$'\n'"<i>Clic droit : changer de ville / actualiser</i>"
 
 printf '{"text":"%s","alt":"%s","class":"%s","tooltip":"%s"}\n' \
     "$(json_escape "$text")" "$cat" "$class" "$(json_escape "$tooltip")"
