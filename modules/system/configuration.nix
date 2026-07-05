@@ -134,9 +134,7 @@
     MOZ_ENABLE_WAYLAND = "1";
   };
 
-  # Swap compressé en RAM : évite l'OOM-kill brutal sur pic mémoire (pas de
-  # partition swap sur ce laptop). Quasi gratuit tant qu'il n'y a pas de pression.
-  zramSwap.enable = true;
+  # Swap : géré par modules/system/swap (systemSettings.swap : zram + earlyoom).
 
   # Manage external disks
   services.udisks2.enable = true;
