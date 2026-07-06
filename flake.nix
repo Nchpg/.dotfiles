@@ -31,6 +31,14 @@
       url = "github:Gerg-L/spicetify-nix";
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
+
+    # Base nix-index pré-construite (hebdomadaire) : nix-locate, comma et les
+    # suggestions command-not-found — la générer localement prend ~15 min.
+    # Consommé par modules/user/nix-index (module HM importé dans profiles/).
+    nix-index-database = {
+      url = "github:nix-community/nix-index-database";
+      inputs.nixpkgs.follows = "nixpkgs-stable";
+    };
   };
 
   outputs =

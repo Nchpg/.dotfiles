@@ -70,6 +70,11 @@
         enable = true;
       };
 
+      # nix-locate + comma + suggestions command-not-found (base pré-construite).
+      nixIndex = {
+        enable = true;
+      };
+
       firefox = {
         enable = true;
       };
