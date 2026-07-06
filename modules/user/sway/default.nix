@@ -50,6 +50,16 @@ let
       [ "@terminal@" "@tmuxBind@" "@bar@" ]
       [ config.userSettings.terminal.default tmuxBind barBlock ]
       templateContent;
+
+  # Même rendu que le bind Ctrl+Échap du config.template ; -f (daemonize) en
+  # plus, requis par swayidle (sinon le lock bloquerait l'événement before-sleep).
+  lockCmd =
+    "${cfg.pkgs.swaylock-effects}/bin/swaylock -f --screenshots --clock --indicator"
+    + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
+    + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
+    + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
+    + " --grace 2 --fade-in 1";
+  swaymsgBin = "${cfg.pkgs.sway}/bin/swaymsg";
 in
 {
   config = lib.mkIf cfg.enable {
@@ -98,6 +108,31 @@ in
       swaylock-effects
     ];
 
-    stylix.targets.sway.enable = true;
+    # Verrouillage automatique : swaylock après 10 min d'inactivité, écrans
+    # éteints après 15 min (rallumés au premier input), et lock systématique
+    # avant une mise en veille (sinon la session revient déverrouillée au
+    # réveil). Le service est lié à graphical-session.target (démarré par
+    # sway-session.target, cf. plus haut).
+    services.swayidle = {
+      enable = true;
+      package = cfg.pkgs.swayidle;
+      timeouts = [
+        {
+          timeout = 600;
+          command = lockCmd;
+        }
+        {
+          timeout = 900;
+          command = "${swaymsgBin} 'output * power off'";
+          resumeCommand = "${swaymsgBin} 'output * power on'";
+        }
+      ];
+      events."before-sleep" = lockCmd;
+    };
+
+    # NB : pas de stylix.targets.sway ici — ce target ne thémise que
+    # wayland.windowManager.sway (module home-manager), qu'on n'utilise pas :
+    # la config est écrite en dur via home.file. Les couleurs de bordures
+    # vivent dans sway-config/config.template (volontairement fixes).
   };
 }
