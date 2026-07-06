@@ -1,4 +1,4 @@
-{ lib, config, pkgs-stable, pkgs-unstable, inputs, target, ... }:
+{ lib, config, pkgs-stable, inputs, target, ... }:
 
 let
   cfg = config.systemSettings.stylix;
@@ -60,7 +60,7 @@ in
       };
 
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = pkgs-stable;
         description = "Pkgs to use";
       };
@@ -72,7 +72,9 @@ in
     systemSettings.stylix.theme = activeTheme;
 
     # Commande `theme {dark|light|toggle}` : flippe `variant` dans la config
-    # puis rebuild. C'est un vrai binaire (pas un alias) → marche pareil en
+    # puis délègue le rebuild à la commande `rebuild` (cf. modules/system/rebuild),
+    # qui gère déjà check git, reload sway et restart waybar — pas de logique
+    # dupliquée ici. C'est un vrai binaire (pas un alias) → marche pareil en
     # bash/zsh/fish. Le choix est persistant (écrit dans la config → survit au
     # reboot). $MY_FLAKE est fourni par home-manager (sessionVariables).
     environment.systemPackages = [
@@ -95,17 +97,9 @@ in
         esac
 
         echo "→ variant = $target ; rebuild en cours…"
-        # Pas de --impure : la config est pure, et --impure désactiverait le
-        # cache d'évaluation (cf. rebuild.sh).
-        sudo nixos-rebuild switch --flake "$flake#$(hostname)"
-
-        # Le changement de thème modifie les couleurs de waybar, mais le rebuild
-        # (root) ne peut pas relancer le service systemd --user. On le redémarre
-        # ici, côté utilisateur, pour qu'il reprenne la nouvelle palette.
-        # try-restart = no-op s'il ne tourne pas.
-        if [ -n "''${SWAYSOCK:-}" ]; then
-          systemctl --user try-restart waybar.service 2>/dev/null || true
-        fi
+        # -y : le sed ci-dessus vient de modifier un fichier tracké, la
+        # confirmation de rebuild.sh serait systématique et sans intérêt ici.
+        exec rebuild -y
       '')
     ];
 
@@ -119,7 +113,7 @@ in
       # sinon il force son scheme dans CHAQUE user en read-only (followSystem)
       # → conflit avec guest/root qui ont leur propre thème.
       homeManagerIntegration.autoImport = false;
-      polarity = theme.polarity;
+      inherit (theme) polarity;
       base16Scheme = theme;
       image = cfg.pkgs.fetchurl {
         url = theme.backgroundUrl;
