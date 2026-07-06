@@ -73,6 +73,23 @@ gpu() {
 }
 gpu_val=$(gpu)
 
+# --- Température CPU (coretemp, « Package id 0 ») ---
+# C'est LA température utile du SoC : l'iGPU Meteor Lake vit dans le même
+# package (pas de sonde GPU distincte), et la LPDDR soudée n'a pas de capteur
+# (pas de température RAM possible). Le numéro hwmon n'est pas stable entre
+# les boots → recherche par nom, comme le ventilo dans battery.sh.
+cpu_temp=""
+for namefile in /sys/class/hwmon/hwmon*/name; do
+    [[ $(<"$namefile") == coretemp ]] || continue
+    h=${namefile%/name}
+    for lbl in "$h"/temp*_label; do
+        [[ -e "$lbl" && $(<"$lbl") == "Package id 0" ]] || continue
+        t=$(<"${lbl%_label}_input")
+        [[ $t =~ ^[0-9]+$ ]] && cpu_temp=$((t / 1000))
+        break 2
+    done
+done
+
 # --- Charge système (load average) normalisée par cœur -> % ---
 # 100 % = tous les cœurs pleinement sollicités ; >100 % = des tâches attendent.
 read -r load1 load5 load15 _ < /proc/loadavg
@@ -85,6 +102,6 @@ read -r load1_pct load5_pct load15_pct < <(
 # --- Sortie JSON (emit + json_escape : cf. lib.sh) ---
 text="󰍛   RAM : ${mem_pct}%  CPU ${cpu_pct}%  GPU ${gpu_val}"
 tooltip="RAM   ${mem_used_gb} / ${mem_total_gb} Gio  (${mem_pct}%)"
-tooltip+=$'\n'"CPU   ${cpu_pct}%  ·  charge 1 min : ${load1_pct}%   5 min : ${load5_pct}%   15 min : ${load15_pct}%"
+tooltip+=$'\n'"CPU   ${cpu_pct}%${cpu_temp:+  ·  ${cpu_temp}°C}  ·  charge 1 min : ${load1_pct}%   5 min : ${load5_pct}%   15 min : ${load15_pct}%"
 tooltip+=$'\n'"GPU   ${gpu_val}"
 emit "$text" "$tooltip"
