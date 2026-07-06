@@ -71,6 +71,9 @@
                 # par user à l'éval). Corollaire : plus de `nixpkgs.*` dans les
                 # configs home (ça devient une erreur d'éval).
                 home-manager.useGlobalPkgs = true;
+                # Paquets HM installés dans le profil système (/etc/profiles)
+                # plutôt que dans ~/.nix-profile mutable de chaque user.
+                home-manager.useUserPackages = true;
                 # La config système est accessible dans les modules HM via
                 # l'argument natif `osConfig` (ex. osConfig.systemSettings.*).
                 home-manager.extraSpecialArgs = {
