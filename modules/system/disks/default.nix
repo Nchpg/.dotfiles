@@ -18,5 +18,17 @@
   # trimait le NVMe jusqu'ici.
   services.fstrim.enable = true;
 
+  # Santé du NVMe : smartd sonde les compteurs SMART (usure, blocs de réserve,
+  # erreurs média) toutes les 30 min et alerte via le journal quand ça se
+  # dégrade — signal précoce d'un SSD mourant, des semaines avant la panne.
+  # Complète fstrim (perf) et fwupd (firmware) ; fournit aussi smartctl pour
+  # un check manuel (smartctl -a /dev/nvme0).
+  # Notifications desktop via systembus-notify (comme earlyoom — qui active
+  # déjà ce daemon : le laisser à false ici créerait un conflit d'éval).
+  services.smartd = {
+    enable = true;
+    notifications.systembus-notify.enable = true;
+  };
+
   programs.thunar.enable = true;
 }

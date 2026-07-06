@@ -15,10 +15,22 @@
 
   # Active Flake
   nix = {
-    settings.experimental-features = [
-      "nix-command"
-      "flakes"
-    ];
+    settings = {
+      experimental-features = [
+        "nix-command"
+        "flakes"
+      ];
+      # Cache binaire de l'input claude-code (cf. flake.nix : pas de follows
+      # pour garder les hashes de l'upstream → hit possible). Sans ces deux
+      # lignes le hit n'était jamais effectif : Nix n'interroge que
+      # cache.nixos.org par défaut, et claude-code se rebuildait localement
+      # à chaque bump. `extra-*` = ajout aux défauts (ne remplace pas
+      # cache.nixos.org). Clé publique : README de sadjow/claude-code-nix.
+      extra-substituters = [ "https://claude-code.cachix.org" ];
+      extra-trusted-public-keys = [
+        "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+      ];
+    };
     # Config 100 % flake : les channels (ancien mécanisme) ne servent plus.
     # Coupe leur gestion et leur entrée NIX_PATH ; les vieux profils de
     # channels (25.05, restes d'avant la migration flake) sont à retirer une
@@ -61,6 +73,13 @@
   # Mises à jour de firmware matériel (BIOS, SSD, docks...) via LVFS.
   # Passif : rien ne se flashe sans un `fwupdmgr update` manuel.
   services.fwupd.enable = true;
+
+  # Binaires dynamiques non-Nix (prebuilds npm type esbuild/sharp, installeurs
+  # curl|sh, serveur VS Code Remote...) : ils cherchent leur loader en dur à
+  # /lib64/ld-linux-x86-64.so.2, absent sur NixOS → « No such file or
+  # directory » cryptique. nix-ld pose un shim à ce chemin ; passif tant
+  # qu'aucun binaire étranger ne tourne.
+  programs.nix-ld.enable = true;
 
   environment.systemPackages = with pkgs-stable; [
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).

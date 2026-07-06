@@ -36,6 +36,8 @@ in
             inputs.sops-nix.homeManagerModules.sops
             # spicetify (Spotify patché, cf. modules/user/spotify)
             inputs.spicetify-nix.homeManagerModules.default
+            # nix-index avec base pré-construite (cf. modules/user/nix-index)
+            inputs.nix-index-database.homeModules.nix-index
             # user modules
             ../modules/user
           ]
