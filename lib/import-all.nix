@@ -4,9 +4,13 @@
 #   imports = import ../../lib/import-all.nix lib ./.;
 lib: dir:
 let
+  # d + "/${file}" (concaténation de PATH) et surtout pas "${d}/${file}" :
+  # l'interpolation coercerait le path en string, ce qui copie chaque
+  # sous-dossier dans le store à l'éval — inutile, et source d'erreurs
+  # « path ...-system is not valid » sur un store vierge (CI).
   getDir =
     d:
-    lib.mapAttrs (file: type: if type == "directory" then getDir "${d}/${file}" else type) (
+    lib.mapAttrs (file: type: if type == "directory" then getDir (d + "/${file}") else type) (
       builtins.readDir d
     );
 
