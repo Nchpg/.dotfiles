@@ -11,7 +11,7 @@
 #      supprime que des pointeurs d'historique (jamais une config rollback-able).
 #   3. GARBAGE COLLECT (y/n) : libère l'espace des chemins devenus orphelins.
 #   4. OPTIMISE (y/n) : déduplique le store via des hardlinks.
-#   5. REBUILD : rafraîchit le menu de boot (GRUB).
+#   5. REBUILD : rafraîchit le menu de boot (systemd-boot).
 #
 # Les chemins HM sont résolus à l'exécution (XDG sinon legacy per-user) → portable.
 set -euo pipefail
@@ -153,7 +153,7 @@ else
     echo "Optimisation ignorée."
 fi
 
-# --- 5. Rebuild pour rafraîchir le menu de boot (GRUB) ----------------------
+# --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
 echo "Rebuild du système via la flake..."
 sudo nixos-rebuild switch --flake .
 
