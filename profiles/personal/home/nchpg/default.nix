@@ -56,6 +56,8 @@
 
       claude = {
         enable = true;
+        # Barre de statut : modèle, coût, contexte, rate limits.
+        statusline.enable = true;
         # Coupe les notifs desktop de Claude Code (popups « kitty »).
         settings.preferredNotifChannel = "notifications_disabled";
       };

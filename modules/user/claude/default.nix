@@ -21,6 +21,8 @@ in
   options.userSettings.claude = {
     enable = lib.mkEnableOption "réglages Claude Code déclaratifs (~/.claude/settings.json)";
 
+    statusline.enable = lib.mkEnableOption "statusline maison (modèle, coût, contexte, rate limits)";
+
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
@@ -61,6 +63,22 @@ in
           name: _type: lib.nameValuePair ".claude/skills/${name}" { source = ./skills + "/${name}"; }
         ) (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./skills));
       }
+
+      # Statusline : barre du bas de Claude Code (modèle · coût · jauge de
+      # contexte · rate limits 5 h / 7 j avec compte à rebours). La logique vit
+      # dans ./statusline.js ; le wrapper épingle SON node (le `node` du PATH
+      # n'est qu'une dépendance implicite d'autres modules — nodejs-slim est
+      # déjà dans le profil, donc aucun poids ajouté). La clé statusLine passe
+      # par le deep-merge de `settings` ci-dessous.
+      (lib.mkIf cfg.statusline.enable {
+        userSettings.claude.settings.statusLine = {
+          type = "command";
+          command = "${config.home.homeDirectory}/.claude/statusline.sh";
+        };
+        home.file.".claude/statusline.sh".source = cfg.pkgs.writeShellScript "claude-statusline" ''
+          exec ${cfg.pkgs.nodejs-slim}/bin/node ${./statusline.js} "$@"
+        '';
+      })
 
       (lib.mkIf (cfg.settings != { }) {
         home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
