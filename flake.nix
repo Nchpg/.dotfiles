@@ -96,6 +96,9 @@
           };
         }) targets);
 
+      # `nix fmt` → formate le repo. Exposé aussi pour les éditeurs/CI.
+      formatter.${system} = pkgs-stable.nixfmt-rfc-style;
+
       devShells.${system} = {
         python = import ./devshells/python.nix { pkgs = pkgs-stable; };
         c      = import ./devshells/c.nix { pkgs = pkgs-stable; };
