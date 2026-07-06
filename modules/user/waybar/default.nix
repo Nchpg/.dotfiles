@@ -236,11 +236,17 @@ let
   # module pour rafraîchir l'icône/le % aussitôt (clic ou molette).
   backlightSignal = 9;
   refreshBacklight = "pkill -RTMIN+${toString backlightSignal} waybar";
-  # Clic gauche : bascule le service wlsunset (start/stop) puis rafraîchit l'icône.
+  # Clic gauche : bascule le service wlsunset (start/stop) puis rafraîchit
+  # l'icône. Le choix PERSISTE au reboot via un flag : couper pose le fichier,
+  # rallumer le retire, et le service a un ExecCondition dessus — au login il
+  # ne démarre que si le night light n'était pas coupé (sans flag, le
+  # WantedBy graphical-session le relançait systématiquement).
+  nightlightOffFlag = "$HOME/.local/state/wlsunset-off";
   nightlightToggle =
     "if ${systemctl} --user is-active --quiet wlsunset;"
     + " then ${systemctl} --user stop wlsunset;"
-    + " else ${systemctl} --user start wlsunset; fi;"
+    + " ${pkgs.coreutils}/bin/mkdir -p \"$HOME/.local/state\" && ${pkgs.coreutils}/bin/touch \"${nightlightOffFlag}\";"
+    + " else ${pkgs.coreutils}/bin/rm -f \"${nightlightOffFlag}\"; ${systemctl} --user start wlsunset; fi;"
     + " ${refreshBacklight}";
 
   # Pas de luminosité ±5 % (molette ET menu). La hausse plafonne d'elle-même à
@@ -385,6 +391,10 @@ in
       };
       Install.WantedBy = [ "graphical-session.target" ];
       Service = {
+        # Respecte le toggle de la barre (cf. nightlightToggle) : si le night
+        # light a été coupé, le flag existe et la condition échoue → unit
+        # « skipped » (pas failed), le service ne se relance pas au login.
+        ExecCondition = "${pkgs.coreutils}/bin/test ! -e %h/.local/state/wlsunset-off";
         ExecStart = "${scriptDir}/wlsunset-geo.sh";
         Restart = "on-failure";
       };
