@@ -116,7 +116,11 @@ let
       pkgs.coreutils
       pkgs.playerctl
     ];
-    "disk.sh" = [ pkgs.coreutils ];
+    # jq : lecture du JSON santé NVMe publié par nvme-health-export.
+    "disk.sh" = [
+      pkgs.coreutils
+      pkgs.jq
+    ];
     "weather.sh" = [
       pkgs.coreutils
       pkgs.curl

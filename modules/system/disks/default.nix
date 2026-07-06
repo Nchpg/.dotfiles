@@ -1,4 +1,4 @@
-{ ... }:
+{ pkgs-stable, ... }:
 
 {
   # Disques externes : udisks2 (montage sans root, via D-Bus + polkit) + NTFS
@@ -28,6 +28,42 @@
   services.smartd = {
     enable = true;
     notifications.systembus-notify.enable = true;
+  };
+
+  # Export périodique de la santé NVMe (JSON smartctl) vers /run/nvme-health/,
+  # lisible sans root. Consommé par le tooltip du module disque de waybar
+  # (modules/user/waybar/scripts/disk.sh). Nécessaire car les commandes admin
+  # NVMe exigent CAP_SYS_ADMIN : un simple accès au device ne suffit pas, donc
+  # waybar (user) ne peut pas appeler smartctl lui-même.
+  systemd.services.nvme-health-export = {
+    description = "Exporte la santé SMART des NVMe vers /run/nvme-health";
+    # Pas de NVMe (autre host) → on ne lance rien, pas d'unit failed.
+    unitConfig.ConditionPathExistsGlob = "/dev/nvme[0-9]";
+    serviceConfig = {
+      Type = "oneshot";
+      RuntimeDirectory = "nvme-health";
+      # Sans ça, systemd supprime /run/nvme-health dès que le oneshot se
+      # termine — le fichier doit survivre entre deux ticks du timer.
+      RuntimeDirectoryPreserve = true;
+      ExecStart = pkgs-stable.writeShellScript "nvme-health-export" ''
+        PATH=${pkgs-stable.smartmontools}/bin:${pkgs-stable.coreutils}/bin
+        for dev in /dev/nvme[0-9]; do
+          [ -e "$dev" ] || continue
+          out="/run/nvme-health/$(basename "$dev").json"
+          # smartctl sort ≠ 0 sur certains warnings SMART tout en produisant
+          # un JSON valide : on garde le fichier dès qu'il est non vide.
+          smartctl -H -A --json=c "$dev" > "$out.tmp" || true
+          [ -s "$out.tmp" ] && mv "$out.tmp" "$out"
+        done
+      '';
+    };
+  };
+  systemd.timers.nvme-health-export = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "1min";
+      OnUnitActiveSec = "5min";
+    };
   };
 
   programs.thunar.enable = true;

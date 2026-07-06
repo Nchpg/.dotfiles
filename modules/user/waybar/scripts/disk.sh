@@ -33,4 +33,31 @@ text="󰉋   ${used_h}o : ${pct}"
 tooltip="Utilisé    ${used_h}o / ${usable_h}o  (${pct})"
 tooltip+=$'\n'"Libre      ${avail_h}o"
 tooltip+=$'\n'"Partition  ${size_h}o  (réserve root ${reserve_g}Go)"
+
+# Santé NVMe, si le service système nvme-health-export publie son JSON
+# (cf. modules/system/disks : smartctl exige root, waybar tourne en user).
+# Absent ou illisible → tooltip de base, sans erreur.
+set -- /run/nvme-health/nvme*.json
+health="$1"
+if [ -e "$health" ]; then
+    read -r temp wear spare written hours status < <(
+        jq -r '[
+            .temperature.current,
+            .nvme_smart_health_information_log.percentage_used,
+            .nvme_smart_health_information_log.available_spare,
+            # data units NVMe = blocs de 512 000 octets (spec)
+            (.nvme_smart_health_information_log.data_units_written * 512000),
+            .power_on_time.hours,
+            (if .smart_status.passed then "OK" else "DÉFAILLANT" end)
+        ] | @tsv' "$health" 2>/dev/null
+    ) || true
+    if [ -n "${temp:-}" ] && [ "$temp" != "null" ]; then
+        written_h=$(numfmt --to=si --round=nearest "$written")
+        tooltip+=$'\n'
+        tooltip+=$'\n'"NVMe       ${temp}°C · santé ${status}"
+        tooltip+=$'\n'"Usure      ${wear}%  (spare ${spare}%)"
+        tooltip+=$'\n'"Écrit      ${written_h}o · ${hours} h"
+    fi
+fi
+
 emit "$text" "$tooltip"
