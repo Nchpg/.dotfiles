@@ -19,6 +19,8 @@
           isAdmin = true;
           allowDocker = true;
           allowLibvirt = true;
+          # Login TTY/SSH en fish, aligné sur userSettings.shell.default.
+          shell = "fish";
         }
         {
           name = "guest";
