@@ -52,6 +52,14 @@ in
           # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
           cfg.pkgs.poppler-utils
         ];
+
+        # Skills Claude Code déclaratifs : chaque dossier de ./skills devient
+        # ~/.claude/skills/<nom> (symlink du store — Claude ne fait que les
+        # lire, contrairement à settings.json). Les skills ajoutés à la main
+        # dans ~/.claude/skills/ cohabitent sans conflit.
+        home.file = lib.mapAttrs' (
+          name: _type: lib.nameValuePair ".claude/skills/${name}" { source = ./skills + "/${name}"; }
+        ) (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./skills));
       }
 
       (lib.mkIf (cfg.settings != { }) {
