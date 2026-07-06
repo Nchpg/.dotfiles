@@ -26,6 +26,9 @@
     options = "--delete-older-than 14d"; # What to delete
   };
 
+  # Déduplication du store par hardlinks (job périodique, complète le gc).
+  nix.optimise.automatic = true;
+
   # Use all available firmware (needed for sound)
   hardware.enableAllFirmware = true;
 
