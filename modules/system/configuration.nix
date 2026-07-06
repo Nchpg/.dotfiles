@@ -41,6 +41,10 @@
   # Enable CUPS to print documents.
   services.printing.enable = true;
 
+  # Mises à jour de firmware matériel (BIOS, SSD, docks...) via LVFS.
+  # Passif : rien ne se flashe sans un `fwupdmgr update` manuel.
+  services.fwupd.enable = true;
+
   environment.systemPackages = with pkgs-stable; [
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
     # Les outils GPU (nvtop, clinfo) sont dans modules/system/intel-graphics.
