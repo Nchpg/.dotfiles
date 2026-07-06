@@ -1,0 +1,27 @@
+name: check
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: nix flake check
+        run: nix flake check --no-build
+
+      # Évalue chaque nixosConfiguration (auto-découvertes, donc pas de liste
+      # en dur ici non plus) sans rien construire : attrape les typos et
+      # erreurs d'éval avant un rebuild sur machine.
+      - name: dry-run build of all nixosConfigurations
+        run: |
+          for cfg in $(nix eval .#nixosConfigurations --apply builtins.attrNames --json | jq -r '.[]'); do
+            echo "::group::$cfg"
+            nix build ".#nixosConfigurations.$cfg.config.system.build.toplevel" --dry-run
+            echo "::endgroup::"
+          done
