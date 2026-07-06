@@ -22,6 +22,9 @@
 
     claude-code = {
       url = "git+https://github.com/sadjow/claude-code-nix";
+      # Pas de `inputs.nixpkgs.follows` : volontaire. L'input garde le nixpkgs
+      # pinné par l'upstream → cache binaire garanti et toujours la dernière
+      # version de claude-code buildable (bump via `rebuild -u`).
     };
 
     spicetify-nix = {
