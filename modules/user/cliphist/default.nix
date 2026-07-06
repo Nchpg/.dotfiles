@@ -6,7 +6,7 @@ in {
   options.userSettings.cliphist = {
     enable = lib.mkEnableOption "gestionnaire d'historique du presse-papier (cliphist + wofi)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, stylix, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings.terminal.kitty;
@@ -7,7 +7,7 @@ in {
     userSettings.terminal.kitty = {
       enable = lib.mkEnableOption "Enable kitty terminal";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

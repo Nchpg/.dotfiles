@@ -67,7 +67,7 @@ in {
   options.userSettings.taskTui = {
     enable = lib.mkEnableOption "task-tui (tasks-tui-app : TUI Google Tasks)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

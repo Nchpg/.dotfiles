@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings.chrome;
@@ -7,7 +7,7 @@ in {
     userSettings.chrome = {
       enable = lib.mkEnableOption "Enable Google Chrome browser";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };
@@ -27,7 +27,7 @@ in {
     # google-chrome est unfree : allowUnfree est déjà activé dans le profil.
     programs.chromium = {
       enable = true;
-      package = cfg.package;
+      inherit (cfg) package;
 
       # Rendu natif Wayland sous Sway (sinon flou/XWayland et tearing).
       commandLineArgs = [

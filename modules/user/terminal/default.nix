@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings;

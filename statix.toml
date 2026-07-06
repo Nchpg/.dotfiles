@@ -1,0 +1,6 @@
+# Lints statix désactivés — choix de style assumés du repo :
+# - repeated_keys : les chemins pointés (boot.loader.x, services.y) sont la
+#   convention NixOS, plus lisibles que des blocs imbriqués pour 2-3 clés.
+# - empty_pattern : `{ ... }:` est la signature conventionnelle d'un module
+#   (montre qu'il en est un), on ne la remplace pas par `_:`.
+disabled = ["repeated_keys", "empty_pattern"]

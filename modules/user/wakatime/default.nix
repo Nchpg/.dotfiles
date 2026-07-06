@@ -17,7 +17,7 @@ in {
     enable = lib.mkEnableOption "WakaTime (suivi du temps de code) dans les editeurs";
 
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

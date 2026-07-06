@@ -7,7 +7,7 @@ in {
     systemSettings.window-manager.sway = {
       enable = lib.mkEnableOption "Enable sway window manager";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = pkgs-stable;
         description = "Pkgs to use";
       };

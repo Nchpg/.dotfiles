@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-unstable, ... }:
 
 let
   cfg = config.userSettings.shell.fish;
@@ -7,7 +7,7 @@ in {
     userSettings.shell.fish = {
       enable = lib.mkEnableOption "Enable  fish";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

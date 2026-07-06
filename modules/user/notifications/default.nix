@@ -151,7 +151,7 @@ in {
     userSettings.notifications = {
       enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

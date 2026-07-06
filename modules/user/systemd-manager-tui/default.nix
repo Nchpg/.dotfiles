@@ -37,7 +37,7 @@ in {
   options.userSettings.systemdManagerTui = {
     enable = lib.mkEnableOption "systemd-manager-tui (gestion des services systemd dans un terminal flottant)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

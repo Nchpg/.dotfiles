@@ -16,13 +16,13 @@ in {
     enable = lib.mkEnableOption "réglages Claude Code déclaratifs (~/.claude/settings.json)";
 
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };
 
     settings = lib.mkOption {
-      type = jsonFormat.type;
+      inherit (jsonFormat) type;
       default = { };
       example = {
         preferredNotifChannel = "notifications_disabled";

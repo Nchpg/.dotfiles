@@ -10,7 +10,7 @@ in {
     enable = lib.mkEnableOption "applications desktop (discord, mpv, ...) et direnv";
 
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

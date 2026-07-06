@@ -51,7 +51,7 @@
       profiles = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./profiles));
       hosts    = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./hosts));
 
-      targets = lib.concatMap (profile: map (host: { profile = profile; host = host; }) hosts) profiles;
+      targets = lib.concatMap (profile: map (host: { inherit profile; inherit host; }) hosts) profiles;
     in
     {
       nixosConfigurations = builtins.listToAttrs

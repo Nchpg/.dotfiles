@@ -8,7 +8,7 @@
   config = {
     home-manager.users = builtins.listToAttrs
       (map (user: {
-        name = user.name;
+        inherit (user) name;
         value = {
           imports = [
             # stylix

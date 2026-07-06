@@ -16,7 +16,7 @@ in {
   options.userSettings.volumeMixer = {
     enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

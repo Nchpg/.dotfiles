@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, inputs, ... }:
+{ config, lib, pkgs-unstable, inputs, ... }:
 
 let
   cfg = config.userSettings.vscode;
@@ -177,7 +177,7 @@ in {
     userSettings.vscode = {
       enable = lib.mkEnableOption "Enable vscode";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };
