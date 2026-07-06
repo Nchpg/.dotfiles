@@ -5,7 +5,7 @@ let
 in
 {
   options.userSettings.cliphist = {
-    enable = lib.mkEnableOption "gestionnaire d'historique du presse-papier (cliphist + wofi)";
+    enable = lib.mkEnableOption "gestionnaire d'historique du presse-papier (cliphist + rofi)";
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
@@ -14,6 +14,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Le bind $mod+v repose sur rofi : on échoue à l'éval avec un message clair
+    # plutôt qu'avec un raccourci silencieusement cassé.
+    assertions = [
+      {
+        assertion = config.userSettings.rofi.enable;
+        message = "userSettings.cliphist requiert userSettings.rofi (le bind $mod+v ouvre l'historique dans rofi).";
+      }
+    ];
+
     # Daemon : surveille le presse-papier et stocke chaque entrée dans l'historique.
     services.cliphist.enable = true;
 
