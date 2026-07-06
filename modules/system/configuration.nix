@@ -49,35 +49,6 @@
     MOZ_ENABLE_WAYLAND = "1";
   };
 
-  # services.elasticsearch = {
-  #   enable = true;
-  #   package = pkgs-stable.elasticsearch; # Compatible with 8.0.x for the TP
-
-  #   listenAddress = "127.0.0.1";
-
-
-  #   # Disable security as per the subject
-  #   extraConf = ''
-  #     xpack.security.enabled: false
-  #   '';
-
-  #   # Adjust JVM heap if needed (e.g., for low RAM)
-  #   extraJavaOptions = [ "-Xms1g" "-Xmx1g" ];
-  # };
-
-
-  # services.redis.servers.default.enable = true;
-
-  # services.neo4j= {
-  #    enable = true;
-  #    bolt = {
-  #      tlsLevel = "DISABLED";
-  #    };
-  #    https = {
-  #      enable = false;
-  #    };
-  #  };
-
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
   # on your system were taken. It‘s perfectly fine and recommended to leave
