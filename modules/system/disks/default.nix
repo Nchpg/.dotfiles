@@ -9,5 +9,14 @@
   services.udisks2.enable = true;
   boot.supportedFilesystems = [ "ntfs" ];
 
+  # gvfs : la couche « volumes » de Thunar (montage des clés USB via udisks2,
+  # corbeille, MTP…). Il n'était fourni qu'indirectement par le module GNOME —
+  # dépendance cachée : sans session GNOME, Thunar ne monterait plus rien.
+  services.gvfs.enable = true;
+
+  # TRIM hebdomadaire du SSD (fstrim.timer) : ext4 sans option discard, rien ne
+  # trimait le NVMe jusqu'ici.
+  services.fstrim.enable = true;
+
   programs.thunar.enable = true;
 }
