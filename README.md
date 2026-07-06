@@ -58,6 +58,7 @@ sur le nom de la cible.
 | `rebuild -y` | Idem sans confirmation si le working tree est sale |
 | `theme dark\|light\|toggle` | Bascule le thème (persistant) puis rebuild |
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |
+| `git config core.hooksPath .githooks` | Active le hook pre-commit (une fois par clone) : formate les `.nix` stagés |
 | `nix flake check` | Vérifie l'évaluation du flake |
 | `sops secrets/secrets.yaml` | Édite les secrets (voir secrets/README.md) |
 
