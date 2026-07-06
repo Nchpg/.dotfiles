@@ -8,7 +8,8 @@
 
   # Gestion thermique proactive Intel (daemon officiel) : réduit le throttling
   # en pilotant P-states/RAPL avant que le CPU n'atteigne ses limites.
-  # Complémentaire de power-profiles-daemon (fourni par GNOME).
+  # Complémentaire de power-profiles-daemon (activé dans modules/system/
+  # configuration.nix).
   services.thermald.enable = true;
 
   # Driver lg-laptop (fan mode sans root, limite de charge batterie).
