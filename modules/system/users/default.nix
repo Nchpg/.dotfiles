@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 {
   options = {
@@ -26,6 +31,22 @@
                 type = lib.types.bool;
                 default = false;
                 description = "If true, the user will be in the libvirtd group (VM management, quasi root-equivalent)";
+              };
+              shell = lib.mkOption {
+                type = lib.types.nullOr (
+                  lib.types.enum [
+                    "bash"
+                    "zsh"
+                    "fish"
+                  ]
+                );
+                default = null;
+                description = ''
+                  Shell de LOGIN (TTY, SSH). null = bash (défaut NixOS).
+                  Les terminaux graphiques, eux, suivent userSettings.shell.default
+                  (home-manager) — avant cette option, un login TTY/SSH tombait
+                  toujours sur bash même avec fish configuré partout ailleurs.
+                '';
               };
             };
           }
@@ -67,11 +88,18 @@
           ++ lib.optional user.isAdmin "wheel"
           ++ lib.optional user.allowDocker "docker"
           ++ lib.optional user.allowLibvirt "libvirtd";
+          shell = lib.mkIf (user.shell != null) pkgs-stable.${user.shell};
           createHome = true;
           description = user.name;
         };
       }) config.systemSettings.users
     );
+
+    # Un shell de login ≠ bash doit être activé côté système : ça l'ajoute à
+    # /etc/shells (sinon le login est refusé) et fournit les complétions des
+    # paquets système.
+    programs.fish.enable = lib.any (user: user.shell == "fish") config.systemSettings.users;
+    programs.zsh.enable = lib.any (user: user.shell == "zsh") config.systemSettings.users;
 
     home-manager.users = builtins.listToAttrs (
       map (user: {
