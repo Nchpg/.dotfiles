@@ -1,11 +1,17 @@
-{ config, lib, pkgs-unstable, ... }:
+{
+  config,
+  lib,
+  pkgs-unstable,
+  ...
+}:
 
 let
   cfg = config.userSettings.rofi;
   c = config.lib.stylix.colors.withHashtag;
   font = config.stylix.fonts.sansSerif.name;
   fontSize = toString config.stylix.fonts.sizes.applications;
-in {
+in
+{
   options.userSettings.rofi = {
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)";
     pkgs = lib.mkOption {
@@ -33,91 +39,93 @@ in {
         display-run = "  Run";
         sidebar-mode = false;
       };
-      theme = let
-        inherit (config.lib.formats.rasi) mkLiteral;
-      in {
-        "*" = {
-          bg = mkLiteral c.base00;
-          bg-alt = mkLiteral c.base01;
-          fg = mkLiteral c.base05;
-          fg-alt = mkLiteral c.base04;
-          accent = mkLiteral c.base0D;
-          urgent = mkLiteral c.base08;
-          font-name = "${font} ${fontSize}";
-          background-color = mkLiteral "transparent";
-          text-color = mkLiteral "@fg";
-        };
+      theme =
+        let
+          inherit (config.lib.formats.rasi) mkLiteral;
+        in
+        {
+          "*" = {
+            bg = mkLiteral c.base00;
+            bg-alt = mkLiteral c.base01;
+            fg = mkLiteral c.base05;
+            fg-alt = mkLiteral c.base04;
+            accent = mkLiteral c.base0D;
+            urgent = mkLiteral c.base08;
+            font-name = "${font} ${fontSize}";
+            background-color = mkLiteral "transparent";
+            text-color = mkLiteral "@fg";
+          };
 
-        "window" = {
-          background-color = mkLiteral "@bg";
-          border = mkLiteral "2px";
-          border-color = mkLiteral "@accent";
-          border-radius = mkLiteral "12px";
-          padding = mkLiteral "16px";
-          width = mkLiteral "680px";
-        };
+          "window" = {
+            background-color = mkLiteral "@bg";
+            border = mkLiteral "2px";
+            border-color = mkLiteral "@accent";
+            border-radius = mkLiteral "12px";
+            padding = mkLiteral "16px";
+            width = mkLiteral "680px";
+          };
 
-        "mainbox" = {
-          background-color = mkLiteral "transparent";
-          spacing = mkLiteral "8px";
-        };
+          "mainbox" = {
+            background-color = mkLiteral "transparent";
+            spacing = mkLiteral "8px";
+          };
 
-        "inputbar" = {
-          background-color = mkLiteral "@bg-alt";
-          border-radius = mkLiteral "8px";
-          padding = mkLiteral "8px 12px";
-          spacing = mkLiteral "8px";
-          children = mkLiteral "[prompt, entry]";
-        };
+          "inputbar" = {
+            background-color = mkLiteral "@bg-alt";
+            border-radius = mkLiteral "8px";
+            padding = mkLiteral "8px 12px";
+            spacing = mkLiteral "8px";
+            children = mkLiteral "[prompt, entry]";
+          };
 
-        "prompt" = {
-          text-color = mkLiteral "@accent";
-          font = mkLiteral "@font-name";
-        };
+          "prompt" = {
+            text-color = mkLiteral "@accent";
+            font = mkLiteral "@font-name";
+          };
 
-        "entry" = {
-          text-color = mkLiteral "@fg";
-          font = mkLiteral "@font-name";
-          placeholder = "Rechercher...";
-          placeholder-color = mkLiteral "@fg-alt";
-        };
+          "entry" = {
+            text-color = mkLiteral "@fg";
+            font = mkLiteral "@font-name";
+            placeholder = "Rechercher...";
+            placeholder-color = mkLiteral "@fg-alt";
+          };
 
-        "listview" = {
-          background-color = mkLiteral "transparent";
-          lines = mkLiteral "14";
-          spacing = mkLiteral "4px";
-          scrollbar = mkLiteral "false";
-        };
+          "listview" = {
+            background-color = mkLiteral "transparent";
+            lines = mkLiteral "14";
+            spacing = mkLiteral "4px";
+            scrollbar = mkLiteral "false";
+          };
 
-        "element" = {
-          background-color = mkLiteral "transparent";
-          border-radius = mkLiteral "8px";
-          padding = mkLiteral "8px 12px";
-          spacing = mkLiteral "8px";
-        };
+          "element" = {
+            background-color = mkLiteral "transparent";
+            border-radius = mkLiteral "8px";
+            padding = mkLiteral "8px 12px";
+            spacing = mkLiteral "8px";
+          };
 
-        "element selected" = {
-          background-color = mkLiteral "@accent";
-          text-color = mkLiteral "@bg";
-        };
+          "element selected" = {
+            background-color = mkLiteral "@accent";
+            text-color = mkLiteral "@bg";
+          };
 
-        "element-icon" = {
-          size = mkLiteral "24px";
-          vertical-align = mkLiteral "0.5";
-        };
+          "element-icon" = {
+            size = mkLiteral "24px";
+            vertical-align = mkLiteral "0.5";
+          };
 
-        "element-text" = {
-          text-color = mkLiteral "inherit";
-          vertical-align = mkLiteral "0.5";
-          font = mkLiteral "@font-name";
-        };
+          "element-text" = {
+            text-color = mkLiteral "inherit";
+            vertical-align = mkLiteral "0.5";
+            font = mkLiteral "@font-name";
+          };
 
-        "message" = {
-          background-color = mkLiteral "@bg-alt";
-          border-radius = mkLiteral "8px";
-          padding = mkLiteral "8px 12px";
+          "message" = {
+            background-color = mkLiteral "@bg-alt";
+            border-radius = mkLiteral "8px";
+            padding = mkLiteral "8px 12px";
+          };
         };
-      };
     };
 
     # Icônes SVG maison, colorées avec la couleur de texte du thème (base05).

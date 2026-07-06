@@ -1,4 +1,9 @@
-{ config, lib, pkgs-stable, ... }:
+{
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 let
   cfg = config.systemSettings.lgLaptop;
@@ -13,12 +18,18 @@ let
   # dont on a vérifié qu'il est inscriptible et effectif sur cette machine.
   threshold = "/sys/devices/platform/lg-laptop/battery_care_limit";
   inherit (pkgs-stable) bash;
-in {
+in
+{
   options = {
     systemSettings.lgLaptop = {
       enable = lib.mkEnableOption "réglages LG (driver lg-laptop) accessibles sans root";
       batteryCareLimit = lib.mkOption {
-        type = lib.types.nullOr (lib.types.enum [ 80 100 ]);
+        type = lib.types.nullOr (
+          lib.types.enum [
+            80
+            100
+          ]
+        );
         default = null;
         example = 80;
         description = ''

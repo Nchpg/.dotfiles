@@ -7,9 +7,10 @@ let
   inherit (lib) concatStringsSep mapAttrsToList;
 
   termCmd =
-    if term == "alacritty"
-    then "${term} --title calendar-tui -e ikhal"
-    else "${term} --title calendar-tui ikhal";
+    if term == "alacritty" then
+      "${term} --title calendar-tui -e ikhal"
+    else
+      "${term} --title calendar-tui ikhal";
 
   vdirsyncerBin = "${cfg.pkgs.vdirsyncer}/bin/vdirsyncer";
   syncCmd = ''
@@ -20,21 +21,19 @@ let
   # L'ID de collection (= adresse/identifiant Google, PII) vient de sops : on
   # insère un placeholder, remplacé par la vraie valeur à l'activation. La config
   # khal est donc générée via sops.templates (cf. plus bas), pas xdg.configFile.
-  khalCalendars = concatStringsSep "\n"
-    (mapAttrsToList
-      (name: calendar: ''
-          [[${name}]]
-            path = ~/.calendars/google/${config.sops.placeholder.${calendar.collectionSecret}}/
-            color = ${calendar.color}
-            readonly = ${if calendar.readonly then "True" else "False"}
-      '')
-      cfg.calendars);
+  khalCalendars = concatStringsSep "\n" (
+    mapAttrsToList (name: calendar: ''
+      [[${name}]]
+        path = ~/.calendars/google/${config.sops.placeholder.${calendar.collectionSecret}}/
+        color = ${calendar.color}
+        readonly = ${if calendar.readonly then "True" else "False"}
+    '') cfg.calendars
+  );
 
   # Secrets sops a declarer pour chaque calendrier (nom = collectionSecret).
-  calendarSecrets = lib.listToAttrs
-    (mapAttrsToList
-      (_: calendar: lib.nameValuePair calendar.collectionSecret { })
-      cfg.calendars);
+  calendarSecrets = lib.listToAttrs (
+    mapAttrsToList (_: calendar: lib.nameValuePair calendar.collectionSecret { }) cfg.calendars
+  );
 
   # vdirsyncer a besoin du client_id/client_secret Google directement dans sa
   # config. On genere le fichier final via un template sops : les placeholders
@@ -65,7 +64,8 @@ let
     item_types = ["VEVENT"]
   '';
 
-in {
+in
+{
   options.userSettings.calendarTui = {
     enable = lib.mkEnableOption "calendar-tui (ikhal + vdirsyncer Google Calendar)";
     pkgs = lib.mkOption {
@@ -94,28 +94,30 @@ in {
       description = "Fuseau horaire utilisé par khal.";
     };
     calendars = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule {
-        options = {
-          collectionSecret = lib.mkOption {
-            type = lib.types.str;
-            description = ''
-              Nom du secret sops contenant l'ID de collection (= identifiant Google,
-              PII) de cet agenda. La valeur est insérée dans la config khal à
-              l'activation, jamais en clair dans le repo.
-            '';
-            example = "calendars/perso";
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            collectionSecret = lib.mkOption {
+              type = lib.types.str;
+              description = ''
+                Nom du secret sops contenant l'ID de collection (= identifiant Google,
+                PII) de cet agenda. La valeur est insérée dans la config khal à
+                l'activation, jamais en clair dans le repo.
+              '';
+              example = "calendars/perso";
+            };
+            color = lib.mkOption {
+              type = lib.types.str;
+              description = "Couleur khal pour cet agenda.";
+            };
+            readonly = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Empêche l'édition de cet agenda depuis ikhal.";
+            };
           };
-          color = lib.mkOption {
-            type = lib.types.str;
-            description = "Couleur khal pour cet agenda.";
-          };
-          readonly = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Empêche l'édition de cet agenda depuis ikhal.";
-          };
-        };
-      });
+        }
+      );
       default = {
         perso = {
           collectionSecret = "calendars/perso";
@@ -148,64 +150,64 @@ in {
     sops.templates."khal-config" = {
       path = "${config.home.homeDirectory}/.config/khal/config";
       content = ''
-      [calendars]
-      ${khalCalendars}
+        [calendars]
+        ${khalCalendars}
 
-      [locale]
-        local_timezone = ${cfg.timezone}
-        default_timezone = ${cfg.timezone}
-        timeformat = %H:%M
-        dateformat = %d/%m/%Y
-        longdateformat = %d/%m/%Y
-        datetimeformat = %d/%m/%Y %H:%M
-        longdatetimeformat = %d/%m/%Y %H:%M
+        [locale]
+          local_timezone = ${cfg.timezone}
+          default_timezone = ${cfg.timezone}
+          timeformat = %H:%M
+          dateformat = %d/%m/%Y
+          longdateformat = %d/%m/%Y
+          datetimeformat = %d/%m/%Y %H:%M
+          longdatetimeformat = %d/%m/%Y %H:%M
 
-      [default]
-        default_calendar = perso
-        enable_mouse = false
-        timedelta = 1h
-        highlight_event_days = true
-        show_all_days = true
+        [default]
+          default_calendar = perso
+          enable_mouse = false
+          timedelta = 1h
+          highlight_event_days = true
+          show_all_days = true
 
-      [keybindings]
-        quit = q, Q, esc
+        [keybindings]
+          quit = q, Q, esc
 
-      [palette]
-        header = white, black, default, '${c.base05}', '${c.base00}'
-        footer = white, black, default, '${c.base04}', '${c.base00}'
-        line header = black, white, bold, '${c.base05}', '${c.base02}'
-        alt header = white, black, bold, '${c.base05}', '${c.base00}'
-        bright = yellow, black, bold, '${c.base05}', '${c.base02}'
-        list = white, black, default, '${c.base05}', '${c.base00}'
-        list focused = black, light blue, bold, '${c.base06}', '${c.base02}'
-        edit = white, black, default, '${c.base05}', '${c.base01}'
-        edit focus = black, light cyan, default, '${c.base06}', '${c.base02}'
-        button = white, black, default, '${c.base05}', '${c.base02}'
-        button focused = black, light green, bold, '${c.base06}', '${c.base03}'
-        reveal focus = black, yellow, default, '${c.base06}', '${c.base02}'
-        today focus = black, light blue, bold, '${c.base06}', '${c.base02}'
-        today = light green, black, default, '${c.base0B}', '${c.base01}'
-        date header = light gray, black, default, '${c.base04}', '${c.base00}'
-        date header focused = black, light blue, bold, '${c.base06}', '${c.base02}'
-        date header selected = black, light green, default, '${c.base05}', '${c.base01}'
-        dayname = light gray, black, default, '${c.base04}', '${c.base00}'
-        monthname = light gray, black, default, '${c.base04}', '${c.base00}'
-        weeknumber_right = light gray, black, default, '${c.base03}', '${c.base00}'
-        alert = white, dark red, bold, '${c.base00}', '${c.base08}'
-        mark = black, light green, bold, '${c.base06}', '${c.base03}'
-        frame = light gray, black, default, '${c.base03}', '${c.base00}'
-        frame focus = light blue, black, bold, '${c.base05}', '${c.base00}'
-        frame focus color = light blue, black, bold, '${c.base05}', '${c.base00}'
-        frame focus top = light magenta, black, bold, '${c.base05}', '${c.base00}'
-        eventcolumn = white, black, default, '${c.base05}', '${c.base00}'
-        eventcolumn focus = white, black, default, '${c.base05}', '${c.base00}'
-        calendar = white, black, default, '${c.base05}', '${c.base00}'
-        calendar focus = white, black, default, '${c.base05}', '${c.base00}'
-        editbx = white, black, default, '${c.base05}', '${c.base01}'
-        editcp = black, light blue, standout, '${c.base06}', '${c.base03}'
-        popupbg = white, black, default, '${c.base05}', '${c.base00}'
-        popupper = black, light blue, bold, '${c.base06}', '${c.base02}'
-        caption = light blue, black, bold, '${c.base05}', '${c.base00}'
+        [palette]
+          header = white, black, default, '${c.base05}', '${c.base00}'
+          footer = white, black, default, '${c.base04}', '${c.base00}'
+          line header = black, white, bold, '${c.base05}', '${c.base02}'
+          alt header = white, black, bold, '${c.base05}', '${c.base00}'
+          bright = yellow, black, bold, '${c.base05}', '${c.base02}'
+          list = white, black, default, '${c.base05}', '${c.base00}'
+          list focused = black, light blue, bold, '${c.base06}', '${c.base02}'
+          edit = white, black, default, '${c.base05}', '${c.base01}'
+          edit focus = black, light cyan, default, '${c.base06}', '${c.base02}'
+          button = white, black, default, '${c.base05}', '${c.base02}'
+          button focused = black, light green, bold, '${c.base06}', '${c.base03}'
+          reveal focus = black, yellow, default, '${c.base06}', '${c.base02}'
+          today focus = black, light blue, bold, '${c.base06}', '${c.base02}'
+          today = light green, black, default, '${c.base0B}', '${c.base01}'
+          date header = light gray, black, default, '${c.base04}', '${c.base00}'
+          date header focused = black, light blue, bold, '${c.base06}', '${c.base02}'
+          date header selected = black, light green, default, '${c.base05}', '${c.base01}'
+          dayname = light gray, black, default, '${c.base04}', '${c.base00}'
+          monthname = light gray, black, default, '${c.base04}', '${c.base00}'
+          weeknumber_right = light gray, black, default, '${c.base03}', '${c.base00}'
+          alert = white, dark red, bold, '${c.base00}', '${c.base08}'
+          mark = black, light green, bold, '${c.base06}', '${c.base03}'
+          frame = light gray, black, default, '${c.base03}', '${c.base00}'
+          frame focus = light blue, black, bold, '${c.base05}', '${c.base00}'
+          frame focus color = light blue, black, bold, '${c.base05}', '${c.base00}'
+          frame focus top = light magenta, black, bold, '${c.base05}', '${c.base00}'
+          eventcolumn = white, black, default, '${c.base05}', '${c.base00}'
+          eventcolumn focus = white, black, default, '${c.base05}', '${c.base00}'
+          calendar = white, black, default, '${c.base05}', '${c.base00}'
+          calendar focus = white, black, default, '${c.base05}', '${c.base00}'
+          editbx = white, black, default, '${c.base05}', '${c.base01}'
+          editcp = black, light blue, standout, '${c.base06}', '${c.base03}'
+          popupbg = white, black, default, '${c.base05}', '${c.base00}'
+          popupper = black, light blue, bold, '${c.base06}', '${c.base02}'
+          caption = light blue, black, bold, '${c.base05}', '${c.base00}'
       '';
     };
 

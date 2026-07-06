@@ -8,7 +8,8 @@
 # d'environnement a propager.
 let
   cfg = config.userSettings.gh;
-in {
+in
+{
   options.userSettings.gh = {
     enable = lib.mkEnableOption "GitHub CLI (gh), auth par token sops";
 
@@ -35,7 +36,10 @@ in {
     };
 
     gitProtocol = lib.mkOption {
-      type = lib.types.enum [ "https" "ssh" ];
+      type = lib.types.enum [
+        "https"
+        "ssh"
+      ];
       default = "https";
       description = "Protocole git utilise par gh pour cloner/pousser.";
     };
@@ -56,11 +60,16 @@ in {
     sops.secrets.${cfg.tokenSops} = { };
     sops.templates."gh-hosts" = {
       path = "${config.home.homeDirectory}/.config/gh/hosts.yml";
-      content = lib.concatStringsSep "\n" ([
-        "github.com:"
-        "    oauth_token: ${config.sops.placeholder.${cfg.tokenSops}}"
-        "    git_protocol: ${cfg.gitProtocol}"
-      ] ++ lib.optional (cfg.user != null) "    user: ${cfg.user}") + "\n";
+      content =
+        lib.concatStringsSep "\n" (
+          [
+            "github.com:"
+            "    oauth_token: ${config.sops.placeholder.${cfg.tokenSops}}"
+            "    git_protocol: ${cfg.gitProtocol}"
+          ]
+          ++ lib.optional (cfg.user != null) "    user: ${cfg.user}"
+        )
+        + "\n";
     };
   };
 }

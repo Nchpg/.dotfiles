@@ -5,7 +5,8 @@ let
   term = config.userSettings.terminal.default;
 
   # Thème sombre pour nmtui via NEWT_COLORS.
-  newtColors = "NEWT_COLORS="
+  newtColors =
+    "NEWT_COLORS="
     + "root=white,black:"
     + "border=blue,black:"
     + "title=blue,black:"
@@ -31,13 +32,15 @@ let
   # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
   termCmd =
-    if term == "alacritty"
-    then "${term} --title nmtui-wifi -e nmtui"
-    else if term == "kitty"
-    then "${term} ${kittyQuit} --title nmtui-wifi nmtui"
-    else "${term} --title nmtui-wifi nmtui";
+    if term == "alacritty" then
+      "${term} --title nmtui-wifi -e nmtui"
+    else if term == "kitty" then
+      "${term} ${kittyQuit} --title nmtui-wifi nmtui"
+    else
+      "${term} --title nmtui-wifi nmtui";
 
-in {
+in
+{
   options.userSettings.wifiPicker = {
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)";
     pkgs = lib.mkOption {

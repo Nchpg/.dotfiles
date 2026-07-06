@@ -5,7 +5,7 @@
     systemSettings = {
       stylix = {
         enable = true;
-        variant = "dark";                  # ← interrupteur dark / light
+        variant = "dark"; # ← interrupteur dark / light
         darkTheme = "gruvbox-dark-custom";
         lightTheme = "gruvbox-light-hard";
       };

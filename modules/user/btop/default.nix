@@ -1,4 +1,9 @@
-{ config, lib, pkgs-unstable, ... }:
+{
+  config,
+  lib,
+  pkgs-unstable,
+  ...
+}:
 
 let
   cfg = config.userSettings.btop;
@@ -36,7 +41,8 @@ let
     # désactive : on utilise sciemment une source différente de l'amont.
     doInstallCheck = false;
   });
-in {
+in
+{
   options = {
     userSettings.btop = {
       enable = lib.mkEnableOption "Enable btop";

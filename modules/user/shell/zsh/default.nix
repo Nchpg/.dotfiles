@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.shell.zsh;
-in {
+in
+{
   options = {
     userSettings.shell.zsh = {
       enable = lib.mkEnableOption "Enable zsh";

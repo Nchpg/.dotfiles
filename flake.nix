@@ -33,7 +33,8 @@
     };
   };
 
-  outputs = inputs@{ self, ... }:
+  outputs =
+    inputs@{ self, ... }:
     let
       system = "x86_64-linux";
 
@@ -48,25 +49,39 @@
       };
 
       lib = inputs.nixpkgs-stable.lib;
-      profiles = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./profiles));
-      hosts    = builtins.filter (x: x != null) (lib.mapAttrsToList (name: value: if value == "directory" then name else null) (builtins.readDir ./hosts));
+      profiles = builtins.filter (x: x != null) (
+        lib.mapAttrsToList (name: value: if value == "directory" then name else null) (
+          builtins.readDir ./profiles
+        )
+      );
+      hosts = builtins.filter (x: x != null) (
+        lib.mapAttrsToList (name: value: if value == "directory" then name else null) (
+          builtins.readDir ./hosts
+        )
+      );
 
-      targets = lib.concatMap (profile: map (host: { inherit profile; inherit host; }) hosts) profiles;
+      targets = lib.concatMap (
+        profile:
+        map (host: {
+          inherit profile;
+          inherit host;
+        }) hosts
+      ) profiles;
     in
     {
-      nixosConfigurations = builtins.listToAttrs
-        (map (target: {
+      nixosConfigurations = builtins.listToAttrs (
+        map (target: {
           name = "${target.profile}-${target.host}";
           value = lib.nixosSystem {
             inherit system;
             modules = [
-               # build host
+              # build host
               ./hosts
-               # build profile
+              # build profile
               ./profiles
-               # system modules
+              # system modules
               ./modules/system
-              
+
               inputs.home-manager.nixosModules.home-manager
               {
                 # Chaque user HM réutilise le `pkgs` du système au lieu
@@ -94,19 +109,19 @@
               inherit target;
             };
           };
-        }) targets);
+        }) targets
+      );
 
       # `nix fmt` → formate le repo. Exposé aussi pour les éditeurs/CI.
       formatter.${system} = pkgs-stable.nixfmt-rfc-style;
 
       devShells.${system} = {
         python = import ./devshells/python.nix { pkgs = pkgs-stable; };
-        c      = import ./devshells/c.nix { pkgs = pkgs-stable; };
+        c = import ./devshells/c.nix { pkgs = pkgs-stable; };
         # Intel Arc / XPU PyTorch — uses pkgs-unstable to match the system
         # graphics stack (intel-compute-runtime / level-zero).
-        xpu    = import ./devshells/xpu.nix { pkgs = pkgs-unstable; };
+        xpu = import ./devshells/xpu.nix { pkgs = pkgs-unstable; };
       };
 
     };
 }
-

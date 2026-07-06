@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.yazi;
-in {
+in
+{
   options = {
     userSettings.yazi = {
       enable = lib.mkEnableOption "Enable yazi";

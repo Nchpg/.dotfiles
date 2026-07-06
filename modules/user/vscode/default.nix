@@ -1,4 +1,10 @@
-{ config, lib, pkgs-unstable, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs-unstable,
+  inputs,
+  ...
+}:
 
 let
   cfg = config.userSettings.vscode;
@@ -87,54 +93,56 @@ let
     }
   ];
 
+  allVscodeExtensions =
+    with cfg.pkgs.vscode-extensions;
+    [
+      # python
+      #ms-python.python
+      #ms-python.debugpy
+      ms-python.vscode-pylance
+      #ms-toolsai.jupyter-keymap
+      ms-toolsai.jupyter
 
-  allVscodeExtensions = with cfg.pkgs.vscode-extensions; [
-    # python
-    #ms-python.python
-    #ms-python.debugpy
-    ms-python.vscode-pylance
-    #ms-toolsai.jupyter-keymap
-    ms-toolsai.jupyter
+      # c/cpp
+      #llvm-vs-code-extensions.vscode-clangd
+      ms-vscode.cpptools
 
-    # c/cpp
-    #llvm-vs-code-extensions.vscode-clangd
-    ms-vscode.cpptools
+      # go
+      golang.go
 
-    # go
-    golang.go
+      # nix
+      bbenoist.nix
 
-    # nix
-    bbenoist.nix
+      # vim
+      vscodevim.vim
 
-    # vim
-    vscodevim.vim
+      # git
+      eamodio.gitlens
 
-    # git
-    eamodio.gitlens
+      # latex (compile + preview pdf auto)
+      james-yu.latex-workshop
 
-    # latex (compile + preview pdf auto)
-    james-yu.latex-workshop
+      # outils
+      arjun.swagger-viewer
+      redhat.vscode-yaml
+      ritwickdey.liveserver
+      usernamehw.errorlens
+      ms-azuretools.vscode-docker
+      ms-vscode-remote.remote-ssh
+      ms-vscode-remote.remote-ssh-edit
 
-    # outils
-    arjun.swagger-viewer
-    redhat.vscode-yaml
-    ritwickdey.liveserver
-    usernamehw.errorlens
-    ms-azuretools.vscode-docker
-    ms-vscode-remote.remote-ssh
-    ms-vscode-remote.remote-ssh-edit
+      # themes & icons
+      dracula-theme.theme-dracula
+      jdinhlife.gruvbox
+      pkief.material-icon-theme
 
-    # themes & icons
-    dracula-theme.theme-dracula
-    jdinhlife.gruvbox
-    pkief.material-icon-theme
+      # databases
+      cweijan.dbclient-jdbc
 
-    # databases
-    cweijan.dbclient-jdbc
-
-  ] ++ marketplaceExtensions
-  # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
-  ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vscode-extensions.wakatime.vscode-wakatime;
+    ]
+    ++ marketplaceExtensions
+    # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+    ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vscode-extensions.wakatime.vscode-wakatime;
 
   # Wrapper script to bypass the macOS arm64 binary bundled in the linux-x64 VSIX.
   # The extension calls: wrapper <bundled_binary> [actual_flags...]
@@ -167,12 +175,14 @@ let
   '';
 
   settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
-  finalConfigContent = lib.replaceStrings
-    ["@shell@" "@claudeWrapper@"]
-    [config.userSettings.shell.default "${claudeWrapper}"]
-    settingsTemplateContent;
+  finalConfigContent =
+    lib.replaceStrings
+      [ "@shell@" "@claudeWrapper@" ]
+      [ config.userSettings.shell.default "${claudeWrapper}" ]
+      settingsTemplateContent;
 
-in {
+in
+{
   options = {
     userSettings.vscode = {
       enable = lib.mkEnableOption "Enable vscode";
@@ -192,12 +202,14 @@ in {
       # distribution LaTeX (latexmk, pdflatex, ...) utilisée par LaTeX Workshop
       # avec les paquets supplémentaires (enumitem, titlesec, eurosym, parskip, ...)
       # manquants utilisés par le CV
-      (cfg.pkgs.texliveMedium.withPackages (ps: with ps; [
-        enumitem
-        titlesec
-        eurosym
-        parskip
-      ]))
+      (cfg.pkgs.texliveMedium.withPackages (
+        ps: with ps; [
+          enumitem
+          titlesec
+          eurosym
+          parskip
+        ]
+      ))
     ];
 
     home.file = {

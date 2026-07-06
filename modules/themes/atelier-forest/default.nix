@@ -2,7 +2,7 @@
   scheme = "Atelier Forest";
   slug = "atelier-forest";
   author = "Bram de Haan (http://atelierbramdehaan.nl)";
-  description = ''A colorscheme like “Birds of Paradise”, but a bit muddier on the browns, less red and more greyed out, like clay'';
+  description = "A colorscheme like “Birds of Paradise”, but a bit muddier on the browns, less red and more greyed out, like clay";
   polarity = "dark";
   backgroundUrl = "https://w.wallhaven.cc/full/72/wallhaven-72p97v.jpg";
   backgroundSha256 = "sha256-+ayGF3G14PfZwZnIeqCpnV/awnwdpue3OBmJYTirb2U=";

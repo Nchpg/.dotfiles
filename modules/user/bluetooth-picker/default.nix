@@ -8,10 +8,12 @@ let
   # automatiquement du thème Stylix via le terminal (kitty), comme nmtui
   # avec NEWT_COLORS pour le wifi-picker.
   termCmd =
-    if term == "alacritty"
-    then "${term} --title bluetui -e bluetui"
-    else "${term} --title bluetui bluetui";
-in {
+    if term == "alacritty" then
+      "${term} --title bluetui -e bluetui"
+    else
+      "${term} --title bluetui bluetui";
+in
+{
   options.userSettings.bluetoothPicker = {
     enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)";
     pkgs = lib.mkOption {

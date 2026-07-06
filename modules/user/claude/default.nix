@@ -1,4 +1,9 @@
-{ config, lib, inputs, ... }:
+{
+  config,
+  lib,
+  inputs,
+  ...
+}:
 
 # Réglages Claude Code déclaratifs.
 #
@@ -11,7 +16,8 @@ let
   cfg = config.userSettings.claude;
   jsonFormat = cfg.pkgs.formats.json { };
   settingsFile = jsonFormat.generate "claude-settings.json" cfg.settings;
-in {
+in
+{
   options.userSettings.claude = {
     enable = lib.mkEnableOption "réglages Claude Code déclaratifs (~/.claude/settings.json)";
 
@@ -36,30 +42,32 @@ in {
     };
   };
 
-  config = lib.mkIf cfg.enable (lib.mkMerge [
-  {
-    home.packages = [
-      # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
-      # bump avec `rebuild -u`).
-      inputs.claude-code.packages.x86_64-linux.default
-      # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
-      cfg.pkgs.poppler-utils
-    ];
-  }
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      {
+        home.packages = [
+          # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
+          # bump avec `rebuild -u`).
+          inputs.claude-code.packages.x86_64-linux.default
+          # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
+          cfg.pkgs.poppler-utils
+        ];
+      }
 
-  (lib.mkIf (cfg.settings != { }) {
-    home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      mkdir -p "$HOME/.claude"
-      if [ -s "$HOME/.claude/settings.json" ]; then
-        # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
-        ${cfg.pkgs.jq}/bin/jq -s '.[0] * .[1]' \
-          "$HOME/.claude/settings.json" ${settingsFile} \
-          > "$HOME/.claude/settings.json.hm-tmp" \
-          && mv "$HOME/.claude/settings.json.hm-tmp" "$HOME/.claude/settings.json"
-      else
-        install -m644 ${settingsFile} "$HOME/.claude/settings.json"
-      fi
-    '';
-  })
-  ]);
+      (lib.mkIf (cfg.settings != { }) {
+        home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          mkdir -p "$HOME/.claude"
+          if [ -s "$HOME/.claude/settings.json" ]; then
+            # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
+            ${cfg.pkgs.jq}/bin/jq -s '.[0] * .[1]' \
+              "$HOME/.claude/settings.json" ${settingsFile} \
+              > "$HOME/.claude/settings.json.hm-tmp" \
+              && mv "$HOME/.claude/settings.json.hm-tmp" "$HOME/.claude/settings.json"
+          else
+            install -m644 ${settingsFile} "$HOME/.claude/settings.json"
+          fi
+        '';
+      })
+    ]
+  );
 }

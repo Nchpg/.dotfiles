@@ -2,7 +2,7 @@
   scheme = "Atelier Cave";
   slug = "atelier-cave";
   author = "Bram de Haan (http://atelierbramdehaan.nl)";
-  description = ''A “cool-warm” palette; not for the claustrophobic'';
+  description = "A “cool-warm” palette; not for the claustrophobic";
   polarity = "dark";
   backgroundUrl = "https://images.hdqwalls.com/wallpapers/anime-girl-angel-ring-5k-7c.jpg";
   backgroundUrlSha256 = "sha256-AVPJYFLEQr9x1V2yQLkMc1g7GqcBPJiKRFuj8MaKe5c=";

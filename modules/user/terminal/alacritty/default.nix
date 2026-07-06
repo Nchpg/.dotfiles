@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.terminal.alacritty;
-in {
+in
+{
   options = {
     userSettings.terminal.alacritty = {
       enable = lib.mkEnableOption "Enable alacritty terminal";

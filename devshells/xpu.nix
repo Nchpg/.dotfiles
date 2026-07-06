@@ -15,8 +15,8 @@
 { pkgs }:
 
 let
-  icr = pkgs.intel-compute-runtime;            # OpenCL driver + ocloc (out)
-  l0drv = icr.drivers;                          # libze_intel_gpu.so (Level-Zero)
+  icr = pkgs.intel-compute-runtime; # OpenCL driver + ocloc (out)
+  l0drv = icr.drivers; # libze_intel_gpu.so (Level-Zero)
   igc = pkgs.intel-graphics-compiler;
 
   # Runtime libraries the torch-xpu wheel + Intel L0 driver need at load time.
@@ -33,9 +33,7 @@ let
     pkgs.ncurses
   ];
 
-  ldPath = pkgs.lib.makeLibraryPath runtimeLibs
-    + ":${igc}/lib/igc2"
-    + ":${icr}/lib/intel-opencl";
+  ldPath = pkgs.lib.makeLibraryPath runtimeLibs + ":${igc}/lib/igc2" + ":${icr}/lib/intel-opencl";
 in
 pkgs.mkShell {
   name = "xpu-dev";
@@ -43,8 +41,8 @@ pkgs.mkShell {
   packages = [
     pkgs.python313
     pkgs.uv
-    pkgs.clinfo            # `clinfo` to sanity-check the GPU is visible
-    pkgs.level-zero        # ze_* headers/loader
+    pkgs.clinfo # `clinfo` to sanity-check the GPU is visible
+    pkgs.level-zero # ze_* headers/loader
   ];
 
   # Make the Intel runtime discoverable, and tell the L0 loader where the

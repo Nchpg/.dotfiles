@@ -1,4 +1,4 @@
-{ pkgs}:
+{ pkgs }:
 
 pkgs.mkShell {
   name = "c-dev";
@@ -8,7 +8,6 @@ pkgs.mkShell {
     pkgs.gdb
     pkgs.cmake
     pkgs.valgrind
-
 
     pkgs.pkg-config
     pkgs.opencv

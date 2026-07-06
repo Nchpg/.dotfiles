@@ -1,8 +1,14 @@
-{ config, lib, pkgs-stable, ... }:
+{
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 let
   cfg = config.systemSettings.window-manager.sway;
-in {
+in
+{
   options = {
     systemSettings.window-manager.sway = {
       enable = lib.mkEnableOption "Enable sway window manager";

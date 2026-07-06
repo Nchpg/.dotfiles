@@ -1,11 +1,17 @@
-{ config, lib, pkgs-stable, ... }:
+{
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 # Docker et libvirt (KVM/QEMU), activables séparément par profil.
 # L'accès des users est géré à part : options allowDocker / allowLibvirt
 # dans modules/system/users (groupes docker / libvirtd, quasi root-équivalents).
 let
   cfg = config.systemSettings.virtualisation;
-in {
+in
+{
   options = {
     systemSettings.virtualisation = {
       docker.enable = lib.mkEnableOption "Docker";
@@ -18,7 +24,10 @@ in {
       virtualisation.docker = {
         enable = true;
         daemon.settings = {
-          dns = [ "8.8.8.8" "1.1.1.1" ];
+          dns = [
+            "8.8.8.8"
+            "1.1.1.1"
+          ];
         };
       };
     })

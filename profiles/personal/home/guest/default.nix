@@ -1,11 +1,16 @@
-{ lib, pkgs-stable, pkgs-unstable, ... }:
+{
+  lib,
+  pkgs-stable,
+  pkgs-unstable,
+  ...
+}:
 
 {
   config = lib.mkDefault {
 
     userSettings = {
       defaultPkgs = pkgs-stable;
-      
+
       stylix = {
         enable = true;
         # Pas de `theme` : suit le thème système (systemSettings.stylix.theme),
@@ -29,7 +34,6 @@
         pkgs = pkgs-unstable;
       };
 
-
       shell = {
         zsh = {
           enable = true;
@@ -39,7 +43,6 @@
         };
         default = "zsh";
       };
-
 
       terminal = {
         kitty = {

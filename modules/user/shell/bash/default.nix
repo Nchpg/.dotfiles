@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.shell.bash;
-in {
+in
+{
   options = {
     userSettings.shell.bash = {
       enable = lib.mkEnableOption "Enable bash";
@@ -24,4 +25,3 @@ in {
     };
   };
 }
-

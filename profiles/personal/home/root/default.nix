@@ -5,7 +5,7 @@
 
     userSettings = {
       defaultPkgs = pkgs-stable;
-      
+
       stylix = {
         enable = true;
         # Pas de `theme` : suit le thème système (systemSettings.stylix.theme),

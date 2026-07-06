@@ -1,8 +1,14 @@
-{ config, lib, pkgs-unstable, ... }:
+{
+  config,
+  lib,
+  pkgs-unstable,
+  ...
+}:
 
 let
   cfg = config.systemSettings.ollama;
-in {
+in
+{
   options = {
     systemSettings.ollama = {
       enable = lib.mkEnableOption "serveur ollama (LLM local)";

@@ -12,7 +12,8 @@
 # (cf. modules vim/neovim/vscode), pour ne pas tracer si le module est off.
 let
   cfg = config.userSettings.wakatime;
-in {
+in
+{
   options.userSettings.wakatime = {
     enable = lib.mkEnableOption "WakaTime (suivi du temps de code) dans les editeurs";
 
@@ -47,10 +48,15 @@ in {
     sops.secrets.${cfg.apiKeySops} = { };
     sops.templates."wakatime-cfg" = {
       path = "${config.home.homeDirectory}/.wakatime.cfg";
-      content = lib.concatStringsSep "\n" ([
-        "[settings]"
-        "api_key = ${config.sops.placeholder.${cfg.apiKeySops}}"
-      ] ++ lib.optional (cfg.apiUrl != null) "api_url = ${cfg.apiUrl}") + "\n";
+      content =
+        lib.concatStringsSep "\n" (
+          [
+            "[settings]"
+            "api_key = ${config.sops.placeholder.${cfg.apiKeySops}}"
+          ]
+          ++ lib.optional (cfg.apiUrl != null) "api_url = ${cfg.apiUrl}"
+        )
+        + "\n";
     };
   };
 }
