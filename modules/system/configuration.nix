@@ -20,6 +20,11 @@
       "nix-command"
       "flakes"
     ];
+    # Config 100 % flake : les channels (ancien mécanisme) ne servent plus.
+    # Coupe leur gestion et leur entrée NIX_PATH ; les vieux profils de
+    # channels (25.05, restes d'avant la migration flake) sont à retirer une
+    # fois à la main : nix-channel --remove <nom> (user et root).
+    channel.enable = false;
   };
 
   # Enable automatic garbage collection
