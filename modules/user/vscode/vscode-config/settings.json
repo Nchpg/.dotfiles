@@ -1,6 +1,6 @@
 {
-    "workbench.colorTheme": "Gruvbox Dark Hard", //Or "Dracula Theme"
-    "workbench.iconTheme": "gruvbox-material-icon-theme", //Or "material-icon-theme",
+    "workbench.colorTheme": "Gruvbox Dark Hard",
+    "workbench.iconTheme": "gruvbox-material-icon-theme",
     "explorer.compactFolders": false,
     "window.zoomLevel": 2,
     "database-client.autoSync": true,
