@@ -1,7 +1,7 @@
-{ config, lib, pkgs-stable, pkgs-unstable, systemSettings, stylix, ... }:
+{ config, lib, osConfig, ... }:
 
 let
-  cfg = systemSettings.window-manager.sway;
+  cfg = osConfig.systemSettings.window-manager.sway;
 
   # Edit config template terminal
   templateContent = builtins.readFile ./sway-config/config.template;

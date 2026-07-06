@@ -1,4 +1,4 @@
-{ config, lib, pkgs, systemSettings, ... }:
+{ config, lib, pkgs, osConfig, ... }:
 
 # Configuration globale sops-nix cote home-manager. Les secrets individuels
 # (et templates) sont declares dans les modules qui les consomment
@@ -12,7 +12,7 @@
 #
 # Editer les secrets :  sops secrets/secrets.yaml   (depuis la racine du repo)
 let
-  keyOwner = systemSettings.sops.keyOwner;
+  keyOwner = osConfig.systemSettings.sops.keyOwner;
 in
 {
   # Outils pour editer les secrets et enroler de nouvelles machines. Seulement

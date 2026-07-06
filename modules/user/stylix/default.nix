@@ -1,4 +1,4 @@
-{ lib, config, pkgs-stable, pkgs-unstable, stylix, systemSettings, ... }:
+{ lib, config, osConfig, ... }:
 
 let
   cfg = config.userSettings.stylix;
@@ -12,8 +12,8 @@ in
         # Par défaut, on suit le thème système (systemSettings.stylix.theme) :
         # ainsi basculer le thème système flippe aussi la session de l'user.
         # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
-        default = systemSettings.stylix.theme;
-        type = lib.types.enum (builtins.attrNames (lib.filterAttrs (name: type: type == "directory") (builtins.readDir ../../themes)));
+        default = osConfig.systemSettings.stylix.theme;
+        type = lib.types.enum (builtins.attrNames (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)));
         description = "Theme for stylix to use system wide. A list of themes can be found in the `themes` directory.";
       };
       themeconfig = lib.mkOption {
@@ -22,7 +22,7 @@ in
         description = "Theme config";
       };
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };
@@ -39,7 +39,7 @@ in
         qt.enable = true;
         gnome.enable = true;
       };
-      polarity = theme.polarity;
+      inherit (theme) polarity;
       image = cfg.pkgs.fetchurl {
         url = theme.backgroundUrl;
         sha256 = theme.backgroundSha256 or theme.backgroundUrlSha256;
