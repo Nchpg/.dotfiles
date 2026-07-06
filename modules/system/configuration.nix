@@ -32,8 +32,11 @@
   # Déduplication du store par hardlinks (job périodique, complète le gc).
   nix.optimise.automatic = true;
 
-  # Use all available firmware (needed for sound)
-  hardware.enableAllFirmware = true;
+  # Firmwares redistribuables : couvre tout le matériel réel (iwlwifi, BT
+  # Intel, GPU via linux-firmware ; le son via sof-firmware, aussi ajouté
+  # explicitement dans modules/system/audio). enableAllFirmware n'ajoutait
+  # que de l'exotique hors sujet (b43/Broadcom, webcam Apple, dongle Xbox).
+  hardware.enableRedistributableFirmware = true;
 
   # Enable CUPS to print documents.
   services.printing.enable = true;
