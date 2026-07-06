@@ -13,4 +13,8 @@
   # Dernier noyau stable de nixpkgs (support du matériel récent, cf. le GPU
   # Meteor Lake dans modules/system/intel-graphics).
   boot.kernelPackages = pkgs-stable.linuxPackages_latest;
+
+  # Vide /tmp à chaque boot : il vit sur la racine ext4 et rien ne le purgeait
+  # (les restes de builds/téléchargements s'accumulaient indéfiniment).
+  boot.tmp.cleanOnBoot = true;
 }
