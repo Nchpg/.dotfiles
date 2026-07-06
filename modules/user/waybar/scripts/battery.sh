@@ -4,7 +4,7 @@
 # natif ne sait pas produire (ses placeholders sont figés) :
 #   - le profil d'alimentation (performance / équilibré / économie), via
 #     power-profiles-daemon (powerprofilesctl) ;
-#   - le régime des ventilateurs : vitesse (acpi_fan, tr/min) + mode LG
+#   - le régime des ventilateurs : état marche/arrêt (acpi_fan) + mode LG
 #     (lg-laptop/fan_mode : silencieux vs performance).
 #
 # Sortie JSON : icône + % dans la barre, `class` pour la couleur CSS
@@ -81,9 +81,12 @@ if command -v powerprofilesctl &>/dev/null; then
     esac
 fi
 
-# --- Ventilateurs : vitesse (acpi_fan) + mode (lg-laptop) --------------------
+# --- Ventilateurs : état (acpi_fan) + mode (lg-laptop) -----------------------
 # Le numéro hwmon n'est pas stable : on cherche le capteur nommé "acpi_fan"
 # dont fan1_input est numérique (deux acpi_fan existent, l'un sans valeur).
+# /!\ La « vitesse » ACPI (_FST) de ce LG est un faux tachymètre : 10 000
+# tr/min constants dès que le ventilo tourne (valeur en dur du firmware, pas
+# une mesure). On n'affiche donc que marche/arrêt, jamais le chiffre.
 fan_rpm=""
 for namefile in /sys/class/hwmon/hwmon*/name; do
     [[ $(<"$namefile") == acpi_fan ]] || continue
@@ -102,7 +105,7 @@ tooltip="${capacity}%"
 [[ -n "$health" ]] && tooltip+=$'\n'"Santé ${health}%  ·  ${cycles} cycles"
 [[ -n "$profile" ]] && tooltip+=$'\n'"Profil  ${profile}"
 if [[ -n "$fan_rpm" ]]; then
-    if (( fan_rpm > 0 )); then fan_line="${fan_rpm} tr/min"; else fan_line="à l'arrêt"; fi
+    if (( fan_rpm > 0 )); then fan_line="en marche"; else fan_line="à l'arrêt"; fi
     [[ -n "$fan_mode" ]] && fan_line+=" · mode ${fan_mode}"
     tooltip+=$'\n'"Ventilateur  ${fan_line}"
 fi
