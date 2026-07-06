@@ -24,21 +24,17 @@ in
       enable = true;
       package = cfg.pkgs.fish;
 
-      shellInit = ''
-        fish_add_path ${cfg.pkgs.fishPlugins.fzf-fish}/bin
-      '';
-
       interactiveShellInit = builtins.concatStringsSep "\n" [
-        ''
-          set -a fish_function_path ${cfg.pkgs.fishPlugins.fzf-fish}/functions
-          set -a fish_complete_path ${cfg.pkgs.fishPlugins.fzf-fish}/completions
-        ''
         (builtins.readFile ../common)
         (builtins.readFile ./fzf_wrapper.fish)
         (builtins.readFile ./.fish)
       ];
     };
 
+    # fzf-fish est chargé par l'autoload vendor de fish (le paquet n'installe
+    # QUE share/fish/vendor_{functions,completions,conf}.d ; les anciens ajouts
+    # manuels à fish_function_path pointaient vers des chemins inexistants).
+    # unstable pour suivre le fzf unstable épinglé dans modules/user/shell.
     home.packages = with pkgs-unstable; [
       fishPlugins.fzf-fish
     ];
