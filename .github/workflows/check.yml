@@ -20,6 +20,18 @@ jobs:
           git ls-files '*.nix' ':!:*hardware-configuration.nix' \
             | xargs nix fmt -- --check
 
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # Anti-patterns Nix (lints désactivés : voir statix.toml, qui n'était
+      # jusqu'ici exécuté nulle part).
+      - name: statix
+        run: nix run nixpkgs#statix -- check .
+
   security:
     runs-on: ubuntu-latest
     steps:
