@@ -9,8 +9,12 @@
   #   rebuild -p work          → ./rebuild.sh --profile work     --host gram
   #   rebuild -H portable      → ./rebuild.sh --profile personal --host portable
   #   rebuild -u               → idem + bump de l'input claude-code avant build
+  #   rebuild -y               → pas de confirmation si le working tree est sale
   # rebuild.sh garde toute sa logique (check git + confirmation, swaymsg reload).
   environment.systemPackages = [
+    # Diff des paquets entre générations, affiché par rebuild.sh après le switch.
+    pkgs-stable.nvd
+
     (pkgs-stable.writeShellScriptBin "rebuild" ''
       set -euo pipefail
       flake="''${MY_FLAKE:-$HOME/.dotfiles}"
@@ -24,10 +28,12 @@
           -p|--profile) profile="$2"; shift 2 ;;
           -H|--host)    host="$2";    shift 2 ;;
           -u|--update)  extra+=(--update); shift ;;
+          -y|--yes)     extra+=(--yes);    shift ;;
           -h|--help)
-            echo "usage: rebuild [-p PROFILE] [-H HOST] [-u|--update]"
+            echo "usage: rebuild [-p PROFILE] [-H HOST] [-u|--update] [-y|--yes]"
             echo "  défaut (cible de ce système) : --profile $profile --host $host"
             echo "  -u : met à jour l'input claude-code avant le rebuild"
+            echo "  -y : pas de confirmation si le working tree est sale"
             exit 0 ;;
           *) echo "argument inconnu : $1" >&2; exit 1 ;;
         esac
