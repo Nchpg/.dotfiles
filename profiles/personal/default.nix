@@ -10,7 +10,10 @@
         lightTheme = "gruvbox-light-hard";
       };
 
-      users = [ 
+      # nchpg détient la clé age qui déchiffre secrets/secrets.yaml.
+      sops.keyOwner = "nchpg";
+
+      users = [
         {
           name = "nchpg";
           isAdmin = true;

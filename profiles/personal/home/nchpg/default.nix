@@ -11,6 +11,11 @@
         enable = true;
       };
 
+      # Apps desktop (discord, mpv, ...) + direnv — cf. modules/user/desktop-apps.
+      desktopApps = {
+        enable = true;
+      };
+
       # Barre waybar (remplace la swaybar native, reproduit les mêmes infos +
       # taskbar pour distinguer les fenêtres, dont les 2 instances Teams).
       waybar = {

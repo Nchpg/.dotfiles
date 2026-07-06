@@ -108,7 +108,7 @@ let
   };
   # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N> dans
   # menus/volume.xml ; chaque action fixe le volume absolu via wpctl.
-  volPresets = [ 10 25 50 75 100 ];
+  volPresets = cfg.volumePresets;
   volPresetActions = lib.listToAttrs (map
     (p: lib.nameValuePair "vol${toString p}"
       "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%")
@@ -119,11 +119,11 @@ let
   menuDir = "${home}/.config/waybar/menus";
   menuNames = [ "volume.xml" "notifications.xml" ];
 
-  # Villes proposées au clic droit du module météo. Source unique : le menu XML
-  # et les actions sont générés à partir de cette liste -> ajouter une ville =
-  # ajouter une chaîne ici (rebuild). Le choix courant est lui persisté hors du
-  # store (cf. weather.sh), donc il survit aux reboots et rebuilds.
-  weatherCities = [ "Angers" "Paris" ];
+  # Villes proposées au clic droit du module météo (option userSettings.waybar.
+  # weatherCities). Source unique : le menu XML et les actions sont générés à
+  # partir de cette liste. Le choix courant est lui persisté hors du store
+  # (cf. weather.sh), donc il survit aux reboots et rebuilds.
+  weatherCities = cfg.weatherCities;
 
   # Signal temps-réel qui réveille le module météo (relance weather.sh sans
   # attendre l'intervalle). Source unique : utilisé pour `signal` côté waybar ET
@@ -193,7 +193,7 @@ let
   # brightnessctl), séparateur, et le pas ±5 % (mêmes commandes que la molette,
   # baisse plancher à 1 %). Source unique = backlightPresets. Id GTK préfixé
   # "pct" (pas de chiffre en tête) ; "mode"/"inc"/"dec" reliés aux actions.
-  backlightPresets = [ 1 25 50 75 100 ];
+  backlightPresets = cfg.backlightPresets;
   backlightMenuActions = lib.listToAttrs
     (map
       (p: lib.nameValuePair "pct${toString p}"
@@ -253,6 +253,28 @@ in {
       type = lib.types.attrs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
+    };
+
+    weatherCities = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "Angers" "Paris" ];
+      description = ''
+        Villes du menu clic droit du module météo (géocodées par weather.sh).
+        La ville active est persistée hors du store et sert aussi de lieu au
+        night light (wlsunset-geo.sh).
+      '';
+    };
+
+    volumePresets = lib.mkOption {
+      type = lib.types.listOf lib.types.int;
+      default = [ 10 25 50 75 100 ];
+      description = "Niveaux de volume (%) proposés dans le menu clic droit.";
+    };
+
+    backlightPresets = lib.mkOption {
+      type = lib.types.listOf lib.types.int;
+      default = [ 1 25 50 75 100 ];
+      description = "Niveaux de luminosité (%) proposés dans le menu clic droit.";
     };
   };
 
