@@ -5,6 +5,7 @@ set -euo pipefail
 HOST=""
 PROFILE=""
 UPDATE=0
+YES=0
 
 # Parsing simple des arguments
 while [[ $# -gt 0 ]]; do
@@ -12,6 +13,7 @@ while [[ $# -gt 0 ]]; do
         --host)    HOST="$2";    shift 2 ;;
         --profile) PROFILE="$2"; shift 2 ;;
         --update)  UPDATE=1;     shift ;;
+        --yes)     YES=1;        shift ;;
         *) echo "Argument inconnu : $1" >&2; exit 1 ;;
     esac
 done
@@ -54,11 +56,17 @@ if [ -n "$(git status --porcelain)" ]; then
     # incluses même non commitées ; seuls les fichiers NON TRACKÉS sont ignorés.
     echo -e "Note: modified tracked files ${GREEN}ARE included${NC} in the build; ${RED}untracked files are NOT${NC} (git add them first)."
     echo
-    read -p "Continue anyway? [y/N] " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}Rebuild aborted by user.${NC}"
-        exit 1
+    # --yes : pas de confirmation (utilisé par `theme`, qui vient justement de
+    # modifier un fichier tracké → le prompt serait systématique et inutile).
+    if [[ "$YES" -eq 1 ]]; then
+        echo "(--yes) Continuing without confirmation."
+    else
+        read -p "Continue anyway? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "${RED}Rebuild aborted by user.${NC}"
+            exit 1
+        fi
     fi
 else
     echo -e "${GREEN}✅ Git status is clean.${NC}"
@@ -66,12 +74,22 @@ fi
 
 echo "🚀 Starting NixOS system rebuild..."
 
+# Génération courante avant le switch, pour afficher le diff des paquets après.
+PREV_SYSTEM="$(readlink -f /run/current-system)"
+
 # Pas de --impure : la config est pure (aucun getEnv/lecture impure), et --impure
 # désactiverait le cache d'évaluation -> chaque rebuild réévaluerait tout de zéro.
 # Pas de --show-trace par défaut : il ralentit nettement l'éval. Pour déboguer une
 # erreur d'éval, relancer ponctuellement via : REBUILD_EXTRA_ARGS=--show-trace rebuild
 if sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" ${REBUILD_EXTRA_ARGS:-}; then
     echo "✅ System rebuild successful."
+
+    # Diff des paquets ancien système → nouveau (versions bump, ajouts, retraits).
+    NEW_SYSTEM="$(readlink -f /run/current-system)"
+    if [[ "$PREV_SYSTEM" != "$NEW_SYSTEM" ]] && command -v nvd > /dev/null; then
+        echo "📦 Changes since previous generation:"
+        nvd diff "$PREV_SYSTEM" "$NEW_SYSTEM" || true
+    fi
 
     if [ -n "${SWAYSOCK:-}" ]; then
         echo "💨 Sway session detected. Reloading configuration..."
