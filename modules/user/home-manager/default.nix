@@ -24,8 +24,8 @@ in {
     home.sessionVariables = {
       EDITOR = "vim";
       VISUAL = "vim";
-      #MY_FLAKE = "${builtins.toPath self}";
-      MY_FLAKE = "/home/${cfg.user}/.dotfiles";
+      # homeDirectory (pas /home/${user} en dur) : le home de root est /root.
+      MY_FLAKE = "${config.home.homeDirectory}/.dotfiles";
     };
 
     # This value determines the Home Manager release that your
