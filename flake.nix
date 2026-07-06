@@ -65,20 +65,21 @@
               ./modules/system
               
               inputs.home-manager.nixosModules.home-manager
-              ({ config, ... }: {
+              {
                 # Chaque user HM réutilise le `pkgs` du système au lieu
                 # d'instancier son propre nixpkgs (~1 instanciation économisée
                 # par user à l'éval). Corollaire : plus de `nixpkgs.*` dans les
                 # configs home (ça devient une erreur d'éval).
                 home-manager.useGlobalPkgs = true;
+                # La config système est accessible dans les modules HM via
+                # l'argument natif `osConfig` (ex. osConfig.systemSettings.*).
                 home-manager.extraSpecialArgs = {
                   inherit pkgs-unstable;
                   inherit pkgs-stable;
                   inherit inputs;
                   inherit self;
-                  systemSettings = config.systemSettings; 
                 };
-              })
+              }
             ];
             specialArgs = {
               inherit pkgs-stable;
