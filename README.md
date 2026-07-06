@@ -18,7 +18,6 @@ modules/
 lib/               Helpers (import-all : import récursif d'un dossier de modules)
 secrets/           Secrets chiffrés sops-nix (voir secrets/README.md)
 devshells/         `nix develop .#python|c|xpu`
-templates/profile  Squelette pour créer un nouveau profil
 rebuild.sh         Script de rebuild (enrobé par la commande `rebuild`)
 ```
 
@@ -33,8 +32,8 @@ sur le nom de la cible.
 - **Ajouter un host** : `hosts/<nom>/` avec son `hardware-configuration.nix`
   (généré par `nixos-generate-config`) et, si besoin, un `configuration.nix`
   pour les réglages matériels manuels (importé automatiquement s'il existe).
-- **Ajouter un profil** : copier `templates/profile` vers `profiles/<nom>/`,
-  puis régler `systemSettings` (users, modules activés) et `home/<user>/`.
+- **Ajouter un profil** : partir d'une copie de `profiles/personal/`, puis
+  régler `systemSettings` (users, modules activés) et `home/<user>/`.
 - **Ajouter un user** : l'ajouter à `systemSettings.users` dans le profil et
   créer `profiles/<profil>/home/<user>/default.nix`. Le compte système, le
   home-manager et les groupes (wheel/docker/libvirt selon les flags) suivent.
