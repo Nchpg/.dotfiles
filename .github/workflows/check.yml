@@ -5,6 +5,44 @@ on:
   pull_request:
 
 jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      # Vérifie que tout est passé par `nix fmt` (le hook pre-commit le fait
+      # en local, ceci rattrape les commits faits avec --no-verify).
+      # hardware-configuration.nix est exclu (fichier généré).
+      - name: check formatting
+        run: |
+          git ls-files '*.nix' ':!:*hardware-configuration.nix' \
+            | xargs nix fmt -- --check
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Historique complet : gitleaks scanne tous les commits, pas
+          # seulement le dernier (un secret committé puis retiré fuit quand même).
+          fetch-depth: 0
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      # Détection de secrets en clair (les secrets sops chiffrés ne le
+      # déclenchent pas — vérifié).
+      - name: gitleaks
+        run: nix run nixpkgs#gitleaks -- detect --source . --no-banner --redact
+
+      # Santé du flake.lock : nixpkgs sur une branche supportée et pas trop
+      # vieux (donc patchs de sécu récents). Informatif, ne bloque pas.
+      - name: flake lock health
+        uses: DeterminateSystems/flake-checker-action@v9
+        with:
+          fail-mode: false
+
   flake-check:
     runs-on: ubuntu-latest
     steps:
