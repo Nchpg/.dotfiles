@@ -16,7 +16,10 @@
   # Active Flake
   nix = {
     package = pkgs-stable.nix;
-    settings.experimental-features = [ "nix-command" "flakes" ];
+    settings.experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
   };
 
   # Enable automatic garbage collection

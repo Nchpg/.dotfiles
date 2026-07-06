@@ -3,7 +3,8 @@
 let
   cfg = config.userSettings.posting;
   c = config.lib.stylix.colors.withHashtag;
-in {
+in
+{
   options.userSettings.posting = {
     enable = lib.mkEnableOption "Enable posting (TUI HTTP client)";
     pkgs = lib.mkOption {

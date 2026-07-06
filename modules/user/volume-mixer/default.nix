@@ -9,10 +9,12 @@ let
   # Padding interne plus large que le terminal courant pour ne pas coller aux bords.
   padOpt = lib.optionalString (term == "kitty") "-o window_padding_width=20 ";
   termCmd =
-    if term == "alacritty"
-    then "${term} --title ncpamixer -e ncpamixer"
-    else "${term} ${padOpt}--title ncpamixer ncpamixer";
-in {
+    if term == "alacritty" then
+      "${term} --title ncpamixer -e ncpamixer"
+    else
+      "${term} ${padOpt}--title ncpamixer ncpamixer";
+in
+{
   options.userSettings.volumeMixer = {
     enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)";
     pkgs = lib.mkOption {

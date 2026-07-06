@@ -1,20 +1,22 @@
 { pkgs }:
 
 let
-  python = pkgs.python313.withPackages (ps: with ps; [
-    # interactive plots
-    matplotlib
+  python = pkgs.python313.withPackages (
+    ps: with ps; [
+      # interactive plots
+      matplotlib
 
-    # lib gcc needed for some packages
-    numpy
-    torch
-    pybullet
-    
-    # Jupyter
-    ipykernel
-    jupyterlab
-    notebook
-  ]);
+      # lib gcc needed for some packages
+      numpy
+      torch
+      pybullet
+
+      # Jupyter
+      ipykernel
+      jupyterlab
+      notebook
+    ]
+  );
 
   mkvenv = pkgs.writeShellScriptBin "mkvenv" ''
     #!/usr/bin/env bash
@@ -29,7 +31,6 @@ let
 
     echo "✔️ venv '$VENV_NAME' créé et connecté au site-packages Nix."
   '';
-
 
   updatevenv = pkgs.writeShellScriptBin "updatevenv" ''
     #!/usr/bin/env bash
@@ -67,7 +68,6 @@ let
     echo "✔️ Kernel '$KERNEL_NAME' créé."
   '';
 
-
   rmkernel = pkgs.writeShellScriptBin "rmkernel" ''
     #!/usr/bin/env bash
 
@@ -91,7 +91,6 @@ let
 
     docker build -f $MY_FLAKE/devshells/Dockerfile.python -t ubuntu-xpu .
   '';
-
 
   runubuntu = pkgs.writeShellScriptBin "runubuntu" ''
     #!/usr/bin/env bash

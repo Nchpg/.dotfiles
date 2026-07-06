@@ -1,8 +1,14 @@
-{ config, lib, pkgs-stable, ... }:
+{
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
 
 let
   cfg = config.userSettings.neovim;
-in {
+in
+{
   options = {
     userSettings.neovim = {
       enable = lib.mkEnableOption "Enable neovim";
@@ -27,51 +33,53 @@ in {
       withRuby = true;
       withPython3 = true;
 
-      plugins = with cfg.pkgs.vimPlugins; [
-        # telescope + deps
-        plenary-nvim
-        nvim-web-devicons
-        telescope-nvim
-        telescope-fzf-native-nvim
+      plugins =
+        with cfg.pkgs.vimPlugins;
+        [
+          # telescope + deps
+          plenary-nvim
+          nvim-web-devicons
+          telescope-nvim
+          telescope-fzf-native-nvim
 
-        # treesitter
-        nvim-treesitter.withAllGrammars
+          # treesitter
+          nvim-treesitter.withAllGrammars
 
-        # lsp
-        nvim-lspconfig
+          # lsp
+          nvim-lspconfig
 
-        # completion
-        nvim-cmp
-        cmp-nvim-lsp
-        cmp-buffer
-        cmp-path
-        luasnip
-        cmp_luasnip
+          # completion
+          nvim-cmp
+          cmp-nvim-lsp
+          cmp-buffer
+          cmp-path
+          luasnip
+          cmp_luasnip
 
-        # ui
-        lualine-nvim
-        nvim-tree-lua
-        image-nvim   # rendu d'images (backend kitty) dans Markdown + API
+          # ui
+          lualine-nvim
+          nvim-tree-lua
+          image-nvim # rendu d'images (backend kitty) dans Markdown + API
 
-        # git
-        vim-fugitive
-        gitsigns-nvim
+          # git
+          vim-fugitive
+          gitsigns-nvim
 
-        # edition
-        comment-nvim
-        nvim-autopairs
-        vim-surround
-      ]
-      # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
-      ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
+          # edition
+          comment-nvim
+          nvim-autopairs
+          vim-surround
+        ]
+        # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+        ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
       extraPackages = with pkgs-stable; [
         # language servers
-        nil          # nix
+        nil # nix
         nixpkgs-fmt
-        clang-tools  # c/cpp
-        pyright      # python
-        gopls        # go
+        clang-tools # c/cpp
+        pyright # python
+        gopls # go
         lua-language-server
         # telescope live grep
         ripgrep

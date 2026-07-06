@@ -1,4 +1,9 @@
-{ config, lib, inputs, ... }:
+{
+  config,
+  lib,
+  inputs,
+  ...
+}:
 
 let
   cfg = config.userSettings.spotify;
@@ -10,22 +15,22 @@ let
   # SANS '#', ce qui est exactement le format attendu par color.ini.
   c = config.lib.stylix.colors;
   stylixColorScheme = {
-    text                = c.base05;
-    subtext             = c.base04;
-    sidebar-text        = c.base05;
-    main                = c.base00;
-    sidebar             = c.base01;
-    player              = c.base01;
-    card                = c.base01;
-    shadow              = c.base00;
-    selected-row        = c.base04;
-    button              = c.base0D;
-    button-active       = c.base0D;
-    button-disabled     = c.base03;
-    tab-bar             = c.base01;
-    notification        = c.base0D;
-    notification-error  = c.base08;
-    misc                = c.base03;
+    text = c.base05;
+    subtext = c.base04;
+    sidebar-text = c.base05;
+    main = c.base00;
+    sidebar = c.base01;
+    player = c.base01;
+    card = c.base01;
+    shadow = c.base00;
+    selected-row = c.base04;
+    button = c.base0D;
+    button-active = c.base0D;
+    button-disabled = c.base03;
+    tab-bar = c.base01;
+    notification = c.base0D;
+    notification-error = c.base08;
+    misc = c.base03;
   };
   # Adblock niveau RÉSEAU (LD_PRELOAD) : abba23/spotify-adblock, compilé depuis
   # la source (pas dans nixpkgs). Contrairement aux extensions spicetify qui
@@ -77,10 +82,12 @@ let
       makeWrapper ${pyEnv}/bin/python3 $out/bin/spotify-tray-custom \
         --add-flags $out/libexec/spotify-tray.py \
         ${lib.optionalString cfg.adblock "--set SPOTIFY_ADBLOCK_LIB ${adblockLib}"} \
-        --prefix PATH : ${lib.makeBinPath [
-          cfg.pkgs.playerctl
-          cfg.pkgs.sway
-        ]}
+        --prefix PATH : ${
+          lib.makeBinPath [
+            cfg.pkgs.playerctl
+            cfg.pkgs.sway
+          ]
+        }
       runHook postInstall
     '';
   };
@@ -162,7 +169,12 @@ in
         exec = "spotify-tray-custom";
         icon = "spotify-client";
         terminal = false;
-        categories = [ "Audio" "Music" "Player" "AudioVideo" ];
+        categories = [
+          "Audio"
+          "Music"
+          "Player"
+          "AudioVideo"
+        ];
         settings.StartupWMClass = "Spotify";
       };
     };

@@ -7,8 +7,7 @@
   backgroundUrl = "https://images7.alphacoders.com/126/1266081.jpg";
   backgroundSha256 = "sha256-wCXKHemZYxVYnWVwh6Ng/nGlUroRotXgvcOdSfqRPeo=";
 
-
-    # Base (Fond et texte, du plus sombre au plus clair)
+  # Base (Fond et texte, du plus sombre au plus clair)
   base00 = "262626"; # Votre `background`
   base01 = "45475a"; # Votre `color0`
   base02 = "585b70"; # Votre `color8`

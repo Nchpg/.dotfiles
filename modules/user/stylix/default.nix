@@ -1,4 +1,9 @@
-{ lib, config, osConfig, ... }:
+{
+  lib,
+  config,
+  osConfig,
+  ...
+}:
 
 let
   cfg = config.userSettings.stylix;
@@ -13,11 +18,15 @@ in
         # ainsi basculer le thème système flippe aussi la session de l'user.
         # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
         default = osConfig.systemSettings.stylix.theme;
-        type = lib.types.enum (builtins.attrNames (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)));
+        type = lib.types.enum (
+          builtins.attrNames (
+            lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)
+          )
+        );
         description = "Theme for stylix to use system wide. A list of themes can be found in the `themes` directory.";
       };
       themeconfig = lib.mkOption {
-        default = {};
+        default = { };
         type = lib.types.attrsOf lib.types.str;
         description = "Theme config";
       };

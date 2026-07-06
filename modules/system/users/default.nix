@@ -5,29 +5,31 @@
     systemSettings = {
       users = lib.mkOption {
         description = "List of desktop users to create on the system";
-        type = lib.types.listOf (lib.types.submodule {
-          options = {
-            name = lib.mkOption {
-              type = lib.types.str;
-              description = "Username";
+        type = lib.types.listOf (
+          lib.types.submodule {
+            options = {
+              name = lib.mkOption {
+                type = lib.types.str;
+                description = "Username";
+              };
+              isAdmin = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "If true, the user will be in the wheel group (sudo access)";
+              };
+              allowDocker = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "If true, the user will have access to docker";
+              };
+              allowLibvirt = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = "If true, the user will be in the libvirtd group (VM management, quasi root-equivalent)";
+              };
             };
-            isAdmin = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "If true, the user will be in the wheel group (sudo access)";
-            };
-            allowDocker = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "If true, the user will have access to docker";
-            };
-            allowLibvirt = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = "If true, the user will be in the libvirtd group (VM management, quasi root-equivalent)";
-            };
-          };
-        });
+          }
+        );
       };
     };
   };
@@ -49,30 +51,36 @@
       }
     ];
 
-    users.users = builtins.listToAttrs
-      (map (user: {
+    users.users = builtins.listToAttrs (
+      map (user: {
         inherit (user) name;
         value = {
           isNormalUser = true;
           # libvirtd n'est PAS dans la base commune : le groupe est quasi
           # équivalent root (une VM peut monter le disque hôte) → opt-in,
           # comme docker.
-          extraGroups = [ "networkmanager" "video" "render" ]
-            ++ lib.optional user.isAdmin "wheel"
-            ++ lib.optional user.allowDocker "docker"
-            ++ lib.optional user.allowLibvirt "libvirtd";
+          extraGroups = [
+            "networkmanager"
+            "video"
+            "render"
+          ]
+          ++ lib.optional user.isAdmin "wheel"
+          ++ lib.optional user.allowDocker "docker"
+          ++ lib.optional user.allowLibvirt "libvirtd";
           createHome = true;
           description = user.name;
         };
-      }) config.systemSettings.users);
+      }) config.systemSettings.users
+    );
 
-    home-manager.users = builtins.listToAttrs
-      (map (user: {
+    home-manager.users = builtins.listToAttrs (
+      map (user: {
         inherit (user) name;
         value = {
           home.username = user.name;
-          home.homeDirectory = "/home/"+user.name;
+          home.homeDirectory = "/home/" + user.name;
         };
-      }) config.systemSettings.users);
+      }) config.systemSettings.users
+    );
   };
 }

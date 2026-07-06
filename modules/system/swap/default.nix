@@ -11,7 +11,8 @@
 #                minutes (thrashing) suivi d'un OOM-kill noyau aveugle.
 let
   cfg = config.systemSettings.swap;
-in {
+in
+{
   options = {
     systemSettings.swap = {
       zram = {
@@ -99,8 +100,10 @@ in {
           # (sway/waybar/gdm). Pas de `node` ici : Claude Code et les serveurs
           # de dev sont des process node — on les laisse en cibles ordinaires
           # (earlyoom prend alors le plus gros consommateur).
-          "--prefer" "^(chrome|chromium|firefox)$"
-          "--avoid" "^(sway|waybar|gdm|Xwayland|systemd|dbus-daemon)$"
+          "--prefer"
+          "^(chrome|chromium|firefox)$"
+          "--avoid"
+          "^(sway|waybar|gdm|Xwayland|systemd|dbus-daemon)$"
         ];
       };
     })

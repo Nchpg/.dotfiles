@@ -1,21 +1,27 @@
-{ config, lib, pkgs-unstable, ... }:
+{
+  config,
+  lib,
+  pkgs-unstable,
+  ...
+}:
 
 let
   cfg = config.userSettings.shell;
-  
+
   shells = lib.attrNames (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./.));
-in {
+in
+{
   options = {
     userSettings.shell = {
       default = lib.mkOption {
-          type = lib.types.enum shells;
-          default = builtins.head shells;
-          description = "Shell by default";
+        type = lib.types.enum shells;
+        default = builtins.head shells;
+        description = "Shell by default";
       };
       list = lib.mkOption {
-          type = lib.types.listOf lib.types.str;
-          readOnly = true;
-          description = "List of available shells";
+        type = lib.types.listOf lib.types.str;
+        readOnly = true;
+        description = "List of available shells";
       };
       pkgs = lib.mkOption {
         type = lib.types.pkgs;
@@ -85,9 +91,7 @@ in {
     # ERROR HANDLING
     assertions = [
       {
-        assertion = lib.any 
-          (shellName: cfg."${shellName}".enable) 
-          shells;
+        assertion = lib.any (shellName: cfg."${shellName}".enable) shells;
         message = "Au moins un shell doit être activé";
       }
       {

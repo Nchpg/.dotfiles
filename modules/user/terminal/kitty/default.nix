@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.terminal.kitty;
-in {
+in
+{
   options = {
     userSettings.terminal.kitty = {
       enable = lib.mkEnableOption "Enable kitty terminal";

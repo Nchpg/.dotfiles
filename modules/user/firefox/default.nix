@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.firefox;
-in {
+in
+{
   options = {
     userSettings.firefox = {
       enable = lib.mkEnableOption "Enable firefox browser";
@@ -144,7 +145,7 @@ in {
 
     stylix.targets.firefox = {
       enable = true;
-      profileNames = [ "default" ]; 
+      profileNames = [ "default" ];
     };
   };
 }

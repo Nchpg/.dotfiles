@@ -2,7 +2,8 @@
 
 let
   cfg = config.systemSettings.window-manager.gnome;
-in {
+in
+{
   options = {
     systemSettings.window-manager.gnome = {
       enable = lib.mkEnableOption "Enable gnome window manager";

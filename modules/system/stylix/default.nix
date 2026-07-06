@@ -1,11 +1,20 @@
-{ lib, config, pkgs-stable, inputs, target, ... }:
+{
+  lib,
+  config,
+  pkgs-stable,
+  inputs,
+  target,
+  ...
+}:
 
 let
   cfg = config.systemSettings.stylix;
 
-  themesEnum = lib.types.enum (builtins.attrNames
-    (lib.filterAttrs (_name: type: type == "directory")
-      (builtins.readDir ../../themes)));
+  themesEnum = lib.types.enum (
+    builtins.attrNames (
+      lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)
+    )
+  );
 
   # Thème actif = la variante sélectionnée. C'est la SOURCE DE VÉRITÉ lue par
   # GDM/console ici, et par le user nchpg (cf. modules/user/stylix).
@@ -29,7 +38,10 @@ in
       enable = lib.mkEnableOption "thème Stylix système (GDM, console)";
 
       variant = lib.mkOption {
-        type = lib.types.enum [ "dark" "light" ];
+        type = lib.types.enum [
+          "dark"
+          "light"
+        ];
         default = "dark";
         description = ''
           Variante active (interrupteur de bascule). Change-la puis rebuild ;
@@ -105,7 +117,7 @@ in
 
     stylix = {
       enable = true;
-      autoEnable = false;            # on n'active que ce qu'on veut
+      autoEnable = false; # on n'active que ce qu'on veut
 
       # On gère nous-mêmes le module Stylix home-manager (importé dans
       # profiles/default.nix) et le suivi du thème (défaut de userSettings.stylix
@@ -121,8 +133,8 @@ in
       };
 
       targets = {
-        gnome.enable = true;          # ⇒ thémise GDM (login screen)
-        console.enable = true;        # ⇒ thémise les TTY
+        gnome.enable = true; # ⇒ thémise GDM (login screen)
+        console.enable = true; # ⇒ thémise les TTY
       };
 
       # Mêmes polices que le module user, pour un rendu cohérent sur GDM.

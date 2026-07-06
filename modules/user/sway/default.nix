@@ -1,4 +1,9 @@
-{ config, lib, osConfig, ... }:
+{
+  config,
+  lib,
+  osConfig,
+  ...
+}:
 
 let
   cfg = osConfig.systemSettings.window-manager.sway;
@@ -13,15 +18,10 @@ let
   # pour viser le même serveur tmux. sway exec passe par sh -c → $XDG_RUNTIME_DIR
   # est bien expansé, et il est toujours défini dans une session sway/wayland.
   tmuxCmd = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
-  tmuxLaunch =
-    if term == "alacritty"
-    then "${term} -e ${tmuxCmd}"
-    else "${term} ${tmuxCmd}";
+  tmuxLaunch = if term == "alacritty" then "${term} -e ${tmuxCmd}" else "${term} ${tmuxCmd}";
 
   # Binding Ctrl+Return → terminal dans tmux, seulement si tmux est activé.
-  tmuxBind =
-    lib.optionalString config.userSettings.tmux.enable
-      "bindsym Control+Return exec ${tmuxLaunch}";
+  tmuxBind = lib.optionalString config.userSettings.tmux.enable "bindsym Control+Return exec ${tmuxLaunch}";
 
   # Barre : si waybar est activé (module dédié), il fournit sa propre barre via
   # systemd → on n'émet PAS de bloc `bar {}` natif (sinon deux barres). Sinon on
@@ -45,11 +45,13 @@ let
     }'';
   barBlock = if useWaybar then "" else swaybarBlock;
 
-  finalConfigContent = lib.replaceStrings
-    ["@terminal@" "@tmuxBind@" "@bar@"]
-    [config.userSettings.terminal.default tmuxBind barBlock]
-    templateContent;
-in {
+  finalConfigContent =
+    lib.replaceStrings
+      [ "@terminal@" "@tmuxBind@" "@bar@" ]
+      [ config.userSettings.terminal.default tmuxBind barBlock ]
+      templateContent;
+in
+{
   config = lib.mkIf cfg.enable {
     home.file.".config/sway/config" = {
       text = finalConfigContent;

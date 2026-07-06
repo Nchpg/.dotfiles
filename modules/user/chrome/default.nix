@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.chrome;
-in {
+in
+{
   options = {
     userSettings.chrome = {
       enable = lib.mkEnableOption "Enable Google Chrome browser";

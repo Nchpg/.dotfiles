@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.cliphist;
-in {
+in
+{
   options.userSettings.cliphist = {
     enable = lib.mkEnableOption "gestionnaire d'historique du presse-papier (cliphist + wofi)";
     pkgs = lib.mkOption {

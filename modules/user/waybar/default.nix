@@ -25,15 +25,28 @@ let
   # Glyphe Nerd Font depuis un codepoint hexa, BMP ou plan astral (les icônes
   # Material Design sont > U+FFFF -> paire de substitution UTF-16). Évite de
   # taper le glyphe en dur (qui se ferait stripper) ; fromJSON gère le \u.
-  mkIcon = hex:
+  mkIcon =
+    hex:
     let
       digits = {
-        "0" = 0; "1" = 1; "2" = 2; "3" = 3; "4" = 4; "5" = 5; "6" = 6;
-        "7" = 7; "8" = 8; "9" = 9; "a" = 10; "b" = 11; "c" = 12; "d" = 13;
-        "e" = 14; "f" = 15;
+        "0" = 0;
+        "1" = 1;
+        "2" = 2;
+        "3" = 3;
+        "4" = 4;
+        "5" = 5;
+        "6" = 6;
+        "7" = 7;
+        "8" = 8;
+        "9" = 9;
+        "a" = 10;
+        "b" = 11;
+        "c" = 12;
+        "d" = 13;
+        "e" = 14;
+        "f" = 15;
       };
-      toInt = s: lib.foldl (acc: ch: acc * 16 + digits.${lib.toLower ch}) 0
-        (lib.stringToCharacters s);
+      toInt = s: lib.foldl (acc: ch: acc * 16 + digits.${lib.toLower ch}) 0 (lib.stringToCharacters s);
       toHex4 = x: lib.toLower (lib.fixedWidthString 4 "0" (lib.toHexString x));
       n = toInt hex;
     in
@@ -70,7 +83,16 @@ let
   # Scripts custom (logique reprise de sway-bar.sh), installés dans la conf
   # waybar puis exécutés par chemin absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
-  scriptNames = [ "resources.sh" "bluetooth.sh" "nowplaying.sh" "disk.sh" "weather.sh" "backlight.sh" "wlsunset-geo.sh" "battery.sh" ];
+  scriptNames = [
+    "resources.sh"
+    "bluetooth.sh"
+    "nowplaying.sh"
+    "disk.sh"
+    "weather.sh"
+    "backlight.sh"
+    "wlsunset-geo.sh"
+    "battery.sh"
+  ];
 
   # Helpers JSON communs (json_escape/emit), inlinés en tête de chaque script.
   libSh = builtins.readFile ./scripts/lib.sh;
@@ -80,23 +102,54 @@ let
   # leurs outils (robuste si la session change de PATH). Le PATH ambiant reste
   # ajouté en repli pour le reste. coreutils couvre cat/date/df/numfmt/nproc/...
   scriptDeps = {
-    "resources.sh" = [ pkgs.coreutils pkgs.gawk ];
-    "bluetooth.sh" = [ pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.bluez ];
-    "nowplaying.sh" = [ pkgs.coreutils pkgs.playerctl ];
+    "resources.sh" = [
+      pkgs.coreutils
+      pkgs.gawk
+    ];
+    "bluetooth.sh" = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.bluez
+    ];
+    "nowplaying.sh" = [
+      pkgs.coreutils
+      pkgs.playerctl
+    ];
     "disk.sh" = [ pkgs.coreutils ];
-    "weather.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq ];
-    "backlight.sh" = [ pkgs.coreutils pkgs.brightnessctl pkgs.systemd ];
-    "wlsunset-geo.sh" = [ pkgs.coreutils pkgs.curl pkgs.jq pkgs.wlsunset ];
-    "battery.sh" = [ pkgs.coreutils pkgs.power-profiles-daemon ];
+    "weather.sh" = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.jq
+    ];
+    "backlight.sh" = [
+      pkgs.coreutils
+      pkgs.brightnessctl
+      pkgs.systemd
+    ];
+    "wlsunset-geo.sh" = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.jq
+      pkgs.wlsunset
+    ];
+    "battery.sh" = [
+      pkgs.coreutils
+      pkgs.power-profiles-daemon
+    ];
   };
 
   # Script final = shebang vers un bash épinglé + PATH déterministe + lib.sh +
   # corps du script source. (Le `#!/usr/bin/env bash` du corps devient un simple
   # commentaire une fois en milieu de fichier.)
-  mkScript = name: ''
-    #!${pkgs.bash}/bin/bash
-    export PATH=${lib.makeBinPath scriptDeps.${name}}:$PATH
-  '' + libSh + builtins.readFile (./scripts + "/${name}");
+  mkScript =
+    name:
+    ''
+      #!${pkgs.bash}/bin/bash
+      export PATH=${lib.makeBinPath scriptDeps.${name}}:$PATH
+    ''
+    + libSh
+    + builtins.readFile (./scripts + "/${name}");
 
   # Commandes volume (wpctl), réutilisées par la molette, le clic et le menu.
   volUp = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
@@ -109,15 +162,19 @@ let
   # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N> dans
   # menus/volume.xml ; chaque action fixe le volume absolu via wpctl.
   volPresets = cfg.volumePresets;
-  volPresetActions = lib.listToAttrs (map
-    (p: lib.nameValuePair "vol${toString p}"
-      "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%")
-    volPresets);
+  volPresetActions = lib.listToAttrs (
+    map (
+      p: lib.nameValuePair "vol${toString p}" "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%"
+    ) volPresets
+  );
 
   # Menus GTK au clic droit : fichiers XML installés dans menuDir, chaque entrée
   # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
   menuDir = "${home}/.config/waybar/menus";
-  menuNames = [ "volume.xml" "notifications.xml" ];
+  menuNames = [
+    "volume.xml"
+    "notifications.xml"
+  ];
 
   # Villes proposées au clic droit du module météo (option userSettings.waybar.
   # weatherCities). Source unique : le menu XML et les actions sont générés à
@@ -138,15 +195,17 @@ let
   # Écrit la ville, réveille la météo, et relance le night light s'il tourne
   # (try-restart = no-op si wlsunset est coupé) pour qu'il adopte les coords de
   # la nouvelle ville. Le wrapper wlsunset-geo.sh géocode lui-même au besoin.
-  mkWeatherAction = city:
+  mkWeatherAction =
+    city:
     "mkdir -p \"${weatherStateDir}\""
     + " && printf '%s' '${city}' > \"${weatherStateDir}/weather-city\""
     + " && ${weatherWake}"
     + " && ${systemctl} --user try-restart wlsunset";
   # Le menu clic droit ne sert qu'à changer de ville : une action par ville.
   # (L'actualisation est passée au clic GAUCHE -> on-click = weatherWake.)
-  weatherMenuActions = lib.listToAttrs
-    (map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities);
+  weatherMenuActions = lib.listToAttrs (
+    map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities
+  );
 
   # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
   # relié à `weatherMenuActions` par cet id).
@@ -155,13 +214,15 @@ let
     <!-- Généré depuis `weatherCities` dans modules/user/waybar/default.nix. -->
     <interface>
       <object class="GtkMenu" id="menu">
-  '' + lib.concatMapStrings (c: ''
-        <child>
-          <object class="GtkMenuItem" id="${c}">
-            <property name="label">${c}</property>
-          </object>
-        </child>
-  '') weatherCities + ''
+  ''
+  + lib.concatMapStrings (c: ''
+    <child>
+      <object class="GtkMenuItem" id="${c}">
+        <property name="label">${c}</property>
+      </object>
+    </child>
+  '') weatherCities
+  + ''
       </object>
     </interface>
   '';
@@ -194,12 +255,17 @@ let
   # baisse plancher à 1 %). Source unique = backlightPresets. Id GTK préfixé
   # "pct" (pas de chiffre en tête) ; "mode"/"inc"/"dec" reliés aux actions.
   inherit (cfg) backlightPresets;
-  backlightMenuActions = lib.listToAttrs
-    (map
-      (p: lib.nameValuePair "pct${toString p}"
-        "${brightnessctl} set ${toString p}%; ${refreshBacklight}")
-      backlightPresets)
-    // { mode = nightlightToggle; inc = backlightUp; dec = backlightDown; };
+  backlightMenuActions =
+    lib.listToAttrs (
+      map (
+        p: lib.nameValuePair "pct${toString p}" "${brightnessctl} set ${toString p}%; ${refreshBacklight}"
+      ) backlightPresets
+    )
+    // {
+      mode = nightlightToggle;
+      inc = backlightUp;
+      dec = backlightDown;
+    };
   backlightMenuXml = ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- Généré depuis `backlightPresets` dans modules/user/waybar/default.nix. -->
@@ -213,13 +279,15 @@ let
         <child>
           <object class="GtkSeparatorMenuItem" id="sepMode"/>
         </child>
-  '' + lib.concatMapStrings (p: ''
-        <child>
-          <object class="GtkMenuItem" id="pct${toString p}">
-            <property name="label">${toString p} %</property>
-          </object>
-        </child>
-  '') backlightPresets + ''
+  ''
+  + lib.concatMapStrings (p: ''
+    <child>
+      <object class="GtkMenuItem" id="pct${toString p}">
+        <property name="label">${toString p} %</property>
+      </object>
+    </child>
+  '') backlightPresets
+  + ''
         <child>
           <object class="GtkSeparatorMenuItem" id="sepStep"/>
         </child>
@@ -245,7 +313,8 @@ let
   };
   bell = mkIcon "f009a"; # md-bell
   bellOff = mkIcon "f009b"; # md-bell-off
-in {
+in
+{
   options.userSettings.waybar = {
     enable = lib.mkEnableOption "waybar (remplace la swaybar native)";
 
@@ -257,7 +326,10 @@ in {
 
     weatherCities = lib.mkOption {
       type = lib.types.listOf lib.types.str;
-      default = [ "Angers" "Paris" ];
+      default = [
+        "Angers"
+        "Paris"
+      ];
       description = ''
         Villes du menu clic droit du module météo (géocodées par weather.sh).
         La ville active est persistée hors du store et sert aussi de lieu au
@@ -267,13 +339,25 @@ in {
 
     volumePresets = lib.mkOption {
       type = lib.types.listOf lib.types.int;
-      default = [ 10 25 50 75 100 ];
+      default = [
+        10
+        25
+        50
+        75
+        100
+      ];
       description = "Niveaux de volume (%) proposés dans le menu clic droit.";
     };
 
     backlightPresets = lib.mkOption {
       type = lib.types.listOf lib.types.int;
-      default = [ 1 25 50 75 100 ];
+      default = [
+        1
+        25
+        50
+        75
+        100
+      ];
       description = "Niveaux de luminosité (%) proposés dans le menu clic droit.";
     };
   };
@@ -306,20 +390,26 @@ in {
     # scriptDeps / mkScript), donc ces paquets ne sont plus requis ICI par
     # waybar. On les garde uniquement comme CLI pratiques pour l'utilisateur
     # (playerctl pilote aussi Spotify via les on-click/on-scroll du module).
-    home.packages = [ pkgs.playerctl pkgs.curl pkgs.jq ];
+    home.packages = [
+      pkgs.playerctl
+      pkgs.curl
+      pkgs.jq
+    ];
 
     home.file = lib.listToAttrs (
-      (map
-        (n: lib.nameValuePair ".config/waybar/scripts/${n}" {
+      (map (
+        n:
+        lib.nameValuePair ".config/waybar/scripts/${n}" {
           text = mkScript n;
           executable = true;
-        })
-        scriptNames)
-      ++ (map
-        (n: lib.nameValuePair ".config/waybar/menus/${n}" {
+        }
+      ) scriptNames)
+      ++ (map (
+        n:
+        lib.nameValuePair ".config/waybar/menus/${n}" {
           source = ./menus + "/${n}";
-        })
-        menuNames)
+        }
+      ) menuNames)
       ++ [
         # Menus générés (cf. let), pas des fichiers source.
         (lib.nameValuePair ".config/waybar/menus/weather.xml" {
@@ -328,7 +418,8 @@ in {
         (lib.nameValuePair ".config/waybar/menus/backlight.xml" {
           text = backlightMenuXml;
         })
-      ]);
+      ]
+    );
 
     programs.waybar = {
       enable = true;
@@ -436,7 +527,8 @@ in {
             mixer = launcher "volume-mixer";
             volup = volUp;
             voldown = volDown;
-          } // volPresetActions;
+          }
+          // volPresetActions;
         };
 
         # Notifications (module unique -> tooltip stable) : cloche + nombre.

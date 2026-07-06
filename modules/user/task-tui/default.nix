@@ -8,9 +8,10 @@ let
   # tasks-tui hérite de la palette du terminal (curses) → thème Stylix
   # automatique via kitty, comme bluetui pour le bluetooth-picker.
   termCmd =
-    if term == "alacritty"
-    then "${term} --title tasks-tui -e tasks-tui"
-    else "${term} --title tasks-tui tasks-tui";
+    if term == "alacritty" then
+      "${term} --title tasks-tui -e tasks-tui"
+    else
+      "${term} --title tasks-tui tasks-tui";
 
   # tasks-tui-app (huiiy/GTask) : TUI curses pour Google Tasks, publié sur PyPI.
   # Pas dans nixpkgs, donc on le package ici via buildPythonApplication.
@@ -63,7 +64,8 @@ let
     };
   };
 
-in {
+in
+{
   options.userSettings.taskTui = {
     enable = lib.mkEnableOption "task-tui (tasks-tui-app : TUI Google Tasks)";
     pkgs = lib.mkOption {

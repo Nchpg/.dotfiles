@@ -1,4 +1,9 @@
-{ lib, pkgs-stable, pkgs-unstable, ... }:
+{
+  lib,
+  pkgs-stable,
+  pkgs-unstable,
+  ...
+}:
 
 {
   config = lib.mkDefault {
@@ -168,7 +173,6 @@
         };
         default = "fish";
       };
-
 
       terminal = {
         kitty = {

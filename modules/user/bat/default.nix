@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.bat;
-in {
+in
+{
   options = {
     userSettings.bat = {
       pkgs = lib.mkOption {
@@ -20,11 +21,9 @@ in {
       config.theme = lib.mkForce "gruvbox-dark";
     };
 
-
-    home.packages =
-      with cfg.pkgs; [
-        bat-extras.batgrep
-        bat-extras.batman
-      ];
+    home.packages = with cfg.pkgs; [
+      bat-extras.batgrep
+      bat-extras.batman
+    ];
   };
 }

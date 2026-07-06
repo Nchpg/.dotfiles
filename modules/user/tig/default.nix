@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.tig;
-in {
+in
+{
   options = {
     userSettings.tig = {
       enable = lib.mkEnableOption "Enable tig";
@@ -17,7 +18,7 @@ in {
   config = lib.mkIf cfg.enable {
 
     home.packages = with cfg.pkgs; [
-        tig
+      tig
     ];
 
     home.file.".tigrc".text = ''

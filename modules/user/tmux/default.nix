@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.tmux;
-in {
+in
+{
   options = {
     userSettings.tmux = {
       enable = lib.mkEnableOption "Enable tmux";
@@ -30,20 +31,20 @@ in {
       shell = "${cfg.pkgs.${config.userSettings.shell.default}}/bin/${config.userSettings.shell.default}";
       terminal = "tmux-256color";
       historyLimit = 100000;
-      escapeTime = 10;          # latence Esc minimale (utile pour vim/neovim)
-      baseIndex = 1;            # fenêtres/panes numérotés à partir de 1
+      escapeTime = 10; # latence Esc minimale (utile pour vim/neovim)
+      baseIndex = 1; # fenêtres/panes numérotés à partir de 1
       keyMode = "vi";
       mouse = true;
 
       plugins = with cfg.pkgs.tmuxPlugins; [
         sensible
-        yank             # copie vers le presse-papier système
+        yank # copie vers le presse-papier système
         {
-          plugin = resurrect;   # sauvegarde/restaure les sessions
+          plugin = resurrect; # sauvegarde/restaure les sessions
           extraConfig = "set -g @resurrect-strategy-nvim 'session'";
         }
         {
-          plugin = continuum;   # sauvegarde automatique périodique
+          plugin = continuum; # sauvegarde automatique périodique
           extraConfig = ''
             set -g @continuum-restore 'on'
             set -g @continuum-save-interval '10'

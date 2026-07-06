@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.flameshot;
-in {
+in
+{
   options = {
     userSettings.flameshot = {
       enable = lib.mkEnableOption "flameshot (capture d'écran, Wayland natif sous Sway)";
@@ -27,8 +28,8 @@ in {
   config = lib.mkIf cfg.enable {
     home.packages = with cfg.pkgs; [
       cfg.package
-      grim         # backend de capture wlroots (requis par flameshot)
-      slurp        # sélection de zone
+      grim # backend de capture wlroots (requis par flameshot)
+      slurp # sélection de zone
       wl-clipboard # wl-copy/wl-paste (utilisé aussi par le bind Shift+Print de Sway)
     ];
 

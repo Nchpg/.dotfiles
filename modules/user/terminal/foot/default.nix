@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.terminal.foot;
-in {
+in
+{
   options = {
     userSettings.terminal.foot = {
       enable = lib.mkEnableOption "Enable foot terminal";

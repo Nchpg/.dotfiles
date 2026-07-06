@@ -5,7 +5,8 @@
 # commun à tous reste dans modules/user/common.nix.)
 let
   cfg = config.userSettings.desktopApps;
-in {
+in
+{
   options.userSettings.desktopApps = {
     enable = lib.mkEnableOption "applications desktop (discord, mpv, ...) et direnv";
 

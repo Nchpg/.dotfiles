@@ -55,7 +55,8 @@ let
     # le mode "displays" (cf. conf.d) qui active la touche q pour fermer.
     exec swaymsg "[app_id=\"nwg-displays\"] move container to output \"$out\", resize set 1250 800, move position center, focus; mode \"displays\""
   '';
-in {
+in
+{
   options.userSettings.displays = {
     enable = lib.mkEnableOption "gestion des écrans externes / HDMI via la GUI nwg-displays";
     pkgs = lib.mkOption {
@@ -79,8 +80,8 @@ in {
       (lib.hiPrio nwg-displays-wrapped)
       pkgs.nwg-displays
       pkgs.wlr-randr
-      pkgs.wl-mirror   # clonage d'écran (Sway ne sait pas mirrorer nativement)
-      pkgs.jq          # parse la sortie JSON de swaymsg (wrapper + script clonage)
+      pkgs.wl-mirror # clonage d'écran (Sway ne sait pas mirrorer nativement)
+      pkgs.jq # parse la sortie JSON de swaymsg (wrapper + script clonage)
     ];
 
     # nwg-displays sauvegarde l'agencement dans ~/.config/sway/outputs. On

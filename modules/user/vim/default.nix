@@ -2,7 +2,8 @@
 
 let
   cfg = config.userSettings.vim;
-in {
+in
+{
   options = {
     userSettings.vim = {
       enable = lib.mkEnableOption "Enable vim";
@@ -19,26 +20,30 @@ in {
       enable = true;
 
       # Plugins gérés par Nix
-      plugins = with cfg.pkgs.vimPlugins; [
-        gruvbox
-        vim-polyglot
-        vim-airline
-        vim-airline-themes
-        vim-fugitive
-        vim-gitgutter
-        vim-commentary
-        nerdtree
-        coc-nvim
-      ]
-      # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
-      ++ lib.optional config.userSettings.wakatime.enable vim-wakatime;
+      plugins =
+        with cfg.pkgs.vimPlugins;
+        [
+          gruvbox
+          vim-polyglot
+          vim-airline
+          vim-airline-themes
+          vim-fugitive
+          vim-gitgutter
+          vim-commentary
+          nerdtree
+          coc-nvim
+        ]
+        # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
+        ++ lib.optional config.userSettings.wakatime.enable vim-wakatime;
 
       extraConfig = ''
         ${builtins.readFile ./vim-config/.vimrc}
         execute 'set runtimepath+=' . expand('~/.vim/airline')
         colorscheme base16-stylix
-        let g:airline_theme='base16_${lib.strings.replaceStrings ["-"] ["_"] config.userSettings.stylix.theme}'
-        
+        let g:airline_theme='base16_${
+          lib.strings.replaceStrings [ "-" ] [ "_" ] config.userSettings.stylix.theme
+        }'
+
         ${lib.optionalString (config.userSettings.stylix.theme == "custom") ''
           set background=dark
           colorscheme gruvbox

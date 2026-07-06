@@ -1,4 +1,10 @@
-{ config, lib, pkgs, osConfig, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  osConfig,
+  ...
+}:
 
 # Configuration globale sops-nix cote home-manager. Les secrets individuels
 # (et templates) sont declares dans les modules qui les consomment
@@ -17,8 +23,14 @@ in
 {
   # Outils pour editer les secrets et enroler de nouvelles machines. Seulement
   # pour le detenteur de la cle : les autres users n'editent pas les secrets.
-  home.packages = lib.mkIf (config.userSettings.user == keyOwner)
-    (with pkgs; [ sops age ssh-to-age ]);
+  home.packages = lib.mkIf (config.userSettings.user == keyOwner) (
+    with pkgs;
+    [
+      sops
+      age
+      ssh-to-age
+    ]
+  );
 
   sops = {
     defaultSopsFile = ../../../secrets/secrets.yaml;

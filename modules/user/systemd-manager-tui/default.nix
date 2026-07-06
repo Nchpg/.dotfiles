@@ -30,10 +30,12 @@ let
   });
 
   termCmd =
-    if term == "alacritty"
-    then "${term} --title systemd-manager-tui -e ${systemd-manager-tui}/bin/systemd-manager-tui"
-    else "${term} --title systemd-manager-tui ${systemd-manager-tui}/bin/systemd-manager-tui";
-in {
+    if term == "alacritty" then
+      "${term} --title systemd-manager-tui -e ${systemd-manager-tui}/bin/systemd-manager-tui"
+    else
+      "${term} --title systemd-manager-tui ${systemd-manager-tui}/bin/systemd-manager-tui";
+in
+{
   options.userSettings.systemdManagerTui = {
     enable = lib.mkEnableOption "systemd-manager-tui (gestion des services systemd dans un terminal flottant)";
     pkgs = lib.mkOption {

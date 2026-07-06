@@ -146,7 +146,8 @@ let
       echo ok > "$state"
     fi
   '';
-in {
+in
+{
   options = {
     userSettings.notifications = {
       enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible";

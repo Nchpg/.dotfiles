@@ -1,4 +1,9 @@
-{ config, target, inputs, ... }:
+{
+  config,
+  target,
+  inputs,
+  ...
+}:
 
 {
   imports = [
@@ -6,8 +11,8 @@
   ];
 
   config = {
-    home-manager.users = builtins.listToAttrs
-      (map (user: {
+    home-manager.users = builtins.listToAttrs (
+      map (user: {
         inherit (user) name;
         value = {
           imports = [
@@ -22,11 +27,11 @@
             # user modules
             ../modules/user
           ];
-          config = { 
-            userSettings.user = user.name; 
+          config = {
+            userSettings.user = user.name;
           };
         };
-      })
-      (config.systemSettings.users ++ [{name = "root";}]));
-    };
+      }) (config.systemSettings.users ++ [ { name = "root"; } ])
+    );
+  };
 }
