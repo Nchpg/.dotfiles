@@ -23,17 +23,11 @@ in
     };
   };
   config = {
-    userSettings.terminal = {
-      list = terminals;
-    }
-    //
-      # apply default shell to enabled terminals
-      (lib.genAttrs terminals (
-        name:
-        lib.mkIf cfg.terminal."${name}".enable {
-          shell = "${cfg.shell.default}";
-        }
-      ));
+    # Le shell de chaque terminal a déjà `shell.default` comme défaut (option
+    # `shell` de chaque module terminal). L'ancien genAttrs qui le re-posait ici
+    # en priorité normale écrasait silencieusement les valeurs mkDefault des
+    # profils (ex. guest : alacritty.shell = "bash" était ignoré).
+    userSettings.terminal.list = terminals;
 
     # ERROR HANDLING
     assertions = lib.mkIf (cfg.user != "root") (
