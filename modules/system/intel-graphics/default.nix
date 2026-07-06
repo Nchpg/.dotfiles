@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs-stable,
   pkgs-unstable,
   ...
 }:
@@ -20,6 +21,15 @@ in
 
   config = lib.mkIf cfg.enable {
     services.xserver.videoDrivers = [ "modesetting" ];
+
+    # Outils de diagnostic GPU, avec le module qui monte la stack :
+    # nvtop variante intel uniquement (la .full embarque les supports
+    # NVIDIA/AMD, inutiles ici), clinfo pour vérifier l'OpenCL
+    # (dans extraPackages il n'était pas dans le PATH).
+    environment.systemPackages = [
+      pkgs-stable.nvtopPackages.intel
+      pkgs-stable.clinfo
+    ];
 
     # L'iGPU Meteor Lake (PCI 7d55) est pris par le driver `xe` (moderne) au
     # lieu de i915. NOTE : xe peut intermittemment geler le compute GPU sur

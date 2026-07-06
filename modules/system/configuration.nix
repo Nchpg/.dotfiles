@@ -40,9 +40,8 @@
 
   environment.systemPackages = with pkgs-stable; [
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
-    nvtopPackages.full
+    # Les outils GPU (nvtop, clinfo) sont dans modules/system/intel-graphics.
     lm_sensors
-    clinfo # diagnostic OpenCL (dans extraPackages il n'était pas dans le PATH)
   ];
 
   environment.sessionVariables = {
