@@ -232,8 +232,10 @@ in
         #!/bin/sh
         set -eu
 
+        # Log dans XDG_RUNTIME_DIR (privé) plutôt que /tmp partagé : un nom
+        # prévisible dans /tmp est écrasable/lisible par les autres users.
         if [ -f "$HOME/.config/vdirsyncer/config" ]; then
-          ${syncCmd} >/tmp/calendar-tui-vdirsyncer.log 2>&1 || true
+          ${syncCmd} >"''${XDG_RUNTIME_DIR:-/tmp}/calendar-tui-vdirsyncer.log" 2>&1 || true
         fi
 
         exec ${termCmd}
