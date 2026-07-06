@@ -1,4 +1,4 @@
-{ config, lib, target, ... }:
+{ lib, target, ... }:
 
 {
   imports = [
