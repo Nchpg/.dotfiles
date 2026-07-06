@@ -6,6 +6,11 @@
 {
   systemSettings.intelGraphics.enable = true;
 
+  # Gestion thermique proactive Intel (daemon officiel) : réduit le throttling
+  # en pilotant P-states/RAPL avant que le CPU n'atteigne ses limites.
+  # Complémentaire de power-profiles-daemon (fourni par GNOME).
+  services.thermald.enable = true;
+
   # Driver lg-laptop (fan mode sans root, limite de charge batterie).
   systemSettings.lgLaptop = {
     enable = true;
