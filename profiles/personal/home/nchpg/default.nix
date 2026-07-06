@@ -20,8 +20,8 @@
         enable = true;
       };
 
-      # Barre waybar (remplace la swaybar native, reproduit les mêmes infos +
-      # taskbar pour distinguer les fenêtres, dont les 2 instances Teams).
+      # Barre waybar (remplace la swaybar native : mêmes blocs + tray,
+      # cf. modules/user/waybar).
       waybar = {
         enable = true;
       };

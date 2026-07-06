@@ -113,7 +113,8 @@
       );
 
       # `nix fmt` → formate le repo. Exposé aussi pour les éditeurs/CI.
-      formatter.${system} = pkgs-stable.nixfmt-rfc-style;
+      # (nixfmt = l'ancien nixfmt-rfc-style, renommé en 26.05.)
+      formatter.${system} = pkgs-stable.nixfmt;
 
       devShells.${system} = {
         python = import ./devshells/python.nix { pkgs = pkgs-stable; };

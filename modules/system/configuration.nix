@@ -15,7 +15,6 @@
 
   # Active Flake
   nix = {
-    package = pkgs-stable.nix;
     settings.experimental-features = [
       "nix-command"
       "flakes"
