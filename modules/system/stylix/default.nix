@@ -1,4 +1,4 @@
-{ lib, config, pkgs-stable, pkgs-unstable, inputs, ... }:
+{ lib, config, pkgs-stable, pkgs-unstable, inputs, target, ... }:
 
 let
   cfg = config.systemSettings.stylix;
@@ -79,7 +79,9 @@ in
       (cfg.pkgs.writeShellScriptBin "theme" ''
         set -euo pipefail
         flake="''${MY_FLAKE:-$HOME/.dotfiles}"
-        file="$flake/profiles/personal/default.nix"
+        # Profil de CE système (specialArg target) : sur une machine work-*,
+        # `theme` édite bien profiles/work/, pas personal/.
+        file="$flake/profiles/${target.profile}/default.nix"
 
         target="''${1:-}"
         if [ "$target" = "toggle" ]; then
