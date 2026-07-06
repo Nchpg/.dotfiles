@@ -174,12 +174,22 @@ let
       2> >(grep -v -F -- "is not in the list of known options, but still passed to Electron/Chromium" >&2)
   '';
 
+  # /!\ vscode-config/settings.json doit rester du JSON STRICT (pas de
+  # commentaires JSONC : le deep-merge ci-dessous passe par jq). Thèmes
+  # alternatifs déjà installés si besoin : "Dracula Theme",
+  # "material-icon-theme".
   settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
   finalConfigContent =
     lib.replaceStrings
       [ "@shell@" "@claudeWrapper@" ]
       [ config.userSettings.shell.default "${claudeWrapper}" ]
       settingsTemplateContent;
+
+  # Validé par jq au build : réintroduire un commentaire dans le template fait
+  # échouer le rebuild au lieu de casser silencieusement le merge à l'activation.
+  settingsFile = cfg.pkgs.runCommand "vscode-settings.json" { } ''
+    ${cfg.pkgs.jq}/bin/jq . ${cfg.pkgs.writeText "vscode-settings-raw.json" finalConfigContent} > $out
+  '';
 
 in
 {
@@ -213,8 +223,34 @@ in
     ];
 
     home.file = {
-      ".config/Code/User/settings.json".text = finalConfigContent;
       ".config/Code/User/keybindings.json".source = ./vscode-config/keybindings.json;
     };
+
+    # settings.json en DEEP-MERGE au rebuild (même mécanique que le module
+    # claude) : VS Code écrit lui-même dans ce fichier (réglages changés via
+    # l'UI, window.zoomLevel au zoom clavier…) — l'ancien symlink read-only du
+    # store cassait ces écritures. On impose seulement les clés du template
+    # (déclaratives, ré-appliquées à chaque rebuild), le reste que VS Code gère
+    # au runtime est préservé. VS Code n'écrit jamais de commentaires ; si une
+    # édition MANUELLE ajoute du JSONC, jq ne peut plus parser → on n'impose
+    # rien ce coup-ci et on prévient, plutôt que d'écraser le fichier.
+    home.activation.vscodeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      mkdir -p "$HOME/.config/Code/User"
+      target="$HOME/.config/Code/User/settings.json"
+      # Migration : l'ancien déploiement laissait un symlink read-only du store.
+      [ -L "$target" ] && rm "$target"
+      if [ -s "$target" ]; then
+        if ${cfg.pkgs.jq}/bin/jq -e . "$target" >/dev/null 2>&1; then
+          # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
+          ${cfg.pkgs.jq}/bin/jq -s '.[0] * .[1]' "$target" ${settingsFile} \
+            > "$target.hm-tmp" \
+            && mv "$target.hm-tmp" "$target"
+        else
+          echo "vscode: $target n'est pas du JSON strict (commentaires ajoutés à la main ?) — clés déclaratives non imposées." >&2
+        fi
+      else
+        install -m644 ${settingsFile} "$target"
+      fi
+    '';
   };
 }
