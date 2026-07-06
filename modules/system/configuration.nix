@@ -46,6 +46,19 @@
   # Enable CUPS to print documents.
   services.printing.enable = true;
 
+  # Découverte des imprimantes réseau (mDNS / IPP Everywhere) + résolution des
+  # noms en .local. Sans ça, CUPS ne voit que les imprimantes ajoutées à la main.
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+  };
+
+  # Profils d'alimentation (powerprofilesctl) : utilisés par lg-control et le
+  # module batterie de waybar. Activé explicitement — il n'était fourni
+  # qu'indirectement par le module GNOME (dépendance cachée sur un host sans
+  # GNOME).
+  services.power-profiles-daemon.enable = true;
+
   # Mises à jour de firmware matériel (BIOS, SSD, docks...) via LVFS.
   # Passif : rien ne se flashe sans un `fwupdmgr update` manuel.
   services.fwupd.enable = true;
