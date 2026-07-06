@@ -1,4 +1,4 @@
-{ config, lib, ... }:
+{ config, lib, inputs, ... }:
 
 # Réglages Claude Code déclaratifs.
 #
@@ -36,7 +36,18 @@ in {
     };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.settings != { }) {
+  config = lib.mkIf cfg.enable (lib.mkMerge [
+  {
+    home.packages = [
+      # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
+      # bump avec `rebuild -u`).
+      inputs.claude-code.packages.x86_64-linux.default
+      # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
+      cfg.pkgs.poppler-utils
+    ];
+  }
+
+  (lib.mkIf (cfg.settings != { }) {
     home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       mkdir -p "$HOME/.claude"
       if [ -s "$HOME/.claude/settings.json" ]; then
@@ -49,5 +60,6 @@ in {
         install -m644 ${settingsFile} "$HOME/.claude/settings.json"
       fi
     '';
-  };
+  })
+  ]);
 }
