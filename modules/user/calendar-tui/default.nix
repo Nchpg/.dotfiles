@@ -69,7 +69,7 @@ in {
   options.userSettings.calendarTui = {
     enable = lib.mkEnableOption "calendar-tui (ikhal + vdirsyncer Google Calendar)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

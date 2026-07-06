@@ -15,7 +15,7 @@ in {
   options.userSettings.bluetoothPicker = {
     enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, ... }:
+{ config, lib, ... }:
 
 # Gestion du swap, en trois briques indépendantes (chacune opt-in) :
 #   - zram     : swap compressé EN RAM (zstd ~3:1). Aucune usure SSD, ordres de

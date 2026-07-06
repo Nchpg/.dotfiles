@@ -10,7 +10,7 @@
 # volume-mixer, bluetooth-picker, lg-control et calendar-tui.
 let
   cfg = config.userSettings.waybar;
-  pkgs = cfg.pkgs;
+  inherit (cfg) pkgs;
 
   c = config.lib.stylix.colors.withHashtag;
   font = config.stylix.fonts.sansSerif.name;
@@ -123,7 +123,7 @@ let
   # weatherCities). Source unique : le menu XML et les actions sont générés à
   # partir de cette liste. Le choix courant est lui persisté hors du store
   # (cf. weather.sh), donc il survit aux reboots et rebuilds.
-  weatherCities = cfg.weatherCities;
+  inherit (cfg) weatherCities;
 
   # Signal temps-réel qui réveille le module météo (relance weather.sh sans
   # attendre l'intervalle). Source unique : utilisé pour `signal` côté waybar ET
@@ -193,7 +193,7 @@ let
   # brightnessctl), séparateur, et le pas ±5 % (mêmes commandes que la molette,
   # baisse plancher à 1 %). Source unique = backlightPresets. Id GTK préfixé
   # "pct" (pas de chiffre en tête) ; "mode"/"inc"/"dec" reliés aux actions.
-  backlightPresets = cfg.backlightPresets;
+  inherit (cfg) backlightPresets;
   backlightMenuActions = lib.listToAttrs
     (map
       (p: lib.nameValuePair "pct${toString p}"
@@ -250,7 +250,7 @@ in {
     enable = lib.mkEnableOption "waybar (remplace la swaybar native)";
 
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

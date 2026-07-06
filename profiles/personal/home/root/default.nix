@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ lib, pkgs-stable, ... }:
 
 {
   config = lib.mkDefault {

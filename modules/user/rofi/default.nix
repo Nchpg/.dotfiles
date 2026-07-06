@@ -4,12 +4,12 @@ let
   cfg = config.userSettings.rofi;
   c = config.lib.stylix.colors.withHashtag;
   font = config.stylix.fonts.sansSerif.name;
-  fontSize = toString (config.stylix.fonts.sizes.applications);
+  fontSize = toString config.stylix.fonts.sizes.applications;
 in {
   options.userSettings.rofi = {
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

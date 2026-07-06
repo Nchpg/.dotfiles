@@ -41,7 +41,7 @@ in {
   options.userSettings.wifiPicker = {
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

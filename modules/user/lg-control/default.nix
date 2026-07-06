@@ -97,7 +97,7 @@ in {
   options.userSettings.lgControl = {
     enable = lib.mkEnableOption "TUI de contrôle LG (ventilateur, profil alim)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

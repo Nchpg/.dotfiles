@@ -87,7 +87,7 @@ in {
       enable = lib.mkEnableOption "Microsoft Teams via teams-for-linux (wrapper Electron)";
 
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };
@@ -118,7 +118,7 @@ in {
       };
 
       settings = lib.mkOption {
-        type = jsonFormat.type;
+        inherit (jsonFormat) type;
         default = {
           # Désactive la fenêtre d'aperçu (« thumbnail ») de partage d'écran,
           # toujours-au-dessus, qui s'ouvre en grand et fait un effet miroir

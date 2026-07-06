@@ -1,12 +1,10 @@
-{ config, lib, pkgs-stable, pkgs-unstable, self, ... }:
+{ config, lib, pkgs-stable, ... }:
 
-let
-  cfg = config.userSettings;
-in {
+{
   options = {
     userSettings = {
       defaultPkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = pkgs-stable;
         description = "Default pkgs to use";
       };

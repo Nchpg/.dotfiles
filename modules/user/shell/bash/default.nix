@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings.shell.bash;
@@ -7,7 +7,7 @@ in {
     userSettings.shell.bash = {
       enable = lib.mkEnableOption "Enable bash";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

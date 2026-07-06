@@ -1,8 +1,7 @@
-{ config, lib, pkgs-stable, pkgs-unstable, inputs, ... }:
+{ lib, pkgs-stable, pkgs-unstable, ... }:
 
 {
-  config = lib.mkMerge [
-    (lib.mkDefault {
+  config = lib.mkDefault {
 
     userSettings = {
       defaultPkgs = pkgs-stable;
@@ -184,6 +183,5 @@
         default = "kitty";
       };
     };
-    })
-  ];
+  };
 }

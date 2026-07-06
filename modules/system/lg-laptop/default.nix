@@ -6,13 +6,13 @@ let
   # Attribut du driver LG qu'on veut rendre modifiable sans root (via le TUI).
   # La limite batterie n'y est pas : elle est gérée par un service systemd (cf. plus bas).
   attrs = "/sys/devices/platform/lg-laptop/fan_mode";
-  coreutils = pkgs-stable.coreutils;
+  inherit (pkgs-stable) coreutils;
 
   # Attribut vendeur LG du seuil de charge. On l'utilise (plutôt que l'interface
   # standard charge_control_end_threshold, qui le reflète) parce que c'est celui
   # dont on a vérifié qu'il est inscriptible et effectif sur cette machine.
   threshold = "/sys/devices/platform/lg-laptop/battery_care_limit";
-  bash = pkgs-stable.bash;
+  inherit (pkgs-stable) bash;
 in {
   options = {
     systemSettings.lgLaptop = {

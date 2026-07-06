@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.systemSettings.window-manager.gnome;

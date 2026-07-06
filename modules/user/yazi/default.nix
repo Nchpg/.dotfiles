@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings.yazi;
@@ -8,7 +8,7 @@ in {
       enable = lib.mkEnableOption "Enable yazi";
 
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

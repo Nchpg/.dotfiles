@@ -2,7 +2,7 @@
 
 let
   cfg = config.userSettings.displays;
-  pkgs = cfg.pkgs;
+  inherit (cfg) pkgs;
 
   # Wrapper qui SHADOW le binaire `nwg-displays`. Toute invocation — terminal,
   # rofi/.desktop, $mod+o, n'importe quoi — passe par cette logique unique, et
@@ -59,7 +59,7 @@ in {
   options.userSettings.displays = {
     enable = lib.mkEnableOption "gestion des écrans externes / HDMI via la GUI nwg-displays";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };

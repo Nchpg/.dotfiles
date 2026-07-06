@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, ... }:
+{ config, lib, pkgs-stable, ... }:
 
 let
   cfg = config.userSettings.neovim;
@@ -7,7 +7,7 @@ in {
     userSettings.neovim = {
       enable = lib.mkEnableOption "Enable neovim";
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };

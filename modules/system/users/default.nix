@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, ... }:
+{ config, lib, ... }:
 
 {
   options = {
@@ -51,7 +51,7 @@
 
     users.users = builtins.listToAttrs
       (map (user: {
-        name = user.name;
+        inherit (user) name;
         value = {
           isNormalUser = true;
           # libvirtd n'est PAS dans la base commune : le groupe est quasi
@@ -68,7 +68,7 @@
 
     home-manager.users = builtins.listToAttrs
       (map (user: {
-        name = user.name;
+        inherit (user) name;
         value = {
           home.username = user.name;
           home.homeDirectory = "/home/"+user.name;

@@ -1,4 +1,4 @@
-{ config, lib, pkgs-stable, pkgs-unstable, stylix, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.userSettings.bat;
@@ -6,7 +6,7 @@ in {
   options = {
     userSettings.bat = {
       pkgs = lib.mkOption {
-        type = lib.types.attrs;
+        type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
         description = "Pkgs to use";
       };
@@ -22,9 +22,9 @@ in {
 
 
     home.packages =
-      (with cfg.pkgs; [
+      with cfg.pkgs; [
         bat-extras.batgrep
         bat-extras.batman
-      ]);
+      ];
   };
 }

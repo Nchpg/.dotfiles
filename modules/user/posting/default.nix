@@ -7,7 +7,7 @@ in {
   options.userSettings.posting = {
     enable = lib.mkEnableOption "Enable posting (TUI HTTP client)";
     pkgs = lib.mkOption {
-      type = lib.types.attrs;
+      type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
       description = "Pkgs to use";
     };
