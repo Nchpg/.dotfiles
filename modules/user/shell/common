@@ -33,10 +33,6 @@ alias fanperf="sudo ec_probe write 0xCF 0x22"
 alias bash='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/bash'
 alias zsh='FROM=$0 PATH_NIX="$PATH" ~/.nix-profile/bin/zsh'
 
-alias dev-python="VIRTUAL_ENV="" nix develop $MY_FLAKE#python"
-alias dev-c="nix develop $MY_FLAKE#c"
-alias dev-xpu="nix develop $MY_FLAKE#xpu"
-
 alias gemini="nix run github:nixos/nixpkgs/nixpkgs-unstable#gemini-cli"
 alias opencode="nix run github:nixos/nixpkgs/nixpkgs-unstable#opencode"
 alias codex="nix run github:nixos/nixpkgs/nixpkgs-unstable#codex"

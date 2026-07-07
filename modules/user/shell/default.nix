@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs-unstable,
+  devShellNames ? [ ],
   ...
 }:
 
@@ -9,6 +10,13 @@ let
   cfg = config.userSettings.shell;
 
   shells = lib.attrNames (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./.));
+
+  # Un alias `dev-<name>` par devshell auto-découvert dans devshells/ (cf.
+  # flake.nix). `VIRTUAL_ENV=""` évite qu'un venv actif dans le shell courant
+  # fuite dans le nouveau `nix develop`.
+  devShellAliases = lib.concatMapStringsSep "\n" (
+    name: ''alias dev-${name}="VIRTUAL_ENV="" nix develop $MY_FLAKE#${name}"''
+  ) devShellNames;
 in
 {
   options = {
@@ -23,6 +31,11 @@ in
         readOnly = true;
         description = "List of available shells";
       };
+      devShellAliases = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        description = "Generated `dev-<name>` aliases, one per devshells/*.nix";
+      };
       pkgs = lib.mkOption {
         type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
@@ -33,6 +46,7 @@ in
 
   config = {
     userSettings.shell.list = shells;
+    userSettings.shell.devShellAliases = devShellAliases;
 
     home.packages = with cfg.pkgs; [
       delta

@@ -26,6 +26,7 @@ in
 
       interactiveShellInit = builtins.concatStringsSep "\n" [
         (builtins.readFile ../common)
+        config.userSettings.shell.devShellAliases
         (builtins.readFile ./fzf_wrapper.fish)
         (builtins.readFile ./.fish)
       ];
