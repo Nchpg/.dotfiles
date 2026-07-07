@@ -149,6 +149,16 @@ setdev() {
   direnv allow
 }
 
+# Complétions fournies par un devshell (ex. rmkernel dans devshells/python.nix).
+# Équivalent de NIX_DEVSHELL_FISH_COMPLETIONS côté fish.
+if [[ -n "$NIX_DEVSHELL_ZSH_COMPLETIONS" ]]; then
+  fpath=($NIX_DEVSHELL_ZSH_COMPLETIONS $fpath)
+  for f in $NIX_DEVSHELL_ZSH_COMPLETIONS/_*(N:t); do
+    autoload -Uz $f
+    compdef $f ${f#_}
+  done
+fi
+
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char
 
