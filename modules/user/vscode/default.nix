@@ -110,6 +110,9 @@ let
       # go
       golang.go
 
+      # scala
+      scala-lang.scala
+
       # nix
       bbenoist.nix
 
