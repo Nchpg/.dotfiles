@@ -20,6 +20,7 @@ in
       package = cfg.pkgs.bash;
       bashrcExtra = builtins.concatStringsSep "\n" [
         (builtins.readFile ../common)
+        config.userSettings.shell.devShellAliases
         (builtins.readFile ./.bashrc)
       ];
     };

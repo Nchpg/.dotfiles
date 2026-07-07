@@ -75,6 +75,21 @@
           inherit host;
         }) hosts
       ) profiles;
+
+      # Un devshell = un fichier devshells/<name>.nix ; auto-découvert comme
+      # profiles/hosts ci-dessus. `dev-<name>` est généré à partir de la même
+      # liste (cf. modules/user/shell) : un nouveau fichier = un nouveau
+      # devShell + un nouvel alias, sans rien déclarer à la main.
+      devShellNames = builtins.filter (x: x != null) (
+        lib.mapAttrsToList (
+          name: type:
+          if type == "regular" && lib.hasSuffix ".nix" name then lib.removeSuffix ".nix" name else null
+        ) (builtins.readDir ./devshells)
+      );
+
+      # Devshells qui doivent matcher la stack système (drivers unstable) au
+      # lieu du pkgs-stable par défaut.
+      unstableDevShells = [ "xpu" ];
     in
     {
       nixosConfigurations = builtins.listToAttrs (
@@ -107,6 +122,7 @@
                   inherit pkgs-stable;
                   inherit inputs;
                   inherit self;
+                  inherit devShellNames;
                 };
               }
             ];
@@ -124,13 +140,14 @@
       # (nixfmt = l'ancien nixfmt-rfc-style, renommé en 26.05.)
       formatter.${system} = pkgs-stable.nixfmt;
 
-      devShells.${system} = {
-        python = import ./devshells/python.nix { pkgs = pkgs-stable; };
-        c = import ./devshells/c.nix { pkgs = pkgs-stable; };
-        # Intel Arc / XPU PyTorch — uses pkgs-unstable to match the system
-        # graphics stack (intel-compute-runtime / level-zero).
-        xpu = import ./devshells/xpu.nix { pkgs = pkgs-unstable; };
-      };
+      devShells.${system} = builtins.listToAttrs (
+        map (name: {
+          inherit name;
+          value = import (./devshells + "/${name}.nix") {
+            pkgs = if builtins.elem name unstableDevShells then pkgs-unstable else pkgs-stable;
+          };
+        }) devShellNames
+      );
 
     };
 }
