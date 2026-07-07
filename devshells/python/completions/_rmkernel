@@ -1,0 +1,4 @@
+#compdef rmkernel
+local -a kernels
+kernels=(${(f)"$(command ls -1 "$HOME/.local/share/jupyter/kernels" 2>/dev/null)"})
+_describe 'kernel jupyter' kernels
