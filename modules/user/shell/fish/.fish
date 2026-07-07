@@ -3,6 +3,12 @@ for profile in (string split " " $NIX_PROFILES)
     set -a fish_complete_path $profile/share/fish/vendor_completions.d
 end
 
+# Complétions fournies par un devshell (ex. rmkernel dans devshells/python.nix).
+# Le fish nixpkgs ignore XDG_DATA_DIRS, d'où cette variable dédiée.
+if set -q NIX_DEVSHELL_FISH_COMPLETIONS
+    set -a fish_complete_path $NIX_DEVSHELL_FISH_COMPLETIONS
+end
+
 
 set -Ux fish_history_file "$HOME/.local/share/fish/fish_history"
 set -Ux fish_history_max 10000
