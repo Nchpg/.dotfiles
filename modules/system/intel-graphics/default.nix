@@ -56,9 +56,6 @@ in
     environment.sessionVariables = {
       # Décodage vidéo VA-API via intel-media-driver.
       LIBVA_DRIVER_NAME = "iHD";
-      # /!\ Compromis sécurité assumé : désactive le sandbox RDD de Firefox
-      # pour que le décodage VA-API fonctionne. À retester sans, un jour.
-      MOZ_DISABLE_RDD_SANDBOX = "1";
     };
   };
 }
