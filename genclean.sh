@@ -154,7 +154,7 @@ else
 fi
 
 # --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
-echo "Rebuild du système via la flake..."
-sudo nixos-rebuild switch --flake .
+echo "Rebuild du système via la commande rebuild..."
+rebuild -y
 
 echo "Nettoyage terminé."
