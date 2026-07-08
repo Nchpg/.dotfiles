@@ -136,9 +136,8 @@
         }) targets
       );
 
-      # `nix fmt` → formate le repo. Exposé aussi pour les éditeurs/CI.
-      # (nixfmt = l'ancien nixfmt-rfc-style, renommé en 26.05.)
-      formatter.${system} = pkgs-stable.nixfmt;
+      # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.
+      formatter.${system} = import ./formatter.nix { pkgs = pkgs-stable; };
 
       devShells.${system} = builtins.listToAttrs (
         map (name: {
