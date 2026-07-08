@@ -7,6 +7,7 @@
 }:
 
 let
+  inherit (config.home) homeDirectory;
   cfg = config.userSettings.vscode;
 
   # Extensions marketplace (hors nixpkgs) : données dans extensions.json plutôt
@@ -182,13 +183,13 @@ in
     home.activation.vscodeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
       ''
         # Migration : l'ancien déploiement laissait un symlink read-only du store.
-        target="${config.home.homeDirectory}/.config/Code/User/settings.json"
+        target="${homeDirectory}/.config/Code/User/settings.json"
         [ -L "$target" ] && rm "$target"
       ''
       + import ../../../lib/deep-merge-json-activation.nix {
         inherit lib;
         pkgs = cfg.pkgs;
-        targetPath = "${config.home.homeDirectory}/.config/Code/User/settings.json";
+        targetPath = "${homeDirectory}/.config/Code/User/settings.json";
         sourceFile = settingsFile;
         label = "vscode";
       }
