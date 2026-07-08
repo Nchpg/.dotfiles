@@ -21,15 +21,7 @@ in
 
   config = lib.mkMerge [
     (lib.mkIf cfg.docker.enable {
-      virtualisation.docker = {
-        enable = true;
-        daemon.settings = {
-          dns = [
-            "8.8.8.8"
-            "1.1.1.1"
-          ];
-        };
-      };
+      virtualisation.docker.enable = true;
     })
 
     (lib.mkIf cfg.libvirt.enable {
