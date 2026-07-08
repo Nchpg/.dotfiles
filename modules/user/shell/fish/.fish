@@ -144,7 +144,7 @@ function nix-shell
 end
 
 function nix
-  if test $argv[1] = "develop"
+  if test (count $argv) -gt 0; and test "$argv[1]" = "develop"
     if contains -- "--command" $argv
       command nix $argv
     else
