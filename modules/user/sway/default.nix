@@ -45,20 +45,28 @@ let
     }'';
   barBlock = if useWaybar then "" else swaybarBlock;
 
-  finalConfigContent =
-    lib.replaceStrings
-      [ "@terminal@" "@tmuxBind@" "@bar@" ]
-      [ config.userSettings.terminal.default tmuxBind barBlock ]
-      templateContent;
-
-  # Même rendu que le bind Ctrl+Échap du config.template ; -f (daemonize) en
-  # plus, requis par swayidle (sinon le lock bloquerait l'événement before-sleep).
-  lockCmd =
-    "${cfg.pkgs.swaylock-effects}/bin/swaylock -f --screenshots --clock --indicator"
+  # Args swaylock partagés par le bind clavier (config.template, @lockCmd@) et
+  # swayidle ci-dessous : une seule définition, plus de divergence possible
+  # entre les deux si l'effet visuel (blur, couleurs) change un jour.
+  lockArgs =
+    "--screenshots --clock --indicator"
     + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
     + " --grace 2 --fade-in 1";
+  swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
+  # Bind clavier : premier plan, sway garde la main sur l'event loop.
+  lockCmd = "${swaylockBin} ${lockArgs}";
+  # swayidle : -f (daemonize) requis, sinon le lock bloquerait l'événement
+  # before-sleep (swayidle attend la fin de la commande avant de continuer).
+  lockCmdDaemonized = "${swaylockBin} -f ${lockArgs}";
+
+  finalConfigContent =
+    lib.replaceStrings
+      [ "@terminal@" "@tmuxBind@" "@bar@" "@lockCmd@" ]
+      [ config.userSettings.terminal.default tmuxBind barBlock lockCmd ]
+      templateContent;
+
   swaymsgBin = "${cfg.pkgs.sway}/bin/swaymsg";
 in
 {
@@ -119,7 +127,7 @@ in
       timeouts = [
         {
           timeout = 600;
-          command = lockCmd;
+          command = lockCmdDaemonized;
         }
         {
           timeout = 900;
@@ -127,7 +135,7 @@ in
           resumeCommand = "${swaymsgBin} 'output * power on'";
         }
       ];
-      events."before-sleep" = lockCmd;
+      events."before-sleep" = lockCmdDaemonized;
     };
 
     # NB : pas de stylix.targets.sway ici — ce target ne thémise que
