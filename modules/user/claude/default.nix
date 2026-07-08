@@ -81,18 +81,15 @@ in
       })
 
       (lib.mkIf (cfg.settings != { }) {
-        home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-          mkdir -p "$HOME/.claude"
-          if [ -s "$HOME/.claude/settings.json" ]; then
-            # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
-            ${cfg.pkgs.jq}/bin/jq -s '.[0] * .[1]' \
-              "$HOME/.claude/settings.json" ${settingsFile} \
-              > "$HOME/.claude/settings.json.hm-tmp" \
-              && mv "$HOME/.claude/settings.json.hm-tmp" "$HOME/.claude/settings.json"
-          else
-            install -m644 ${settingsFile} "$HOME/.claude/settings.json"
-          fi
-        '';
+        home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+          import ../../../lib/deep-merge-json-activation.nix {
+            inherit lib;
+            pkgs = cfg.pkgs;
+            targetPath = "${config.home.homeDirectory}/.claude/settings.json";
+            sourceFile = settingsFile;
+            label = "claude";
+          }
+        );
       })
     ]
   );
