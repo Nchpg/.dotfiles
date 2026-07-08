@@ -156,11 +156,6 @@ function nix
 end
 
 
-function fish_preexec --on-event fish_preexec
-    set -g __fish_last_cmd $argv[1]
-    echo $__fish_last_cmd >> ~/last_cmd.txt
-end
-
 function clear
     set -g __fish_first_prompt 1
     set -g __fish_nb_prompt 0
