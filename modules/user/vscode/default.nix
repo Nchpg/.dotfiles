@@ -237,23 +237,19 @@ in
     # au runtime est préservé. VS Code n'écrit jamais de commentaires ; si une
     # édition MANUELLE ajoute du JSONC, jq ne peut plus parser → on n'impose
     # rien ce coup-ci et on prévient, plutôt que d'écraser le fichier.
-    home.activation.vscodeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-      mkdir -p "$HOME/.config/Code/User"
-      target="$HOME/.config/Code/User/settings.json"
-      # Migration : l'ancien déploiement laissait un symlink read-only du store.
-      [ -L "$target" ] && rm "$target"
-      if [ -s "$target" ]; then
-        if ${cfg.pkgs.jq}/bin/jq -e . "$target" >/dev/null 2>&1; then
-          # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
-          ${cfg.pkgs.jq}/bin/jq -s '.[0] * .[1]' "$target" ${settingsFile} \
-            > "$target.hm-tmp" \
-            && mv "$target.hm-tmp" "$target"
-        else
-          echo "vscode: $target n'est pas du JSON strict (commentaires ajoutés à la main ?) — clés déclaratives non imposées." >&2
-        fi
-      else
-        install -m644 ${settingsFile} "$target"
-      fi
-    '';
+    home.activation.vscodeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+      ''
+        # Migration : l'ancien déploiement laissait un symlink read-only du store.
+        target="${config.home.homeDirectory}/.config/Code/User/settings.json"
+        [ -L "$target" ] && rm "$target"
+      ''
+      + import ../../../lib/deep-merge-json-activation.nix {
+        inherit lib;
+        pkgs = cfg.pkgs;
+        targetPath = "${config.home.homeDirectory}/.config/Code/User/settings.json";
+        sourceFile = settingsFile;
+        label = "vscode";
+      }
+    );
   };
 }
