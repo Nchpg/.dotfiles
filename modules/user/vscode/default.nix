@@ -8,90 +8,13 @@
 
 let
   cfg = config.userSettings.vscode;
-  marketplaceExtensions = cfg.pkgs.vscode-utils.extensionsFromVscodeMarketplace [
-    # claude code
-    {
-      name = "claude-code";
-      publisher = "anthropic";
-      version = "2.1.142";
-      sha256 = "sha256-EZqihuVQZUVtW8lTM2nIvdX/CxMoS4Z2Cyu0ir4sALw=";
-      targetPlatform = "linux-x64";
-    }
 
-    # outils
-    {
-      name = "shift-shift";
-      publisher = "ahgood";
-      version = "0.0.5";
-      sha256 = "sha256-r6qzsQTQrTbZiloFdyH5XtT2P2Mf3uOV70iCNuJa6HQ=";
-    }
-    {
-      name = "vscode-containers";
-      publisher = "ms-azuretools";
-      version = "2.2.0";
-      sha256 = "sha256-UxWsu7AU28plnT0QMdpPJrcYZIV09FeC+rmYKf39a6M=";
-    }
-    {
-      name = "remote-explorer";
-      publisher = "ms-vscode";
-      version = "0.5.0";
-      sha256 = "sha256-BNsnetpddxv3Y9MjZERU5jOq1I2g6BNFF1rD7Agpmr8=";
-    }
-
-    # databases
-    {
-      name = "vscode-postgresql-client2";
-      publisher = "cweijan";
-      version = "8.4.2";
-      sha256 = "sha256-fZa5PpIfYo8FIrEqVIW4uQPRv8tCf9WMLp5jZb1uhno=";
-    }
-
-    # c/cpp
-    {
-      name = "cpptools-themes";
-      publisher = "ms-vscode";
-      version = "2.0.0";
-      sha256 = "sha256-YWA5UsA+cgvI66uB9d9smwghmsqf3vZPFNpSCK+DJxc=";
-    }
-
-    # nginx
-    {
-      name = "vscode-nginx";
-      publisher = "william-voyek";
-      version = "0.7.2";
-      sha256 = "sha256-mAmncewwAeagVqwWWrmYosMyw2AT3W0sx8jl2mCeimg=";
-    }
-
-    # github copilot
-    {
-      name = "copilot-chat";
-      publisher = "github";
-      version = "0.31.5";
-      sha256 = "sha256-D7k+hA786w7IZHVI+Og6vHGAAohpfpuOmmCcDUU0WsY=";
-    }
-    {
-      name = "copilot";
-      publisher = "github";
-      version = "1.388.0";
-      sha256 = "sha256-7RjK8+PNI+rIuRQfCwpvswAiz991dacRO2qYhcv1vhk=";
-    }
-
-    # icons
-    {
-      name = "gruvbox-material-icon-theme";
-      publisher = "jonathanharty";
-      version = "1.1.5";
-      sha256 = "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY=";
-    }
-
-    # cypher
-    {
-      name = "cypher-query-language";
-      publisher = "jakeboone02";
-      version = "2.0.0";
-      sha256 = "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc=";
-    }
-  ];
+  # Extensions marketplace (hors nixpkgs) : données dans extensions.json plutôt
+  # qu'en dur ici, pour être lisibles ET réinscriptibles par un script (cf.
+  # update-extensions.sh / commande vscode-update-extensions plus bas).
+  marketplaceExtensions = cfg.pkgs.vscode-utils.extensionsFromVscodeMarketplace (
+    builtins.attrValues (builtins.fromJSON (builtins.readFile ./extensions.json))
+  );
 
   allVscodeExtensions =
     with cfg.pkgs.vscode-extensions;
@@ -194,6 +117,23 @@ let
     ${cfg.pkgs.jq}/bin/jq . ${cfg.pkgs.writeText "vscode-settings-raw.json" finalConfigContent} > $out
   '';
 
+  # Commande `vscode-update-extensions` : interroge l'API du VS Code Marketplace
+  # pour chaque extension d'extensions.json et bump version+sha256 (via `nix
+  # store prefetch-file`) pour celles qui ont bougé. Manuelle, comme `rebuild -u`
+  # pour claude-code — jamais en CI ni au rebuild (cf. update-extensions.sh).
+  updateExtensionsCmd = cfg.pkgs.writeShellApplication {
+    name = "vscode-update-extensions";
+    runtimeInputs = with cfg.pkgs; [
+      curl
+      jq
+      nix
+    ];
+    # readFile inclut son propre shebang, redondant avec celui posé par
+    # writeShellApplication : il devient un simple commentaire une fois en
+    # 2e ligne (même pattern que mkScript dans modules/user/waybar).
+    text = builtins.readFile ./update-extensions.sh;
+  };
+
 in
 {
   options = {
@@ -223,6 +163,8 @@ in
           parskip
         ]
       ))
+      # `vscode-update-extensions` : bump manuel de extensions.json (cf. let).
+      updateExtensionsCmd
     ];
 
     home.file = {

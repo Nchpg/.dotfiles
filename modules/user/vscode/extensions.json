@@ -1,0 +1,69 @@
+{
+  "anthropic.claude-code": {
+    "publisher": "anthropic",
+    "name": "claude-code",
+    "version": "2.1.142",
+    "sha256": "sha256-EZqihuVQZUVtW8lTM2nIvdX/CxMoS4Z2Cyu0ir4sALw=",
+    "targetPlatform": "linux-x64"
+  },
+  "ahgood.shift-shift": {
+    "publisher": "ahgood",
+    "name": "shift-shift",
+    "version": "0.0.5",
+    "sha256": "sha256-r6qzsQTQrTbZiloFdyH5XtT2P2Mf3uOV70iCNuJa6HQ="
+  },
+  "ms-azuretools.vscode-containers": {
+    "publisher": "ms-azuretools",
+    "name": "vscode-containers",
+    "version": "2.2.0",
+    "sha256": "sha256-UxWsu7AU28plnT0QMdpPJrcYZIV09FeC+rmYKf39a6M="
+  },
+  "ms-vscode.remote-explorer": {
+    "publisher": "ms-vscode",
+    "name": "remote-explorer",
+    "version": "0.5.0",
+    "sha256": "sha256-BNsnetpddxv3Y9MjZERU5jOq1I2g6BNFF1rD7Agpmr8="
+  },
+  "cweijan.vscode-postgresql-client2": {
+    "publisher": "cweijan",
+    "name": "vscode-postgresql-client2",
+    "version": "8.4.2",
+    "sha256": "sha256-fZa5PpIfYo8FIrEqVIW4uQPRv8tCf9WMLp5jZb1uhno="
+  },
+  "ms-vscode.cpptools-themes": {
+    "publisher": "ms-vscode",
+    "name": "cpptools-themes",
+    "version": "2.0.0",
+    "sha256": "sha256-YWA5UsA+cgvI66uB9d9smwghmsqf3vZPFNpSCK+DJxc="
+  },
+  "william-voyek.vscode-nginx": {
+    "publisher": "william-voyek",
+    "name": "vscode-nginx",
+    "version": "0.7.2",
+    "sha256": "sha256-mAmncewwAeagVqwWWrmYosMyw2AT3W0sx8jl2mCeimg="
+  },
+  "github.copilot-chat": {
+    "publisher": "github",
+    "name": "copilot-chat",
+    "version": "0.31.5",
+    "sha256": "sha256-D7k+hA786w7IZHVI+Og6vHGAAohpfpuOmmCcDUU0WsY="
+  },
+  "github.copilot": {
+    "publisher": "github",
+    "name": "copilot",
+    "version": "1.388.0",
+    "sha256": "sha256-7RjK8+PNI+rIuRQfCwpvswAiz991dacRO2qYhcv1vhk="
+  },
+  "jonathanharty.gruvbox-material-icon-theme": {
+    "publisher": "jonathanharty",
+    "name": "gruvbox-material-icon-theme",
+    "version": "1.1.5",
+    "sha256": "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY="
+  },
+  "jakeboone02.cypher-query-language": {
+    "publisher": "jakeboone02",
+    "name": "cypher-query-language",
+    "version": "2.0.0",
+    "sha256": "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc="
+  }
+}
