@@ -2,8 +2,8 @@
   "anthropic.claude-code": {
     "publisher": "anthropic",
     "name": "claude-code",
-    "version": "2.1.142",
-    "sha256": "sha256-EZqihuVQZUVtW8lTM2nIvdX/CxMoS4Z2Cyu0ir4sALw=",
+    "version": "2.1.204",
+    "sha256": "sha256-cthRiuDJzTQSY/8I/W6dmkxBadVKyomlssUMyEOy0Nc=",
     "targetPlatform": "linux-x64"
   },
   "ahgood.shift-shift": {
@@ -15,20 +15,20 @@
   "ms-azuretools.vscode-containers": {
     "publisher": "ms-azuretools",
     "name": "vscode-containers",
-    "version": "2.2.0",
-    "sha256": "sha256-UxWsu7AU28plnT0QMdpPJrcYZIV09FeC+rmYKf39a6M="
+    "version": "2.4.5",
+    "sha256": "sha256-Js+403StdF3WmlHOiB78UKM77njReuKOiQ9NHnFljs8="
   },
   "ms-vscode.remote-explorer": {
     "publisher": "ms-vscode",
     "name": "remote-explorer",
-    "version": "0.5.0",
-    "sha256": "sha256-BNsnetpddxv3Y9MjZERU5jOq1I2g6BNFF1rD7Agpmr8="
+    "version": "0.6.2026031809",
+    "sha256": "sha256-WRg8ObPVQMluuCW/dBM2ibBDW/zc8cQQS5QQMfcpw2c="
   },
   "cweijan.vscode-postgresql-client2": {
     "publisher": "cweijan",
     "name": "vscode-postgresql-client2",
-    "version": "8.4.2",
-    "sha256": "sha256-fZa5PpIfYo8FIrEqVIW4uQPRv8tCf9WMLp5jZb1uhno="
+    "version": "9.0.2",
+    "sha256": "sha256-BmcVzL8DV3E+oZ/ciIwChbzT/1kdXkovZ60nii09jfw="
   },
   "ms-vscode.cpptools-themes": {
     "publisher": "ms-vscode",
@@ -45,8 +45,8 @@
   "github.copilot-chat": {
     "publisher": "github",
     "name": "copilot-chat",
-    "version": "0.31.5",
-    "sha256": "sha256-D7k+hA786w7IZHVI+Og6vHGAAohpfpuOmmCcDUU0WsY="
+    "version": "0.48.1",
+    "sha256": "sha256-eFLfYMFxvgtZtmwLsxfneMjD4jOg8/Uk0Eu/6+A6odY="
   },
   "github.copilot": {
     "publisher": "github",
