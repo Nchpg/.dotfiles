@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 {
   # Déclare qui détient la clé age de la machine. Consommé par le module
@@ -17,4 +17,13 @@
       };
     };
   };
+
+  config.assertions = [
+    {
+      assertion = lib.any (
+        user: user.name == config.systemSettings.sops.keyOwner
+      ) config.systemSettings.users;
+      message = "systemSettings.sops.keyOwner doit correspondre à un utilisateur déclaré dans systemSettings.users.";
+    }
+  ];
 }
