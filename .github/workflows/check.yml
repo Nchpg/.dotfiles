@@ -77,3 +77,14 @@ jobs:
             nix build ".#nixosConfigurations.$cfg.config.system.build.toplevel" --dry-run
             echo "::endgroup::"
           done
+
+      # Idem côté devshells (auto-découverts depuis devshells/, cf. flake.nix) :
+      # attrape une régression dans un devShells.<system>.<nom> sans attendre
+      # qu'un `nix develop` échoue sur machine.
+      - name: dry-run build of all devShells
+        run: |
+          for name in $(nix eval .#devShells.x86_64-linux --apply builtins.attrNames --json | jq -r '.[]'); do
+            echo "::group::$name"
+            nix build ".#devShells.x86_64-linux.$name" --dry-run
+            echo "::endgroup::"
+          done
