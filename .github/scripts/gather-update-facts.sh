@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Compare un flake.lock + extensions.json AVANT/APRÈS un bump et produit un
-# JSON de FAITS : pour chaque input flake racine dont le lock a changé, rev
-# avant/après, nombre de commits entre les deux (si c'est un dépôt GitHub) et
-# lien de comparaison. Idem pour les extensions VS Code dont la version a bougé.
+# JSON de FAITS : pour chaque input flake racine dont le lock a changé, date
+# + rev avant/après, nombre de commits entre les deux (si c'est un dépôt
+# GitHub) et lien de comparaison. Idem pour les extensions VS Code dont la
+# version a bougé. Si nixpkgs-stable change, compare aussi la version du
+# noyau (linuxPackages_latest) avant/après.
 #
 # Volontairement minimal : pas de contenu de commit récupéré ni interprété
 # (juste un compte + un lien) — consommé par render-pr-body.sh, qui construit
@@ -54,9 +56,14 @@ for name in $root_inputs; do
 
     old_rev=$(jq -r '.rev // empty' <<<"$old_locked")
     new_rev=$(jq -r '.rev // empty' <<<"$new_locked")
+    old_date=$(jq -r '.lastModified // empty' <<<"$old_locked")
+    new_date=$(jq -r '.lastModified // empty' <<<"$new_locked")
+    old_date=$([ -n "$old_date" ] && date -u -d "@${old_date}" +%Y-%m-%d || echo "")
+    new_date=$([ -n "$new_date" ] && date -u -d "@${new_date}" +%Y-%m-%d || echo "")
 
     entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" \
-        '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: null, commitCount: null}')
+        --arg oldDate "$old_date" --arg newDate "$new_date" \
+        '{name: $name, oldRev: $oldRev, newRev: $newRev, oldDate: $oldDate, newDate: $newDate, compareUrl: null, commitCount: null}')
 
     or=$(locked_owner_repo "$new_locked")
     owner=$(jq -r '.owner' <<<"$or")
@@ -66,12 +73,25 @@ for name in $root_inputs; do
         compare_url="https://github.com/${owner}/${repo}/compare/${old_rev}...${new_rev}"
         if compare_json=$(gh_api "https://api.github.com/repos/${owner}/${repo}/compare/${old_rev}...${new_rev}" 2>/dev/null); then
             ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare_json")
-            entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" \
-                --arg compareUrl "$compare_url" --argjson commitCount "$ahead_by" \
-                '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: $compareUrl, commitCount: $commitCount}')
+            entry=$(jq --arg compareUrl "$compare_url" --argjson commitCount "$ahead_by" \
+                '. + {compareUrl: $compareUrl, commitCount: $commitCount}' <<<"$entry")
         else
-            entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" --arg compareUrl "$compare_url" \
-                '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: $compareUrl, commitCount: null}')
+            entry=$(jq --arg compareUrl "$compare_url" '. + {compareUrl: $compareUrl}' <<<"$entry")
+        fi
+    fi
+
+    # Alerte changement de version de noyau : nixpkgs-stable fournit
+    # linuxPackages_latest (cf. modules/system/boot). On évalue la version du
+    # noyau aux deux revs pour distinguer un vrai bump de noyau d'un simple
+    # bump de nixpkgs sans impact sur le noyau.
+    if [ "$name" = "nixpkgs-stable" ] && [ -n "$old_rev" ] && [ -n "$new_rev" ]; then
+        kernel_attr="legacyPackages.x86_64-linux.linuxPackages_latest.kernel.version"
+        old_kernel=$(nix eval --raw "github:NixOS/nixpkgs/${old_rev}#${kernel_attr}" 2>/dev/null || echo "")
+        new_kernel=$(nix eval --raw "github:NixOS/nixpkgs/${new_rev}#${kernel_attr}" 2>/dev/null || echo "")
+        if [ -n "$old_kernel" ] && [ -n "$new_kernel" ]; then
+            kernel_changed=$([ "$old_kernel" != "$new_kernel" ] && echo true || echo false)
+            entry=$(jq --arg oldKernel "$old_kernel" --arg newKernel "$new_kernel" --argjson kernelChanged "$kernel_changed" \
+                '. + {oldKernelVersion: $oldKernel, newKernelVersion: $newKernel, kernelChanged: $kernelChanged}' <<<"$entry")
         fi
     fi
 

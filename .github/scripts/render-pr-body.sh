@@ -13,11 +13,23 @@ facts_file="$1"
 flake_count=$(jq '.flakeInputs | length' "$facts_file")
 ext_count=$(jq '.vscodeExtensions | length' "$facts_file")
 
+kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$facts_file")
+if [ "$kernel_changed" = "true" ]; then
+    echo "## ⚠️ Changement de version du noyau"
+    echo
+    jq -r '.flakeInputs[] | select(.kernelChanged == true) |
+      "Le noyau Linux passe de **\(.oldKernelVersion)** à **\(.newKernelVersion)** (via \(.name))."
+    ' "$facts_file"
+    echo
+fi
+
 if [ "$flake_count" -gt 0 ]; then
     echo "## Inputs flake"
     echo
     jq -r '.flakeInputs[] |
       "- **\(.name)** : " +
+      (if .oldDate != "" and .newDate != "" then "\(.oldDate) → \(.newDate)" else "date inconnue" end) +
+      ", " +
       (if .commitCount != null then "\(.commitCount) commit(s)" else "révision changée" end) +
       (if .compareUrl then " — [comparer sur GitHub](\(.compareUrl))" else "" end)
     ' "$facts_file"
