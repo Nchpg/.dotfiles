@@ -1,0 +1,61 @@
+name: weekly-update
+
+# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus) + des
+# extensions VS Code (extensions.json), puis ouverture d'une PR listant, par
+# input, le nombre de commits et un lien de comparaison GitHub. Rendu 100%
+# déterministe (pas de LLM) : aucun contenu de commit n'est résumé ni
+# interprété. Ne merge jamais automatiquement : le job `check` tourne sur la
+# PR comme sur n'importe quelle branche.
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # lundi 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - name: snapshot avant bump
+        run: |
+          cp flake.lock /tmp/flake.lock.before
+          cp modules/user/vscode/extensions.json /tmp/extensions.json.before
+
+      - name: bump des inputs flake
+        run: nix flake update
+
+      - name: bump des extensions vscode
+        run: MY_FLAKE="$PWD" bash modules/user/vscode/update-extensions.sh
+
+      - name: rassembler les faits (rev + nombre de commits par input)
+        id: facts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/gather-update-facts.sh \
+            /tmp/flake.lock.before flake.lock \
+            /tmp/extensions.json.before modules/user/vscode/extensions.json \
+            > /tmp/facts.json
+          changed=$(jq '(.flakeInputs | length) > 0 or (.vscodeExtensions | length) > 0' /tmp/facts.json)
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+      - name: générer le corps de la PR
+        if: steps.facts.outputs.changed == 'true'
+        run: .github/scripts/render-pr-body.sh /tmp/facts.json > /tmp/pr-body.md
+
+      - name: créer la PR
+        if: steps.facts.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: weekly flake + vscode extensions update"
+          branch: weekly-update
+          delete-branch: true
+          title: "chore: weekly flake + vscode extensions update"
+          body-path: /tmp/pr-body.md

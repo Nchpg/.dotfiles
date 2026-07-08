@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Compare un flake.lock + extensions.json AVANT/APRÈS un bump et produit un
+# JSON de FAITS : pour chaque input flake racine dont le lock a changé, rev
+# avant/après, nombre de commits entre les deux (si c'est un dépôt GitHub) et
+# lien de comparaison. Idem pour les extensions VS Code dont la version a bougé.
+#
+# Volontairement minimal : pas de contenu de commit récupéré ni interprété
+# (juste un compte + un lien) — consommé par render-pr-body.sh, qui construit
+# le corps de la PR de façon 100% déterministe (aucun LLM).
+#
+# Usage: gather-update-facts.sh <old-flake.lock> <new-flake.lock> <old-extensions.json> <new-extensions.json>
+# Nécessite GH_TOKEN dans l'environnement (auth API GitHub, sinon rate-limit
+# anonyme trop bas pour ~8 inputs).
+set -euo pipefail
+
+old_lock="$1"
+new_lock="$2"
+old_ext="$3"
+new_ext="$4"
+
+gh_api() {
+    curl -sf -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$@"
+}
+
+# owner/repo d'un node "locked" : direct si type=github, sinon extrait de
+# l'URL si c'est un type=git pointant vers github.com (ex. claude-code-nix).
+locked_owner_repo() {
+    local locked="$1"
+    local type owner repo url
+    type=$(jq -r '.type // empty' <<<"$locked")
+    if [ "$type" = "github" ]; then
+        owner=$(jq -r '.owner // empty' <<<"$locked")
+        repo=$(jq -r '.repo // empty' <<<"$locked")
+    elif [ "$type" = "git" ]; then
+        url=$(jq -r '.url // empty' <<<"$locked")
+        if [[ "$url" =~ ^https://github\.com/([^/]+)/([^/.]+)(\.git)?/?$ ]]; then
+            owner="${BASH_REMATCH[1]}"
+            repo="${BASH_REMATCH[2]}"
+        fi
+    fi
+    jq -n --arg owner "${owner:-}" --arg repo "${repo:-}" '{owner: $owner, repo: $repo}'
+}
+
+root_inputs=$(jq -r '.nodes.root.inputs | keys[]' "$new_lock")
+
+flake_facts="[]"
+for name in $root_inputs; do
+    old_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' "$old_lock")
+    new_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' "$new_lock")
+
+    if [ -z "$old_locked" ] || [ "$old_locked" = "$new_locked" ]; then
+        continue # input absent avant, ou inchangé
+    fi
+
+    old_rev=$(jq -r '.rev // empty' <<<"$old_locked")
+    new_rev=$(jq -r '.rev // empty' <<<"$new_locked")
+
+    entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" \
+        '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: null, commitCount: null}')
+
+    or=$(locked_owner_repo "$new_locked")
+    owner=$(jq -r '.owner' <<<"$or")
+    repo=$(jq -r '.repo' <<<"$or")
+
+    if [ -n "$owner" ] && [ -n "$repo" ] && [ -n "$old_rev" ] && [ -n "$new_rev" ]; then
+        compare_url="https://github.com/${owner}/${repo}/compare/${old_rev}...${new_rev}"
+        if compare_json=$(gh_api "https://api.github.com/repos/${owner}/${repo}/compare/${old_rev}...${new_rev}" 2>/dev/null); then
+            ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare_json")
+            entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" \
+                --arg compareUrl "$compare_url" --argjson commitCount "$ahead_by" \
+                '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: $compareUrl, commitCount: $commitCount}')
+        else
+            entry=$(jq -n --arg name "$name" --arg oldRev "$old_rev" --arg newRev "$new_rev" --arg compareUrl "$compare_url" \
+                '{name: $name, oldRev: $oldRev, newRev: $newRev, compareUrl: $compareUrl, commitCount: null}')
+        fi
+    fi
+
+    flake_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$flake_facts")
+done
+
+vscode_facts=$(jq -n --slurpfile old "$old_ext" --slurpfile new "$new_ext" '
+  ($old[0]) as $o | ($new[0]) as $n |
+  [ $n | keys[] | select($o[.].version != $n[.].version) | {
+      key: .,
+      oldVersion: $o[.].version,
+      newVersion: $n[.].version
+    }
+  ]
+')
+
+jq -n --argjson flakeInputs "$flake_facts" --argjson vscodeExtensions "$vscode_facts" \
+    '{flakeInputs: $flakeInputs, vscodeExtensions: $vscodeExtensions}'
