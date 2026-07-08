@@ -13,6 +13,7 @@
 # clés de `settings` (elles sont déclaratives → ré-appliquées à chaque rebuild),
 # tout le reste que Claude gère au runtime est préservé.
 let
+  inherit (config.home) homeDirectory;
   cfg = config.userSettings.claude;
   jsonFormat = cfg.pkgs.formats.json { };
   settingsFile = jsonFormat.generate "claude-settings.json" cfg.settings;
@@ -73,7 +74,7 @@ in
       (lib.mkIf cfg.statusline.enable {
         userSettings.claude.settings.statusLine = {
           type = "command";
-          command = "${config.home.homeDirectory}/.claude/statusline.sh";
+          command = "${homeDirectory}/.claude/statusline.sh";
         };
         home.file.".claude/statusline.sh".source = cfg.pkgs.writeShellScript "claude-statusline" ''
           exec ${cfg.pkgs.nodejs-slim}/bin/node ${./statusline.js} "$@"
@@ -85,7 +86,7 @@ in
           import ../../../lib/deep-merge-json-activation.nix {
             inherit lib;
             pkgs = cfg.pkgs;
-            targetPath = "${config.home.homeDirectory}/.claude/settings.json";
+            targetPath = "${homeDirectory}/.claude/settings.json";
             sourceFile = settingsFile;
             label = "claude";
           }
