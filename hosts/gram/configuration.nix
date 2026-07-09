@@ -6,6 +6,9 @@
 {
   systemSettings.intelGraphics.enable = true;
 
+  # Dock Dell D3100 (DisplayLink) : sorties vidéo du dock via USB.
+  systemSettings.displaylink.enable = true;
+
   # Gestion thermique proactive Intel (daemon officiel) : réduit le throttling
   # en pilotant P-states/RAPL avant que le CPU n'atteigne ses limites.
   # Complémentaire de power-profiles-daemon (activé dans modules/system/
