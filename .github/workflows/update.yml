@@ -77,6 +77,7 @@ jobs:
           DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
           STATUS: ${{ job.status }}
           PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           PR_BODY_FILE: /tmp/pr-body.md
           FACTS_FILE: /tmp/facts.json
         run: .github/scripts/notify-discord.sh
