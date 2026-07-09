@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Envoie un message Discord (via webhook) résumant le run du workflow
-# weekly-update : ping l'utilisateur (notif garantie), succès/échec, lien du
-# run, alerte noyau, puis lien de la PR et sa description en dessous (si une
-# PR a été créée).
+# weekly-update : ping l'utilisateur (notif garantie), succès/échec, alerte
+# noyau, puis lien de la PR et sa description en dessous (si une PR a été
+# créée). Volontairement minimal : pas de lien vers le run GitHub Actions ni
+# de liens de comparaison dans la description, seulement le lien PR (avec
+# preview Discord désactivée via <>) pour éviter le bruit des embeds.
 #
 # Toute la config passe par variables d'environnement (pas d'arguments
 # positionnels) :
 #   DISCORD_WEBHOOK_URL  requis
 #   DISCORD_USER_ID       requis (ping l'utilisateur, sinon pas de notif fiable)
 #   STATUS                requis : success|failure|cancelled
-#   RUN_URL                requis : lien vers le run GitHub Actions
 #   PR_URL                 optionnel : lien de la PR créée
 #   PR_BODY_FILE           optionnel : fichier markdown de la description de la PR
 #   FACTS_FILE             optionnel : facts.json (pour l'alerte noyau)
@@ -21,7 +22,6 @@ if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
 fi
 
 status="${STATUS:?STATUS requis}"
-run_url="${RUN_URL:?RUN_URL requis}"
 
 case "$status" in
 success) emoji="✅" ;;
@@ -34,7 +34,7 @@ if [ -n "${DISCORD_USER_ID:-}" ]; then
     mention="<@${DISCORD_USER_ID}> "
 fi
 
-content="${mention}${emoji} weekly-update (${status}) — ${run_url}"
+content="${mention}${emoji} weekly-update (${status})"
 
 if [ -n "${FACTS_FILE:-}" ] && [ -f "$FACTS_FILE" ]; then
     kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$FACTS_FILE")
@@ -49,7 +49,7 @@ fi
 if [ -n "${PR_URL:-}" ]; then
     content="${content}
 
-${PR_URL}"
+<${PR_URL}>"
     if [ -n "${PR_BODY_FILE:-}" ] && [ -f "$PR_BODY_FILE" ]; then
         content="${content}
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Construit le corps Markdown de la PR à partir des faits de
-# gather-update-facts.sh. 100% déterministe : pour chaque input flake, le
-# nombre de commits (si connu) et un lien vers la comparaison GitHub — aucun
-# contenu de commit n'est résumé ni interprété, donc aucun risque d'invention
-# et aucune limite de tokens à surveiller.
+# gather-update-facts.sh. 100% déterministe : pour chaque input flake, dates
+# avant/après et nombre de commits (si connu) — aucun contenu de commit n'est
+# résumé ni interprété, donc aucun risque d'invention et aucune limite de
+# tokens à surveiller. Pas de lien de comparaison (repris tel quel dans la
+# notif Discord, qui doit rester minimale).
 #
 # Usage: render-pr-body.sh <facts.json>
 set -euo pipefail
@@ -30,8 +31,7 @@ if [ "$flake_count" -gt 0 ]; then
       "- **\(.name)** : " +
       (if .oldDate != "" and .newDate != "" then "\(.oldDate) → \(.newDate)" else "date inconnue" end) +
       ", " +
-      (if .commitCount != null then "\(.commitCount) commit(s)" else "révision changée" end) +
-      (if .compareUrl then " — [comparer sur GitHub](\(.compareUrl))" else "" end)
+      (if .commitCount != null then "\(.commitCount) commit(s)" else "révision changée" end)
     ' "$facts_file"
     echo
 fi
