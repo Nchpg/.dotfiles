@@ -2,9 +2,10 @@
 # Envoie un message Discord (via webhook) résumant le run du workflow
 # weekly-update : ping l'utilisateur (notif garantie), succès/échec, alerte
 # noyau, puis lien de la PR et sa description en dessous (si une PR a été
-# créée). Volontairement minimal : pas de lien vers le run GitHub Actions ni
-# de liens de comparaison dans la description, seulement le lien PR (avec
-# preview Discord désactivée via <>) pour éviter le bruit des embeds.
+# créée). Volontairement minimal : en succès, seulement le lien PR (avec
+# preview Discord désactivée via <>) pour éviter le bruit des embeds ; le
+# lien vers le run GitHub Actions n'apparaît que si le run a échoué (pour
+# aller droit aux logs).
 #
 # Toute la config passe par variables d'environnement (pas d'arguments
 # positionnels) :
@@ -14,6 +15,7 @@
 #   PR_URL                 optionnel : lien de la PR créée
 #   PR_BODY_FILE           optionnel : fichier markdown de la description de la PR
 #   FACTS_FILE             optionnel : facts.json (pour l'alerte noyau)
+#   RUN_URL                optionnel : lien du run Actions (affiché hors succès)
 set -euo pipefail
 
 if [ -z "${DISCORD_WEBHOOK_URL:-}" ]; then
@@ -44,6 +46,12 @@ if [ -n "${FACTS_FILE:-}" ] && [ -f "$FACTS_FILE" ]; then
         content="${content}
 ⚠️ ${kernel_line}"
     fi
+fi
+
+if [ "$status" != "success" ] && [ -n "${RUN_URL:-}" ]; then
+    content="${content}
+
+<${RUN_URL}>"
 fi
 
 if [ -n "${PR_URL:-}" ]; then
