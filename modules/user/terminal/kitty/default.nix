@@ -92,7 +92,13 @@ in
         map ctrl+c copy_or_interrupt
         map ctrl+alt+c copy_to_clipboard
         map ctrl+shift+v paste_from_clipboard
-        map ctrl+v paste_from_clipboard
+        # Surtout PAS de `map ctrl+v paste_from_clipboard` : kitty
+        # intercepterait la touche pour faire un collage TEXTE, et les TUI
+        # comme Claude Code ne la recevraient jamais — or leur collage
+        # d'image fonctionne en recevant Ctrl+V puis en lisant eux-mêmes le
+        # presse-papier (wl-paste). Presse-papier avec image + bind kitty =
+        # rien ne se passe. Sans bind, Ctrl+V est transmis à l'application ;
+        # le collage texte reste sur Ctrl+Shift+V.
       '';
     };
 
