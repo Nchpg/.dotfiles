@@ -49,6 +49,9 @@
       pkgs-stable = import inputs.nixpkgs-stable {
         inherit system;
         config.allowUnfree = true;
+        # Téléchargement automatique du driver DisplayLink (dock Dell D3100),
+        # sinon nix-prefetch-url manuel sur chaque host.
+        overlays = [ (import ./overlays/displaylink.nix) ];
       };
 
       pkgs-unstable = import inputs.nixpkgs-unstable {
