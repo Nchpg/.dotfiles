@@ -53,8 +53,9 @@ jobs:
         run: .github/scripts/render-pr-body.sh /tmp/facts.json > /tmp/pr-body.md
 
       - name: créer la PR
+        id: create-pr
         if: steps.facts.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "chore: weekly flake + vscode extensions update"
           branch: weekly-update
@@ -66,8 +67,10 @@ jobs:
         if: always()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-        run: |
-          .github/scripts/notify-discord.sh \
-            "${{ job.status }}" \
-            "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            /tmp/facts.json
+          DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+          STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
+          PR_BODY_FILE: /tmp/pr-body.md
+          FACTS_FILE: /tmp/facts.json
+        run: .github/scripts/notify-discord.sh
