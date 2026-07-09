@@ -13,6 +13,13 @@ on:
     - cron: "0 6 * * 1"  # lundi 06:00 UTC
   workflow_dispatch: {}
 
+# Runner self-hosted en locale française : create-pull-request compare la
+# sortie de `git stash push` à la chaîne anglaise "No local changes to save",
+# croit qu'un stash existe, et son `git stash pop` échoue (« Aucune entrée de
+# remisage trouvée »). Git en anglais règle ça pour tous les steps.
+env:
+  LC_ALL: C.UTF-8
+
 permissions:
   contents: write
   pull-requests: write
