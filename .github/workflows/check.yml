@@ -6,7 +6,7 @@ on:
 
 jobs:
   fmt:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
 
@@ -21,7 +21,7 @@ jobs:
             | xargs nix fmt -- --check
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
 
@@ -33,7 +33,7 @@ jobs:
         run: nix run nixpkgs#statix -- check .
 
   security:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
         with:
@@ -58,7 +58,7 @@ jobs:
           nixpkgs-keys: nixpkgs-stable,nixpkgs-unstable
 
   flake-check:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v7
 
