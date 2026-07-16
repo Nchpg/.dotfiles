@@ -7,7 +7,10 @@
 
 let
   cfg = config.userSettings.stylix;
-  theme = import (../../../modules/themes + ("/" + cfg.theme));
+
+  # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
+  # modules/system/stylix, cf. modules/themes/default.nix.
+  themes = import ../../themes lib;
 in
 {
   options = {
@@ -18,12 +21,16 @@ in
         # ainsi basculer le thème système flippe aussi la session de l'user.
         # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
         default = osConfig.systemSettings.stylix.theme;
-        type = lib.types.enum (
-          builtins.attrNames (
-            lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)
-          )
-        );
-        description = "Theme for stylix to use system wide. A list of themes can be found in the `themes` directory.";
+        type = lib.types.enum themes.names;
+        description = "Theme for stylix to use system wide. A list of themes can be found in the `themes/schemes` directory.";
+      };
+      wallpaper = lib.mkOption {
+        type = lib.types.nullOr (lib.types.enum themes.wallpaperNames);
+        default = null;
+        description = ''
+          Fond d'écran de session à la place de celui du thème — un nom de
+          modules/themes/wallpapers.nix. null = le fond par défaut du thème.
+        '';
       };
       themeconfig = lib.mkOption {
         default = { };
@@ -39,7 +46,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    userSettings.stylix.themeconfig = theme;
+    userSettings.stylix.themeconfig = themes.load cfg.theme;
     stylix = {
       enable = true;
       autoEnable = false;
@@ -48,16 +55,15 @@ in
         qt.enable = true;
         gnome.enable = true;
       };
-      inherit (theme) polarity;
-      image = cfg.pkgs.fetchurl {
-        url = theme.backgroundUrl;
-        sha256 = theme.backgroundSha256 or theme.backgroundUrlSha256;
-      };
-      base16Scheme = theme;
 
       # Polices partagées avec le module système (GDM) et installées par
       # modules/system/fonts — source unique : modules/themes/fonts.nix.
       fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
+    }
+    # Scheme base16 + polarité + wallpaper du thème choisi (bloc commun avec
+    # le module système, cf. modules/themes/default.nix).
+    // themes.stylixSettings {
+      inherit (cfg) pkgs theme wallpaper;
     };
   };
 }

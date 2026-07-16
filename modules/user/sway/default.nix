@@ -23,6 +23,14 @@ let
   # Binding Ctrl+Return → terminal dans tmux, seulement si tmux est activé.
   tmuxBind = lib.optionalString config.userSettings.tmux.enable "bindsym Control+Return exec ${tmuxLaunch}";
 
+  # Fond d'écran : l'image résolue par stylix (thème actif, ou surcharge
+  # userSettings.stylix.wallpaper — cf. modules/themes). Avant, un PNG en dur
+  # (~/.config/sway/wallpaper.png) court-circuitait stylix : le fond ne suivait
+  # ni le thème ni la config. Si stylix est coupé pour ce user, pas de ligne bg.
+  wallpaperBg = lib.optionalString (
+    config.userSettings.stylix.enable && config.stylix.image != null
+  ) "output * bg ${config.stylix.image} fill";
+
   # Barre : si waybar est activé (module dédié), il fournit sa propre barre via
   # systemd → on n'émet PAS de bloc `bar {}` natif (sinon deux barres). Sinon on
   # garde la swaybar maison (sway-bar.sh).
@@ -63,8 +71,20 @@ let
 
   finalConfigContent =
     lib.replaceStrings
-      [ "@terminal@" "@tmuxBind@" "@bar@" "@lockCmd@" ]
-      [ config.userSettings.terminal.default tmuxBind barBlock lockCmd ]
+      [
+        "@terminal@"
+        "@tmuxBind@"
+        "@bar@"
+        "@lockCmd@"
+        "@wallpaperBg@"
+      ]
+      [
+        config.userSettings.terminal.default
+        tmuxBind
+        barBlock
+        lockCmd
+        wallpaperBg
+      ]
       templateContent;
 
   swaymsgBin = "${cfg.pkgs.sway}/bin/swaymsg";
@@ -84,8 +104,6 @@ in
       source = ./sway-config/sway-bar.sh;
       executable = true;
     };
-
-    home.file.".config/sway/wallpaper.png".source = ./sway-config/wallpaper.png;
 
     # Cible de session graphique pour l'intégration systemd. Démarrée au lancement
     # de sway (cf. config.template), elle active graphical-session.target via BindsTo,

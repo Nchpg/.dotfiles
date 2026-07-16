@@ -3,23 +3,20 @@
   config,
   pkgs-stable,
   inputs,
-  target,
   ...
 }:
 
 let
   cfg = config.systemSettings.stylix;
 
-  themesEnum = lib.types.enum (
-    builtins.attrNames (
-      lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ../../themes)
-    )
-  );
+  # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
+  # modules/user/stylix, cf. modules/themes/default.nix.
+  themes = import ../../themes lib;
+  themesEnum = lib.types.enum themes.names;
 
   # Thème actif = la variante sélectionnée. C'est la SOURCE DE VÉRITÉ lue par
   # GDM/console ici, et par le user nchpg (cf. modules/user/stylix).
   activeTheme = if cfg.variant == "light" then cfg.lightTheme else cfg.darkTheme;
-  theme = import (../../themes + ("/" + activeTheme));
 in
 {
   # Module Stylix NIVEAU SYSTÈME : thémise ce que le module home-manager ne
@@ -27,10 +24,12 @@ in
   #   - GDM (écran de login) via le target `gnome` → « GNOME and GDM »
   #   - la console / TTY
   #
-  # Bascule dark/light : on change `variant` (à la main ou via la commande
-  # `theme dark|light|toggle`) puis on rebuild. Comme c'est une valeur de la
-  # config, le thème choisi est PERSISTANT — il survit au reboot, sans aucune
-  # entrée de boot supplémentaire.
+  # Bascule dark/light : `variant` est injecté par la CIBLE du flake
+  # (personal-gram = dark, personal-gram-light = light) — la commande
+  # `theme dark|light|toggle` rebuilde simplement l'autre cible, sans
+  # modifier aucun fichier. PERSISTANT : systemd-boot démarre la dernière
+  # génération activée, et `rebuild` seul reste sur la variante courante
+  # (sa cible par défaut vient du système qui tourne).
   imports = [ inputs.stylix.nixosModules.stylix ];
 
   options = {
@@ -44,9 +43,9 @@ in
         ];
         default = "dark";
         description = ''
-          Variante active (interrupteur de bascule). Change-la puis rebuild ;
-          le choix est persistant (reboot inclus). La commande
-          `theme dark|light|toggle` fait ce changement + rebuild automatiquement.
+          Variante active. Ne PAS la définir dans un profil : elle est
+          injectée par la cible du flake (personal-gram-light → "light").
+          Bascule via la commande `theme dark|light|toggle`.
         '';
       };
 
@@ -54,6 +53,15 @@ in
         type = themesEnum;
         default = "gruvbox-dark-custom";
         description = "Thème utilisé quand variant = \"dark\".";
+      };
+
+      wallpaper = lib.mkOption {
+        type = lib.types.nullOr (lib.types.enum themes.wallpaperNames);
+        default = null;
+        description = ''
+          Fond d'écran (GDM) à la place de celui du thème actif — un nom de
+          modules/themes/wallpapers.nix. null = le fond par défaut du thème.
+        '';
       };
 
       lightTheme = lib.mkOption {
@@ -83,35 +91,35 @@ in
     # Expose le thème actif (consommé par modules/user/stylix via systemSettings).
     systemSettings.stylix.theme = activeTheme;
 
-    # Commande `theme {dark|light|toggle}` : flippe `variant` dans la config
-    # puis délègue le rebuild à la commande `rebuild` (cf. modules/system/rebuild),
-    # qui gère déjà check git, reload sway et restart waybar — pas de logique
-    # dupliquée ici. C'est un vrai binaire (pas un alias) → marche pareil en
-    # bash/zsh/fish. Le choix est persistant (écrit dans la config → survit au
-    # reboot). $MY_FLAKE est fourni par home-manager (sessionVariables).
+    # Commande `theme {dark|light|toggle}` : rebuilde la cible du flake de
+    # l'autre variante via la commande `rebuild` (cf. modules/system/rebuild),
+    # qui gère déjà check git, reload sway et restart waybar. Aucun fichier
+    # modifié : la variante courante est celle de la cible qui a construit CE
+    # système (cfg.variant, injectée par le flake), l'état vit dans la
+    # génération active. Si les deux variantes sont déjà dans le store (arbre
+    # inchangé, CI passée), la bascule est quasi immédiate.
     environment.systemPackages = [
       (cfg.pkgs.writeShellScriptBin "theme" ''
         set -euo pipefail
-        flake="''${MY_FLAKE:-$HOME/.dotfiles}"
-        # Profil de CE système (specialArg target) : sur une machine work-*,
-        # `theme` édite bien profiles/work/, pas personal/.
-        file="$flake/profiles/${target.profile}/default.nix"
+        current="${cfg.variant}"
 
-        target="''${1:-}"
-        if [ "$target" = "toggle" ]; then
-          if grep -q 'variant = "dark"' "$file"; then target=light; else target=dark; fi
+        want="''${1:-}"
+        if [ "$want" = "toggle" ]; then
+          if [ "$current" = "dark" ]; then want=light; else want=dark; fi
         fi
 
-        case "$target" in
-          dark)  sed -i 's/variant = "light"/variant = "dark"/' "$file" ;;
-          light) sed -i 's/variant = "dark"/variant = "light"/' "$file" ;;
-          *) echo "usage: theme {dark|light|toggle}" >&2; exit 1 ;;
+        case "$want" in
+          dark|light) ;;
+          *) echo "usage: theme {dark|light|toggle}   (variante actuelle : $current)" >&2; exit 1 ;;
         esac
 
-        echo "→ variant = $target ; rebuild en cours…"
-        # -y : le sed ci-dessus vient de modifier un fichier tracké, la
-        # confirmation de rebuild.sh serait systématique et sans intérêt ici.
-        exec rebuild -y
+        if [ "$want" = "$current" ]; then
+          echo "Déjà en $want — rien à faire."
+          exit 0
+        fi
+
+        echo "→ bascule $current → $want…"
+        exec rebuild --variant "$want"
       '')
     ];
 
@@ -125,12 +133,6 @@ in
       # sinon il force son scheme dans CHAQUE user en read-only (followSystem)
       # → conflit avec guest/root qui ont leur propre thème.
       homeManagerIntegration.autoImport = false;
-      inherit (theme) polarity;
-      base16Scheme = theme;
-      image = cfg.pkgs.fetchurl {
-        url = theme.backgroundUrl;
-        sha256 = theme.backgroundSha256 or theme.backgroundUrlSha256;
-      };
 
       targets = {
         gnome.enable = true; # ⇒ thémise GDM (login screen)
@@ -141,6 +143,12 @@ in
       # installées par modules/system/fonts — source unique :
       # modules/themes/fonts.nix.
       fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
+    }
+    # Scheme base16 + polarité + wallpaper du thème actif (bloc commun avec le
+    # module user, cf. modules/themes/default.nix).
+    // themes.stylixSettings {
+      inherit (cfg) pkgs wallpaper;
+      theme = activeTheme;
     };
   };
 }
