@@ -8,7 +8,7 @@ input type:touchpad {
     natural_scroll enabled
 }
 
-output * bg ~/.config/sway/wallpaper.png fill
+@wallpaperBg@
 
 seat * xcursor_theme Adwaita 24
 

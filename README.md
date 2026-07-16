@@ -14,7 +14,7 @@ profiles/          Un dossier par usage (personal, work, …) : quels modules
 modules/
   system/          Modules NixOS, gatés par des options systemSettings.*
   user/            Modules home-manager, gatés par des options userSettings.*
-  themes/          Thèmes base16 (+ wallpaper) consommés par stylix
+  themes/          Thèmes base16 (schemes/*.nix, + wallpaper) pour stylix
 lib/               Helpers (import-all : import récursif d'un dossier de modules)
 secrets/           Secrets chiffrés sops-nix (voir secrets/README.md)
 devshells/         `nix develop .#python|c|xpu`

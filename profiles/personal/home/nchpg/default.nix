@@ -15,6 +15,10 @@
 
       stylix = {
         enable = true;
+        # Fond perso (l'ex-wallpaper.png de la config sway, désormais dans le
+        # registre modules/themes/wallpapers.nix) : fixe quel que soit le
+        # thème. Commenter pour suivre le fond du thème actif.
+        wallpaper = "custom-kyoto";
       };
 
       # Apps desktop (discord, mpv, ...) + direnv — cf. modules/user/desktop-apps.
