@@ -1,8 +1,17 @@
 name: check
 
+# push limité à main : les branches de PR sont déjà couvertes par l'event
+# pull_request (sinon chaque job tournait deux fois sur le runner).
 on:
   push:
+    branches: [main]
   pull_request:
+
+# Un nouveau push sur la même branche/PR annule les runs obsolètes
+# (runner self-hosted : évite d'empiler des jobs devenus inutiles).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   fmt:
