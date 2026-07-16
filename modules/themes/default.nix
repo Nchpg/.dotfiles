@@ -18,8 +18,11 @@ lib: rec {
     ) (builtins.readDir ./schemes)
   );
 
-  # Attrset brut d'un thème (couleurs base16 + métadonnées).
-  load = name: import (./schemes + "/${name}.nix");
+  # Attrset brut d'un thème (couleurs base16 + métadonnées). Le slug base16
+  # est injecté depuis le nom du fichier (source unique) : sans lui,
+  # base16.nix nomme tous les artefacts générés « untitled »
+  # (base16-untitled.conf, untitled-gnome-shell-theme, ...).
+  load = name: import (./schemes + "/${name}.nix") // { slug = name; };
 
   # Registre des fonds d'écran (nom → source), découplé des thèmes : chaque
   # schéma référence son fond PAR DÉFAUT via `wallpaper = "<nom>"`, et un
