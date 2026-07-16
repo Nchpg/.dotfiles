@@ -20,4 +20,10 @@
     enable = true;
     batteryCareLimit = 80;
   };
+
+  # Release NixOS de la première installation de CE host (défauts des données
+  # stateful : emplacements de fichiers, versions de bases...). À laisser tel
+  # quel — ne suit PAS les upgrades. Valeur par machine, comme
+  # hardware-configuration.nix.
+  system.stateVersion = "25.05";
 }
