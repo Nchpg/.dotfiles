@@ -41,6 +41,13 @@ jobs:
       - name: statix
         run: nix run nixpkgs#statix -- check .
 
+      # Code mort Nix (bindings inutilisés, arguments de pattern jamais lus).
+      # hardware-configuration.nix est exclu (fichier généré, comme pour fmt).
+      - name: deadnix
+        run: |
+          git ls-files '*.nix' ':!:*hardware-configuration.nix' \
+            | xargs nix run nixpkgs#deadnix -- --fail
+
   security:
     runs-on: self-hosted
     steps:
