@@ -4,6 +4,7 @@ set -euo pipefail
 
 HOST=""
 PROFILE=""
+VARIANT="dark"
 UPDATE=0
 YES=0
 
@@ -12,6 +13,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --host)    HOST="$2";    shift 2 ;;
         --profile) PROFILE="$2"; shift 2 ;;
+        --variant) VARIANT="$2"; shift 2 ;;
         --update)  UPDATE=1;     shift ;;
         --yes)     YES=1;        shift ;;
         *) echo "Argument inconnu : $1" >&2; exit 1 ;;
@@ -20,8 +22,20 @@ done
 
 # Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
-    echo "Usage: $0 --host <host> --profile <profile>" >&2
+    echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light]" >&2
     exit 1
+fi
+
+case "$VARIANT" in
+    dark|light) ;;
+    *) echo "Variante invalide : $VARIANT (attendu : dark ou light)" >&2; exit 1 ;;
+esac
+
+# Nom de la cible du flake : la variante dark garde le nom historique
+# (personal-gram), light suffixe (personal-gram-light) — cf. flake.nix.
+ATTR="$PROFILE-$HOST"
+if [[ "$VARIANT" != "dark" ]]; then
+    ATTR="$ATTR-$VARIANT"
 fi
 
 YELLOW='\033[1;33m'
@@ -81,7 +95,7 @@ PREV_SYSTEM="$(readlink -f /run/current-system)"
 # désactiverait le cache d'évaluation -> chaque rebuild réévaluerait tout de zéro.
 # Pas de --show-trace par défaut : il ralentit nettement l'éval. Pour déboguer une
 # erreur d'éval, relancer ponctuellement via : REBUILD_EXTRA_ARGS=--show-trace rebuild
-if sudo nixos-rebuild switch --flake .#"$PROFILE"-"$HOST" ${REBUILD_EXTRA_ARGS:-}; then
+if sudo nixos-rebuild switch --flake .#"$ATTR" ${REBUILD_EXTRA_ARGS:-}; then
     echo "✅ System rebuild successful."
 
     # Diff des paquets ancien système → nouveau (versions bump, ajouts, retraits).

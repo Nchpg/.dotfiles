@@ -71,13 +71,31 @@
         )
       );
 
+      # Variantes de thème : chaque couple profil×host produit une cible par
+      # variante — `personal-gram` (dark, nom historique) et
+      # `personal-gram-light`. La variante ne vit PAS dans la config (aucun
+      # fichier à modifier pour toggler) : elle est portée par la cible, et
+      # « l'état courant » est simplement la génération système active.
+      # Bascule via la commande `theme` (cf. modules/system/stylix).
+      variants = [
+        "dark"
+        "light"
+      ];
+
       targets = lib.concatMap (
         profile:
-        map (host: {
-          inherit profile;
-          inherit host;
-        }) hosts
+        lib.concatMap (
+          host:
+          map (variant: {
+            inherit profile host variant;
+          }) variants
+        ) hosts
       ) profiles;
+
+      targetName =
+        target:
+        "${target.profile}-${target.host}"
+        + lib.optionalString (target.variant != "dark") "-${target.variant}";
 
       # Un devshell = un fichier devshells/<name>.nix ; auto-découvert comme
       # profiles/hosts ci-dessus. `dev-<name>` est généré à partir de la même
@@ -97,7 +115,7 @@
     {
       nixosConfigurations = builtins.listToAttrs (
         map (target: {
-          name = "${target.profile}-${target.host}";
+          name = targetName target;
           value = lib.nixosSystem {
             inherit system;
             modules = [
@@ -107,6 +125,9 @@
               ./profiles
               # system modules
               ./modules/system
+
+              # Variante de thème portée par la cible (cf. `variants` plus haut).
+              { systemSettings.stylix.variant = target.variant; }
 
               inputs.home-manager.nixosModules.home-manager
               {
