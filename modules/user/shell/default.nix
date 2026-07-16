@@ -96,8 +96,9 @@ in
       };
     };
 
+    # Pas de bat ici : son thémage est géré par modules/user/bat (polarité
+    # déléguée à bat lui-même, target stylix explicitement coupé là-bas).
     stylix.targets = {
-      bat.enable = true;
       feh.enable = true;
       lazygit.enable = true;
     };

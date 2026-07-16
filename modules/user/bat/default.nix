@@ -2,11 +2,6 @@
 
 let
   cfg = config.userSettings.bat;
-
-  # En dark on garde le thème bat historique « gruvbox-dark » (rendu identique
-  # à avant) ; en light on laisse Stylix appliquer base16-stylix (le mkForce
-  # inconditionnel gardait bat sombre même en variante light).
-  isDark = (config.userSettings.stylix.themeconfig.polarity or "dark") == "dark";
 in
 {
   options = {
@@ -28,8 +23,21 @@ in
     programs.bat = {
       enable = true;
       package = cfg.pkgs.bat;
-      config.theme = lib.mkIf isDark (lib.mkForce "gruvbox-dark");
+      # Polarité déléguée à bat lui-même (≥ 0.25) : il détecte le fond du
+      # terminal à chaque invocation et choisit le bon thème — thèmes NATIFS
+      # bat (rendu riche, cf. gruvbox-dark historique), aucun branchement
+      # dark/light côté Nix. Choix de style assumé : bat reste gruvbox quel
+      # que soit darkTheme/lightTheme. Dans un TTY/ssh sans détection, bat
+      # retombe sur theme-dark (bénin). Nécessite de couper le target stylix
+      # (ci-dessous), qui poserait sinon un `theme` prioritaire sur la paire
+      # theme-dark/theme-light.
+      config = {
+        theme-dark = "gruvbox-dark";
+        theme-light = "gruvbox-light";
+      };
     };
+
+    stylix.targets.bat.enable = false;
 
     home.packages = with cfg.pkgs; [
       bat-extras.batgrep
