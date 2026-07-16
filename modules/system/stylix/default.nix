@@ -137,32 +137,10 @@ in
         console.enable = true; # ⇒ thémise les TTY
       };
 
-      # Mêmes polices que le module user, pour un rendu cohérent sur GDM.
-      # /!\ les polices doivent être installées dans
-      #     modules/system/fonts (fonts.packages).
-      fonts = {
-        monospace = {
-          name = "FiraCode Nerd Font";
-          package = cfg.pkgs.nerd-fonts.fira-code;
-        };
-        serif = {
-          name = "Fira Sans";
-          package = cfg.pkgs.fira-sans;
-        };
-        sansSerif = {
-          name = "Fira Sans";
-          package = cfg.pkgs.fira-sans;
-        };
-        emoji = {
-          name = "Twitter Color Emoji";
-          package = cfg.pkgs.twitter-color-emoji;
-        };
-        sizes = {
-          terminal = 16;
-          applications = 10;
-          desktop = 10;
-        };
-      };
+      # Polices partagées avec le module user (rendu cohérent sur GDM) et
+      # installées par modules/system/fonts — source unique :
+      # modules/themes/fonts.nix.
+      fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
     };
   };
 }
