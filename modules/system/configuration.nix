@@ -26,9 +26,16 @@
       # cache.nixos.org par défaut, et claude-code se rebuildait localement
       # à chaque bump. `extra-*` = ajout aux défauts (ne remplace pas
       # cache.nixos.org). Clé publique : README de sadjow/claude-code-nix.
-      extra-substituters = [ "https://claude-code.cachix.org" ];
+      # Idem pour ros.cachix.org (nix-ros-overlay) : sans ça, tout ROS2 se
+      # recompile depuis les sources sur chaque machine qui ouvre un projet
+      # ROS (build de plusieurs dizaines de minutes).
+      extra-substituters = [
+        "https://claude-code.cachix.org"
+        "https://ros.cachix.org"
+      ];
       extra-trusted-public-keys = [
         "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+        "ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="
       ];
     };
     # Config 100 % flake : les channels (ancien mécanisme) ne servent plus.
