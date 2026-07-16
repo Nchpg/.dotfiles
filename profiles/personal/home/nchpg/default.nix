@@ -1,12 +1,14 @@
 {
-  lib,
   pkgs-stable,
   pkgs-unstable,
   ...
 }:
 
 {
-  config = lib.mkDefault {
+  # Pas de mkDefault ici : le profil est la couche d'intention finale, il
+  # définit en priorité normale (les modules fournissent les défauts via
+  # `default =` de leurs options ou mkDefault).
+  config = {
 
     userSettings = {
       defaultPkgs = pkgs-stable;
@@ -74,6 +76,12 @@
 
       # nix-locate + comma + suggestions command-not-found (base pré-construite).
       nixIndex = {
+        enable = true;
+      };
+
+      # python + uv hors devshell (scripts ponctuels, uv run/uvx) —
+      # cf. modules/user/python.
+      python = {
         enable = true;
       };
 

@@ -1,12 +1,12 @@
 {
-  lib,
   pkgs-stable,
   pkgs-unstable,
   ...
 }:
 
 {
-  config = lib.mkDefault {
+  # Priorité normale (pas de mkDefault) : cf. profiles/personal/home/nchpg.
+  config = {
 
     userSettings = {
       defaultPkgs = pkgs-stable;
