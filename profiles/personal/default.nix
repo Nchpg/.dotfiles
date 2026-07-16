@@ -5,7 +5,9 @@
     systemSettings = {
       stylix = {
         enable = true;
-        variant = "dark"; # ← interrupteur dark / light
+        # Pas de `variant` ici : la variante dark/light est portée par la
+        # CIBLE du flake (personal-gram vs personal-gram-light) — bascule via
+        # la commande `theme`, sans modifier la config.
         darkTheme = "gruvbox-dark-custom";
         lightTheme = "gruvbox-light-hard";
       };
