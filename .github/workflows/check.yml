@@ -83,24 +83,27 @@ jobs:
       - name: nix flake check
         run: nix flake check --no-build
 
-      # Évalue chaque nixosConfiguration (auto-découvertes, donc pas de liste
-      # en dur ici non plus) sans rien construire : attrape les typos et
-      # erreurs d'éval avant un rebuild sur machine.
-      - name: dry-run build of all nixosConfigurations
+      # Construit réellement chaque nixosConfiguration (auto-découvertes, donc
+      # pas de liste en dur ici non plus) : contrairement à un --dry-run, ça
+      # attrape aussi les erreurs de BUILD (ex. hash de l'overlay displaylink
+      # cassé par un bump nixpkgs), pas seulement les erreurs d'éval. Bonus sur
+      # runner self-hosted : le store local est pré-rempli, le rebuild sur
+      # machine après merge est quasi instantané.
+      - name: build all nixosConfigurations
         run: |
           for cfg in $(nix eval .#nixosConfigurations --apply builtins.attrNames --json | jq -r '.[]'); do
             echo "::group::$cfg"
-            nix build ".#nixosConfigurations.$cfg.config.system.build.toplevel" --dry-run
+            nix build ".#nixosConfigurations.$cfg.config.system.build.toplevel" --no-link
             echo "::endgroup::"
           done
 
       # Idem côté devshells (auto-découverts depuis devshells/, cf. flake.nix) :
       # attrape une régression dans un devShells.<system>.<nom> sans attendre
       # qu'un `nix develop` échoue sur machine.
-      - name: dry-run build of all devShells
+      - name: build all devShells
         run: |
           for name in $(nix eval .#devShells.x86_64-linux --apply builtins.attrNames --json | jq -r '.[]'); do
             echo "::group::$name"
-            nix build ".#devShells.x86_64-linux.$name" --dry-run
+            nix build ".#devShells.x86_64-linux.$name" --no-link
             echo "::endgroup::"
           done
