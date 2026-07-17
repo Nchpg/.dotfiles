@@ -21,9 +21,11 @@
     };
 
     claude-code = {
-      # `github:` (tarball via l'API) et pas `git+https` (clone complet du
-      # dépôt) : fetch bien plus rapide sur `rebuild -u`, lock équivalent.
-      url = "github:sadjow/claude-code-nix";
+      # `git+https` (clone git anonyme) et PAS `github:` : ce dernier récupère
+      # la source via l'API GitHub (api.github.com/tarball), qui exige un token
+      # en CI et échoue en 401 « Bad credentials » sur le runner. Le clone git
+      # HTTPS est anonyme sur un repo public, aucune auth requise.
+      url = "git+https://github.com/sadjow/claude-code-nix";
       # Pas de `inputs.nixpkgs.follows` : volontaire. L'input garde le nixpkgs
       # pinné par l'upstream → cache binaire garanti et toujours la dernière
       # version de claude-code buildable (bump via `rebuild -u`).

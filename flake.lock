@@ -76,15 +76,15 @@
       "locked": {
         "lastModified": 1784251880,
         "narHash": "sha256-Lm9c8DZJHCkd6HcEEOwyh3cooo/hgqWFju1sn+Lq6lo=",
-        "owner": "sadjow",
-        "repo": "claude-code-nix",
+        "ref": "refs/heads/main",
         "rev": "d316ee38bc9966215bd487f9733ae75d483b6363",
-        "type": "github"
+        "revCount": 379,
+        "type": "git",
+        "url": "https://github.com/sadjow/claude-code-nix"
       },
       "original": {
-        "owner": "sadjow",
-        "repo": "claude-code-nix",
-        "type": "github"
+        "type": "git",
+        "url": "https://github.com/sadjow/claude-code-nix"
       }
     },
     "firefox-gnome-theme": {
