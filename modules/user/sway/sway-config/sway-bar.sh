@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env bash
+# bash requis ([[ ]], &>, <<<) — l'ancien #!/bin/sh ne marchait que parce que
+# le status_command l'invoque via `bash …` (cf. modules/user/sway).
 
 # Fonction pour récupérer le niveau de batterie
 battery() {

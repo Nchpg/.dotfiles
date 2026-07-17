@@ -22,7 +22,19 @@ let
   #     bordure comprise) ; elle y fait tout son reflow, et on ne la ramène au
   #     centre qu'une fois posée. C'est ce wrapper — et lui seul — qui fait ce
   #     "ramène au centre", d'où la nécessité que tout passe par lui.
+  # Dépendances épinglées en tête de PATH (même pattern que les scripts
+  # waybar) : le wrapper ne dépend plus du PATH ambiant pour swaymsg/jq/grep.
+  scriptPath = lib.makeBinPath [
+    pkgs.sway # swaymsg, swaynag
+    pkgs.jq
+    pkgs.gnugrep
+    pkgs.coreutils # sleep, head
+    pkgs.procps # pkill
+  ];
+
   nwg-displays-wrapped = pkgs.writeShellScriptBin "nwg-displays" ''
+    export PATH="${scriptPath}:$PATH"
+
     # Déjà ouvert ? on ferme. Sinon on ouvre. ($mod+o sert d'ouvre/ferme.)
     if swaymsg -t get_tree | grep -q '"nwg-displays"'; then
       exec swaymsg '[app_id="nwg-displays"] kill'
@@ -100,6 +112,11 @@ in
     home.file.".config/sway/launchers/mirror" = {
       text = ''
         #!/bin/sh
+        # Dépendances épinglées (cf. scriptPath) : pas de dépendance au PATH
+        # ambiant. wl-mirror vient de home.packages mais on le résout aussi
+        # par chemin store, même robustesse.
+        export PATH="${scriptPath}:${pkgs.wl-mirror}/bin:$PATH"
+
         # Un miroir tourne déjà ? on l'arrête (toggle).
         if pkill -x wl-mirror; then
           exit 0

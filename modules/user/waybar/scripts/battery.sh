@@ -13,8 +13,13 @@
 
 export LC_ALL=C
 
-bat=/sys/class/power_supply/BAT0
-if [[ ! -d $bat ]]; then
+# Première batterie trouvée (BAT0, BAT1, …) : même détection que le script
+# de notifications (modules/user/notifications), plus de BAT0 en dur.
+bat=""
+for d in /sys/class/power_supply/BAT*; do
+    [[ -d $d ]] && bat=$d && break
+done
+if [[ -z $bat ]]; then
     printf '{"text":"󰂑  N/A","tooltip":"Batterie indisponible"}\n'
     exit 0
 fi
