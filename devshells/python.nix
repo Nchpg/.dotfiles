@@ -35,56 +35,63 @@ let
   zshCompletions = completion "/share/zsh/site-functions/_rmkernel" ./python/completions/_rmkernel;
 
   # Libs que la plupart des wheels compilés (numpy, torch, …) dlopen à l'import.
+  # PAS de glibc ici : mettre une glibc dans LD_LIBRARY_PATH fait charger sa
+  # libc à tout binaire lancé dans le shell, y compris ceux linkés contre une
+  # AUTRE glibc (ld.so ≠ libc → segfault possible dès que stable et unstable
+  # divergent — xpu.nix instancie ce shell en unstable). Les wheels manylinux
+  # trouvent leur libc via le loader système/nix-ld.
   commonLibs = [
     pkgs.stdenv.cc.cc.lib
-    pkgs.glibc
     pkgs.zlib
     pkgs.libxml2
     pkgs.ncurses
   ];
 in
-pkgs.mkShell (
-  {
-    inherit name;
+pkgs.mkShell {
+  inherit name;
 
-    packages = [
-      pkgs.python313
-      pkgs.uv
-      pkgs.jq
-      fishCompletions
-      bashCompletions
-      zshCompletions
-    ]
-    ++ map tool [
-      "mkvenv"
-      "mkkernel"
-      "rmkernel"
-      "lskernel"
-      "lab"
-    ]
-    ++ extraPackages;
+  packages = [
+    pkgs.python313
+    pkgs.uv
+    pkgs.jq
+    fishCompletions
+    bashCompletions
+    zshCompletions
+  ]
+  ++ map tool [
+    "mkvenv"
+    "mkkernel"
+    "rmkernel"
+    "lskernel"
+    "lab"
+  ]
+  ++ extraPackages;
 
-    LD_LIBRARY_PATH = pkgs.lib.concatStringsSep ":" (
-      [ (pkgs.lib.makeLibraryPath (commonLibs ++ extraLibs)) ] ++ extraLdPaths
-    );
+  LD_LIBRARY_PATH = pkgs.lib.concatStringsSep ":" (
+    [ (pkgs.lib.makeLibraryPath (commonLibs ++ extraLibs)) ] ++ extraLdPaths
+  );
 
-    shellHook = ''
-      # Cache uv partagé entre devshells/projets, hardlinks vers les .venv.
-      export UV_CACHE_DIR="''${UV_CACHE_DIR:-$HOME/.cache/uv}"
-      export UV_LINK_MODE="''${UV_LINK_MODE:-hardlink}"
+  shellHook = ''
+    # Cache uv partagé entre devshells/projets, hardlinks vers les .venv.
+    export UV_CACHE_DIR="''${UV_CACHE_DIR:-$HOME/.cache/uv}"
+    export UV_LINK_MODE="''${UV_LINK_MODE:-hardlink}"
 
-      export XDG_DATA_DIRS="${bashCompletions}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
-      export NIX_DEVSHELL_FISH_COMPLETIONS="${fishCompletions}/share/fish/vendor_completions.d"
-      export NIX_DEVSHELL_ZSH_COMPLETIONS="${zshCompletions}/share/zsh/site-functions"
-      export NIX_DEV_SHELL_PYTHON="python"
+    export XDG_DATA_DIRS="${bashCompletions}/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+    export NIX_DEVSHELL_FISH_COMPLETIONS="${fishCompletions}/share/fish/vendor_completions.d"
+    export NIX_DEVSHELL_ZSH_COMPLETIONS="${zshCompletions}/share/zsh/site-functions"
+    export NIX_DEV_SHELL_PYTHON="python"
 
-      echo "🐍 Python dev shell ready (uv)"
-      echo
-      echo "  venv:      mkvenv [--python 3.X] [nom]"
-      echo "  packages:  uv pip install <pkg> / -r requirements.txt"
-      echo "  Jupyter:   lab (serveur) · mkkernel / rmkernel / lskernel (venv activé)"
-    ''
-    + extraShellHook;
-  }
-  // extraEnv
-)
+    echo "🐍 Python dev shell ready (uv)"
+    echo
+    echo "  venv:      mkvenv [--python 3.X] [nom]"
+    echo "  packages:  uv pip install <pkg> / -r requirements.txt"
+    echo "  Jupyter:   lab (serveur) · mkkernel / rmkernel / lskernel (venv activé)"
+  ''
+  + extraShellHook;
+
+  # Variables d'environnement additionnelles (xpu : ZE_ENABLE_ALT_DRIVERS…).
+  # Via `env` (attribut dédié de mkShell) et non un `//` sur l'attrset :
+  # un extraEnv.packages ou .shellHook ne peut plus écraser silencieusement
+  # les attributs ci-dessus.
+  env = extraEnv;
+}

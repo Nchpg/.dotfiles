@@ -33,8 +33,10 @@ in
             # stylix
             inputs.stylix.homeModules.stylix
             # sops-nix (secrets chiffres -> fichiers $HOME a l'activation)
-            inputs.sops-nix.homeManagerModules.sops
-            # spicetify (Spotify patché, cf. modules/user/spotify)
+            inputs.sops-nix.homeModules.sops
+            # spicetify (Spotify patché, cf. modules/user/spotify).
+            # spicetify-nix n'expose QUE homeManagerModules (pas d'alias
+            # homeModules, contrairement à sops-nix).
             inputs.spicetify-nix.homeManagerModules.default
             # nix-index avec base pré-construite (cf. modules/user/nix-index)
             inputs.nix-index-database.homeModules.nix-index

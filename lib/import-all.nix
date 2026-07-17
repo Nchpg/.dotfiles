@@ -2,24 +2,11 @@
 # default.nix racine (celui qui appelle ce helper). Utilisé par
 # modules/system/default.nix et modules/user/default.nix :
 #   imports = import ../../lib/import-all.nix lib ./.;
+#
+# listFilesRecursive renvoie des PATHS (pas de coercition en string) : rien
+# n'est copié dans le store à l'éval — même garantie que l'ancienne
+# implémentation manuelle (getDir/collect), en trois lignes.
 lib: dir:
-let
-  # d + "/${file}" (concaténation de PATH) et surtout pas "${d}/${file}" :
-  # l'interpolation coercerait le path en string, ce qui copie chaque
-  # sous-dossier dans le store à l'éval — inutile, et source d'erreurs
-  # « path ...-system is not valid » sur un store vierge (CI).
-  getDir =
-    d:
-    lib.mapAttrs (file: type: if type == "directory" then getDir (d + "/${file}") else type) (
-      builtins.readDir d
-    );
-
-  files =
-    d:
-    lib.collect lib.isString (
-      lib.mapAttrsRecursive (path: _type: lib.concatStringsSep "/" path) (getDir d)
-    );
-in
-map (file: dir + "/${file}") (
-  lib.filter (file: lib.hasSuffix ".nix" file && file != "default.nix") (files dir)
+builtins.filter (f: lib.hasSuffix ".nix" (toString f) && f != dir + "/default.nix") (
+  lib.filesystem.listFilesRecursive dir
 )
