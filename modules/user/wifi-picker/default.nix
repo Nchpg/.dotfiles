@@ -42,7 +42,11 @@ let
 in
 {
   options.userSettings.wifiPicker = {
-    enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)";
+    # Défaut : suit waybar (son bloc réseau a un on-click vers ce picker).
+    # Surchargeable : mettre false pour une waybar sans bouton wifi.
+    enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
+      default = config.userSettings.waybar.enable;
+    };
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;

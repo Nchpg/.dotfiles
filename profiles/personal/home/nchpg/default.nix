@@ -191,6 +191,8 @@
           enable = true;
         };
         default = "fish";
+        # Outils de confort dev (lazydocker, lazysql, broot, ncdu, feh).
+        devTools.enable = true;
       };
 
       terminal = {

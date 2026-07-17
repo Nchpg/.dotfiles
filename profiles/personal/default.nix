@@ -8,6 +8,10 @@
         # Pas de `variant` ici : la variante dark/light est portée par la
         # CIBLE du flake (personal-gram vs personal-gram-light) — bascule via
         # la commande `theme`, sans modifier la config.
+        # Thèmes explicites au niveau profil (couche d'intention) : on voit ici
+        # quel thème est actif sans aller lire le défaut du module. Le module
+        # garde les mêmes valeurs par défaut, en repli pour un profil qui ne les
+        # préciserait pas.
         darkTheme = "gruvbox-dark-custom";
         lightTheme = "gruvbox-light-hard";
       };

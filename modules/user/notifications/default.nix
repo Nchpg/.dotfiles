@@ -150,7 +150,13 @@ in
 {
   options = {
     userSettings.notifications = {
-      enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible";
+      # Défaut : suit sway. Sans ce daemon, aucune notification desktop
+      # n'apparaît (Discord, navigateur, notify-send) et le bloc cloche de
+      # waybar + le bind $mod+n restent inertes. Module sûr pour tout user
+      # (pas de secret, pas de chemin en dur).
+      enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible" // {
+        default = config.userSettings.sway.enable;
+      };
       pkgs = lib.mkOption {
         type = lib.types.pkgs;
         default = config.userSettings.defaultPkgs;
