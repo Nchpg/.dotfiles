@@ -40,6 +40,9 @@ setopt NO_BEEP
 
 export SH=zsh
 
+# FIRST_PROMPT, clear(), setdev(), bloc PATH_NIX : cf. ../common-posix (partagé
+# avec bash, injecté par shell/zsh/default.nix).
+
 git_branch() {
   local head_file="$PWD/.git/HEAD"
   if [[ -r "$head_file" ]]; then
@@ -48,12 +51,6 @@ git_branch() {
     [[ -n "$branch" ]] && echo "%F{red} ${branch}%f"
   fi
 }
-
-if [ "$SHLVL" -eq 1 ]; then
-    FIRST_PROMPT=1
-else
-    FIRST_PROMPT=0
-fi
 
 # Fonction pour construire le prompt
 build_prompt() {
@@ -110,12 +107,6 @@ ${last_status}%F{green}$SHELL_DEPTH❯%f "
 # Lancer la construction du prompt avant chaque commande
 precmd_functions+=(build_prompt)
 
-# Alias cls pour clear + reset FIRST_PROMPT
-clear() {
-    command clear
-    FIRST_PROMPT=1
-}
-
 nix-shell() {
     local has_run=0
     for arg in "$@"; do
@@ -144,11 +135,6 @@ nix() {
   fi
 }
 
-setdev() {
-  echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
-  direnv allow
-}
-
 # Complétions fournies par un devshell (ex. rmkernel dans devshells/python.nix).
 # Équivalent de NIX_DEVSHELL_FISH_COMPLETIONS côté fish.
 if [[ -n "$NIX_DEVSHELL_ZSH_COMPLETIONS" ]]; then
@@ -161,8 +147,3 @@ fi
 
 # bindkey '^?' delete-char
 bindkey '^[[3~' delete-char
-
-if [[ -n "$PATH_NIX" && "$(basename $FROM)" == "fish" ]]; then
-  export PATH="$PATH_NIX:$PATH"
-  export PATH_NIX=""
-fi

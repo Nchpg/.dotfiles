@@ -17,11 +17,9 @@ shopt -s checkwinsize
 
 export SH=bash
 
-if [ "$SHLVL" -eq 1 ]; then
-    FIRST_PROMPT=1
-else
-    FIRST_PROMPT=0
-fi
+# FIRST_PROMPT, clear(), setdev(), bloc PATH_NIX : cf. ../common-posix (partagé
+# avec zsh, injecté par shell/bash/default.nix).
+
 # Fonction pour construire le prompt avec l'heure alignée à droite
 set_bash_prompt() {
     local last_status=$?
@@ -73,11 +71,6 @@ set_bash_prompt() {
     PS1="$NEW_LINE$user_host $cwd $venv_name$git_branch\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
 }
 
-clear() {
-    command clear
-    FIRST_PROMPT=1
-}
-
 nix-shell() {
     for arg in "$@"; do
         if [ "$arg" = "--run" ]; then
@@ -89,14 +82,4 @@ nix-shell() {
     command nix-shell "$@" --run "exec $SHELL"
 }
 
-setdev() {
-  echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
-  direnv allow
-}
-
 PROMPT_COMMAND=set_bash_prompt
-
-if [[ -n "$PATH_NIX" && "$(basename $FROM)" == "fish" ]]; then
-  export PATH="$PATH_NIX:$PATH"
-  export PATH_NIX=""
-fi

@@ -14,15 +14,19 @@ alias egrep='egrep --color=auto'
 alias cls="clear"
 alias su='sudo su -s "$0"'
 alias cat="bat --paging=never --style=plain"
+# 'base16' (thème intégré à bat/delta) : colore avec les 16 couleurs ANSI du
+# terminal, donc suit le thème stylix actif, dark comme light. L'ancien
+# 'base16-stylix' était le tmTheme généré par le target stylix de bat,
+# supprimé depuis que bat gère sa polarité lui-même (cf. modules/user/bat).
 alias diff="delta \
           --side-by-side \
           --line-numbers \
-          --syntax-theme 'base16-stylix' \
+          --syntax-theme 'base16' \
           --hunk-header-style 'bold syntax'"
 alias man="batman"
 
-export EDITOR=vim
-export VISUAL=vim
+# EDITOR/VISUAL : posés une seule fois, via home.sessionVariables
+# (modules/user/home-manager), chargés par les trois shells.
 export NIX_SHELL_PRESERVE_PROMPT=1
 
 alias fanauto="sudo ec_probe write 0xCF 0x00"

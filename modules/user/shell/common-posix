@@ -1,0 +1,31 @@
+# Fragments POSIX partagés par bash ET zsh (sourcés après ../common par les
+# modules shell/bash et shell/zsh) — avant, ces blocs étaient dupliqués au
+# caractère près dans .bashrc et .zshrc. fish a ses propres équivalents
+# (syntaxe incompatible, cf. shell/fish).
+
+# Premier prompt de la session : pas de saut de ligne avant (consommé par les
+# fonctions de prompt de chaque shell).
+if [ "$SHLVL" -eq 1 ]; then
+    FIRST_PROMPT=1
+else
+    FIRST_PROMPT=0
+fi
+
+clear() {
+    command clear
+    FIRST_PROMPT=1
+}
+
+# Écrit un .envrc direnv pointant sur un devshell du flake (dev-<name> ouvre
+# le shell une fois ; setdev <name> le rend automatique dans ce dossier).
+setdev() {
+  echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
+  direnv allow
+}
+
+# Restauration du PATH transmis par fish à travers un shell intermédiaire
+# (cf. shell/fish : fish exporte PATH_NIX/FROM avant d'exec un autre shell).
+if [ -n "$PATH_NIX" ] && [ "$(basename "$FROM")" = "fish" ]; then
+  export PATH="$PATH_NIX:$PATH"
+  export PATH_NIX=""
+fi
