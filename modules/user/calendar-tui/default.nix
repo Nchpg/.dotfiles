@@ -139,6 +139,19 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # calendar-tui déclare des secrets sops (identifiants Google + IDs de
+    # collection). Sans accès à la clé, l'activation échouerait au déchiffrement
+    # avec un message obscur : on l'attrape ici à l'éval. NB : ceci vérifie le
+    # DROIT d'accès (keyOwner/root). Que la clé age soit bien présente et
+    # déchiffre effectivement les secrets Google, c'est sops-nix qui le vérifie
+    # à l'activation (impossible à l'éval, la clé est un fichier runtime).
+    assertions = [
+      {
+        assertion = config.userSettings.sops.available;
+        message = "userSettings.calendarTui a besoin des secrets sops (Google Agenda), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
+      }
+    ];
+
     home.packages = with cfg.pkgs; [
       khal
       vdirsyncer
