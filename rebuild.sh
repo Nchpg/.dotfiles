@@ -22,7 +22,9 @@ done
 
 # Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
-    echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light]" >&2
+    echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light] [--update] [--yes]" >&2
+    echo "  --update : bump l'input claude-code avant le build" >&2
+    echo "  --yes    : pas de confirmation si le working tree est sale" >&2
     exit 1
 fi
 
@@ -70,8 +72,9 @@ if [ -n "$(git status --porcelain)" ]; then
     # incluses même non commitées ; seuls les fichiers NON TRACKÉS sont ignorés.
     echo -e "Note: modified tracked files ${GREEN}ARE included${NC} in the build; ${RED}untracked files are NOT${NC} (git add them first)."
     echo
-    # --yes : pas de confirmation (utilisé par `theme`, qui vient justement de
-    # modifier un fichier tracké → le prompt serait systématique et inutile).
+    # --yes : pas de confirmation (utilisé par genclean pour son rebuild final
+    # automatique ; `theme` ne modifie plus aucun fichier depuis que la
+    # variante est portée par la cible du flake).
     if [[ "$YES" -eq 1 ]]; then
         echo "(--yes) Continuing without confirmation."
     else
@@ -95,7 +98,10 @@ PREV_SYSTEM="$(readlink -f /run/current-system)"
 # désactiverait le cache d'évaluation -> chaque rebuild réévaluerait tout de zéro.
 # Pas de --show-trace par défaut : il ralentit nettement l'éval. Pour déboguer une
 # erreur d'éval, relancer ponctuellement via : REBUILD_EXTRA_ARGS=--show-trace rebuild
-if sudo nixos-rebuild switch --flake .#"$ATTR" ${REBUILD_EXTRA_ARGS:-}; then
+# Split volontaire de REBUILD_EXTRA_ARGS en mots, via un tableau (et pas une
+# expansion non quotée, qui subirait aussi l'expansion des globs).
+read -ra EXTRA_ARGS <<< "${REBUILD_EXTRA_ARGS:-}"
+if sudo nixos-rebuild switch --flake .#"$ATTR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}; then
     echo "✅ System rebuild successful."
 
     # Diff des paquets ancien système → nouveau (versions bump, ajouts, retraits).

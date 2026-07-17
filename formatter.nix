@@ -9,7 +9,8 @@ pkgs.writeShellApplication {
   ];
   text = ''
     if [ "$#" -eq 0 ]; then
-      git ls-files '*.nix' ':!:*hardware-configuration.nix' | xargs -r nixfmt
+      # -z / -0 : robuste aux chemins avec espaces.
+      git ls-files -z '*.nix' ':!:*hardware-configuration.nix' | xargs -r0 nixfmt
     else
       exec nixfmt "$@"
     fi
