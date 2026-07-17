@@ -21,7 +21,9 @@
     };
 
     claude-code = {
-      url = "git+https://github.com/sadjow/claude-code-nix";
+      # `github:` (tarball via l'API) et pas `git+https` (clone complet du
+      # dépôt) : fetch bien plus rapide sur `rebuild -u`, lock équivalent.
+      url = "github:sadjow/claude-code-nix";
       # Pas de `inputs.nixpkgs.follows` : volontaire. L'input garde le nixpkgs
       # pinné par l'upstream → cache binaire garanti et toujours la dernière
       # version de claude-code buildable (bump via `rebuild -u`).
@@ -42,34 +44,37 @@
   };
 
   outputs =
-    inputs@{ self, ... }:
+    inputs:
     let
       system = "x86_64-linux";
-
-      pkgs-stable = import inputs.nixpkgs-stable {
-        inherit system;
-        config.allowUnfree = true;
-        # Téléchargement automatique du driver DisplayLink (dock Dell D3100),
-        # sinon nix-prefetch-url manuel sur chaque host.
-        overlays = [ (import ./overlays/displaylink.nix) ];
-      };
-
-      pkgs-unstable = import inputs.nixpkgs-unstable {
-        inherit system;
-        config.allowUnfree = true;
-      };
-
       lib = inputs.nixpkgs-stable.lib;
-      profiles = builtins.filter (x: x != null) (
-        lib.mapAttrsToList (name: value: if value == "directory" then name else null) (
-          builtins.readDir ./profiles
-        )
-      );
-      hosts = builtins.filter (x: x != null) (
-        lib.mapAttrsToList (name: value: if value == "directory" then name else null) (
-          builtins.readDir ./hosts
-        )
-      );
+
+      # Instancie un nixpkgs : system + allowUnfree communs, overlays optionnels.
+      mkPkgs =
+        nixpkgs: overlays:
+        import nixpkgs {
+          inherit system overlays;
+          config.allowUnfree = true;
+        };
+
+      # pkgs-stable porte l'overlay DisplayLink : téléchargement automatique du
+      # driver (dock Dell D3100), sinon nix-prefetch-url manuel sur chaque host.
+      pkgs-stable = mkPkgs inputs.nixpkgs-stable [ (import ./overlays/displaylink.nix) ];
+      pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
+
+      # Arguments injectés dans TOUS les modules : système (via specialArgs) et
+      # home-manager (via extraSpecialArgs). Chacun y ajoute ensuite ses args
+      # propres (target côté système, devShellNames côté HM).
+      commonArgs = {
+        inherit pkgs-stable pkgs-unstable inputs;
+      };
+
+      # Auto-découverte du contenu d'un dossier : sous-dossiers (profils, hosts)
+      # ou fichiers .nix (devshells). Cf. lib/discover.nix.
+      inherit (import ./lib/discover.nix lib) dirNames nixFileNames;
+
+      profiles = dirNames ./profiles;
+      hosts = dirNames ./hosts;
 
       # Variantes de thème : chaque couple profil×host produit une cible par
       # variante — `personal-gram` (dark, nom historique) et
@@ -82,15 +87,13 @@
         "light"
       ];
 
-      targets = lib.concatMap (
-        profile:
-        lib.concatMap (
-          host:
-          map (variant: {
-            inherit profile host variant;
-          }) variants
-        ) hosts
-      ) profiles;
+      # Produit cartésien profils × hosts × variantes : une cible par combo,
+      # sous forme { profile; host; variant; } (cf. targetName).
+      targets = lib.cartesianProduct {
+        profile = profiles;
+        host = hosts;
+        variant = variants;
+      };
 
       targetName =
         target:
@@ -101,12 +104,7 @@
       # profiles/hosts ci-dessus. `dev-<name>` est généré à partir de la même
       # liste (cf. modules/user/shell) : un nouveau fichier = un nouveau
       # devShell + un nouvel alias, sans rien déclarer à la main.
-      devShellNames = builtins.filter (x: x != null) (
-        lib.mapAttrsToList (
-          name: type:
-          if type == "regular" && lib.hasSuffix ".nix" name then lib.removeSuffix ".nix" name else null
-        ) (builtins.readDir ./devshells)
-      );
+      devShellNames = nixFileNames ./devshells;
 
       # Devshells qui doivent matcher la stack système (drivers unstable) au
       # lieu du pkgs-stable par défaut.
@@ -141,36 +139,42 @@
                 home-manager.useUserPackages = true;
                 # La config système est accessible dans les modules HM via
                 # l'argument natif `osConfig` (ex. osConfig.systemSettings.*).
-                home-manager.extraSpecialArgs = {
-                  inherit pkgs-unstable;
-                  inherit pkgs-stable;
-                  inherit inputs;
-                  inherit self;
+                home-manager.extraSpecialArgs = commonArgs // {
                   inherit devShellNames;
                 };
               }
             ];
-            specialArgs = {
-              inherit pkgs-stable;
-              inherit pkgs-unstable;
-              inherit inputs;
+            specialArgs = commonArgs // {
               inherit target;
             };
           };
         }) targets
       );
 
-      # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.
-      formatter.${system} = import ./formatter.nix { pkgs = pkgs-stable; };
-
-      devShells.${system} = builtins.listToAttrs (
-        map (name: {
-          inherit name;
-          value = import (./devshells + "/${name}.nix") {
-            pkgs = if builtins.elem name unstableDevShells then pkgs-unstable else pkgs-stable;
-          };
-        }) devShellNames
+      devShells.${system} = lib.genAttrs devShellNames (
+        name:
+        import (./devshells + "/${name}.nix") {
+          pkgs = if builtins.elem name unstableDevShells then pkgs-unstable else pkgs-stable;
+        }
       );
 
+      # Validation des fonds d'écran : `nix build .#wallpapers-all` réalise
+      # TOUTES les fetchurl du registre (modules/themes/wallpapers.nix). Les
+      # URLs wallhaven/wallpaperflare sont éphémères, et seuls les fonds des
+      # thèmes actifs sont téléchargés en temps normal : une URL morte ne se
+      # découvrirait qu'au moment de sélectionner le thème concerné.
+      packages.${system}.wallpapers-all =
+        let
+          themes = import ./modules/themes lib;
+        in
+        pkgs-stable.linkFarm "wallpapers-all" (
+          map (name: {
+            inherit name;
+            path = themes.wallpaperPath pkgs-stable name;
+          }) themes.wallpaperNames
+        );
+
+      # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.
+      formatter.${system} = import ./formatter.nix { pkgs = pkgs-stable; };
     };
 }

@@ -3,13 +3,18 @@
 pkgs.mkShell {
   name = "c-dev";
 
-  buildInputs = [
+  # Outils (compilateur, debugger, build system) : `packages` — la sémantique
+  # mkShell des outils qu'on exécute. Les bibliothèques contre lesquelles on
+  # linke restent en buildInputs (pkg-config les y découvre).
+  packages = [
     pkgs.gcc
     pkgs.gdb
     pkgs.cmake
     pkgs.valgrind
-
     pkgs.pkg-config
+  ];
+
+  buildInputs = [
     pkgs.opencv
     pkgs.openblas
     pkgs.nlohmann_json
