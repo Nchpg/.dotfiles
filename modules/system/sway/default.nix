@@ -24,6 +24,10 @@ in
     programs.sway = {
       enable = true;
       wrapperFeatures.gtk = true;
+      # Le défaut du module NixOS installe foot, swaylock, swayidle, wmenu,
+      # brightnessctl, grim et pulseaudio (!) — tous en doublon avec le côté
+      # user (modules/user/{terminal,sway,flameshot}) ou inutiles (pipewire).
+      extraPackages = [ ];
     };
 
     # Partage d'écran (Discord/Chrome) sur Wayland : active xdg-desktop-portal
@@ -33,7 +37,7 @@ in
     xdg.portal = {
       enable = true;
       wlr.enable = true; # backend Screencast/Screenshot pour wlroots
-      extraPortals = [ pkgs-stable.xdg-desktop-portal-gtk ];
+      extraPortals = [ cfg.pkgs.xdg-desktop-portal-gtk ];
 
       # Routage des interfaces de portail. Sans ça, avec XDG_CURRENT_DESKTOP=sway
       # et plusieurs backends, FileChooser n'est servi par personne (dialogue Qt

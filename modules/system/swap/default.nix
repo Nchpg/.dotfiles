@@ -45,8 +45,8 @@ in
       partition = {
         enable = lib.mkEnableOption "partition de swap";
         device = lib.mkOption {
-          type = lib.types.str;
-          default = "";
+          type = lib.types.nullOr lib.types.str;
+          default = null;
           description = "Chemin du périphérique de la partition de swap.";
         };
       };
@@ -82,7 +82,7 @@ in
           device = cfg.file.path;
           size = cfg.file.size;
         }
-        ++ lib.optional (cfg.partition.enable && cfg.partition.device != "") {
+        ++ lib.optional (cfg.partition.enable && cfg.partition.device != null) {
           device = cfg.partition.device;
         };
     }
@@ -103,7 +103,7 @@ in
           "--prefer"
           "^(chrome|chromium|firefox)$"
           "--avoid"
-          "^(sway|waybar|gdm|Xwayland|systemd|dbus-daemon)$"
+          "^(sway|waybar|gdm|gnome-shell|Xwayland|systemd|dbus-daemon)$"
         ];
       };
     })

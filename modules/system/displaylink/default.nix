@@ -17,9 +17,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # S'ajoute au "modesetting" déjà posé par intel-graphics (les listes
-    # fusionnent) ; installe le paquet displaylink, charge evdi et lance
-    # le service dlm.
+    # S'ajoute au "modesetting" du GPU natif posé par intel-graphics (les listes
+    # videoDrivers fusionnent) ; installe le paquet displaylink, charge evdi et
+    # lance le service dlm. On ne remet PAS "modesetting" ici : la liste ne
+    # déduplique pas, ça ferait un doublon. Un host displaylink sans driver GPU
+    # natif devrait fournir le sien (aucun aujourd'hui).
     services.xserver.videoDrivers = [ "displaylink" ];
   };
 }

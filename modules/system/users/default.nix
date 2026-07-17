@@ -80,6 +80,9 @@
           # libvirtd n'est PAS dans la base commune : le groupe est quasi
           # équivalent root (une VM peut monter le disque hôte) → opt-in,
           # comme docker.
+          # networkmanager pour tous : un user doit pouvoir gérer son wifi
+          # (se connecter à un nouveau réseau crée une connexion système, ce qui
+          # exige ce groupe — cf. la policy polkit modify.system).
           extraGroups = [
             "networkmanager"
             "video"

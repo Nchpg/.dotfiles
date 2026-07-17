@@ -45,15 +45,21 @@
     channel.enable = false;
   };
 
-  # Enable automatic garbage collection
+  # GC automatique : ne supprime QUE les chemins orphelins du store, jamais
+  # les générations (pas de --delete-older-than). La rétention des
+  # générations est pilotée interactivement par genclean — un timer qui les
+  # supprimait à 14 jours écrasait silencieusement le choix fait là-bas.
   nix.gc = {
-    automatic = true; # Run the garbage collector automatically
-    dates = "weekly"; # How often to run it
-    options = "--delete-older-than 14d"; # What to delete
+    automatic = true;
+    dates = "weekly";
   };
 
   # Déduplication du store par hardlinks (job périodique, complète le gc).
   nix.optimise.automatic = true;
+
+  # Manuel NixOS local (nixos-help) : jamais utilisé, et sa génération coûte
+  # à chaque rebuild. Les man pages classiques restent actives.
+  documentation.nixos.enable = false;
 
   # Firmwares redistribuables : couvre tout le matériel réel (iwlwifi, BT
   # Intel, GPU via linux-firmware ; le son via sof-firmware, aussi ajouté
