@@ -3,9 +3,10 @@
 # modules/system/stylix et modules/user/stylix. Changer de police = éditer ce
 # fichier uniquement.
 #
-# Fichier régulier (pas un dossier) : il est donc invisible pour l'énumération
-# des thèmes (readDir filtré sur type == "directory") et n'est pas auto-importé
-# (lib/import-all.nix ne parcourt que modules/system et modules/user).
+# Hors de schemes/ : il est donc invisible pour l'énumération des thèmes
+# (qui ne lit que modules/themes/schemes, cf. default.nix) et n'est pas
+# auto-importé (lib/import-all.nix ne parcourt que modules/system et
+# modules/user).
 pkgs: rec {
   # À installer dans fonts.packages — /!\ stylix (ci-dessous) référence ces
   # familles par leur nom : le rendu GDM/session casse si elles manquent.

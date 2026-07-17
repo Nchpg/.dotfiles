@@ -22,7 +22,7 @@ in
         # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
         default = osConfig.systemSettings.stylix.theme;
         type = lib.types.enum themes.names;
-        description = "Theme for stylix to use system wide. A list of themes can be found in the `themes/schemes` directory.";
+        description = "Theme for stylix to use system wide. A list of themes can be found in the `modules/themes/schemes` directory.";
       };
       wallpaper = lib.mkOption {
         type = lib.types.nullOr (lib.types.enum themes.wallpaperNames);
@@ -31,11 +31,6 @@ in
           Fond d'écran de session à la place de celui du thème — un nom de
           modules/themes/wallpapers.nix. null = le fond par défaut du thème.
         '';
-      };
-      themeconfig = lib.mkOption {
-        default = { };
-        type = lib.types.attrsOf lib.types.str;
-        description = "Theme config";
       };
       pkgs = lib.mkOption {
         type = lib.types.pkgs;
@@ -46,7 +41,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    userSettings.stylix.themeconfig = themes.load cfg.theme;
     stylix = {
       enable = true;
       autoEnable = false;
