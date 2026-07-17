@@ -101,10 +101,12 @@ in
         # telescope live grep
         ripgrep
         fd
-        # image.nvim : traitement d'images, + ghostscript pour rasteriser PDF/EPS.
-        # (pdftoppm/pdftotext viennent de poppler-utils, cf. modules/user/common.nix)
+        # image.nvim : traitement d'images, + ghostscript pour rasteriser PDF/EPS,
+        # + poppler-utils (pdftoppm/pdftotext) déclaré ICI — avant, il n'arrivait
+        # que via le module claude : neovim sans claude perdait le rendu PDF.
         imagemagick
         ghostscript
+        poppler-utils
       ];
 
       # image.nvim a besoin du rock lua `magick` sur le luapath de Neovim.
