@@ -22,6 +22,14 @@ let
   home = config.home.homeDirectory;
   launcher = name: "${home}/.config/sway/launchers/${name}";
 
+  # on-click vers le launcher d'un autre module, câblé UNIQUEMENT si ce module
+  # est activé pour le user. Sinon pas d'attribut on-click du tout : le bloc
+  # reste affiché, le clic est simplement inactif. Rend la barre composable —
+  # un user minimal (guest) peut activer waybar sans être forcé de tirer
+  # calendarTui (secrets sops) ni wifiPicker (nmtui/networkmanager).
+  clickIf =
+    module: name: lib.optionalAttrs config.userSettings.${module}.enable { on-click = launcher name; };
+
   # Glyphe Nerd Font depuis un codepoint hexa, BMP ou plan astral (les icônes
   # Material Design sont > U+FFFF -> paire de substitution UTF-16). Évite de
   # taper le glyphe en dur (qui se ferait stripper) ; fromJSON gère le \u.
@@ -326,7 +334,12 @@ let
 in
 {
   options.userSettings.waybar = {
-    enable = lib.mkEnableOption "waybar (remplace la swaybar native)";
+    # Défaut : suit sway. Un user en session sway veut la waybar (tray, blocs
+    # custom) plutôt que la swaybar native — celle-ci reste le fallback si on
+    # met explicitement waybar.enable = false. Surchargeable par user.
+    enable = lib.mkEnableOption "waybar (remplace la swaybar native)" // {
+      default = config.userSettings.sway.enable;
+    };
 
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
@@ -373,6 +386,12 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Les on-click de la barre pointent vers ~/.config/sway/launchers/*, fournis
+    # par cinq autres modules (bluetoothPicker, wifiPicker, volumeMixer,
+    # lgControl, calendarTui). On ne les câble que si le module correspondant
+    # est activé (cf. clickIf), plutôt que d'imposer les cinq : la barre reste
+    # utilisable pour un user qui n'en active qu'une partie.
+
     # On gère nous-mêmes le style (palette Stylix) pour coller à l'ancienne barre.
     stylix.targets.waybar.enable = false;
 
@@ -485,8 +504,8 @@ in
           interval = 5;
           # Sortie JSON : barre = noms tronqués, tooltip = noms complets.
           return-type = "json";
-          on-click = launcher "bluetooth";
-        };
+        }
+        // clickIf "bluetoothPicker" "bluetooth";
 
         network = {
           interval = 5;
@@ -494,8 +513,8 @@ in
           format-ethernet = labeled "f05a9" "{ifname}";
           format-disconnected = labeled "f05a9" "Off";
           tooltip-format = "{ifname} {ipaddr}";
-          on-click = launcher "wifi";
-        };
+        }
+        // clickIf "wifiPicker" "wifi";
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
@@ -538,9 +557,13 @@ in
           menu-file = "${menuDir}/volume.xml";
           menu-actions = {
             mute = volMute; # toggle mute/unmute
-            mixer = launcher "volume-mixer";
             volup = volUp;
             voldown = volDown;
+          }
+          # Entrée « mixer » du menu seulement si volumeMixer est activé (sinon
+          # l'action est juste absente du menu, le reste marche).
+          // lib.optionalAttrs config.userSettings.volumeMixer.enable {
+            mixer = launcher "volume-mixer";
           }
           // volPresetActions;
         };
@@ -586,8 +609,8 @@ in
           exec = "${scriptDir}/battery.sh";
           interval = 10; # profil/ventilo bougent plus vite que le niveau
           return-type = "json";
-          on-click = launcher "lg-control";
-        };
+        }
+        // clickIf "lgControl" "lg-control";
 
         # Météo (Open-Meteo via weather.sh). Le script émet une catégorie dans
         # "alt", mappée ici sur l'icône Material Design (jour/nuit inclus).
@@ -629,8 +652,8 @@ in
         clock = {
           format = labeled "f0e8f" "{:%a %d-%m-%Y %H:%M}"; # md-calendar-clock
           tooltip-format = "<tt>{calendar}</tt>";
-          on-click = launcher "calendar";
-        };
+        }
+        // clickIf "calendarTui" "calendar";
 
         tray = {
           icon-size = 16;

@@ -16,7 +16,11 @@ let
 in
 {
   options.userSettings.volumeMixer = {
-    enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)";
+    # Défaut : suit waybar (l'entrée « mixer » du menu volume ouvre ce module).
+    # Surchargeable : mettre false pour une waybar sans mixeur.
+    enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)" // {
+      default = config.userSettings.waybar.enable;
+    };
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;

@@ -13,7 +13,11 @@ let
 in
 {
   options.userSettings.rofi = {
-    enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)";
+    # Défaut : suit sway. rofi sert le lanceur d'apps $mod+d (et $mod+v de
+    # cliphist) : un bureau sway sans rofi n'a pas de lanceur clavier.
+    enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)" // {
+      default = config.userSettings.sway.enable;
+    };
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;

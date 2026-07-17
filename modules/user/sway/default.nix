@@ -20,8 +20,49 @@ let
   tmuxCmd = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
   tmuxLaunch = if term == "alacritty" then "${term} -e ${tmuxCmd}" else "${term} ${tmuxCmd}";
 
-  # Binding Ctrl+Return → terminal dans tmux, seulement si tmux est activé.
-  tmuxBind = lib.optionalString config.userSettings.tmux.enable "bindsym Control+Return exec ${tmuxLaunch}";
+  # Bind (ou bloc) émis seulement si le module user `opt` est activé — évite un
+  # bind mort, ou un daemon lancé dans le vide, quand le programme ciblé n'est
+  # pas installé pour ce user. Tous les lanceurs vers d'autres modules passent
+  # par là (rofi/swaync/flameshot suivent sway par défaut, mais on gate quand
+  # même au cas où ils seraient explicitement coupés).
+  bindIf = opt: str: lib.optionalString config.userSettings.${opt}.enable str;
+
+  # Ctrl+Return → terminal dans tmux, seulement si tmux est activé.
+  tmuxBind = bindIf "tmux" "bindsym Control+Return exec ${tmuxLaunch}";
+
+  # $mod+Shift+f → firefox. Pas de résolution du nom (contrairement à chrome) :
+  # le binaire s'appelle toujours `firefox`, non substituable.
+  firefoxBind = bindIf "firefox" "bindsym $mod+Shift+f exec firefox";
+
+  # $mod+Shift+c → chrome. Nom de binaire résolu depuis le paquet (substituable :
+  # google-chrome-stable / chromium / ungoogled) et non un chemin store, pour
+  # que le PATH résolve le wrapper home-manager qui porte les flags Wayland.
+  chromeBind = lib.optionalString config.userSettings.chrome.enable "bindsym $mod+Shift+c exec ${baseNameOf (lib.getExe config.userSettings.chrome.package)}";
+
+  # $mod+d / XF86Search → lanceur d'apps rofi.
+  menuBind = bindIf "rofi" "bindsym $mod+d exec $menu";
+  searchBind = bindIf "rofi" "bindsym XF86Search exec $menu";
+
+  # $mod+n → centre de notifications swaync (module notifications).
+  swayncBind = bindIf "notifications" "bindsym $mod+n exec swaync-client -t -sw";
+
+  # Capture d'écran flameshot (opt-in) : daemon au démarrage + binds
+  # Print/Shift+Print + règles de fenêtre. grim/slurp/wl-copy sont fournis par
+  # le module flameshot, donc tout le bloc est gaté sur lui.
+  flameshotDaemon = bindIf "flameshot" "exec QT_QPA_PLATFORM=wayland flameshot";
+  flameshotBinds = bindIf "flameshot" ''
+    # Print : flameshot (capture via grim → éditeur : annoter, sauver, copier).
+    # QT_QPA_PLATFORM=wayland : la copie passe par KSystemClipboard (wlr-data-
+    # control), actif seulement en Wayland natif. QT_QPA_PLATFORMTHEME=
+    # xdgdesktopportal : boîte « Save » via le sélecteur de fichiers GTK.
+    bindsym Print exec QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui
+    # Shift+Print : sélection d'une zone → copie directe dans le presse-papier.
+    bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
+
+    # L'overlay flameshot doit être flottant/sans bordure (sinon tilé et cassé).
+    for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
+    for_window [class="flameshot"] floating enable, border none, fullscreen disable
+  '';
 
   # Fond d'écran : l'image résolue par stylix (thème actif, ou surcharge
   # userSettings.stylix.wallpaper — cf. modules/themes). Avant, un PNG en dur
@@ -77,6 +118,13 @@ let
         "@bar@"
         "@lockCmd@"
         "@wallpaperBg@"
+        "@chromeBind@"
+        "@firefoxBind@"
+        "@menuBind@"
+        "@searchBind@"
+        "@swayncBind@"
+        "@flameshotDaemon@"
+        "@flameshotBinds@"
       ]
       [
         config.userSettings.terminal.default
@@ -84,13 +132,42 @@ let
         barBlock
         lockCmd
         wallpaperBg
+        chromeBind
+        firefoxBind
+        menuBind
+        searchBind
+        swayncBind
+        flameshotDaemon
+        flameshotBinds
       ]
       templateContent;
 
   swaymsgBin = "${cfg.pkgs.sway}/bin/swaymsg";
 in
 {
-  config = lib.mkIf cfg.enable {
+  options.userSettings.sway = {
+    # Gate PROPRE à ce user, indépendant de desktopApps (un window manager n'a
+    # rien à voir avec « des apps desktop »). Défaut : suit le sway SYSTÈME —
+    # tout user d'un host où sway est activé reçoit sa config, avec la barre
+    # native en haut (sway-bar.sh, dépendances installées ci-dessous). Pour la
+    # barre waybar + les binds rofi/flameshot, il suffit d'activer ces modules
+    # dans le profil du user. Mettre false pour un user qui ne veut pas de
+    # session sway (ex. root, cf. son profil).
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = cfg.enable;
+      description = "Config sway de ce user (défaut : suit le sway système).";
+    };
+  };
+
+  config = lib.mkIf config.userSettings.sway.enable {
+    assertions = [
+      {
+        assertion = cfg.enable;
+        message = "userSettings.sway requiert systemSettings.window-manager.sway (le compositor vient du système).";
+      }
+    ];
+
     home.file.".config/sway/config" = {
       text = finalConfigContent;
     };

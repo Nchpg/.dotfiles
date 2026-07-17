@@ -35,7 +35,7 @@ seat * xcursor_theme Adwaita 24
 # Daemon flameshot (Wayland natif) : indispensable pour le bouton Copier.
 # Le « gui » envoie l'image au daemon via DBus, et c'est lui qui la pose dans le
 # presse-papier et la maintient en vie après fermeture de l'éditeur.
-    exec QT_QPA_PLATFORM=wayland flameshot
+    @flameshotDaemon@
 
 #
 # Mod & Terminal
@@ -56,7 +56,7 @@ seat * xcursor_theme Adwaita 24
     bindsym $mod+Return exec $term
     @tmuxBind@
     bindsym $mod+Shift+q kill
-    bindsym $mod+d exec $menu
+    @menuBind@
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
 
     bindsym Control+Escape exec @lockCmd@
@@ -170,8 +170,8 @@ client.focused  #285577 #285577 #ffffff #323232 #323232
 
 # Extra launchers
 #
-bindsym $mod+Shift+f exec firefox
-bindsym $mod+Shift+c exec google-chrome-stable
+@firefoxBind@
+@chromeBind@
 
 # Sound and other keyboard control
 #
@@ -186,24 +186,14 @@ bindsym XF86AudioPrev exec playerctl previous
 bindsym XF86MonBrightnessDown exec ~/.config/sway/brightness.sh down
 bindsym XF86MonBrightnessUp exec ~/.config/sway/brightness.sh up
 
-bindsym XF86Search exec $menu
+@searchBind@
 
 # Ouvre/ferme le centre de notifications swaync
-bindsym $mod+n exec swaync-client -t -sw
+@swayncBind@
 
-# Print : flameshot (capture via grim → éditeur : annoter, sauver, copier).
-# QT_QPA_PLATFORM=wayland INDISPENSABLE : la copie passe par KSystemClipboard
-# (protocole wlr-data-control) qui n'est actif qu'en Wayland natif. Le bouton
-# Copier transmet l'image au daemon flameshot (lancé plus haut) qui la conserve.
-# QT_QPA_PLATFORMTHEME=xdgdesktopportal : la boîte « Save » utilise le sélecteur
-# de fichiers GTK (via xdg-desktop-portal-gtk) au lieu du dialogue Qt par défaut.
-bindsym Print exec QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui
-# Shift+Print : sélection d'une zone → copie directe dans le presse-papier
-bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
-
-# L'overlay flameshot doit être flottant/sans bordure (sinon tilé et cassé).
-for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
-for_window [class="flameshot"] floating enable, border none, fullscreen disable
+# Capture d'écran flameshot (Print/Shift+Print + règles de fenêtre) : bloc
+# injecté seulement si le module flameshot est activé (cf. modules/user/sway).
+@flameshotBinds@
 
 # Modules additionnels
 include ~/.config/sway/conf.d/*.conf

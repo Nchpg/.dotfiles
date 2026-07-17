@@ -15,7 +15,11 @@ let
 in
 {
   options.userSettings.bluetoothPicker = {
-    enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)";
+    # Défaut : suit waybar (son bloc bluetooth a un on-click vers ce picker).
+    # Surchargeable : mettre false pour une waybar sans bouton bluetooth.
+    enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)" // {
+      default = config.userSettings.waybar.enable;
+    };
     pkgs = lib.mkOption {
       type = lib.types.pkgs;
       default = config.userSettings.defaultPkgs;
