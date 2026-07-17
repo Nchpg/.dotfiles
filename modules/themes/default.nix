@@ -56,9 +56,13 @@ lib: rec {
     in
     {
       inherit (t) polarity;
-      # Sans la clé `wallpaper` : elle ne concerne pas le scheme base16 et
-      # finirait sinon dans le yaml généré par stylix.
-      base16Scheme = builtins.removeAttrs t [ "wallpaper" ];
+      # Sans `wallpaper` ni `polarity` : ils ne concernent pas le scheme
+      # base16 (polarity est déjà passé à part ci-dessus) et finiraient sinon
+      # dans le yaml généré par stylix.
+      base16Scheme = builtins.removeAttrs t [
+        "wallpaper"
+        "polarity"
+      ];
     }
     // lib.optionalAttrs (chosen != null) {
       image = wallpaperPath pkgs chosen;

@@ -2,6 +2,11 @@
 
 let
   cfg = config.userSettings.firefox;
+  # Palette stylix du user (hex sans #), même source que rofi/waybar — plus
+  # d'API parallèle userSettings.stylix.themeconfig. Le CSS n'est émis que si
+  # stylix est activé pour ce user (sinon `colors` n'est pas évaluable).
+  c = config.lib.stylix.colors;
+  themed = config.userSettings.stylix.enable;
 in
 {
   options = {
@@ -39,26 +44,26 @@ in
         settings = {
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
         };
-        userChrome = ''
+        userChrome = lib.optionalString themed ''
           /* Appliquer uniquement les couleurs Stylix sans modifier la disposition */
           :root {
-            --toolbar-bgcolor: #${config.userSettings.stylix.themeconfig.base00} !important;
-            --toolbar-color: #${config.userSettings.stylix.themeconfig.base05} !important;
-            --toolbar-field-background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
-            --toolbar-field-color: #${config.userSettings.stylix.themeconfig.base05} !important;
-            --toolbar-field-border-color: #${config.userSettings.stylix.themeconfig.base03} !important;
-            --lwt-accent-color: #${config.userSettings.stylix.themeconfig.base00} !important;
-            --lwt-accent-color-inactive: #${config.userSettings.stylix.themeconfig.base00} !important;
-            --lwt-text-color: #${config.userSettings.stylix.themeconfig.base05} !important;
-            --lwt-selected-tab-background-color: #${config.userSettings.stylix.themeconfig.base02} !important;
-            --tab-selected-bgcolor: #${config.userSettings.stylix.themeconfig.base02} !important;
-            --arrowpanel-background: #${config.userSettings.stylix.themeconfig.base00} !important;
-            --arrowpanel-color: #${config.userSettings.stylix.themeconfig.base05} !important;
+            --toolbar-bgcolor: #${c.base00} !important;
+            --toolbar-color: #${c.base05} !important;
+            --toolbar-field-background-color: #${c.base00} !important;
+            --toolbar-field-color: #${c.base05} !important;
+            --toolbar-field-border-color: #${c.base03} !important;
+            --lwt-accent-color: #${c.base00} !important;
+            --lwt-accent-color-inactive: #${c.base00} !important;
+            --lwt-text-color: #${c.base05} !important;
+            --lwt-selected-tab-background-color: #${c.base02} !important;
+            --tab-selected-bgcolor: #${c.base02} !important;
+            --arrowpanel-background: #${c.base00} !important;
+            --arrowpanel-color: #${c.base05} !important;
           }
 
           /* Barre d'outils principale */
           #nav-bar {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
+            background-color: #${c.base00} !important;
           }
 
           #navigator-toolbox {
@@ -67,84 +72,84 @@ in
 
           /* Barre d'adresse et champs de recherche */
           #urlbar, .searchbar-textbox {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
-            color: #${config.userSettings.stylix.themeconfig.base05} !important;
-            border-color: #${config.userSettings.stylix.themeconfig.base03} !important;
+            background-color: #${c.base00} !important;
+            color: #${c.base05} !important;
+            border-color: #${c.base03} !important;
           }
 
           #urlbar-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
+            background-color: #${c.base00} !important;
           }
 
           /* Menu déroulants */
           menupopup, panel, .panel-arrowcontent {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
-            color: #${config.userSettings.stylix.themeconfig.base05} !important;
-            border-color: #${config.userSettings.stylix.themeconfig.base03} !important;
+            background-color: #${c.base00} !important;
+            color: #${c.base05} !important;
+            border-color: #${c.base03} !important;
           }
 
           menuitem:hover, menu:hover {
-            background-color: #${config.userSettings.stylix.themeconfig.base02} !important;
+            background-color: #${c.base02} !important;
           }
 
           /* Onglets sélectionnés */
           .tabbrowser-tab[selected] .tab-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base02} !important;
+            background-color: #${c.base02} !important;
           }
 
           .tabbrowser-tab:is([selected], [visuallyselected="true"]) .tab-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base02} !important;
+            background-color: #${c.base02} !important;
           }
 
           .tabbrowser-tab[selected] .tab-label {
-            color: #${config.userSettings.stylix.themeconfig.base05} !important;
+            color: #${c.base05} !important;
           }
 
           /* Onglets non sélectionnés */
           .tabbrowser-tab:not([selected]) .tab-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
+            background-color: #${c.base00} !important;
           }
 
           .tabbrowser-tab:not([selected], [visuallyselected="true"]) .tab-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
+            background-color: #${c.base00} !important;
           }
 
           .tabbrowser-tab:not([selected]) .tab-label {
-            color: #${config.userSettings.stylix.themeconfig.base04} !important;
+            color: #${c.base04} !important;
           }
 
           /* Hover sur les onglets */
           .tabbrowser-tab:hover:not([selected]) .tab-background {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
+            background-color: #${c.base00} !important;
           }
 
           /* Sidebar */
           #sidebar-box, #sidebar-header {
-            background-color: #${config.userSettings.stylix.themeconfig.base00} !important;
-            color: #${config.userSettings.stylix.themeconfig.base05} !important;
+            background-color: #${c.base00} !important;
+            color: #${c.base05} !important;
           }
         '';
 
-        userContent = ''
+        userContent = lib.optionalString themed ''
           /* Personnalisation des pages internes de Firefox */
           @-moz-document url-prefix(about:), url-prefix(chrome://) {
             :root {
-              --in-content-page-background: #${config.userSettings.stylix.themeconfig.base00} !important;
-              --in-content-page-color: #${config.userSettings.stylix.themeconfig.base05} !important;
-              --in-content-box-background: #${config.userSettings.stylix.themeconfig.base00} !important;
-              --in-content-box-background-odd: #${config.userSettings.stylix.themeconfig.base00} !important;
-              --in-content-border-color: #${config.userSettings.stylix.themeconfig.base03} !important;
-              --in-content-button-background: #${config.userSettings.stylix.themeconfig.base02} !important;
-              --in-content-button-background-hover: #${config.userSettings.stylix.themeconfig.base03} !important;
-              --in-content-primary-button-background: #${config.userSettings.stylix.themeconfig.base0D} !important;
-              --in-content-primary-button-background-hover: #${config.userSettings.stylix.themeconfig.base0E} !important;
+              --in-content-page-background: #${c.base00} !important;
+              --in-content-page-color: #${c.base05} !important;
+              --in-content-box-background: #${c.base00} !important;
+              --in-content-box-background-odd: #${c.base00} !important;
+              --in-content-border-color: #${c.base03} !important;
+              --in-content-button-background: #${c.base02} !important;
+              --in-content-button-background-hover: #${c.base03} !important;
+              --in-content-primary-button-background: #${c.base0D} !important;
+              --in-content-primary-button-background-hover: #${c.base0E} !important;
             }
         '';
       };
     };
 
     stylix.targets.firefox = {
-      enable = true;
+      enable = themed;
       profileNames = [ "default" ];
     };
   };

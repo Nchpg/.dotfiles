@@ -87,68 +87,76 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    # Expose le thème actif (consommé par modules/user/stylix via systemSettings).
-    systemSettings.stylix.theme = activeTheme;
-
-    # Commande `theme {dark|light|toggle}` : rebuilde la cible du flake de
-    # l'autre variante via la commande `rebuild` (cf. modules/system/rebuild),
-    # qui gère déjà check git, reload sway et restart waybar. Aucun fichier
-    # modifié : la variante courante est celle de la cible qui a construit CE
-    # système (cfg.variant, injectée par le flake), l'état vit dans la
-    # génération active. Si les deux variantes sont déjà dans le store (arbre
-    # inchangé, CI passée), la bascule est quasi immédiate.
-    environment.systemPackages = [
-      (cfg.pkgs.writeShellScriptBin "theme" ''
-        set -euo pipefail
-        current="${cfg.variant}"
-
-        want="''${1:-}"
-        if [ "$want" = "toggle" ]; then
-          if [ "$current" = "dark" ]; then want=light; else want=dark; fi
-        fi
-
-        case "$want" in
-          dark|light) ;;
-          *) echo "usage: theme {dark|light|toggle}   (variante actuelle : $current)" >&2; exit 1 ;;
-        esac
-
-        if [ "$want" = "$current" ]; then
-          echo "Déjà en $want — rien à faire."
-          exit 0
-        fi
-
-        echo "→ bascule $current → $want…"
-        exec rebuild --variant "$want"
-      '')
-    ];
-
-    stylix = {
-      enable = true;
-      autoEnable = false; # on n'active que ce qu'on veut
-
-      # On gère nous-mêmes le module Stylix home-manager (importé dans
-      # profiles/default.nix) et le suivi du thème (défaut de userSettings.stylix
-      # = systemSettings.stylix.theme). On coupe donc l'auto-import de Stylix,
-      # sinon il force son scheme dans CHAQUE user en read-only (followSystem)
-      # → conflit avec guest/root qui ont leur propre thème.
-      homeManagerIntegration.autoImport = false;
-
-      targets = {
-        gnome.enable = true; # ⇒ thémise GDM (login screen)
-        console.enable = true; # ⇒ thémise les TTY
-      };
-
-      # Polices partagées avec le module user (rendu cohérent sur GDM) et
-      # installées par modules/system/fonts — source unique :
-      # modules/themes/fonts.nix.
-      fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
+  config = lib.mkMerge [
+    {
+      # Expose le thème actif (consommé par modules/user/stylix via
+      # systemSettings). Hors du mkIf : le calcul ne dépend pas de `enable`,
+      # et l'option étant readOnly sans default, un profil sans stylix
+      # système casserait l'éval du module user sinon.
+      systemSettings.stylix.theme = activeTheme;
     }
-    # Scheme base16 + polarité + wallpaper du thème actif (bloc commun avec le
-    # module user, cf. modules/themes/default.nix).
-    // themes.stylixSettings {
-      inherit (cfg) pkgs wallpaper;
-      theme = activeTheme;
-    };
-  };
+
+    (lib.mkIf cfg.enable {
+
+      # Commande `theme {dark|light|toggle}` : rebuilde la cible du flake de
+      # l'autre variante via la commande `rebuild` (cf. modules/system/rebuild),
+      # qui gère déjà check git, reload sway et restart waybar. Aucun fichier
+      # modifié : la variante courante est celle de la cible qui a construit CE
+      # système (cfg.variant, injectée par le flake), l'état vit dans la
+      # génération active. Si les deux variantes sont déjà dans le store (arbre
+      # inchangé, CI passée), la bascule est quasi immédiate.
+      environment.systemPackages = [
+        (cfg.pkgs.writeShellScriptBin "theme" ''
+          set -euo pipefail
+          current="${cfg.variant}"
+
+          want="''${1:-}"
+          if [ "$want" = "toggle" ]; then
+            if [ "$current" = "dark" ]; then want=light; else want=dark; fi
+          fi
+
+          case "$want" in
+            dark|light) ;;
+            *) echo "usage: theme {dark|light|toggle}   (variante actuelle : $current)" >&2; exit 1 ;;
+          esac
+
+          if [ "$want" = "$current" ]; then
+            echo "Déjà en $want — rien à faire."
+            exit 0
+          fi
+
+          echo "→ bascule $current → $want…"
+          exec rebuild --variant "$want"
+        '')
+      ];
+
+      stylix = {
+        enable = true;
+        autoEnable = false; # on n'active que ce qu'on veut
+
+        # On gère nous-mêmes le module Stylix home-manager (importé dans
+        # profiles/default.nix) et le suivi du thème (défaut de userSettings.stylix
+        # = systemSettings.stylix.theme). On coupe donc l'auto-import de Stylix,
+        # sinon il forcerait son scheme dans CHAQUE user en read-only (followSystem),
+        # court-circuitant notre option userSettings.stylix.theme.
+        homeManagerIntegration.autoImport = false;
+
+        targets = {
+          gnome.enable = true; # ⇒ thémise GDM (login screen)
+          console.enable = true; # ⇒ thémise les TTY
+        };
+
+        # Polices partagées avec le module user (rendu cohérent sur GDM) et
+        # installées par modules/system/fonts — source unique :
+        # modules/themes/fonts.nix.
+        fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
+      }
+      # Scheme base16 + polarité + wallpaper du thème actif (bloc commun avec le
+      # module user, cf. modules/themes/default.nix).
+      // themes.stylixSettings {
+        inherit (cfg) pkgs wallpaper;
+        theme = activeTheme;
+      };
+    })
+  ];
 }
