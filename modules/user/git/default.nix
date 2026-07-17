@@ -75,7 +75,12 @@ in
               navigate = true;
               side-by-side = true;
               line-numbers = true;
-              syntax-theme = "base16-stylix";
+              # Thème intégré qui colore avec les 16 couleurs ANSI du terminal
+              # → suit le thème stylix actif, dark comme light. L'ancien
+              # "base16-stylix" (tmTheme généré par le target stylix de bat)
+              # n'existe plus depuis que ce target est coupé (modules/user/bat) ;
+              # il ne survivait que via le cache ~/.cache/bat.
+              syntax-theme = "base16";
               diff-stat = true;
               hunk-header-style = "syntax bold";
             };

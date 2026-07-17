@@ -29,6 +29,7 @@ in
       };
       initContent = builtins.concatStringsSep "\n" [
         (builtins.readFile ../common)
+        (builtins.readFile ../common-posix)
         config.userSettings.shell.devShellAliases
         (builtins.readFile ./.zshrc)
       ];

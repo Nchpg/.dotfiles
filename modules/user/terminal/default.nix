@@ -15,11 +15,6 @@ in
         default = builtins.head terminals;
         description = "Terminal by default";
       };
-      list = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        readOnly = true;
-        description = "List of available terminals";
-      };
     };
   };
   config = {
@@ -27,7 +22,6 @@ in
     # `shell` de chaque module terminal). L'ancien genAttrs qui le re-posait ici
     # en priorité normale écrasait silencieusement les valeurs mkDefault des
     # profils (ex. guest : alacritty.shell = "bash" était ignoré).
-    userSettings.terminal.list = terminals;
 
     # ERROR HANDLING
     assertions = lib.mkIf (cfg.user != "root") (

@@ -26,10 +26,12 @@ in
         default = builtins.head shells;
         description = "Shell by default";
       };
-      list = lib.mkOption {
-        type = lib.types.listOf lib.types.str;
-        readOnly = true;
-        description = "List of available shells";
+      # Outils CLI de confort dev (lazydocker, lazysql, broot, ncdu, feh) :
+      # opt-in explicite par user, découplé de desktopApps. Défaut false → root
+      # et guest gardent le strict minimum (cf. common.nix) sans que ça dépende
+      # d'un autre module.
+      devTools = {
+        enable = lib.mkEnableOption "outils CLI de confort dev (lazydocker, lazysql, broot, ncdu, feh)";
       };
       devShellAliases = lib.mkOption {
         type = lib.types.str;
@@ -45,24 +47,31 @@ in
   };
 
   config = {
-    userSettings.shell.list = shells;
     userSettings.shell.devShellAliases = devShellAliases;
 
-    home.packages = with cfg.pkgs; [
-      delta
-      file
-      eza
-      duf
-      ripgrep
-      fd
-      curl
-      wget
-      ncdu
-      broot
-      lazydocker
-      lazysql
-      gnugrep
-    ];
+    home.packages =
+      with cfg.pkgs;
+      [
+        # Socle requis par les rc/alias communs (cf. shell/common) : pour tous
+        # les users, root et guest compris.
+        delta
+        file
+        eza
+        duf
+        ripgrep
+        fd
+        curl
+        wget
+        gnugrep
+      ]
+      # Confort dev : opt-in via userSettings.shell.devTools (nchpg), pas pour
+      # root/guest qui restent au strict minimum (cf. modules/user/common.nix).
+      ++ lib.optionals cfg.devTools.enable [
+        ncdu
+        broot
+        lazydocker
+        lazysql
+      ];
 
     home.sessionVariables = {
       # `dircolors -b` sort `LS_COLORS='…'; export LS_COLORS` : on extrait la
@@ -76,14 +85,19 @@ in
     programs = {
       # btop est géré par son propre module (modules/user/btop) pour permettre
       # l'override du support GPU Intel xe.
+      # Visionneuse d'images : inutile pour root/guest (strict minimum).
       feh = {
-        enable = true;
+        enable = cfg.devTools.enable;
         package = cfg.pkgs.feh;
       };
+      # git TUI : confort dev (même famille que lazydocker/lazysql), gaté sur
+      # devTools — pas pour root/guest.
       lazygit = {
-        enable = true;
+        enable = cfg.devTools.enable;
         package = cfg.pkgs.lazygit;
       };
+      # fzf/zoxide : ergonomie du shell interactif (Ctrl-R, z/zi), pas des
+      # « outils » — laissés à tous les users, pas gatés sur devTools.
       fzf = {
         enable = true;
         package = pkgs-unstable.fzf;
@@ -98,9 +112,10 @@ in
 
     # Pas de bat ici : son thémage est géré par modules/user/bat (polarité
     # déléguée à bat lui-même, target stylix explicitement coupé là-bas).
+    # feh/lazygit suivent devTools : on ne thémise pas un programme désactivé.
     stylix.targets = {
-      feh.enable = true;
-      lazygit.enable = true;
+      feh.enable = cfg.devTools.enable;
+      lazygit.enable = cfg.devTools.enable;
     };
 
     # ERROR HANDLING
