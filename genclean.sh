@@ -53,11 +53,11 @@ ask_yn() {
 echo "Nettoyage des générations système — choisis le mode :"
 echo "1) Supprimer les générations plus anciennes que X jours"
 echo "2) Ne garder que les N générations les plus récentes"
-read -p "Votre choix (1 ou 2) : " MODE
+read -r -p "Votre choix (1 ou 2) : " MODE
 
 case "$MODE" in
     1)
-        read -p "Nombre de jours : " DAYS
+        read -r -p "Nombre de jours : " DAYS
         if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
             err "Erreur : '$DAYS' n'est pas un nombre valide."
             exit 1
@@ -66,7 +66,7 @@ case "$MODE" in
         sudo nix-env -p "$SYSTEM_PROFILE" --delete-generations +"$DAYS"d
         ;;
     2)
-        read -p "Nombre de générations à garder : " N
+        read -r -p "Nombre de générations à garder : " N
         if ! [[ "$N" =~ ^[0-9]+$ ]]; then
             err "Erreur : '$N' n'est pas un nombre valide."
             exit 1
@@ -123,11 +123,13 @@ if ask_yn "Supprimer les fichiers *.hm-backup laissés par home-manager ?"; then
         [ -d "$d" ] || continue
         u="$(stat -c %U "$d")"
         echo "→ hm-backup[$u] : recherche dans $d ..."
+        # -print0 / mapfile -d "" : robuste aux noms de fichiers exotiques
+        # (espaces, voire newlines), contrairement à l'ancien xargs -d "\n".
         run_as "$u" bash -c '
-            found=$(find "$HOME" -xdev -name "*.hm-backup" -type f 2>/dev/null)
-            if [ -z "$found" ]; then echo "   aucun fichier."; exit 0; fi
-            echo "$found" | sed "s/^/   /"
-            echo "$found" | xargs -d "\n" rm -f
+            mapfile -d "" -t found < <(find "$HOME" -xdev -name "*.hm-backup" -type f -print0 2>/dev/null)
+            if [ "${#found[@]}" -eq 0 ]; then echo "   aucun fichier."; exit 0; fi
+            printf "   %s\n" "${found[@]}"
+            rm -f -- "${found[@]}"
             echo "   supprimés."
         ' || warn "   ⚠️  nettoyage hm-backup[$u] échoué, on continue."
     done
@@ -154,7 +156,14 @@ else
 fi
 
 # --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
-echo "Rebuild du système via la commande rebuild..."
-rebuild -y
+# La commande `rebuild` vient de modules/system/rebuild : absente si le module
+# n'a pas encore été switché (repo fraîchement cloné) — on prévient au lieu
+# d'échouer sur la dernière étape.
+if command -v rebuild >/dev/null 2>&1; then
+    echo "Rebuild du système via la commande rebuild..."
+    rebuild -y
+else
+    warn "Commande 'rebuild' introuvable — relance './rebuild.sh --profile <profil> --host <host>' à la main pour rafraîchir le menu de boot."
+fi
 
 echo "Nettoyage terminé."

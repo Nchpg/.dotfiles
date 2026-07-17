@@ -5,6 +5,10 @@
 # Si le fichier existant n'est pas du JSON strict (édition manuelle avec
 # commentaires, JSONC...), on n'impose rien et on prévient plutôt que de
 # l'écraser. Utilisé par modules/user/claude et modules/user/vscode.
+#
+# Limite assumée du merge one-way : une clé RETIRÉE du JSON déclaratif n'est
+# jamais retirée du fichier cible (elle y reste avec sa dernière valeur).
+# Pour la supprimer vraiment : l'effacer à la main dans le fichier cible.
 {
   lib,
   pkgs,
@@ -21,9 +25,14 @@
   if [ -s "$target" ]; then
     if ${pkgs.jq}/bin/jq -e . "$target" >/dev/null 2>&1; then
       # deep-merge : existant (.[0]) * nos clés (.[1]) — les nôtres l'emportent.
-      ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$target" ${sourceFile} \
-        > "$target.hm-tmp" \
-        && mv "$target.hm-tmp" "$target"
+      # En cas d'échec du jq (disque plein...), on nettoie le tmp au lieu de
+      # laisser un $target.hm-tmp orphelin.
+      if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$target" ${sourceFile} > "$target.hm-tmp"; then
+        mv "$target.hm-tmp" "$target"
+      else
+        rm -f "$target.hm-tmp"
+        echo "${label}: échec du merge JSON de $target — fichier laissé intact." >&2
+      fi
     else
       echo "${label}: $target n'est pas du JSON strict (édité à la main ?) — clés déclaratives non imposées." >&2
     fi
