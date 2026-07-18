@@ -76,6 +76,9 @@ let
   wpctl = "${pkgs.wireplumber}/bin/wpctl";
   swaync = "${pkgs.swaynotificationcenter}/bin/swaync-client";
   systemctl = "${pkgs.systemd}/bin/systemctl";
+  # Seule dépendance du module qui restait en nom nu : elle ne marchait que
+  # parce que NixOS met procps dans environment.systemPackages par défaut.
+  pkill = "${pkgs.procps}/bin/pkill";
 
   # Terminal de l'utilisateur (même convention que le module sway) : alacritty
   # exige `-e` pour lancer un programme, kitty/foot l'acceptent directement.
@@ -197,7 +200,7 @@ let
   # attendre l'intervalle). Source unique : utilisé pour `signal` côté waybar ET
   # pour le `pkill` des actions de menu -> les deux restent forcément cohérents.
   weatherSignal = 8;
-  weatherWake = "pkill -RTMIN+${toString weatherSignal} waybar";
+  weatherWake = "${pkill} -RTMIN+${toString weatherSignal} waybar";
 
   # Action de menu : écrit la ville dans l'état persistant puis réveille le
   # module pour un switch immédiat.
@@ -246,7 +249,7 @@ let
   # (custom/backlight) : son icône reflète l'état on/off. Ce signal réveille ce
   # module pour rafraîchir l'icône/le % aussitôt (clic ou molette).
   backlightSignal = 9;
-  refreshBacklight = "pkill -RTMIN+${toString backlightSignal} waybar";
+  refreshBacklight = "${pkill} -RTMIN+${toString backlightSignal} waybar";
   # Clic gauche : bascule le service wlsunset (start/stop) puis rafraîchit
   # l'icône. Le choix PERSISTE au reboot via un flag : couper pose le fichier,
   # rallumer le retire, et le service a un ExecCondition dessus — au login il
