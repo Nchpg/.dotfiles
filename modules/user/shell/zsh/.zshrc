@@ -131,7 +131,9 @@ nix-shell() {
 
 nix() {
   if [[ "$1" == "develop" ]]; then
-    if [[ " $* " == *" --command "* ]]; then
+    # `-c` est l'abréviation de `--command` : sans ce test, `nix develop -c cmd`
+    # se voyait ajouter un second `--command zsh` et échouait.
+    if [[ " $* " == *" --command "* || " $* " == *" -c "* ]]; then
       command nix "$@"
     else
       command nix develop "${@:2}" --command zsh
