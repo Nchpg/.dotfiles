@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  osConfig,
+  ...
+}:
 
 let
   cfg = config.userSettings.wifiPicker;
@@ -47,18 +52,27 @@ in
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };
-    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
   config = lib.mkIf cfg.enable (
-    import ../../../lib/mk-floating-tui-launcher.nix {
-      name = "wifi";
-      confName = "wifi-picker";
-      scriptBody = "${newtColors} exec ${termCmd}";
-      keybind = "$mod+w";
-      title = "nmtui-wifi";
-      width = 1200;
-      height = 850;
-    }
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "wifi";
+        confName = "wifi-picker";
+        scriptBody = "${newtColors} exec ${termCmd}";
+        keybind = "$mod+w";
+        title = "nmtui-wifi";
+        width = 1200;
+        height = 850;
+      })
+      {
+        assertions = [
+          {
+            assertion = osConfig.networking.networkmanager.enable;
+            message = "userSettings.wifiPicker a besoin de NetworkManager (nmtui), mais networking.networkmanager.enable est faux sur ce host.";
+          }
+        ];
+      }
+    ]
   );
 }
