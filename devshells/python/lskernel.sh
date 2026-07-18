@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 for spec in "$HOME/.local/share/jupyter/kernels"/*/kernel.json; do
   [ -f "$spec" ] || continue

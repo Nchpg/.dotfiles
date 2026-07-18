@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # uv choisit le python : --python X.Y explicite, .python-version du projet,
 # sinon le python nix du devshell. Les interpréteurs manquants sont

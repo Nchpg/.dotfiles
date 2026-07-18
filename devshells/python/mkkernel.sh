@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Le kernel doit pointer sur le python du venv (c'est lui qui a torch & co),
 # pas sur le python nix nu du devshell.
