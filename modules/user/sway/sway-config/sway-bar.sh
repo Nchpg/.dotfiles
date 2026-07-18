@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # bash requis ([[ ]], &>, <<<) — l'ancien #!/bin/sh ne marchait que parce que
 # le status_command l'invoque via `bash …` (cf. modules/user/sway).
+#
+# Pas de `set -euo pipefail` volontairement : la boucle infinie ci-dessous
+# doit continuer à produire des blocs même si un outil (acpi, nmcli, ...) est
+# absent ou échoue ponctuellement — une barre de statut qui meurt sur une
+# erreur transitoire est pire qu'un bloc affichant "N/A".
 
 # Fonction pour récupérer le niveau de batterie
 battery() {
