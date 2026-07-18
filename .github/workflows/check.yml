@@ -13,6 +13,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Token GitHub frais à chaque run : le runner self-hosted garde dans son
+  # nix.conf l'`access-tokens` gravé par l'installeur, un GITHUB_TOKEN qui
+  # expire en une heure. Sans ce reset, les résolutions d'inputs `github:`
+  # partent avec un token mort (401 « Bad credentials »). NIX_CONFIG a
+  # priorité sur les fichiers de conf.
+  NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
+
 jobs:
   fmt:
     runs-on: self-hosted

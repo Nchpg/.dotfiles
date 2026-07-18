@@ -20,6 +20,15 @@ on:
 env:
   LC_ALL: C.UTF-8
 
+  # Token GitHub frais à chaque run. Sans ça, Nix réutilise l'`access-tokens`
+  # que l'installeur a gravé dans le nix.conf PERSISTANT du runner
+  # self-hosted : un GITHUB_TOKEN qui expire au bout d'une heure. Tous les
+  # runs suivants envoient donc un token mort → 401 sur api.github.com, et
+  # `nix flake update` retombe en silence sur « using cached version ».
+  # Symptôme observé : job vert, PR créée, et zéro input réellement bumpé
+  # pendant plus d'une semaine. NIX_CONFIG a priorité sur les fichiers de conf.
+  NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
+
 permissions:
   contents: write
   pull-requests: write
