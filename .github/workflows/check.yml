@@ -107,3 +107,17 @@ jobs:
             nix build ".#devShells.x86_64-linux.$name" --no-link
             echo "::endgroup::"
           done
+
+      # Réalise TOUTES les fetchurl du registre de fonds d'écran
+      # (modules/themes/wallpapers.nix). Les builds ci-dessus ne téléchargent
+      # que les fonds des thèmes ACTIFS : une URL morte, ou un contenu
+      # republié sous la même URL, ne se découvrirait qu'en sélectionnant le
+      # thème concerné. `--keep-going` pour lister TOUS les fonds cassés d'un
+      # coup au lieu de s'arrêter au premier.
+      #
+      # Non bloquant (comme flake lock health) : ces 56 URLs sont tierces et
+      # éphémères, un fond retiré en amont ne doit pas bloquer un merge qui
+      # n'a rien à voir. L'annotation suffit à savoir quoi corriger.
+      - name: build all wallpapers
+        continue-on-error: true
+        run: nix build .#wallpapers-all --no-link --keep-going
