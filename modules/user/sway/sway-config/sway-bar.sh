@@ -154,14 +154,36 @@ brightness() {
     fi
 }
 
-resources() {
-    # CPU usage (1 seconde moyenne)
-    cpu=$(top -bn1 | grep '^%Cpu' | awk '{print 100 - $8}')
+# CPU : delta de /proc/stat entre deux passages (état stocké), comme gpu()
+# ci-dessous. Bien plus juste et léger qu'un `top -bn1`, dont le %Cpu est une
+# moyenne depuis le boot (qui ne bouge donc quasi jamais). Même logique que
+# modules/user/waybar/scripts/resources.sh.
+cpu() {
+    local state="${XDG_RUNTIME_DIR:-/tmp}/sway-bar-cpu.state"
+    local user nice system idle iowait irq softirq steal
+    local total prev_idle prev_total d_idle d_total pct=0
+    read -r _ user nice system idle iowait irq softirq steal _ < /proc/stat
+    idle=$((idle + iowait))
+    total=$((user + nice + system + idle + irq + softirq + steal))
+    if [[ -r "$state" ]]; then
+        read -r prev_idle prev_total < "$state"
+        d_idle=$((idle - prev_idle))
+        d_total=$((total - prev_total))
+        if (( d_total > 0 )); then
+            pct=$(( (d_total - d_idle) * 100 / d_total ))
+            (( pct < 0 )) && pct=0
+            (( pct > 100 )) && pct=100
+        fi
+    fi
+    echo "$idle $total" > "$state"
+    echo "$pct"
+}
 
+resources() {
     # RAM usage (en pourcentage)
     mem_used=$(free | awk '/Mem:/ {printf("%.0f"), $3/$2 * 100}')
 
-    echo "🖥️ RAM : ${mem_used}%  CPU ${cpu%%.*}%  $(gpu)"
+    echo "🖥️ RAM : ${mem_used}%  CPU $(cpu)%  $(gpu)"
 }
 
 # Utilisation GPU (Intel, driver xe) : pas de gpu_busy_percent en sysfs, mais
