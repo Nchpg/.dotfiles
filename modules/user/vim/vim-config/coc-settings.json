@@ -25,7 +25,6 @@
             "filetypes": ["python"],
             "settings": {
                 "python": {
-                    "pythonPath": "/usr/bin/python3",
                     "linting": {
                         "enabled": true,
                         "pylintEnabled": true,
