@@ -1,10 +1,16 @@
 name: check
 
-# push limité à main : les branches de PR sont déjà couvertes par l'event
-# pull_request (sinon chaque job tournait deux fois sur le runner).
+# push limité à main + weekly-update : les branches de PR sont déjà couvertes
+# par l'event pull_request (sinon chaque job tournait deux fois sur le runner).
+#
+# weekly-update est explicite parce que la PR hebdomadaire est ouverte par
+# create-pull-request avec le GITHUB_TOKEN par défaut — et GitHub ne déclenche
+# AUCUN workflow sur les événements produits par ce token (anti-boucle). Sans
+# cette branche listée ici, la PR de bump arrivait sans le moindre check, y
+# compris sur le build displaylink que le job `flake-check` surveille.
 on:
   push:
-    branches: [main]
+    branches: [main, weekly-update]
   pull_request:
 
 # Un nouveau push sur la même branche/PR annule les runs obsolètes
