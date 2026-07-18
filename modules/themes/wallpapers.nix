@@ -216,7 +216,7 @@
   };
   ubuntu = {
     url = "https://images.hdqwalls.com/download/sea-of-dreamscape-r4-1920x1080.jpg";
-    sha256 = "sha256-5TPwZAQekK1Aq2YdomcJ0irGmIXVPUpgxRwuEetthYw=";
+    sha256 = "sha256-W2v1uQngxqcQ+xBSTRxo7blKzgaL1pW06E6n0vP2Z88=";
   };
   uwunicorn = {
     url = "https://r4.wallpaperflare.com/wallpaper/30/586/460/artwork-fantasy-art-digital-art-forest-wallpaper-3cdadbae5dd4b0ca4dd008fd72d13bf3.jpg";
