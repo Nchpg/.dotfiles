@@ -8,13 +8,10 @@
   environment.systemPackages = [
     (pkgs-stable.writeShellScriptBin "genclean" ''
       set -euo pipefail
-      flake="''${MY_FLAKE:-$HOME/.dotfiles}"
-      # Garde explicite : lancé par un user sans clone (~guest, sudo -i), le
-      # exec échouerait avec un « No such file » peu clair.
-      if [ ! -x "$flake/genclean.sh" ]; then
-        echo "genclean : flake introuvable ($flake/genclean.sh) — clone le dépôt ou définis MY_FLAKE." >&2
-        exit 1
-      fi
+      ${import ../../../lib/mk-flake-guard.nix {
+        name = "genclean";
+        scriptName = "genclean.sh";
+      }}
       exec "$flake/genclean.sh" "$@"
     '')
   ];

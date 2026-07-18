@@ -8,11 +8,7 @@ in
     userSettings.terminal.kitty = {
       enable = lib.mkEnableOption "Enable kitty terminal";
       pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
-      shell = lib.mkOption {
-        type = lib.types.str;
-        default = config.userSettings.shell.default;
-        description = "Shell to use";
-      };
+      shell = import ../../../../lib/mk-terminal-shell-option.nix { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {
