@@ -13,6 +13,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Moindre privilège : ce workflow ne fait que lire le repo (fmt/lint/build).
+permissions:
+  contents: read
+
 env:
   # Token GitHub frais à chaque run : le runner self-hosted garde dans son
   # nix.conf l'`access-tokens` gravé par l'installeur, un GITHUB_TOKEN qui
