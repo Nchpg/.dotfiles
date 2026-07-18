@@ -9,16 +9,15 @@ if set -q NIX_DEVSHELL_FISH_COMPLETIONS
     set -a fish_complete_path $NIX_DEVSHELL_FISH_COMPLETIONS
 end
 
+# Ni `fish_history_file` ni `fish_history_max` n'existent dans fish : la seule
+# variable reconnue est `fish_history` (nom de session). Elles ont été
+# retirées — en prime, `set -U` les gravait dans ~/.config/fish/fish_variables,
+# un état mutable hors du contrôle de Nix, réécrit à chaque shell interactif.
+# Si elles traînent encore : `set -eU fish_history_file fish_history_max`.
 
-set -Ux fish_history_file "$HOME/.local/share/fish/fish_history"
-set -Ux fish_history_max 10000
-
-if test -n "$KITTY_INSTALLATION_DIR"
-    set -x KITTY_SHELL_INTEGRATION no-rc
-    if test -f "$KITTY_INSTALLATION_DIR/shell-integration/fish/kitty.fish"
-        source "$KITTY_INSTALLATION_DIR/shell-integration/fish/kitty.fish"
-    end
-end
+# L'intégration shell kitty est déjà injectée par programs.kitty (home-manager)
+# dans les trois shells : la refaire ici la chargeait deux fois (hooks de
+# prompt et marqueurs OSC 133 enregistrés en double).
 
 export 0=fish
 export SH=fish
