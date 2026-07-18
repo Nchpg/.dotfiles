@@ -108,5 +108,14 @@ vscode_facts=$(jq -n --slurpfile old "$old_ext" --slurpfile new "$new_ext" '
   ]
 ')
 
+# 5e argument optionnel : extensions qu'update-extensions.sh n'a PAS pu
+# vérifier (API Marketplace en erreur, téléchargement échoué). Elles ne font
+# pas échouer le run, donc sans ça elles ne seraient visibles que dans le log.
+skipped_ext="[]"
+if [ -n "${5:-}" ] && [ -s "$5" ]; then
+    skipped_ext=$(cat "$5")
+fi
+
 jq -n --argjson flakeInputs "$flake_facts" --argjson vscodeExtensions "$vscode_facts" \
-    '{flakeInputs: $flakeInputs, vscodeExtensions: $vscodeExtensions}'
+    --argjson skippedExtensions "$skipped_ext" \
+    '{flakeInputs: $flakeInputs, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions}'

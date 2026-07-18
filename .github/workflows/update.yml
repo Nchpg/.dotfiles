@@ -61,8 +61,11 @@ jobs:
             exit 1
           fi
 
+      # VSCODE_SKIPPED_FILE : liste des extensions qu'on n'a pas pu vérifier
+      # (API Marketplace en erreur, téléchargement échoué). Reprise plus bas
+      # dans les faits, pour apparaître dans le corps de la PR.
       - name: bump des extensions vscode
-        run: MY_FLAKE="$PWD" bash modules/user/vscode/update-extensions.sh
+        run: MY_FLAKE="$PWD" VSCODE_SKIPPED_FILE=/tmp/extensions-skipped.json bash modules/user/vscode/update-extensions.sh
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts
@@ -72,6 +75,7 @@ jobs:
           .github/scripts/gather-update-facts.sh \
             /tmp/flake.lock.before flake.lock \
             /tmp/extensions.json.before modules/user/vscode/extensions.json \
+            /tmp/extensions-skipped.json \
             > /tmp/facts.json
           changed=$(jq '(.flakeInputs | length) > 0 or (.vscodeExtensions | length) > 0' /tmp/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"

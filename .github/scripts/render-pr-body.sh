@@ -44,3 +44,17 @@ if [ "$ext_count" -gt 0 ]; then
     ' "$facts_file"
     echo
 fi
+
+# Extensions non vérifiées ce coup-ci : leur version ET leur hash sont restés
+# tels quels. Ce n'est pas bloquant, mais ça doit se voir dans la PR — sinon
+# l'absence d'une extension de la liste ci-dessus se lit à tort comme « rien
+# n'a changé » alors qu'on n'en sait rien.
+skipped_count=$(jq '.skippedExtensions // [] | length' "$facts_file")
+if [ "$skipped_count" -gt 0 ]; then
+    echo "## ⚠️ Extensions non vérifiées"
+    echo
+    jq -r '.skippedExtensions[] | "- **\(.key)** : \(.reason)"' "$facts_file"
+    echo
+    echo "Version et hash inchangés pour ces extensions — à revérifier au prochain run."
+    echo
+fi
