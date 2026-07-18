@@ -9,7 +9,9 @@
 # re-stage ajoute aussi les modifications non stagées de ce fichier.
 set -euo pipefail
 
-mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- '*.nix' ':!:*hardware-configuration.nix')
+# -z / mapfile -d '' : sans ça, git *quote* les chemins non-ASCII
+# ("caf\303\251.nix") et le hook tenterait de formater un nom avec guillemets.
+mapfile -d '' -t files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.nix' ':!:*hardware-configuration.nix')
 [ ${#files[@]} -eq 0 ] && exit 0
 
 nix fmt -- "${files[@]}"
