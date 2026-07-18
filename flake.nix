@@ -97,14 +97,24 @@
         variant = variants;
       };
 
-      # Attention : un nom de host se terminant par "-light"/"-dark" pourrait
-      # produire une collision textuelle avec une autre cible en variante
-      # light/dark (ex. host "x-light" en dark ≡ host "x" en light) — à éviter
-      # tant qu'aucune déduplication n'est faite sur les noms générés.
       targetName =
         target:
         "${target.profile}-${target.host}"
         + lib.optionalString (target.variant != "dark") "-${target.variant}";
+
+      # Un host se terminant par "-light"/"-dark" produit une collision
+      # textuelle avec une autre cible (host "x-light" en dark ≡ host "x" en
+      # light). `listToAttrs` garderait silencieusement la PREMIÈRE entrée :
+      # une des deux machines deviendrait inatteignable, et `rebuild -H` en
+      # construirait une autre sans rien signaler. On échoue à l'éval.
+      targetNames =
+        let
+          names = map targetName targets;
+          dupes = lib.unique (lib.filter (n: lib.count (x: x == n) names > 1) names);
+        in
+        lib.throwIf (dupes != [ ])
+          "flake.nix : collision de noms de cibles (${lib.concatStringsSep ", " dupes}) — un nom de host ne doit pas se terminer par -dark ou -light."
+          names;
 
       # Un devshell = un fichier devshells/<name>.nix ; auto-découvert comme
       # profiles/hosts ci-dessus. `dev-<name>` est généré à partir de la même
@@ -117,9 +127,11 @@
       unstableDevShells = [ "xpu" ];
     in
     {
+      # zipListsWith plutôt que `map` : consommer `targetNames` force le
+      # contrôle de collision ci-dessus (sinon il ne serait jamais évalué).
       nixosConfigurations = builtins.listToAttrs (
-        map (target: {
-          name = targetName target;
+        lib.zipListsWith (name: target: {
+          inherit name;
           value = lib.nixosSystem {
             inherit system;
             modules = [
@@ -163,7 +175,7 @@
               inherit target;
             };
           };
-        }) targets
+        }) targetNames targets
       );
 
       devShells.${system} = lib.genAttrs devShellNames (
