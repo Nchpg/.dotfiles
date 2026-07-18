@@ -57,6 +57,12 @@
   # Déduplication du store par hardlinks (job périodique, complète le gc).
   nix.optimise.automatic = true;
 
+  # Plafond du journal systemd. Sans ça, la limite par défaut est 10 % du
+  # système de fichiers, soit ~19 Go ici : un plafond invisible, jamais
+  # atteint en usage normal, mais qui laisse le journal grossir sans fin.
+  # 500 Mo couvrent largement plusieurs semaines de logs.
+  services.journald.extraConfig = "SystemMaxUse=500M";
+
   # Manuel NixOS local (nixos-help) : jamais utilisé, et sa génération coûte
   # à chaque rebuild. Les man pages classiques restent actives.
   documentation.nixos.enable = false;
