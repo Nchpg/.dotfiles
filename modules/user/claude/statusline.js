@@ -2,7 +2,7 @@ const chunks = [];
 process.stdin.on('data', d => chunks.push(d));
 process.stdin.on('end', () => {
   let data = {};
-  try { data = JSON.parse(chunks.join('')); } catch {}
+  try { data = JSON.parse(chunks.join('')); } catch (err) { console.error('statusline: JSON.parse failed:', err.message); }
 
   const reset  = '\x1b[0m';
   const dim    = '\x1b[2m';
@@ -30,7 +30,7 @@ process.stdin.on('end', () => {
   const cost = data?.cost?.total_cost_usd;
   if (modelName || cost != null) {
     const shortName = modelName ? modelName.replace(/^Claude\s+/i, '') : null;
-    const costStr = cost != null ? `${gray}$${cost.toFixed(4)}${reset}` : null;
+    const costStr = cost != null ? `${gray}$${Number(cost).toFixed(4)}${reset}` : null;
     const modelStr = shortName ? `${cyan}${shortName}${reset}` : null;
     const combined = [modelStr, costStr].filter(Boolean).join(`  `);
     if (combined) parts.push(combined);
