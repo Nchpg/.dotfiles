@@ -40,6 +40,16 @@ query_latest_version() {
 
 updated=0
 skipped=0
+# Extensions ignorées, accumulées en JSON pour être reprises dans le corps de
+# la PR hebdomadaire (cf. VSCODE_SKIPPED_FILE en fin de script) : une
+# extension non vérifiée doit être VISIBLE dans la PR, pas seulement dans le
+# log du run que personne ne relit.
+skipped_json="[]"
+note_skip() {
+    skipped=$((skipped + 1))
+    skipped_json=$(jq --arg k "$1" --arg r "$2" '. + [{key: $k, reason: $r}]' <<<"$skipped_json")
+}
+
 for key in $(jq -r 'keys[]' "$file"); do
     publisher=$(jq -r ".\"$key\".publisher" "$file")
     name=$(jq -r ".\"$key\".name" "$file")
@@ -48,7 +58,7 @@ for key in $(jq -r 'keys[]' "$file"); do
     latest=$(query_latest_version "$publisher" "$name") || latest=""
     if [ -z "$latest" ]; then
         echo "⚠️  $key : impossible de récupérer la dernière version (API Marketplace), ignoré." >&2
-        skipped=$((skipped + 1))
+        note_skip "$key" "API Marketplace injoignable ou réponse invalide"
         continue
     fi
 
@@ -58,7 +68,7 @@ for key in $(jq -r 'keys[]' "$file"); do
     if ! prefetch=$(nix store prefetch-file --json "$url" 2>/dev/null) \
         || ! hash=$(printf '%s' "$prefetch" | jq -er '.hash' 2>/dev/null); then
         echo "⚠️  $key : téléchargement du vsix échoué ($latest), ignoré." >&2
-        skipped=$((skipped + 1))
+        note_skip "$key" "téléchargement du vsix $latest échoué"
         continue
     fi
     current_hash=$(jq -r ".\"$key\".sha256" "$file")
@@ -98,4 +108,11 @@ fi
 # annotation GitHub pour rester visibles plutôt que noyées dans le log.
 if [ "$skipped" -gt 0 ]; then
     echo "::warning::$skipped extension(s) ignorée(s) : API Marketplace ou téléchargement en échec."
+fi
+
+# Consommé par gather-update-facts.sh pour que la PR hebdomadaire liste ce qui
+# n'a PAS pu être vérifié. Optionnel : hors CI la variable n'est pas définie et
+# le script se comporte comme avant.
+if [ -n "${VSCODE_SKIPPED_FILE:-}" ]; then
+    printf '%s\n' "$skipped_json" > "$VSCODE_SKIPPED_FILE"
 fi
