@@ -1,7 +1,11 @@
 function searchf --description "Search files and their content using fzf"
+    # Le token sert UNIQUEMENT à préremplir --query de fzf (cf. plus bas).
+    # Surtout pas d'`eval` ici : $token est du texte non validé tapé ou collé
+    # par l'utilisateur, et un chemin contenant $(...), ; ou des backticks
+    # serait exécuté au simple appui sur le raccourci. Une expansion du ~
+    # suffit à l'usage voulu.
     set -f token (commandline --current-token)
-    set -f expanded_token (eval echo -- $token)
-    set -f unescaped_exp_token (string unescape -- $expanded_token)
+    set -f unescaped_exp_token (string replace -r '^~' -- $HOME $token)
 
     set results (
         bash -c "
