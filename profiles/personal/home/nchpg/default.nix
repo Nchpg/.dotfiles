@@ -27,8 +27,7 @@
         enable = true;
       };
 
-      # Barre waybar (remplace la swaybar native : mêmes blocs + tray,
-      # cf. modules/user/waybar).
+      # Barre de la session sway (cf. modules/user/waybar).
       waybar = {
         enable = true;
       };
