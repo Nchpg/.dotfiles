@@ -47,7 +47,7 @@ in
         home.packages = [
           # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
           # bump avec `rebuild -u`).
-          inputs.claude-code.packages.x86_64-linux.default
+          inputs.claude-code.packages.${cfg.pkgs.stdenv.hostPlatform.system}.default
           # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
           cfg.pkgs.poppler-utils
         ];
