@@ -8,21 +8,7 @@
 # Percentage') sont en anglais, on ne dépend pas de la locale de session.
 export LC_ALL=C
 
-# Icônes batterie Nerd Font (Material Design) : mêmes 11 niveaux que le module
-# batterie du PC (codepoints f008e..f0079, cf. format-icons dans waybar
-# default.nix -> garder les DEUX listes synchronisées). Index = pourcentage
-# arrondi à la dizaine (0% -> outline 󰂎 ... 100% -> pleine 󰁹). Glyphes
-# littéraux (et non printf '\U…') : insensibles à LC_ALL=C, qui en locale ASCII
-# ne sait pas encoder ces codepoints du plan astral.
-bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
-bat_icon() { # $1 = pourcentage -> glyphe
-    local idx=$(( ($1 + 5) / 10 ))
-    (( idx < 0 )) && idx=0
-    (( idx > 10 )) && idx=10
-    printf '%s' "${bat_icons[idx]}"
-}
-
-# json_escape / emit : fournis par lib.sh (inliné en tête au build).
+# json_escape / emit / bat_icon : fournis par lib.sh (inliné en tête au build).
 
 if ! command -v bluetoothctl &>/dev/null; then
     emit "󰂯  N/A" ""

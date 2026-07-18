@@ -27,13 +27,9 @@ fi
 capacity=$(<"$bat/capacity")
 status=$(<"$bat/status")
 
-# Icônes batterie : mêmes 11 niveaux que bluetooth.sh (bat_icons) et que le
-# format-icons du module natif — garder les trois listes synchronisées.
-bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
-idx=$(( (capacity + 5) / 10 ))
-(( idx < 0 )) && idx=0
-(( idx > 10 )) && idx=10
-icon=${bat_icons[idx]}
+# Icône batterie : bat_icon vient de lib.sh (partagée avec bluetooth.sh) —
+# mêmes 11 niveaux que le format-icons du module natif, à garder synchronisés.
+icon=$(bat_icon "$capacity")
 
 # En charge : éclair sur batterie (md-battery-charging). Pleine : icône pleine.
 class=""
