@@ -157,13 +157,6 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
-#
-# Status Bar:
-#
-@bar@
-
-
-
 # Couleurs de bordures/titre volontairement fixes (non thémées par Stylix).
 client.focused  #285577 #285577 #ffffff #323232 #323232
 

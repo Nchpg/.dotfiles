@@ -72,27 +72,11 @@ let
     config.userSettings.stylix.enable && config.stylix.image != null
   ) "output * bg ${config.stylix.image} fill";
 
-  # Barre : si waybar est activé (module dédié), il fournit sa propre barre via
-  # systemd → on n'émet PAS de bloc `bar {}` natif (sinon deux barres). Sinon on
-  # garde la swaybar maison (sway-bar.sh).
-  useWaybar = config.userSettings.waybar.enable;
-  swaybarBlock = ''
-    bar {
-        position top
-
-        status_command bash ~/.config/sway/sway-bar.sh
-        tray_output *
-        tray_padding 4
-
-        # Pas d'onglet de mode (ex. le "displays" rouge) affiché dans la barre.
-        binding_mode_indicator no
-
-        colors {
-            statusline #ffffff
-            background #323232
-        }
-    }'';
-  barBlock = if useWaybar then "" else swaybarBlock;
+  # La barre vient du module waybar (systemd user service), qui gère aussi son
+  # propre thème et ses scripts. Sway n'émet donc plus AUCUN bloc `bar {}` :
+  # l'ancienne swaybar maison (sway-bar.sh) est supprimée — elle n'était plus
+  # atteignable dans aucun profil, et dupliquait waybar/scripts/*.sh avec des
+  # divergences (échappement JSON, volume ALSA vs PipeWire, libellés fan_mode).
 
   # Args swaylock partagés par le bind clavier (config.template, @lockCmd@) et
   # swayidle ci-dessous : une seule définition, plus de divergence possible
@@ -115,7 +99,6 @@ let
       [
         "@terminal@"
         "@tmuxBind@"
-        "@bar@"
         "@lockCmd@"
         "@wallpaperBg@"
         "@chromeBind@"
@@ -129,7 +112,6 @@ let
       [
         config.userSettings.terminal.default
         tmuxBind
-        barBlock
         lockCmd
         wallpaperBg
         chromeBind
@@ -148,9 +130,8 @@ in
   options.userSettings.sway = {
     # Gate PROPRE à ce user, indépendant de desktopApps (un window manager n'a
     # rien à voir avec « des apps desktop »). Défaut : suit le sway SYSTÈME —
-    # tout user d'un host où sway est activé reçoit sa config, avec la barre
-    # native en haut (sway-bar.sh, dépendances installées ci-dessous). Pour la
-    # barre waybar + les binds rofi/flameshot, il suffit d'activer ces modules
+    # tout user d'un host où sway est activé reçoit sa config. Pour la barre
+    # (waybar) et les binds rofi/flameshot, il suffit d'activer ces modules
     # dans le profil du user. Mettre false pour un user qui ne veut pas de
     # session sway (ex. root, cf. son profil).
     enable = lib.mkOption {
@@ -177,11 +158,6 @@ in
       executable = true;
     };
 
-    home.file.".config/sway/sway-bar.sh" = {
-      source = ./sway-config/sway-bar.sh;
-      executable = true;
-    };
-
     # Cible de session graphique pour l'intégration systemd. Démarrée au lancement
     # de sway (cf. config.template), elle active graphical-session.target via BindsTo,
     # ce qui démarre automatiquement les services Wayland liés (cliphist, etc.) et
@@ -201,9 +177,8 @@ in
     # règles for_window restent dans sway-config/config.template.
     home.packages = with cfg.pkgs; [
 
-      # Sway bar dependencies
-      acpi # Power battery
-      alsa-utils # Sound
+      # Touches média / luminosité du template (XF86Audio*, XF86MonBrightness*)
+      # et sway-config/brightness.sh.
       brightnessctl # Brightness (remplace `light`, retiré en nixpkgs 26.05)
       playerctl # Audio player
 
