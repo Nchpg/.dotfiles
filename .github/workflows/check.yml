@@ -126,6 +126,16 @@ jobs:
       # Non bloquant (comme flake lock health) : ces 56 URLs sont tierces et
       # éphémères, un fond retiré en amont ne doit pas bloquer un merge qui
       # n'a rien à voir. L'annotation suffit à savoir quoi corriger.
+      #
+      # ⚠️ PORTÉE RÉELLE : ne revérifie RIEN tant que les fonds sont déjà dans
+      # le store du runner — une FOD réalisée n'est jamais retéléchargée, donc
+      # son hash n'est jamais recontrôlé. Sur Serv, qui n'a pas de GC, cette
+      # étape rend la main en 1 s sans rien faire. Elle ne redeviendra un vrai
+      # contrôle qu'une fois `nix.gc` actif (hérité de modules/system après la
+      # migration NixOS), quand les fonds non référencés seront collectés.
+      # Conservée telle quelle : elle coûte 1 s et se réactivera seule.
+      # Le seul contrôle fiable d'une FOD est celui qui télécharge SANS
+      # consulter le store — cf. update-extensions.sh.
       - name: build all wallpapers
         continue-on-error: true
         run: nix build .#wallpapers-all --no-link --keep-going
