@@ -20,6 +20,20 @@ emit() {
     printf '{"text":"%s","tooltip":"%s"}\n' "$(json_escape "$1")" "$(json_escape "$2")"
 }
 
+# Icônes batterie Nerd Font (Material Design), 11 niveaux (0-100% par pas de
+# 10) : partagées par battery.sh et bluetooth.sh (mêmes glyphes que le
+# format-icons natif dans modules/user/waybar/default.nix -> garder les DEUX
+# synchronisés si un jour ils changent). Glyphes littéraux (et non printf
+# '\U…') : insensibles à LC_ALL=C, qui en locale ASCII ne sait pas encoder ces
+# codepoints du plan astral.
+bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
+bat_icon() { # $1 = pourcentage -> glyphe
+    local idx=$(( ($1 + 5) / 10 ))
+    (( idx < 0 )) && idx=0
+    (( idx > 10 )) && idx=10
+    printf '%s' "${bat_icons[idx]}"
+}
+
 # --- Lieu météo partagé ----------------------------------------------------
 # Source unique de la ville + de ses coordonnées, utilisée par weather.sh ET par
 # le night light (wlsunset-geo.sh) : ainsi le night light suit la même ville que
