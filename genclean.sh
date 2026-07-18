@@ -80,8 +80,8 @@ case "$MODE" in
         ;;
 esac
 
-# --- 2. Profils home-manager (optionnel) ------------------------------------
-if ask_yn "Purger l'historique home-manager (garder seulement la génération courante) ?"; then
+# --- 2. Profils utilisateur : home-manager ET profile (optionnel) -----------
+if ask_yn "Purger l'historique des profils utilisateur (garder seulement la génération courante) ?"; then
     # Users détectés via les services générés par le module HM (portable).
     mapfile -t HM_USERS < <(
         systemctl list-unit-files --no-legend 'home-manager-*.service' 2>/dev/null \
@@ -97,18 +97,28 @@ if ask_yn "Purger l'historique home-manager (garder seulement la génération co
             # $HOME (même protégé) et on préserve les permissions du profil.
             run_as "$u" bash -c '
                 if   [ -d "$HOME/.local/state/nix/profiles" ]; then
-                     p="$HOME/.local/state/nix/profiles/home-manager"          # XDG
+                     dir="$HOME/.local/state/nix/profiles"                     # XDG
                 elif [ -d "/nix/var/nix/profiles/per-user/$(id -un)" ]; then
-                     p="/nix/var/nix/profiles/per-user/$(id -un)/home-manager" # legacy
+                     dir="/nix/var/nix/profiles/per-user/$(id -un)"            # legacy
                 else
-                     printf "\033[1;33m   profil HM introuvable, ignoré.\033[0m\n"; exit 0
+                     printf "\033[1;33m   profils introuvables, ignoré.\033[0m\n"; exit 0
                 fi
-                if [ ! -e "$p" ]; then
-                     printf "\033[1;33m   %s absent, ignoré.\033[0m\n" "$p"; exit 0
-                fi
-                echo "   profil : $p"
-                nix-env -p "$p" --delete-generations old
-            ' || warn "   ⚠️  purge HM[$u] échouée, on continue."
+                # DEUX profils accumulent une génération par rebuild, pas un :
+                #   home-manager : la génération HM elle-même
+                #   profile      : les user-environment (nix profile / nix-env)
+                # Ne purger que le premier laissait le second croître sans fin.
+                # Constaté sur guest : 325 générations `profile` retenant 304
+                # closures distinctes, soit ~20 000 chemins que le GC ne pouvait
+                # pas libérer — alors que son historique HM était bien purgé.
+                for name in home-manager profile; do
+                     p="$dir/$name"
+                     if [ ! -e "$p" ]; then
+                          printf "\033[1;33m   %s absent, ignoré.\033[0m\n" "$p"; continue
+                     fi
+                     echo "   profil : $p"
+                     nix-env -p "$p" --delete-generations old
+                done
+            ' || warn "   ⚠️  purge des profils de $u échouée, on continue."
         done
     fi
 else
