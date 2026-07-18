@@ -144,6 +144,15 @@
                 home-manager.extraSpecialArgs = commonArgs // {
                   inherit devShellNames;
                 };
+                # Manpages de la référence home-manager (`man
+                # home-configuration.nix`) : générées PAR USER, donc 3 fois par
+                # configuration ici, à chaque rebuild. Même raisonnement que
+                # `documentation.nixos.enable = false` dans modules/system :
+                # jamais consultées, et la doc est de toute façon en ligne.
+                # Effet de bord attendu : fait taire les warnings
+                # « options.json […] without a proper context » émis par la
+                # génération de doc en amont.
+                home-manager.sharedModules = [ { manual.manpages.enable = false; } ];
               }
             ];
             specialArgs = commonArgs // {
