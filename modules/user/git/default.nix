@@ -41,6 +41,10 @@ in
 
         home.packages = with cfg.pkgs; [
           git-graph
+          # delta est référencé plus bas par core.pager et interactive.diffFilter :
+          # il se trouvait uniquement dans shell/default.nix, donc ce module
+          # cassait dès qu'il était activé sans le module shell.
+          delta
         ];
 
         programs.git = {
@@ -59,7 +63,11 @@ in
               co = "checkout";
               br = "branch";
               ci = "commit";
-              lg = "!f() { case \"$*\" in *--format*|*-f*) git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
+              # Le motif était `*--format*|*-f*` : `*-f*` attrapait aussi
+              # --first-parent, --follow, une branche « wip-fix » ou un fichier
+              # « mon-fichier.c », et abandonnait alors le format enrichi sans
+              # rien dire. On ne matche plus `-f` qu'en argument exact.
+              lg = "!f() { case \"$*\" in *--format*|*\" -f \"*|-f|\"-f \"*|*\" -f\") git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
             };
 
             init.defaultBranch = "main";
