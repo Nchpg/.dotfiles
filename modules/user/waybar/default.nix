@@ -1,13 +1,12 @@
 { config, lib, ... }:
 
-# Barre waybar reproduisant la swaybar maison (cf. modules/user/sway/sway-config
-# /sway-bar.sh) : mêmes blocs, mêmes icônes, mêmes clics — plus le tray. Quand ce
-# module est activé, le module Sway retire sa barre native (cf.
-# modules/user/sway/default.nix, placeholder @bar@) pour ne pas avoir 2 barres.
+# Barre de la session sway : blocs, icônes, clics et tray. C'est la SEULE barre
+# du dépôt depuis le retrait de l'ancienne swaybar maison (sway-bar.sh) — sway
+# n'émet plus aucun bloc `bar {}` natif.
 #
-# Les blocs cliquables réutilisent les mêmes launchers que la swaybar
-# (~/.config/sway/launchers/*), fournis par les modules wifi-picker,
-# volume-mixer, bluetooth-picker, lg-control et calendar-tui.
+# Les blocs cliquables passent par les launchers ~/.config/sway/launchers/*,
+# fournis par les modules wifi-picker, volume-mixer, bluetooth-picker,
+# lg-control et calendar-tui.
 let
   cfg = config.userSettings.waybar;
   inherit (cfg) pkgs;
@@ -88,8 +87,8 @@ let
   btop = "${config.programs.btop.package}/bin/btop";
   thunar = "${pkgs.thunar}/bin/thunar"; # gestionnaire de fichiers (GUI)
 
-  # Scripts custom (logique reprise de sway-bar.sh), installés dans la conf
-  # waybar puis exécutés par chemin absolu (cf. scriptDir).
+  # Scripts custom installés dans la conf waybar, puis exécutés par chemin
+  # absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
   scriptNames = [
     "resources.sh"
@@ -338,10 +337,11 @@ let
 in
 {
   options.userSettings.waybar = {
-    # Défaut : suit sway. Un user en session sway veut la waybar (tray, blocs
-    # custom) plutôt que la swaybar native — celle-ci reste le fallback si on
-    # met explicitement waybar.enable = false. Surchargeable par user.
-    enable = lib.mkEnableOption "waybar (remplace la swaybar native)" // {
+    # Défaut : suit sway — un user en session sway veut la barre. ATTENTION :
+    # il n'y a plus de fallback depuis le retrait de la swaybar maison. Mettre
+    # waybar.enable = false donne une session sway SANS AUCUNE barre (choix
+    # légitime pour un user minimal, mais ce n'est pas un repli).
+    enable = lib.mkEnableOption "waybar (seule barre de la session sway)" // {
       default = config.userSettings.sway.enable;
     };
 
@@ -467,7 +467,7 @@ in
 
         modules-left = [ "sway/workspaces" ];
         modules-center = [ ];
-        # Même ordre que la swaybar (nowplaying ... datetime), tray en bout.
+        # Ordre historique (nowplaying ... datetime), tray en bout.
         modules-right = [
           "custom/nowplaying"
           "custom/bluetooth"
