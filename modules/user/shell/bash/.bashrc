@@ -1,4 +1,6 @@
-[[ $- != *i* ]] && return
+# Pas de garde `[[ $- != *i* ]] && return` ici : home-manager pose la sienne,
+# et comme bashrcExtra est injecté EN TÊTE du .bashrc généré, un `return`
+# prématuré à cet endroit court-circuiterait tout ce que HM ajoute ensuite.
 
 # On interroge git plutôt que de lire $PWD/.git/HEAD : ce dernier n'existe
 # qu'à la racine du dépôt (aucune branche affichée dans un sous-dossier) et
@@ -11,10 +13,8 @@ parse_git_branch() {
   [[ -n "$branch" ]] && echo "\[\e[31m\] $branch\[\e[0m\]"
 }
 
-HISTCONTROL=ignoreboth
-HISTSIZE=6000
-HISTFILESIZE=6000
-shopt -s histappend
+# HISTCONTROL/HISTSIZE/HISTFILESIZE/histappend sont posés par home-manager
+# (programs.bash.*), APRÈS ce bloc : les redéclarer ici n'avait aucun effet.
 shopt -s checkwinsize
 
 export SH=bash

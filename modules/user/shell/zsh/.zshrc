@@ -1,35 +1,14 @@
 # BASE CONFIG
 
-typeset -U path cdpath fpath manpath
-for profile in ${(z)NIX_PROFILES}; do
-  fpath+=($profile/share/zsh/site-functions $profile/share/zsh/$ZSH_VERSION/functions $profile/share/zsh/vendor-completions)
-done
-
-HISTSIZE="10000"
-SAVEHIST="10000"
-HISTFILE="$HOME/.zsh_history"
-mkdir -p "$(dirname "$HISTFILE")"
-
-setopt HIST_FCNTL_LOCK
-setopt HIST_IGNORE_DUPS
-setopt HIST_IGNORE_SPACE
-setopt SHARE_HISTORY
-setopt EXTENDED_HISTORY
-unsetopt APPEND_HISTORY
-unsetopt HIST_IGNORE_ALL_DUPS
-unsetopt HIST_SAVE_NO_DUPS
-unsetopt HIST_FIND_NO_DUPS
-unsetopt HIST_EXPIRE_DUPS_FIRST
-
-if test -n "$KITTY_INSTALLATION_DIR"; then
-  export KITTY_SHELL_INTEGRATION="no-rc"
-  autoload -Uz -- "$KITTY_INSTALLATION_DIR"/shell-integration/zsh/kitty-integration
-  kitty-integration
-  unfunction kitty-integration
-fi
+# NB : historique (HISTFILE/HISTSIZE/setopt HIST_*), `typeset -U path`, les
+# `fpath+=` des profils Nix, `compinit` et l'intégration shell kitty sont TOUS
+# générés par home-manager (programs.zsh.* et programs.kitty). Les redéclarer
+# ici les exécutait deux fois — et faisait surtout croire que les options Nix
+# pilotaient l'historique, alors que ce fichier les écrasait juste après.
+# Ne remets rien de tout ça : règle-le via programs.zsh.history.* dans
+# shell/zsh/default.nix.
 
 autoload -Uz colors && colors
-autoload -Uz compinit && compinit
 setopt PROMPT_SUBST
 setopt NO_BEEP
 
