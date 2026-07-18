@@ -55,9 +55,17 @@ let
     }
 
     # Attendre que la taille soit posée ET stable (le reflow GTK est passé).
+    # Bornée à 10 s (40 x 0,25 s) : si nwg-displays ne s'ouvre jamais (crash,
+    # dépendance GTK cassée), on prévient au lieu de bloquer indéfiniment.
     prev=""
     cur="$(geo)"
+    tries=0
     while [ -z "$cur" ] || [ "$cur" != "$prev" ]; do
+      tries=$((tries + 1))
+      if [ "$tries" -ge 40 ]; then
+        swaynag -t error -m "nwg-displays : la fenêtre ne s'est pas stabilisée (timeout)."
+        exit 1
+      fi
       sleep 0.25
       prev="$cur"
       cur="$(geo)"
