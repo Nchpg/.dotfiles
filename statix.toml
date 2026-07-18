@@ -9,3 +9,7 @@
 #   `inherit` local (cf. modules/user/{claude,vscode}/default.nix : targetPath
 #   construit un chemin par interpolation, ce n'est pas un candidat inherit).
 disabled = ["repeated_keys", "empty_pattern", "manual_inherit_from"]
+
+# hardware-configuration.nix est généré par nixos-generate-config et ne doit
+# pas être édité : on l'exclut comme le font déjà `nix fmt` et deadnix en CI.
+ignore = ["*hardware-configuration.nix"]
