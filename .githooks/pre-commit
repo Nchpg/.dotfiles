@@ -12,5 +12,5 @@ set -euo pipefail
 mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- '*.nix' ':!:*hardware-configuration.nix')
 [ ${#files[@]} -eq 0 ] && exit 0
 
-nix fmt -- "${files[@]}" 2>/dev/null
+nix fmt -- "${files[@]}"
 git add -- "${files[@]}"
