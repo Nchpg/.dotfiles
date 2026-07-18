@@ -46,6 +46,17 @@ if [ -n "${FACTS_FILE:-}" ] && [ -f "$FACTS_FILE" ]; then
         content="${content}
 ⚠️ ${kernel_line}"
     fi
+
+    # Extensions non vérifiées : sans ça, un run où RIEN n'a bougé mais où des
+    # extensions ont été ignorées envoie un « ✅ success » nu, alors qu'on ne
+    # sait justement pas si ces extensions étaient à jour. Pas de PR dans ce
+    # cas, donc Discord est le seul canal qui reste.
+    skipped_count=$(jq '.skippedExtensions // [] | length' "$FACTS_FILE")
+    if [ "$skipped_count" -gt 0 ]; then
+        skipped_keys=$(jq -r '[.skippedExtensions[].key] | join(", ")' "$FACTS_FILE")
+        content="${content}
+⚠️ ${skipped_count} extension(s) non vérifiée(s) : ${skipped_keys}"
+    fi
 fi
 
 if [ "$status" != "success" ] && [ -n "${RUN_URL:-}" ]; then
