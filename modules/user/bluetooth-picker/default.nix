@@ -20,33 +20,28 @@ in
     enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.bluetui ];
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "bluetooth";
+        confName = "bluetooth-picker";
+        scriptBody = "exec ${termCmd}";
+        keybind = "$mod+b";
+        title = "bluetui";
+        width = 1200;
+        height = 850;
+      })
+      {
+        home.packages = [ cfg.pkgs.bluetui ];
 
-    # Échap quitte bluetui (par défaut seuls q / ctrl+c quittent).
-    xdg.configFile."bluetui/config.toml".text = ''
-      esc_quit = true
-    '';
-
-    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
-    home.file.".config/sway/launchers/bluetooth" = {
-      text = ''
-        #!/bin/sh
-        exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/bluetooth-picker.conf".text = ''
-      bindsym $mod+b exec ~/.config/sway/launchers/bluetooth
-      for_window [title="bluetui"] floating enable, resize set 1200 850, border pixel 2
-    '';
-  };
+        # Échap quitte bluetui (par défaut seuls q / ctrl+c quittent).
+        xdg.configFile."bluetui/config.toml".text = ''
+          esc_quit = true
+        '';
+      }
+    ]
+  );
 }

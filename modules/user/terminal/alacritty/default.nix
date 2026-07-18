@@ -7,11 +7,7 @@ in
   options = {
     userSettings.terminal.alacritty = {
       enable = lib.mkEnableOption "Enable alacritty terminal";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
       shell = lib.mkOption {
         type = lib.types.str;
         default = config.userSettings.shell.default;

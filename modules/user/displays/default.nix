@@ -71,11 +71,7 @@ in
 {
   options.userSettings.displays = {
     enable = lib.mkEnableOption "gestion des écrans externes / HDMI via la GUI nwg-displays";
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
   config = lib.mkIf cfg.enable {

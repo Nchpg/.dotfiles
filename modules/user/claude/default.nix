@@ -24,11 +24,7 @@ in
 
     statusline.enable = lib.mkEnableOption "statusline maison (modèle, coût, contexte, rate limits)";
 
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
 
     settings = lib.mkOption {
       inherit (jsonFormat) type;

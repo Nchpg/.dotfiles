@@ -341,11 +341,7 @@ in
       default = config.userSettings.sway.enable;
     };
 
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
 
     weatherCities = lib.mkOption {
       type = lib.types.listOf lib.types.str;

@@ -21,28 +21,20 @@ in
     enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.ncpamixer ];
-
-    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
-    home.file.".config/sway/launchers/volume-mixer" = {
-      text = ''
-        #!/bin/sh
-        exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/volume-mixer.conf".text = ''
-      bindsym $mod+p exec ~/.config/sway/launchers/volume-mixer
-      for_window [title="ncpamixer"] floating enable, resize set 1200 850, border pixel 2
-    '';
-  };
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "volume-mixer";
+        scriptBody = "exec ${termCmd}";
+        keybind = "$mod+p";
+        title = "ncpamixer";
+        width = 1200;
+        height = 850;
+      })
+      { home.packages = [ cfg.pkgs.ncpamixer ]; }
+    ]
+  );
 }

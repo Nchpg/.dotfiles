@@ -46,11 +46,7 @@ in
   options = {
     userSettings.btop = {
       enable = lib.mkEnableOption "Enable btop";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
       xeGpuSupport = lib.mkEnableOption "support du driver GPU Intel xe (PR #1457, non mergée)";
     };
   };

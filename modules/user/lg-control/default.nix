@@ -98,28 +98,20 @@ in
 {
   options.userSettings.lgControl = {
     enable = lib.mkEnableOption "TUI de contrôle LG (ventilateur, profil alim)";
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.packages = [ lg-control ];
-
-    # Launcher partagé entre le bind sway et un éventuel clic swaybar (DRY).
-    home.file.".config/sway/launchers/lg-control" = {
-      text = ''
-        #!/bin/sh
-        exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/lg-control.conf".text = ''
-      bindsym $mod+Shift+p exec ~/.config/sway/launchers/lg-control
-      for_window [title="lg-control"] floating enable, resize set 900 500, border pixel 2
-    '';
-  };
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "lg-control";
+        scriptBody = "exec ${termCmd}";
+        keybind = "$mod+Shift+p";
+        title = "lg-control";
+        width = 900;
+        height = 500;
+      })
+      { home.packages = [ lg-control ]; }
+    ]
+  );
 }

@@ -12,11 +12,7 @@ in
   options = {
     userSettings.shell.fish = {
       enable = lib.mkEnableOption "Enable  fish";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {

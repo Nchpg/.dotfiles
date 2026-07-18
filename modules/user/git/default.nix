@@ -8,11 +8,7 @@ in
     userSettings.git = {
       enable = lib.mkEnableOption "Enable git";
 
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
       userName = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;

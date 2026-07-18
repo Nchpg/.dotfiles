@@ -29,11 +29,7 @@ in
   options = {
     userSettings.neovim = {
       enable = lib.mkEnableOption "Enable neovim";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
 
