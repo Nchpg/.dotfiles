@@ -258,7 +258,7 @@ nowplaying() {
 
 # Échappe les caractères spéciaux JSON dans le texte d'un bloc.
 json_escape() {
-    s=$1
+    local s=$1
     s=${s//\\/\\\\}
     s=${s//\"/\\\"}
     printf '%s' "$s"
