@@ -8,12 +8,17 @@ VARIANT="dark"
 UPDATE=0
 YES=0
 
-# Parsing simple des arguments
+# Parsing simple des arguments.
+# need_value : sous `set -u`, un `--host` sans valeur mourait sur un
+# « $2: unbound variable » au lieu du message d'usage juste en dessous.
+need_value() {
+    [[ $# -ge 2 ]] || { echo "Option $1 : valeur manquante" >&2; exit 1; }
+}
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --host)    HOST="$2";    shift 2 ;;
-        --profile) PROFILE="$2"; shift 2 ;;
-        --variant) VARIANT="$2"; shift 2 ;;
+        --host)    need_value "$@"; HOST="$2";    shift 2 ;;
+        --profile) need_value "$@"; PROFILE="$2"; shift 2 ;;
+        --variant) need_value "$@"; VARIANT="$2"; shift 2 ;;
         --update)  UPDATE=1;     shift ;;
         --yes)     YES=1;        shift ;;
         *) echo "Argument inconnu : $1" >&2; exit 1 ;;
@@ -113,8 +118,14 @@ if sudo nixos-rebuild switch --flake .#"$ATTR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}
 
     if [ -n "${SWAYSOCK:-}" ]; then
         echo "💨 Sway session detected. Reloading configuration..."
-        swaymsg reload
-        echo "🎉 Sway reloaded."
+        # `|| true` comme pour nvd et waybar plus bas : le switch a DÉJÀ
+        # réussi à ce stade, un reload raté ne doit pas tuer le script avant
+        # le redémarrage de waybar ni faire croire à un rebuild en échec.
+        if swaymsg reload; then
+            echo "🎉 Sway reloaded."
+        else
+            echo "⚠️  Sway reload échoué (le rebuild, lui, est bien appliqué)." >&2
+        fi
 
         # waybar tourne en service systemd --user : le rebuild (root) ne peut
         # pas le relancer, donc les X-Restart-Triggers / onChange du module HM
