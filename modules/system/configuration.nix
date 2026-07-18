@@ -72,6 +72,10 @@
   # que de l'exotique hors sujet (b43/Broadcom, webcam Apple, dongle Xbox).
   hardware.enableRedistributableFirmware = true;
 
+  # Explicite alors que c'est déjà le défaut NixOS : rend l'intention visible
+  # et auditable dans le repo plutôt que de reposer sur un défaut implicite.
+  networking.firewall.enable = true;
+
   # Enable CUPS to print documents.
   services.printing.enable = true;
 
