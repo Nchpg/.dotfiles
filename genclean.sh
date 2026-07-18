@@ -63,7 +63,7 @@ case "$MODE" in
             exit 1
         fi
         echo "→ Système : suppression des générations de plus de $DAYS jours..."
-        sudo nix-env -p "$SYSTEM_PROFILE" --delete-generations +"$DAYS"d
+        sudo nix-env -p "$SYSTEM_PROFILE" --delete-generations "${DAYS}d"
         ;;
     2)
         read -r -p "Nombre de générations à garder : " N
