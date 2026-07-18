@@ -42,17 +42,24 @@ export SH=zsh
 # FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé avec bash,
 # injecté par shell/zsh/default.nix).
 
+# On interroge git plutôt que de lire $PWD/.git/HEAD : ce dernier n'existe
+# qu'à la racine du dépôt (aucune branche affichée dans un sous-dossier) et
+# n'est même pas un dossier sur un worktree ou un submodule.
 git_branch() {
-  local head_file="$PWD/.git/HEAD"
-  if [[ -r "$head_file" ]]; then
-    local branch
-    branch=$(sed -n 's|ref: refs/heads/||p' "$head_file")
-    [[ -n "$branch" ]] && echo "%F{red} ${branch}%f"
-  fi
+  local branch
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null) \
+    || branch=$(git rev-parse --short HEAD 2>/dev/null) \
+    || return
+  [[ -n "$branch" ]] && echo "%F{red} ${branch}%f"
 }
 
 # Fonction pour construire le prompt
 build_prompt() {
+  # DOIT rester la toute première instruction : $? porte le code de sortie de
+  # la commande de l'utilisateur, et n'importe quelle commande intermédiaire
+  # (jusqu'à une simple affectation) l'écrase.
+  local last_status=$?
+
   venv_name=""
 
   if [[ -n "$VIRTUAL_ENV" ]]; then
@@ -72,11 +79,11 @@ build_prompt() {
   venv_name="%F{yellow}$venv_name%f"
 
   local left_prompt="%F{cyan}%n@%m%f %F{blue}%~%f ${venv_name}$(git_branch)"
-  local last_status=""
 
-  # Code de sortie de la dernière commande
-  if [[ $? -ne 0 ]]; then
-    last_status="%F{red}✘$?%f "
+  # Code de sortie de la dernière commande (capturé en tête de fonction).
+  local status_prompt=""
+  if [[ $last_status -ne 0 ]]; then
+    status_prompt="%F{red}✘${last_status}%f "
   fi
 
   # Retour à la ligne seulement si ce n'est pas le premier prompt
@@ -100,7 +107,7 @@ build_prompt() {
 
   # Prompt principal (deux lignes)
   PROMPT="${new_line}${left_prompt}
-${last_status}%F{green}$SHELL_DEPTH❯%f "
+${status_prompt}%F{green}$SHELL_DEPTH❯%f "
 }
 
 # Lancer la construction du prompt avant chaque commande

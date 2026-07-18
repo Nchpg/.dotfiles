@@ -1,12 +1,14 @@
 [[ $- != *i* ]] && return
 
+# On interroge git plutôt que de lire $PWD/.git/HEAD : ce dernier n'existe
+# qu'à la racine du dépôt (aucune branche affichée dans un sous-dossier) et
+# n'est même pas un dossier sur un worktree ou un submodule.
 parse_git_branch() {
-  local head_file="$PWD/.git/HEAD"
-  if [[ -r "$head_file" ]]; then
-    local branch
-    branch=$(sed -n 's|ref: refs/heads/||p' "$head_file")
-    [[ -n "$branch" ]] && echo "\[\e[31m\] $branch\[\e[0m\]"
-  fi
+  local branch
+  branch=$(git symbolic-ref --short HEAD 2>/dev/null) \
+    || branch=$(git rev-parse --short HEAD 2>/dev/null) \
+    || return
+  [[ -n "$branch" ]] && echo "\[\e[31m\] $branch\[\e[0m\]"
 }
 
 HISTCONTROL=ignoreboth
@@ -47,8 +49,10 @@ set_bash_prompt() {
         venv_name="${venv_name}($current) "
     done
 
-    # couleur jaune (bash)
-    venv_name="\e[33m$venv_name\e[0m"
+    # Couleur jaune. Les \[ \] sont indispensables : sans eux bash compte les
+    # octets ANSI dans la largeur du prompt, et l'édition de ligne se décale
+    # dès qu'un venv est actif.
+    venv_name="\[\e[33m\]$venv_name\[\e[0m\]"
 
     
     if [ "$FIRST_PROMPT" -eq 1 ]; then
