@@ -46,8 +46,20 @@ jobs:
           cp flake.lock /tmp/flake.lock.before
           cp modules/user/vscode/extensions.json /tmp/extensions.json.before
 
+      # `nix flake update` traite un échec de résolution d'input en WARNING :
+      # il retombe sur « using cached version », n'écrit rien, et sort en 0.
+      # Le job passe donc au vert en n'ayant rien bumpé (vécu : 9 jours de MAJ
+      # hebdo fantômes sur un token expiré). On échoue explicitement.
+      # `set -o pipefail` indispensable : sans lui le code de retour serait
+      # celui de `tee`, et un vrai échec de `nix flake update` serait masqué.
       - name: bump des inputs flake
-        run: nix flake update
+        run: |
+          set -o pipefail
+          nix flake update 2>&1 | tee /tmp/update.log
+          if grep -q "unable to download" /tmp/update.log; then
+            echo "::error::résolution d'input échouée — le lock n'a peut-être pas été mis à jour"
+            exit 1
+          fi
 
       - name: bump des extensions vscode
         run: MY_FLAKE="$PWD" bash modules/user/vscode/update-extensions.sh
