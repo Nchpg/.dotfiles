@@ -83,4 +83,18 @@ nix-shell() {
     command nix-shell "$@" --run "exec $SHELL"
 }
 
+nix() {
+    if [ "$1" = "develop" ]; then
+        for arg in "$@"; do
+            if [ "$arg" = "--command" ]; then
+                command nix "$@"
+                return
+            fi
+        done
+        command nix develop "${@:2}" --command bash
+    else
+        command nix "$@"
+    fi
+}
+
 PROMPT_COMMAND=set_bash_prompt
