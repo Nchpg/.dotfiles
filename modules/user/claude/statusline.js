@@ -20,7 +20,11 @@ process.stdin.on('end', () => {
   }
 
   function bar(pct, width = 8) {
-    const filled = Math.round((pct / 100) * width);
+    // Bornage indispensable : rien ne garantit que le pourcentage reçu tient
+    // dans [0, 100], et String.repeat lève un RangeError sur un négatif — ce
+    // qui ferait tomber la statusline entière, pas seulement cette barre.
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    const filled = Math.round((p / 100) * width);
     return '█'.repeat(filled) + '░'.repeat(width - filled);
   }
 
