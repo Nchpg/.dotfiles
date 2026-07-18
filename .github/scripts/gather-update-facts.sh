@@ -102,7 +102,9 @@ vscode_facts=$(jq -n --slurpfile old "$old_ext" --slurpfile new "$new_ext" '
   ($old[0]) as $o | ($new[0]) as $n |
   [ $n | keys[] | select($o[.].version != $n[.].version) | {
       key: .,
-      oldVersion: $o[.].version,
+      # `// "nouvelle"` : pour une extension AJOUTÉE, $o[.] vaut null et le
+      # corps de la PR affichait littéralement « foo.bar : null → 1.2.3 ».
+      oldVersion: ($o[.].version // "nouvelle"),
       newVersion: $n[.].version
     }
   ]
