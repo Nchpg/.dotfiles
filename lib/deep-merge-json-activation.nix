@@ -28,6 +28,10 @@
       # En cas d'échec du jq (disque plein...), on nettoie le tmp au lieu de
       # laisser un $target.hm-tmp orphelin.
       if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' "$target" ${sourceFile} > "$target.hm-tmp"; then
+        # Le tmp naît avec le umask courant (0644) : sans ce report, un fichier
+        # volontairement durci en 0600 — ~/.claude/settings.json peut contenir
+        # des jetons — repasserait monde-lisible à CHAQUE activation.
+        chmod --reference="$target" "$target.hm-tmp" 2>/dev/null || true
         mv "$target.hm-tmp" "$target"
       else
         rm -f "$target.hm-tmp"
