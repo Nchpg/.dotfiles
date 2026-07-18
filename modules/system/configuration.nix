@@ -60,6 +60,9 @@
   # système de fichiers, soit ~19 Go ici : un plafond invisible, jamais
   # atteint en usage normal, mais qui laisse le journal grossir sans fin.
   # 500 Mo couvrent largement plusieurs semaines de logs.
+  # services.journald.settings n'existe pas encore dans nixpkgs-stable 26.05
+  # (pinné ici) : à migrer depuis extraConfig (déprécié en unstable) une fois
+  # stable rattrapé.
   services.journald.extraConfig = "SystemMaxUse=500M";
 
   # Manuel NixOS local (nixos-help) : jamais utilisé, et sa génération coûte
