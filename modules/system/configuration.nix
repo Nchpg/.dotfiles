@@ -98,6 +98,14 @@
   # directory » cryptique. nix-ld pose un shim à ce chemin ; passif tant
   # qu'aucun binaire étranger ne tourne.
   programs.nix-ld.enable = true;
+  # Sans libraries explicites, nix-ld ne fournit que le strict minimum (glibc)
+  # : la plupart des binaires visés ci-dessus ont aussi besoin de libstdc++/
+  # zlib/openssl au runtime.
+  programs.nix-ld.libraries = with pkgs-stable; [
+    stdenv.cc.cc.lib
+    zlib
+    openssl
+  ];
 
   environment.systemPackages = with pkgs-stable; [
     # Portails xdg gérés par xdg.portal dans modules/system/sway (screencast).
