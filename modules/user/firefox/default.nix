@@ -36,7 +36,9 @@ in
       # le chemin historique pour ne pas avoir à déplacer ~/.mozilla.
       configPath = ".mozilla/firefox";
       profiles.default = {
-        extensions.force = lib.mkForce true;
+        # Pas de extensions.packages déclarées ici : on ne force donc PAS
+        # extensions.force (ça imposerait un ensemble vide et désinstallerait
+        # au rebuild toute extension installée à la main via about:addons).
         settings = {
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
         };
