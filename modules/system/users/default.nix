@@ -83,6 +83,11 @@
           # networkmanager pour tous : un user doit pouvoir gérer son wifi
           # (se connecter à un nouveau réseau crée une connexion système, ce qui
           # exige ce groupe — cf. la policy polkit modify.system).
+          # video/render pour tous : accès direct aux nœuds GPU (rétroéclairage,
+          # /dev/dri/renderD*) nécessaire pour l'usage desktop courant (Vulkan,
+          # VA-API, contrôle de luminosité). Pas d'opt-in comme docker/libvirtd
+          # : sur une machine mono-user de confiance, l'accès GPU d'un autre
+          # user n'est pas un modèle de menace pertinent ici.
           extraGroups = [
             "networkmanager"
             "video"
