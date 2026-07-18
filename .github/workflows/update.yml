@@ -20,6 +20,19 @@ on:
     - cron: "0 6 * * 1"  # lundi 06:00 UTC
   workflow_dispatch: {}
 
+# Deux runs simultanés (typiquement un workflow_dispatch manuel pendant que le
+# cron tourne) poussent tous les deux sur la MÊME branche `weekly-update` à
+# l'étape create-pull-request : le second écrase le premier, et la PR peut se
+# retrouver avec un corps qui décrit d'autres bumps que ceux réellement dans
+# son flake.lock. Aucune erreur n'est levée, le résultat est juste faux.
+#
+# cancel-in-progress: false — on met en file d'attente au lieu d'annuler,
+# contrairement à check.yml : un run de bump déjà lancé a un travail utile à
+# terminer, il ne devient pas obsolète parce qu'un autre démarre.
+concurrency:
+  group: weekly-update
+  cancel-in-progress: false
+
 # Runner self-hosted en locale française : create-pull-request compare la
 # sortie de `git stash push` à la chaîne anglaise "No local changes to save",
 # croit qu'un stash existe, et son `git stash pop` échoue (« Aucune entrée de
@@ -50,8 +63,8 @@ jobs:
 
       - name: snapshot avant bump
         run: |
-          cp flake.lock /tmp/flake.lock.before
-          cp modules/user/vscode/extensions.json /tmp/extensions.json.before
+          cp flake.lock "${RUNNER_TEMP}"/flake.lock.before
+          cp modules/user/vscode/extensions.json "${RUNNER_TEMP}"/extensions.json.before
 
       # `nix flake update` traite un échec de résolution d'input en WARNING :
       # il retombe sur « using cached version », n'écrit rien, et sort en 0.
@@ -62,8 +75,8 @@ jobs:
       - name: bump des inputs flake
         run: |
           set -o pipefail
-          nix flake update 2>&1 | tee /tmp/update.log
-          if grep -q "unable to download" /tmp/update.log; then
+          nix flake update 2>&1 | tee "${RUNNER_TEMP}"/update.log
+          if grep -q "unable to download" "${RUNNER_TEMP}"/update.log; then
             echo "::error::résolution d'input échouée — le lock n'a peut-être pas été mis à jour"
             exit 1
           fi
@@ -72,7 +85,7 @@ jobs:
       # (API Marketplace en erreur, téléchargement échoué). Reprise plus bas
       # dans les faits, pour apparaître dans le corps de la PR.
       - name: bump des extensions vscode
-        run: MY_FLAKE="$PWD" VSCODE_SKIPPED_FILE=/tmp/extensions-skipped.json bash modules/user/vscode/update-extensions.sh
+        run: MY_FLAKE="$PWD" VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json bash modules/user/vscode/update-extensions.sh
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts
@@ -80,16 +93,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           .github/scripts/gather-update-facts.sh \
-            /tmp/flake.lock.before flake.lock \
-            /tmp/extensions.json.before modules/user/vscode/extensions.json \
-            /tmp/extensions-skipped.json \
-            > /tmp/facts.json
-          changed=$(jq '(.flakeInputs | length) > 0 or (.vscodeExtensions | length) > 0' /tmp/facts.json)
+            "${RUNNER_TEMP}"/flake.lock.before flake.lock \
+            "${RUNNER_TEMP}"/extensions.json.before modules/user/vscode/extensions.json \
+            "${RUNNER_TEMP}"/extensions-skipped.json \
+            > "${RUNNER_TEMP}"/facts.json
+          changed=$(jq '(.flakeInputs | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: générer le corps de la PR
         if: steps.facts.outputs.changed == 'true'
-        run: .github/scripts/render-pr-body.sh /tmp/facts.json > /tmp/pr-body.md
+        run: .github/scripts/render-pr-body.sh "${RUNNER_TEMP}"/facts.json > "${RUNNER_TEMP}"/pr-body.md
 
       - name: créer la PR
         id: create-pr
@@ -100,7 +113,7 @@ jobs:
           branch: weekly-update
           delete-branch: true
           title: "chore: weekly flake + vscode extensions update"
-          body-path: /tmp/pr-body.md
+          body-path: ${{ runner.temp }}/pr-body.md
 
       - name: notifier Discord
         if: always()
@@ -110,6 +123,6 @@ jobs:
           STATUS: ${{ job.status }}
           PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PR_BODY_FILE: /tmp/pr-body.md
-          FACTS_FILE: /tmp/facts.json
+          PR_BODY_FILE: ${{ runner.temp }}/pr-body.md
+          FACTS_FILE: ${{ runner.temp }}/facts.json
         run: .github/scripts/notify-discord.sh
