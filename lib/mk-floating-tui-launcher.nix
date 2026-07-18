@@ -1,6 +1,6 @@
 # Génère les deux home.file partagés par tous les TUIs "en terminal flottant"
 # de sway : un script lanceur (~/.config/sway/launchers/<name>, appelé par le
-# bind ET par un éventuel clic swaybar) et son bind clavier + règle de fenêtre
+# bind ET par un éventuel clic waybar) et son bind clavier + règle de fenêtre
 # flottante (~/.config/sway/conf.d/<confName>.conf). Cf. bluetooth-picker,
 # wifi-picker, volume-mixer, lg-control, systemd-manager-tui, task-tui,
 # calendar-tui : même forme à chaque fois, seuls le nom, la commande, le bind,
