@@ -18,7 +18,6 @@ in
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)" // {
       default = config.userSettings.sway.enable;
     };
-    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
   config = lib.mkIf cfg.enable {
