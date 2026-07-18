@@ -63,7 +63,6 @@ inoremap {;<CR> {<CR>};<ESC>O
 " line and column behaviour
 :set cursorline
 set colorcolumn=80
-highlight Normal ctermfg=black ctermbg=lightgrey
 
 " color schema
 if has("termguicolors")
@@ -72,7 +71,6 @@ endif
 syntax on
 " set background=dark
 " colorscheme gruvbox
-:hi Comment None
 
 " duplicate line
 nnoremap <C-d> yyp:-1<CR>
