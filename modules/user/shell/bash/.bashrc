@@ -17,8 +17,8 @@ shopt -s checkwinsize
 
 export SH=bash
 
-# FIRST_PROMPT, clear(), setdev(), bloc PATH_NIX : cf. ../common-posix (partagé
-# avec zsh, injecté par shell/bash/default.nix).
+# FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé avec zsh,
+# injecté par shell/bash/default.nix).
 
 # Fonction pour construire le prompt avec l'heure alignée à droite
 set_bash_prompt() {
