@@ -7,12 +7,12 @@ let
   # ncpamixer (ncurses) utilise la palette du terminal : il hérite donc
   # automatiquement du thème Stylix via le terminal (kitty).
   # Padding interne plus large que le terminal courant pour ne pas coller aux bords.
-  padOpt = lib.optionalString (term == "kitty") "-o window_padding_width=20 ";
-  termCmd =
-    if term == "alacritty" then
-      "${term} --title ncpamixer -e ncpamixer"
-    else
-      "${term} ${padOpt}--title ncpamixer ncpamixer";
+  termCmd = import ../../../lib/mk-terminal-cmd.nix {
+    inherit lib term;
+    title = "ncpamixer";
+    exec = "ncpamixer";
+    kittyExtraOpts = "-o window_padding_width=20";
+  };
 in
 {
   options.userSettings.volumeMixer = {

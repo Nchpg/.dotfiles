@@ -29,11 +29,11 @@ let
     '';
   });
 
-  termCmd =
-    if term == "alacritty" then
-      "${term} --title systemd-manager-tui -e ${systemd-manager-tui}/bin/systemd-manager-tui"
-    else
-      "${term} --title systemd-manager-tui ${systemd-manager-tui}/bin/systemd-manager-tui";
+  termCmd = import ../../../lib/mk-terminal-cmd.nix {
+    inherit lib term;
+    title = "systemd-manager-tui";
+    exec = "${systemd-manager-tui}/bin/systemd-manager-tui";
+  };
 in
 {
   options.userSettings.systemdManagerTui = {

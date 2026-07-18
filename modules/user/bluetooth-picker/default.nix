@@ -7,11 +7,11 @@ let
   # bluetui (ratatui) utilise la palette du terminal : il hérite donc
   # automatiquement du thème Stylix via le terminal (kitty), comme nmtui
   # avec NEWT_COLORS pour le wifi-picker.
-  termCmd =
-    if term == "alacritty" then
-      "${term} --title bluetui -e bluetui"
-    else
-      "${term} --title bluetui bluetui";
+  termCmd = import ../../../lib/mk-terminal-cmd.nix {
+    inherit lib term;
+    title = "bluetui";
+    exec = "bluetui";
+  };
 in
 {
   options.userSettings.bluetoothPicker = {
