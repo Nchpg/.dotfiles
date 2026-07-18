@@ -38,8 +38,12 @@ fi
 
 content="${mention}${emoji} weekly-update (${status})"
 
-if [ -n "${FACTS_FILE:-}" ] && [ -f "$FACTS_FILE" ]; then
-    kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$FACTS_FILE")
+# -s et pas -f : si le step « rassembler les faits » a échoué, la redirection
+# a déjà créé un facts.json VIDE, que `-f` laissait passer. Et les deux jq
+# ci-dessous sont des affectations : sur un JSON partiel, `set -e` tuerait le
+# script — donc justement l'alerte Discord d'échec, au moment où elle sert.
+if [ -n "${FACTS_FILE:-}" ] && [ -s "$FACTS_FILE" ]; then
+    kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$FACTS_FILE" 2>/dev/null || echo false)
     if [ "$kernel_changed" = "true" ]; then
         kernel_line=$(jq -r '.flakeInputs[] | select(.kernelChanged == true) |
           "noyau: \(.oldKernelVersion) → \(.newKernelVersion)"' "$FACTS_FILE")
@@ -51,7 +55,7 @@ if [ -n "${FACTS_FILE:-}" ] && [ -f "$FACTS_FILE" ]; then
     # extensions ont été ignorées envoie un « ✅ success » nu, alors qu'on ne
     # sait justement pas si ces extensions étaient à jour. Pas de PR dans ce
     # cas, donc Discord est le seul canal qui reste.
-    skipped_count=$(jq '.skippedExtensions // [] | length' "$FACTS_FILE")
+    skipped_count=$(jq '.skippedExtensions // [] | length' "$FACTS_FILE" 2>/dev/null || echo 0)
     if [ "$skipped_count" -gt 0 ]; then
         skipped_keys=$(jq -r '[.skippedExtensions[].key] | join(", ")' "$FACTS_FILE")
         content="${content}
@@ -79,5 +83,11 @@ fi
 # Discord limite le contenu d'un message à 2000 caractères.
 content="${content:0:2000}"
 
+# --retry : un 429 (rate-limit Discord) ou un hoquet réseau faisait sortir
+# curl en non-zéro sous `set -e`, donc échouer un run par ailleurs réussi —
+# PR créée comprise. La notification est le dernier maillon : son échec doit
+# rester un warning, pas le verdict du job.
 jq -n --arg content "$content" '{content: $content}' \
-    | curl -sf -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL" >/dev/null
+    | curl -sS --fail-with-body --retry 3 --retry-delay 2 \
+        -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL" >/dev/null \
+    || echo "::warning::notification Discord échouée (le run lui-même n'est pas affecté)"
