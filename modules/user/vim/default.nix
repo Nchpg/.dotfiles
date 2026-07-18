@@ -40,11 +40,6 @@ in
           lib.strings.replaceStrings [ "-" ] [ "_" ] config.userSettings.stylix.theme
         }'
 
-        ${lib.optionalString (config.userSettings.stylix.theme == "custom") ''
-          set background=dark
-          colorscheme gruvbox
-          let g:airline_theme='powerline'
-        ''}
         ${lib.optionalString (config.userSettings.stylix.theme == "gruvbox-dark-custom") ''
           let g:airline_theme='powerline'
         ''}
