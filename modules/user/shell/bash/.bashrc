@@ -25,7 +25,8 @@ set_bash_prompt() {
     local last_status=$?
     local user_host="\[\e[0;36m\]\u@\h\[\e[0m\]"
     local cwd="\[\e[0;34m\]\w\[\e[0m\]"
-    local git_branch="\[\e[31m\]$(parse_git_branch)\[\e[0m\]"
+    local git_branch
+    git_branch="$(parse_git_branch)"
     local status=""
     [ $last_status -ne 0 ] && status="\[\e[31m\]✘$last_status \[\e[0m\]"
 
