@@ -89,8 +89,10 @@ nix-shell() {
 
 nix() {
     if [ "$1" = "develop" ]; then
+        # `-c` est l'abréviation de `--command` : sans ce test, `nix develop -c
+        # cmd` se voyait ajouter un second `--command bash` et échouait.
         for arg in "$@"; do
-            if [ "$arg" = "--command" ]; then
+            if [ "$arg" = "--command" ] || [ "$arg" = "-c" ]; then
                 command nix "$@"
                 return
             fi
