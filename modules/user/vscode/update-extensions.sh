@@ -19,31 +19,48 @@ fi
 
 # filterType 7 = recherche exacte par "publisher.name" ; flags 103 = inclut la
 # liste des versions (la plus récente en premier).
+#
+# Toute défaillance réseau est LOCALE à une extension : on la signale et on
+# passe à la suivante, jamais d'abandon global. L'API Marketplace n'est ni
+# officielle ni fiable (throttling, pages d'erreur HTML), et une extension
+# capricieuse ne doit pas faire perdre le `nix flake update` déjà effectué ni
+# empêcher la PR hebdomadaire d'être créée.
+#
+# Les `|| return 1` sont indispensables : sous `set -euo pipefail`, un `curl |
+# jq` qui échoue interrompt tout le script AVANT que l'appelant puisse tester
+# le résultat — la garde « ignoré » plus bas n'était jamais atteinte.
 query_latest_version() {
-    local publisher="$1" name="$2"
-    curl -s -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
+    local publisher="$1" name="$2" response
+    response=$(curl -sf -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json;api-version=3.0-preview.1" \
-        -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"${publisher}.${name}\"}]}],\"flags\":103}" \
-        | jq -r '.results[0].extensions[0].versions[0].version // empty'
+        -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"${publisher}.${name}\"}]}],\"flags\":103}") || return 1
+    printf '%s' "$response" | jq -r '.results[0].extensions[0].versions[0].version // empty' 2>/dev/null || return 1
 }
 
 updated=0
+skipped=0
 for key in $(jq -r 'keys[]' "$file"); do
     publisher=$(jq -r ".\"$key\".publisher" "$file")
     name=$(jq -r ".\"$key\".name" "$file")
     current=$(jq -r ".\"$key\".version" "$file")
 
-    latest=$(query_latest_version "$publisher" "$name")
+    latest=$(query_latest_version "$publisher" "$name") || latest=""
     if [ -z "$latest" ]; then
         echo "⚠️  $key : impossible de récupérer la dernière version (API Marketplace), ignoré." >&2
+        skipped=$((skipped + 1))
         continue
     fi
 
     url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${latest}/vspackage"
     # --json donne directement le hash au format SRI (sha256-...), attendu tel
     # quel par extensionsFromVscodeMarketplace : pas de conversion à faire.
-    hash=$(nix store prefetch-file --json "$url" | jq -r '.hash')
+    if ! prefetch=$(nix store prefetch-file --json "$url" 2>/dev/null) \
+        || ! hash=$(printf '%s' "$prefetch" | jq -er '.hash' 2>/dev/null); then
+        echo "⚠️  $key : téléchargement du vsix échoué ($latest), ignoré." >&2
+        skipped=$((skipped + 1))
+        continue
+    fi
     current_hash=$(jq -r ".\"$key\".sha256" "$file")
 
     # On télécharge TOUJOURS, même à version identique, et on compare le
@@ -74,4 +91,11 @@ if [ "$updated" -eq 0 ]; then
     echo "Aucune extension à mettre à jour."
 else
     echo "$updated extension(s) mise(s) à jour dans $file — vérifie le diff, puis rebuild."
+fi
+
+# Les extensions ignorées ne font PAS échouer le run (une API tierce
+# capricieuse ne doit pas bloquer la PR hebdomadaire), mais elles remontent en
+# annotation GitHub pour rester visibles plutôt que noyées dans le log.
+if [ "$skipped" -gt 0 ]; then
+    echo "::warning::$skipped extension(s) ignorée(s) : API Marketplace ou téléchargement en échec."
 fi
