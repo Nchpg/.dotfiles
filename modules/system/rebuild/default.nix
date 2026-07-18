@@ -21,7 +21,6 @@
 
     (pkgs-stable.writeShellScriptBin "rebuild" ''
       set -euo pipefail
-      flake="''${MY_FLAKE:-$HOME/.dotfiles}"
 
       profile="${target.profile}"
       host="${target.host}"
@@ -46,12 +45,10 @@
         esac
       done
 
-      # Garde explicite : lancé par un user sans clone (~guest, sudo -i), le
-      # exec échouerait avec un « No such file » peu clair.
-      if [ ! -x "$flake/rebuild.sh" ]; then
-        echo "rebuild : flake introuvable ($flake/rebuild.sh) — clone le dépôt ou définis MY_FLAKE." >&2
-        exit 1
-      fi
+      ${import ../../../lib/mk-flake-guard.nix {
+        name = "rebuild";
+        scriptName = "rebuild.sh";
+      }}
 
       exec "$flake/rebuild.sh" --profile "$profile" --host "$host" --variant "$variant" ''${extra[@]+"''${extra[@]}"}
     '')
