@@ -42,8 +42,10 @@ in
       # Toutes les couleurs viennent de stylix (targets.kitty, activé plus
       # bas) : kitty suit le thème choisi dans les DEUX polarités. L'ancien
       # jeu de couleurs custom appliqué en dark (fond #262626, accents
-      # pastel) vit dans le scheme modules/themes/schemes/custom.nix —
-      # pour retrouver ce rendu partout : darkTheme = "custom" dans le profil.
+      # pastel) vivait dans le scheme modules/themes/schemes/custom.nix,
+      # supprimé depuis (cf. gruvbox-dark-custom pour un rendu proche) —
+      # pour retrouver ce rendu partout : darkTheme = "gruvbox-dark-custom"
+      # dans le profil.
 
       extraConfig = ''
         enable_audio_bell no
