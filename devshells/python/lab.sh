@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 # Serveur JupyterLab via uvx : installé une fois dans le cache uv partagé,
 # sans polluer le venv du projet. Racine épinglée sur le dossier de

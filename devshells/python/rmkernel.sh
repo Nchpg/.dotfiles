@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 
 KERNEL_NAME="${1:-}"
 if [ -z "$KERNEL_NAME" ]; then

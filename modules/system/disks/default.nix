@@ -46,6 +46,7 @@
       # termine — le fichier doit survivre entre deux ticks du timer.
       RuntimeDirectoryPreserve = true;
       ExecStart = pkgs-stable.writeShellScript "nvme-health-export" ''
+        set -euo pipefail
         PATH=${pkgs-stable.smartmontools}/bin:${pkgs-stable.coreutils}/bin
         for dev in /dev/nvme[0-9]; do
           [ -e "$dev" ] || continue
