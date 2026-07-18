@@ -55,8 +55,8 @@ jobs:
       # hardware-configuration.nix est exclu (fichier généré).
       - name: check formatting
         run: |
-          git ls-files '*.nix' ':!:*hardware-configuration.nix' \
-            | xargs nix fmt -- --check
+          git ls-files -z '*.nix' ':!:*hardware-configuration.nix' \
+            | xargs -r0 nix fmt -- --check
 
   lint:
     runs-on: self-hosted
@@ -75,8 +75,8 @@ jobs:
       # hardware-configuration.nix est exclu (fichier généré, comme pour fmt).
       - name: deadnix
         run: |
-          git ls-files '*.nix' ':!:*hardware-configuration.nix' \
-            | xargs nix run nixpkgs#deadnix -- --fail
+          git ls-files -z '*.nix' ':!:*hardware-configuration.nix' \
+            | xargs -r0 nix run nixpkgs#deadnix -- --fail
 
   security:
     runs-on: self-hosted
