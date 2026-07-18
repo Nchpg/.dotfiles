@@ -11,11 +11,7 @@ in
       enable = lib.mkEnableOption "bat (cat amélioré) + batgrep/batman" // {
         default = true;
       };
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
 

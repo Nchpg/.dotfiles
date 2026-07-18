@@ -140,11 +140,7 @@ in
   options = {
     userSettings.vscode = {
       enable = lib.mkEnableOption "Enable vscode";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {

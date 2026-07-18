@@ -11,11 +11,7 @@ in
 {
   options.userSettings.python = {
     enable = lib.mkEnableOption "Python + uv globaux (hors devshell)";
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
   config = lib.mkIf cfg.enable {

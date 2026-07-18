@@ -32,11 +32,7 @@ in
           modules/themes/wallpapers.nix. null = le fond par défaut du thème.
         '';
       };
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
 

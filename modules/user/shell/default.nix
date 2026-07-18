@@ -38,11 +38,7 @@ in
         readOnly = true;
         description = "Generated `dev-<name>` aliases, one per devshells/*.nix";
       };
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
 

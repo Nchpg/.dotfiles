@@ -7,11 +7,7 @@ in
   options = {
     userSettings.tmux = {
       enable = lib.mkEnableOption "Enable tmux";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
 

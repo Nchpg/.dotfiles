@@ -7,11 +7,7 @@ in
   options = {
     userSettings.flameshot = {
       enable = lib.mkEnableOption "flameshot (capture d'écran, Wayland natif sous Sway)";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
       package = lib.mkOption {
         type = lib.types.package;
         default = cfg.pkgs.flameshot.override { enableWlrSupport = true; };

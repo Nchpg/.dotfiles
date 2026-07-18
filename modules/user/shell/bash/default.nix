@@ -7,11 +7,7 @@ in
   options = {
     userSettings.shell.bash = {
       enable = lib.mkEnableOption "Enable bash";
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {

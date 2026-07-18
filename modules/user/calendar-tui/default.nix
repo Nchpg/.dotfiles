@@ -68,11 +68,7 @@ in
 {
   options.userSettings.calendarTui = {
     enable = lib.mkEnableOption "calendar-tui (ikhal + vdirsyncer Google Calendar)";
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
     syncInterval = lib.mkOption {
       type = lib.types.str;
       default = "2min";
@@ -138,164 +134,165 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    # calendar-tui déclare des secrets sops (identifiants Google + IDs de
-    # collection). Sans accès à la clé, l'activation échouerait au déchiffrement
-    # avec un message obscur : on l'attrape ici à l'éval. NB : ceci vérifie le
-    # DROIT d'accès (keyOwner/root). Que la clé age soit bien présente et
-    # déchiffre effectivement les secrets Google, c'est sops-nix qui le vérifie
-    # à l'activation (impossible à l'éval, la clé est un fichier runtime).
-    assertions = [
-      {
-        assertion = config.userSettings.sops.available;
-        message = "userSettings.calendarTui a besoin des secrets sops (Google Agenda), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
-      }
-    ];
-
-    home.packages = with cfg.pkgs; [
-      khal
-      vdirsyncer
-    ];
-
-    # Config khal generee via sops (les chemins de calendriers contiennent des
-    # placeholders -> IDs injectes a l'activation). Les couleurs Stylix, elles,
-    # sont resolues a l'eval (mix placeholder runtime + interpolation build OK).
-    sops.templates."khal-config" = {
-      path = "${config.home.homeDirectory}/.config/khal/config";
-      content = ''
-        [calendars]
-        ${khalCalendars}
-
-        [locale]
-          local_timezone = ${cfg.timezone}
-          default_timezone = ${cfg.timezone}
-          timeformat = %H:%M
-          dateformat = %d/%m/%Y
-          longdateformat = %d/%m/%Y
-          datetimeformat = %d/%m/%Y %H:%M
-          longdatetimeformat = %d/%m/%Y %H:%M
-
-        [default]
-          default_calendar = perso
-          enable_mouse = false
-          timedelta = 1h
-          highlight_event_days = true
-          show_all_days = true
-
-        [keybindings]
-          quit = q, Q, esc
-
-        [palette]
-          header = white, black, default, '${c.base05}', '${c.base00}'
-          footer = white, black, default, '${c.base04}', '${c.base00}'
-          line header = black, white, bold, '${c.base05}', '${c.base02}'
-          alt header = white, black, bold, '${c.base05}', '${c.base00}'
-          bright = yellow, black, bold, '${c.base05}', '${c.base02}'
-          list = white, black, default, '${c.base05}', '${c.base00}'
-          list focused = black, light blue, bold, '${c.base06}', '${c.base02}'
-          edit = white, black, default, '${c.base05}', '${c.base01}'
-          edit focus = black, light cyan, default, '${c.base06}', '${c.base02}'
-          button = white, black, default, '${c.base05}', '${c.base02}'
-          button focused = black, light green, bold, '${c.base06}', '${c.base03}'
-          reveal focus = black, yellow, default, '${c.base06}', '${c.base02}'
-          today focus = black, light blue, bold, '${c.base06}', '${c.base02}'
-          today = light green, black, default, '${c.base0B}', '${c.base01}'
-          date header = light gray, black, default, '${c.base04}', '${c.base00}'
-          date header focused = black, light blue, bold, '${c.base06}', '${c.base02}'
-          date header selected = black, light green, default, '${c.base05}', '${c.base01}'
-          dayname = light gray, black, default, '${c.base04}', '${c.base00}'
-          monthname = light gray, black, default, '${c.base04}', '${c.base00}'
-          weeknumber_right = light gray, black, default, '${c.base03}', '${c.base00}'
-          alert = white, dark red, bold, '${c.base00}', '${c.base08}'
-          mark = black, light green, bold, '${c.base06}', '${c.base03}'
-          frame = light gray, black, default, '${c.base03}', '${c.base00}'
-          frame focus = light blue, black, bold, '${c.base05}', '${c.base00}'
-          frame focus color = light blue, black, bold, '${c.base05}', '${c.base00}'
-          frame focus top = light magenta, black, bold, '${c.base05}', '${c.base00}'
-          eventcolumn = white, black, default, '${c.base05}', '${c.base00}'
-          eventcolumn focus = white, black, default, '${c.base05}', '${c.base00}'
-          calendar = white, black, default, '${c.base05}', '${c.base00}'
-          calendar focus = white, black, default, '${c.base05}', '${c.base00}'
-          editbx = white, black, default, '${c.base05}', '${c.base01}'
-          editcp = black, light blue, standout, '${c.base06}', '${c.base03}'
-          popupbg = white, black, default, '${c.base05}', '${c.base00}'
-          popupper = black, light blue, bold, '${c.base06}', '${c.base02}'
-          caption = light blue, black, bold, '${c.base05}', '${c.base00}'
-      '';
-    };
-
-    # Secrets OAuth Google (partages avec task-tui) dechiffres depuis
-    # secrets/secrets.yaml. Le template ci-dessous genere
-    # ~/.config/vdirsyncer/config avec les vraies valeurs a l'activation
-    # home-manager (jamais en clair dans le store ni dans Git).
-    # google/* = creds OAuth ; calendars/* = IDs d'agendas (PII), un par calendrier.
-    sops.secrets = calendarSecrets // {
-      "google/client_id" = { };
-      "google/client_secret" = { };
-    };
-    sops.templates."vdirsyncer-config" = {
-      content = vdirsyncerConfig;
-      path = "${config.home.homeDirectory}/.config/vdirsyncer/config";
-    };
-
-    home.file.".calendars/google/.keep".text = "";
-
-    home.file.".config/sway/launchers/calendar" = {
-      text = ''
-        #!/bin/sh
-        set -eu
-
-        # Log dans XDG_RUNTIME_DIR (privé) plutôt que /tmp partagé : un nom
-        # prévisible dans /tmp est écrasable/lisible par les autres users.
-        if [ -f "$HOME/.config/vdirsyncer/config" ]; then
-          ${syncCmd} >"''${XDG_RUNTIME_DIR:-/tmp}/calendar-tui-vdirsyncer.log" 2>&1 || true
-        fi
-
-        exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/calendar-tui.conf".text = ''
-      bindsym $mod+c exec ~/.config/sway/launchers/calendar
-      for_window [title="calendar-tui"] floating enable, resize set 1500 950, border pixel 2
-    '';
-
-    # Synchro périodique Google Calendar <-> vdir local. Le service ne fait rien
-    # tant que ~/.config/vdirsyncer/config n'a pas été créé depuis le template.
-    systemd.user.services.calendar-tui-sync = {
-      Unit.Description = "Synchronisation Google Calendar pour ikhal";
-      Service = {
-        Type = "oneshot";
-        ExecStart = "${cfg.pkgs.writeShellScript "calendar-tui-sync" ''
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "calendar";
+        confName = "calendar-tui";
+        scriptBody = ''
           set -eu
-          [ -f "$HOME/.config/vdirsyncer/config" ] || exit 0
-          ${syncCmd}
-        ''}";
-      };
-    };
-    systemd.user.timers.calendar-tui-sync = {
-      Unit.Description = "Synchronise périodiquement Google Calendar pour ikhal";
-      Timer = {
-        OnBootSec = "1min";
-        OnUnitActiveSec = cfg.syncInterval;
-      };
-      Install.WantedBy = [ "timers.target" ];
-    };
 
-    # Setup OAuth (le fichier ~/.config/vdirsyncer/config est desormais genere
-    # automatiquement par sops a chaque `nixos-rebuild switch`) :
-    #
-    # Dans Google Cloud Console :
-    #   1. Activer l'API CalDAV (pas seulement Google Calendar API)
-    #   2. Créer un OAuth Client ID de type "Desktop application"
-    #
-    # Puis renseigner les secrets une fois (depuis la racine du repo) :
-    #   sops secrets/secrets.yaml
-    #     -> google.client_id / google.client_secret / google.project_id
-    #     -> calendars.perso / calendars.epita / calendars.feries (IDs agendas)
-    #
-    # Apres `switch`, lancer une fois :  vdirsyncer discover && vdirsyncer sync
-    # Ensuite : Mod+c ouvre ikhal. La synchro tourne aussi via timer user.
-  };
+          # Log dans XDG_RUNTIME_DIR (privé) plutôt que /tmp partagé : un nom
+          # prévisible dans /tmp est écrasable/lisible par les autres users.
+          if [ -f "$HOME/.config/vdirsyncer/config" ]; then
+            ${syncCmd} >"''${XDG_RUNTIME_DIR:-/tmp}/calendar-tui-vdirsyncer.log" 2>&1 || true
+          fi
+
+          exec ${termCmd}'';
+        keybind = "$mod+c";
+        title = "calendar-tui";
+        width = 1500;
+        height = 950;
+      })
+      {
+        # calendar-tui déclare des secrets sops (identifiants Google + IDs de
+        # collection). Sans accès à la clé, l'activation échouerait au déchiffrement
+        # avec un message obscur : on l'attrape ici à l'éval. NB : ceci vérifie le
+        # DROIT d'accès (keyOwner/root). Que la clé age soit bien présente et
+        # déchiffre effectivement les secrets Google, c'est sops-nix qui le vérifie
+        # à l'activation (impossible à l'éval, la clé est un fichier runtime).
+        assertions = [
+          {
+            assertion = config.userSettings.sops.available;
+            message = "userSettings.calendarTui a besoin des secrets sops (Google Agenda), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
+          }
+        ];
+
+        home.packages = with cfg.pkgs; [
+          khal
+          vdirsyncer
+        ];
+
+        # Config khal generee via sops (les chemins de calendriers contiennent des
+        # placeholders -> IDs injectes a l'activation). Les couleurs Stylix, elles,
+        # sont resolues a l'eval (mix placeholder runtime + interpolation build OK).
+        sops.templates."khal-config" = {
+          path = "${config.home.homeDirectory}/.config/khal/config";
+          content = ''
+            [calendars]
+            ${khalCalendars}
+
+            [locale]
+              local_timezone = ${cfg.timezone}
+              default_timezone = ${cfg.timezone}
+              timeformat = %H:%M
+              dateformat = %d/%m/%Y
+              longdateformat = %d/%m/%Y
+              datetimeformat = %d/%m/%Y %H:%M
+              longdatetimeformat = %d/%m/%Y %H:%M
+
+            [default]
+              default_calendar = perso
+              enable_mouse = false
+              timedelta = 1h
+              highlight_event_days = true
+              show_all_days = true
+
+            [keybindings]
+              quit = q, Q, esc
+
+            [palette]
+              header = white, black, default, '${c.base05}', '${c.base00}'
+              footer = white, black, default, '${c.base04}', '${c.base00}'
+              line header = black, white, bold, '${c.base05}', '${c.base02}'
+              alt header = white, black, bold, '${c.base05}', '${c.base00}'
+              bright = yellow, black, bold, '${c.base05}', '${c.base02}'
+              list = white, black, default, '${c.base05}', '${c.base00}'
+              list focused = black, light blue, bold, '${c.base06}', '${c.base02}'
+              edit = white, black, default, '${c.base05}', '${c.base01}'
+              edit focus = black, light cyan, default, '${c.base06}', '${c.base02}'
+              button = white, black, default, '${c.base05}', '${c.base02}'
+              button focused = black, light green, bold, '${c.base06}', '${c.base03}'
+              reveal focus = black, yellow, default, '${c.base06}', '${c.base02}'
+              today focus = black, light blue, bold, '${c.base06}', '${c.base02}'
+              today = light green, black, default, '${c.base0B}', '${c.base01}'
+              date header = light gray, black, default, '${c.base04}', '${c.base00}'
+              date header focused = black, light blue, bold, '${c.base06}', '${c.base02}'
+              date header selected = black, light green, default, '${c.base05}', '${c.base01}'
+              dayname = light gray, black, default, '${c.base04}', '${c.base00}'
+              monthname = light gray, black, default, '${c.base04}', '${c.base00}'
+              weeknumber_right = light gray, black, default, '${c.base03}', '${c.base00}'
+              alert = white, dark red, bold, '${c.base00}', '${c.base08}'
+              mark = black, light green, bold, '${c.base06}', '${c.base03}'
+              frame = light gray, black, default, '${c.base03}', '${c.base00}'
+              frame focus = light blue, black, bold, '${c.base05}', '${c.base00}'
+              frame focus color = light blue, black, bold, '${c.base05}', '${c.base00}'
+              frame focus top = light magenta, black, bold, '${c.base05}', '${c.base00}'
+              eventcolumn = white, black, default, '${c.base05}', '${c.base00}'
+              eventcolumn focus = white, black, default, '${c.base05}', '${c.base00}'
+              calendar = white, black, default, '${c.base05}', '${c.base00}'
+              calendar focus = white, black, default, '${c.base05}', '${c.base00}'
+              editbx = white, black, default, '${c.base05}', '${c.base01}'
+              editcp = black, light blue, standout, '${c.base06}', '${c.base03}'
+              popupbg = white, black, default, '${c.base05}', '${c.base00}'
+              popupper = black, light blue, bold, '${c.base06}', '${c.base02}'
+              caption = light blue, black, bold, '${c.base05}', '${c.base00}'
+          '';
+        };
+
+        # Secrets OAuth Google (partages avec task-tui) dechiffres depuis
+        # secrets/secrets.yaml. Le template ci-dessous genere
+        # ~/.config/vdirsyncer/config avec les vraies valeurs a l'activation
+        # home-manager (jamais en clair dans le store ni dans Git).
+        # google/* = creds OAuth ; calendars/* = IDs d'agendas (PII), un par calendrier.
+        sops.secrets = calendarSecrets // {
+          "google/client_id" = { };
+          "google/client_secret" = { };
+        };
+        sops.templates."vdirsyncer-config" = {
+          content = vdirsyncerConfig;
+          path = "${config.home.homeDirectory}/.config/vdirsyncer/config";
+        };
+
+        home.file.".calendars/google/.keep".text = "";
+
+        # Synchro périodique Google Calendar <-> vdir local. Le service ne fait rien
+        # tant que ~/.config/vdirsyncer/config n'a pas été créé depuis le template.
+        systemd.user.services.calendar-tui-sync = {
+          Unit.Description = "Synchronisation Google Calendar pour ikhal";
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${cfg.pkgs.writeShellScript "calendar-tui-sync" ''
+              set -eu
+              [ -f "$HOME/.config/vdirsyncer/config" ] || exit 0
+              ${syncCmd}
+            ''}";
+          };
+        };
+        systemd.user.timers.calendar-tui-sync = {
+          Unit.Description = "Synchronise périodiquement Google Calendar pour ikhal";
+          Timer = {
+            OnBootSec = "1min";
+            OnUnitActiveSec = cfg.syncInterval;
+          };
+          Install.WantedBy = [ "timers.target" ];
+        };
+
+        # Setup OAuth (le fichier ~/.config/vdirsyncer/config est desormais genere
+        # automatiquement par sops a chaque `nixos-rebuild switch`) :
+        #
+        # Dans Google Cloud Console :
+        #   1. Activer l'API CalDAV (pas seulement Google Calendar API)
+        #   2. Créer un OAuth Client ID de type "Desktop application"
+        #
+        # Puis renseigner les secrets une fois (depuis la racine du repo) :
+        #   sops secrets/secrets.yaml
+        #     -> google.client_id / google.client_secret / google.project_id
+        #     -> calendars.perso / calendars.epita / calendars.feries (IDs agendas)
+        #
+        # Apres `switch`, lancer une fois :  vdirsyncer discover && vdirsyncer sync
+        # Ensuite : Mod+c ouvre ikhal. La synchro tourne aussi via timer user.
+      }
+    ]
+  );
 }

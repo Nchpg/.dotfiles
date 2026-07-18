@@ -38,29 +38,21 @@ in
 {
   options.userSettings.systemdManagerTui = {
     enable = lib.mkEnableOption "systemd-manager-tui (gestion des services systemd dans un terminal flottant)";
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
-  config = lib.mkIf cfg.enable {
-    home.packages = [ systemd-manager-tui ];
-
-    # Launcher partagé entre le bind sway et un éventuel clic swaybar (DRY),
-    # comme les autres pickers/TUIs.
-    home.file.".config/sway/launchers/systemd-manager" = {
-      text = ''
-        #!/bin/sh
-        exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/systemd-manager-tui.conf".text = ''
-      bindsym $mod+m exec ~/.config/sway/launchers/systemd-manager
-      for_window [title="systemd-manager-tui"] floating enable, resize set 1200 850, border pixel 2
-    '';
-  };
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      (import ../../../lib/mk-floating-tui-launcher.nix {
+        name = "systemd-manager";
+        confName = "systemd-manager-tui";
+        scriptBody = "exec ${termCmd}";
+        keybind = "$mod+m";
+        title = "systemd-manager-tui";
+        width = 1200;
+        height = 850;
+      })
+      { home.packages = [ systemd-manager-tui ]; }
+    ]
+  );
 }

@@ -157,11 +157,7 @@ in
       enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible" // {
         default = config.userSettings.sway.enable;
       };
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
       lowBatteryThreshold = lib.mkOption {
         type = lib.types.ints.between 1 100;
         default = 20;

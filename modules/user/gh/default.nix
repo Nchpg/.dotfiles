@@ -13,11 +13,7 @@ in
   options.userSettings.gh = {
     enable = lib.mkEnableOption "GitHub CLI (gh), auth par token sops";
 
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
 
     tokenSops = lib.mkOption {
       type = lib.types.str;

@@ -47,26 +47,18 @@ in
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };
-    pkgs = lib.mkOption {
-      type = lib.types.pkgs;
-      default = config.userSettings.defaultPkgs;
-      description = "Pkgs to use";
-    };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
-  config = lib.mkIf cfg.enable {
-    # Launcher partagé entre le bind sway et le clic sur la swaybar (DRY).
-    home.file.".config/sway/launchers/wifi" = {
-      text = ''
-        #!/bin/sh
-        ${newtColors} exec ${termCmd}
-      '';
-      executable = true;
-    };
-
-    home.file.".config/sway/conf.d/wifi-picker.conf".text = ''
-      bindsym $mod+w exec ~/.config/sway/launchers/wifi
-      for_window [title="nmtui-wifi"] floating enable, resize set 1200 850, border pixel 2
-    '';
-  };
+  config = lib.mkIf cfg.enable (
+    import ../../../lib/mk-floating-tui-launcher.nix {
+      name = "wifi";
+      confName = "wifi-picker";
+      scriptBody = "${newtColors} exec ${termCmd}";
+      keybind = "$mod+w";
+      title = "nmtui-wifi";
+      width = 1200;
+      height = 850;
+    }
+  );
 }

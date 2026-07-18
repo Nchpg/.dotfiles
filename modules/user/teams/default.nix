@@ -95,11 +95,7 @@ in
     userSettings.teams = {
       enable = lib.mkEnableOption "Microsoft Teams via teams-for-linux (wrapper Electron)";
 
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
-        default = config.userSettings.defaultPkgs;
-        description = "Pkgs to use";
-      };
+      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
 
       title = lib.mkOption {
         type = lib.types.str;
