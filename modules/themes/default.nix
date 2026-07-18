@@ -22,7 +22,19 @@ lib: rec {
   # est injecté depuis le nom du fichier (source unique) : sans lui,
   # base16.nix nomme tous les artefacts générés « untitled »
   # (base16-untitled.conf, untitled-gnome-shell-theme, ...).
-  load = name: import (./schemes + "/${name}.nix") // { slug = name; };
+  #
+  # Les couleurs baseXX sont censées être du hex NU (sans #) : les
+  # consommateurs (rofi, firefox, waybar...) préfixent eux-mêmes avec
+  # "#${c.baseXX}". Un fichier de scheme qui inclut le # par erreur produirait
+  # un "##" silencieux — on le retire donc systématiquement ici plutôt que de
+  # compter sur chaque fichier pour rester bien formé.
+  load =
+    name:
+    let
+      raw = import (./schemes + "/${name}.nix");
+      stripHash = v: if lib.isString v && lib.hasPrefix "#" v then lib.removePrefix "#" v else v;
+    in
+    lib.mapAttrs (k: v: if lib.hasPrefix "base" k then stripHash v else v) raw // { slug = name; };
 
   # Registre des fonds d'écran (nom → source), découplé des thèmes : chaque
   # schéma référence son fond PAR DÉFAUT via `wallpaper = "<nom>"`, et un
