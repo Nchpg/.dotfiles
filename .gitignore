@@ -2,3 +2,8 @@
 # Bytecode Python (artefacts de compilation)
 __pycache__/
 *.pyc
+
+# Symlinks nix build / environnement direnv
+result
+result-*
+.direnv/
