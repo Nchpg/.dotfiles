@@ -36,13 +36,12 @@ let
   # mais on ne peut plus taper un « q » littéral (ex. mot de passe wifi).
   # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
-  termCmd =
-    if term == "alacritty" then
-      "${term} --title nmtui-wifi -e nmtui"
-    else if term == "kitty" then
-      "${term} ${kittyQuit} --title nmtui-wifi nmtui"
-    else
-      "${term} --title nmtui-wifi nmtui";
+  termCmd = import ../../../lib/mk-terminal-cmd.nix {
+    inherit lib term;
+    title = "nmtui-wifi";
+    exec = "nmtui";
+    kittyExtraOpts = kittyQuit;
+  };
 
 in
 {
