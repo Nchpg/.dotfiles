@@ -210,7 +210,7 @@ let
   mkWeatherAction =
     city:
     "mkdir -p \"${weatherStateDir}\""
-    + " && printf '%s' '${city}' > \"${weatherStateDir}/weather-city\""
+    + " && printf '%s' ${lib.escapeShellArg city} > \"${weatherStateDir}/weather-city\""
     + " && ${weatherWake}"
     + " && ${systemctl} --user try-restart wlsunset";
   # Le menu clic droit ne sert qu'à changer de ville : une action par ville.
@@ -218,6 +218,10 @@ let
   weatherMenuActions = lib.listToAttrs (
     map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities
   );
+
+  # Échappement XML minimal pour les valeurs générées (noms de ville saisis
+  # librement par l'utilisateur dans userSettings.waybar.weatherCities).
+  escapeXml = lib.replaceStrings [ "&" "<" ">" "\"" "'" ] [ "&amp;" "&lt;" "&gt;" "&quot;" "&apos;" ];
 
   # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
   # relié à `weatherMenuActions` par cet id).
@@ -229,8 +233,8 @@ let
   ''
   + lib.concatMapStrings (c: ''
     <child>
-      <object class="GtkMenuItem" id="${c}">
-        <property name="label">${c}</property>
+      <object class="GtkMenuItem" id="${escapeXml c}">
+        <property name="label">${escapeXml c}</property>
       </object>
     </child>
   '') weatherCities
