@@ -90,6 +90,12 @@ in
       # Email git via sops : on génère un fragment gitconfig `[user] email = …` et on
       # l'inclut. Le vrai email n'apparaît ni dans le repo ni dans le Nix store.
       (lib.mkIf (cfg.userEmailSops != null) {
+        assertions = [
+          {
+            assertion = config.userSettings.sops.available;
+            message = "userSettings.git.userEmailSops a besoin du secret sops, mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
+          }
+        ];
         sops.secrets.${cfg.userEmailSops} = { };
         sops.templates."git-user-email".content = ''
           [user]
