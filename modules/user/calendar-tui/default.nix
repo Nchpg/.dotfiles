@@ -6,11 +6,11 @@ let
   c = config.lib.stylix.colors.withHashtag;
   inherit (lib) concatStringsSep mapAttrsToList;
 
-  termCmd =
-    if term == "alacritty" then
-      "${term} --title calendar-tui -e ikhal"
-    else
-      "${term} --title calendar-tui ikhal";
+  termCmd = import ../../../lib/mk-terminal-cmd.nix {
+    inherit lib term;
+    title = "calendar-tui";
+    exec = "ikhal";
+  };
 
   vdirsyncerBin = "${cfg.pkgs.vdirsyncer}/bin/vdirsyncer";
   syncCmd = ''
@@ -144,8 +144,10 @@ in
 
           # Log dans XDG_RUNTIME_DIR (privé) plutôt que /tmp partagé : un nom
           # prévisible dans /tmp est écrasable/lisible par les autres users.
+          # Repli sur $HOME (toujours privé) si XDG_RUNTIME_DIR est absent,
+          # jamais sur /tmp.
           if [ -f "$HOME/.config/vdirsyncer/config" ]; then
-            ${syncCmd} >"''${XDG_RUNTIME_DIR:-/tmp}/calendar-tui-vdirsyncer.log" 2>&1 || true
+            ${syncCmd} >"''${XDG_RUNTIME_DIR:-$HOME/.cache}/calendar-tui-vdirsyncer.log" 2>&1 || true
           fi
 
           exec ${termCmd}'';
