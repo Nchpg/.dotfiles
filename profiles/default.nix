@@ -20,10 +20,22 @@ in
     # Sans ce garde, ajouter un user sans créer le dossier faisait échouer
     # l'éval avec un « path does not exist » cryptique ; ici on échoue avec un
     # message clair (l'import est conditionné au pathExists ci-dessous).
-    assertions = map (user: {
-      assertion = builtins.pathExists (homeDir user);
-      message = "profiles/${target.profile}/home/${user.name} est introuvable : crée ce dossier (config home-manager du user « ${user.name} »).";
-    }) users;
+    assertions =
+      map (user: {
+        assertion = builtins.pathExists (homeDir user);
+        message = "profiles/${target.profile}/home/${user.name} est introuvable : crée ce dossier (config home-manager du user « ${user.name} »).";
+      }) users
+      # "root" est toujours ajouté ci-dessus : un profil qui le déclarerait aussi
+      # dans systemSettings.users produirait un doublon silencieusement résolu
+      # par listToAttrs (seule la première entrée serait gardée). On préfère
+      # échouer avec un message clair plutôt que d'ignorer silencieusement la
+      # déclaration explicite du profil.
+      ++ [
+        {
+          assertion = !(lib.any (u: u.name == "root") config.systemSettings.users);
+          message = "systemSettings.users ne doit pas déclarer \"root\" explicitement : il est déjà ajouté automatiquement par profiles/default.nix.";
+        }
+      ];
 
     home-manager.users = builtins.listToAttrs (
       map (user: {
