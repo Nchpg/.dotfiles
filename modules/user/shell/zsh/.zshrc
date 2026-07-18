@@ -40,8 +40,8 @@ setopt NO_BEEP
 
 export SH=zsh
 
-# FIRST_PROMPT, clear(), setdev(), bloc PATH_NIX : cf. ../common-posix (partagé
-# avec bash, injecté par shell/zsh/default.nix).
+# FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé avec bash,
+# injecté par shell/zsh/default.nix).
 
 git_branch() {
   local head_file="$PWD/.git/HEAD"

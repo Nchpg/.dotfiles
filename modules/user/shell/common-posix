@@ -22,10 +22,3 @@ setdev() {
   echo "use flake \"\$MY_FLAKE#$1\"" > .envrc
   direnv allow
 }
-
-# Restauration du PATH transmis par fish à travers un shell intermédiaire
-# (cf. shell/fish : fish exporte PATH_NIX/FROM avant d'exec un autre shell).
-if [ -n "$PATH_NIX" ] && [ "$(basename "$FROM")" = "fish" ]; then
-  export PATH="$PATH_NIX:$PATH"
-  export PATH_NIX=""
-fi
