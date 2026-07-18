@@ -8,7 +8,13 @@
   # Borne les entrées du menu de boot (kernels/initrds copiés sur l'ESP, petite
   # partition) : au-delà, les vieilles générations restent dans le store (gc /
   # genclean décident de leur sort) mais sortent du menu.
-  boot.loader.systemd-boot.configurationLimit = 15;
+  #
+  # 5 et pas plus : l'ESP fait 256 Mo et chaque génération y pèse ~31 Mo
+  # (noyau + initrd), soit ~8 générations maximum. Une limite supérieure n'est
+  # pas atteignable — la partition se remplit AVANT que systemd-boot n'élague,
+  # et le rebuild échoue en « No space left on device » sur /boot alors que /
+  # est encore large. 5 × 31 Mo ≈ 155 Mo, marge confortable.
+  boot.loader.systemd-boot.configurationLimit = 5;
 
   # Dernier noyau stable de nixpkgs (support du matériel récent, cf. le GPU
   # Meteor Lake dans modules/system/intel-graphics).
