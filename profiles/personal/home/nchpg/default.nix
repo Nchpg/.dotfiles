@@ -5,9 +5,10 @@
 }:
 
 {
-  # Pas de mkDefault ici : le profil est la couche d'intention finale, il
-  # définit en priorité normale (les modules fournissent les défauts via
-  # `default =` de leurs options ou mkDefault).
+  # Priorité normale (pas de mkDefault) : le profil est la couche d'intention
+  # finale, les modules fournissent les défauts via `default =` de leurs
+  # options ou mkDefault. Référence pour guest/default.nix et root/default.nix,
+  # qui renvoient ici plutôt que de répéter cette explication.
   config = {
 
     userSettings = {
