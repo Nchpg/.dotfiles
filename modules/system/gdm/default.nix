@@ -11,7 +11,4 @@
   # Chrome réclame « Authentication required » au démarrage.
   services.gnome.gnome-keyring.enable = true;
   security.pam.services.gdm-password.enableGnomeKeyring = true;
-
-  # Touchpad (activé par défaut dans la plupart des desktopManager).
-  services.libinput.enable = true;
 }
