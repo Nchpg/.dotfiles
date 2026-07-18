@@ -97,6 +97,10 @@
         variant = variants;
       };
 
+      # Attention : un nom de host se terminant par "-light"/"-dark" pourrait
+      # produire une collision textuelle avec une autre cible en variante
+      # light/dark (ex. host "x-light" en dark ≡ host "x" en light) — à éviter
+      # tant qu'aucune déduplication n'est faite sur les noms générés.
       targetName =
         target:
         "${target.profile}-${target.host}"

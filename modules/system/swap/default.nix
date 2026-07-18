@@ -94,6 +94,10 @@ in
         freeMemThreshold = 5;
         freeSwapThreshold = 5;
         # Notification desktop au kill (via le daemon de notifs de la session).
+        # Le module upstream avertit que n'importe quel utilisateur LOCAL peut
+        # alors spammer des notifications (DoS) — sans risque en mono-user
+        # (systemSettings.users n'a que nchpg/guest de confiance), à
+        # réévaluer si un compte non-fiable est ajouté un jour.
         enableNotifications = true;
         extraArgs = [
           # Sacrifier un navigateur en priorité, jamais la session elle-même
