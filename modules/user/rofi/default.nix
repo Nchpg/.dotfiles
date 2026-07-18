@@ -18,14 +18,20 @@ in
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)" // {
       default = config.userSettings.sway.enable;
     };
+
+    # Défaut sur unstable : rofi-wayland pas encore dans stable 26.05.
+    # Surchargeable comme les autres modules (cf. mk-pkgs-option.nix).
+    pkgs = import ../../../lib/mk-pkgs-option.nix {
+      inherit lib config;
+      default = pkgs-unstable;
+    };
   };
 
   config = lib.mkIf cfg.enable {
     # rofi-wayland : fork Wayland-natif de rofi.
-    # Disponible dans unstable, pas encore dans stable 26.05.
     programs.rofi = {
       enable = true;
-      package = pkgs-unstable.rofi;
+      package = cfg.pkgs.rofi;
       terminal = config.userSettings.terminal.default;
       extraConfig = {
         modi = "drun,run";
