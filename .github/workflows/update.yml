@@ -5,9 +5,16 @@ name: weekly-update
 # input, les dates avant/après, le nombre de commits et un lien de
 # comparaison GitHub, avec alerte si la version du noyau change. Rendu 100%
 # déterministe (pas de LLM) : aucun contenu de commit n'est résumé ni
-# interprété. Ne merge jamais automatiquement : le job `check` tourne sur la
-# PR comme sur n'importe quelle branche. Notifie Discord (succès ou échec) à
-# la fin du run.
+# interprété. Ne merge jamais automatiquement.
+#
+# La PR est ouverte avec le GITHUB_TOKEN par défaut, et GitHub ne déclenche
+# aucun workflow sur les événements produits par ce token : les checks ne
+# viennent donc PAS de l'event pull_request, mais du `push` sur la branche
+# `weekly-update`, explicitement listée dans check.yml. Ne retire pas cette
+# branche de check.yml sans passer create-pull-request sur un PAT, sinon la PR
+# de bump repart sans aucune vérification.
+#
+# Notifie Discord (succès ou échec) à la fin du run.
 on:
   schedule:
     - cron: "0 6 * * 1"  # lundi 06:00 UTC
