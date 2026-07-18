@@ -40,16 +40,28 @@ for key in $(jq -r 'keys[]' "$file"); do
         continue
     fi
 
-    if [ "$latest" = "$current" ]; then
-        echo "✓ $key : à jour ($current)"
-        continue
-    fi
-
-    echo "⬆️  $key : $current -> $latest"
     url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${latest}/vspackage"
     # --json donne directement le hash au format SRI (sha256-...), attendu tel
     # quel par extensionsFromVscodeMarketplace : pas de conversion à faire.
     hash=$(nix store prefetch-file --json "$url" | jq -r '.hash')
+    current_hash=$(jq -r ".\"$key\".sha256" "$file")
+
+    # On télécharge TOUJOURS, même à version identique, et on compare le
+    # contenu : le Marketplace republie parfois une même version avec des
+    # octets différents (resignature/recompression). Ni un rebuild local ni la
+    # CI ne peuvent voir cette dérive — dès que la sortie est dans le store,
+    # Nix ne redescend plus jusqu'au téléchargement, donc ne revérifie plus le
+    # hash de la FOD. Ce script est le seul maillon qui fetch inconditionnellement.
+    if [ "$latest" = "$current" ] && [ "$hash" = "$current_hash" ]; then
+        echo "✓ $key : à jour ($current)"
+        continue
+    fi
+
+    if [ "$latest" = "$current" ]; then
+        echo "🔁 $key : $current inchangée, contenu republié — bump du hash"
+    else
+        echo "⬆️  $key : $current -> $latest"
+    fi
 
     tmp=$(mktemp)
     jq --arg k "$key" --arg v "$latest" --arg h "$hash" \
