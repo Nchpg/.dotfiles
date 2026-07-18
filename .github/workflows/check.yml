@@ -25,9 +25,20 @@ env:
   # priorité sur les fichiers de conf.
   NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
 
+# Runner SELF-HOSTED sur un dépôt PUBLIC : le `if:` présent sur chaque job
+# est un garde de sécurité, pas une optimisation. Sans lui, n'importe qui peut
+# forker, glisser du Nix arbitraire (preBuild, import d'un dérivé malveillant…)
+# dans une PR, et le faire exécuter sur la machine perso — celle qui porte la
+# clé SSH dont dérive la clé age sops. On ne construit donc que du code déjà
+# présent dans le dépôt : push sur main/weekly-update, ou PR ouverte depuis
+# une branche interne. Les PR de forks n'exécutent RIEN (statut « skipped »)
+# et doivent être relues à la main avant d'être poussées sur une branche
+# interne. Ne retire ce garde qu'en basculant les jobs sur un runner jetable
+# (ubuntu-latest).
 jobs:
   fmt:
     runs-on: self-hosted
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v7
 
@@ -43,6 +54,7 @@ jobs:
 
   lint:
     runs-on: self-hosted
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v7
 
@@ -62,6 +74,7 @@ jobs:
 
   security:
     runs-on: self-hosted
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v7
         with:
@@ -87,6 +100,7 @@ jobs:
 
   flake-check:
     runs-on: self-hosted
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v7
 
