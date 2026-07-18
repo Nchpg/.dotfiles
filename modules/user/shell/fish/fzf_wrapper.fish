@@ -49,6 +49,7 @@ function searchf --description "Search files and their content using fzf"
                  --height=90% \
                  --border \
                  --prompt='Recherche > ' \
+                 --query "$unescaped_exp_token" \
                  --exact \
                  --no-sort \
                  --no-hscroll
@@ -114,9 +115,6 @@ function man
   end
 
 function man_wrapper
-    set -f token (commandline --current-token)
-    set -f expanded_token (eval echo -- $token)
-    set -f unescaped_exp_token (string unescape -- $expanded_token)
     man $argv
     set -g __fish_nb_prompt (math $__fish_nb_prompt - 1)
     commandline --function repaint
