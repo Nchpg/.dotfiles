@@ -140,6 +140,7 @@ in
               --in-content-primary-button-background: #${c.base0D} !important;
               --in-content-primary-button-background-hover: #${c.base0E} !important;
             }
+          }
         '';
       };
     };
