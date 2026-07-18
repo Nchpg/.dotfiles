@@ -89,7 +89,9 @@ in
       extraPackages = with pkgs-stable; [
         # language servers
         nil # nix
-        nixpkgs-fmt
+        # nixfmt et non nixpkgs-fmt : c'est le formateur de `nix fmt` et du hook
+        # pre-commit (cf. formatter.nix). Les deux styles sont incompatibles.
+        nixfmt
         clang-tools # c/cpp
         pyright # python
         gopls # go

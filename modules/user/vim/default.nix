@@ -64,7 +64,10 @@ in
 
       # nix
       nil
-      nixpkgs-fmt
+      # nixfmt et non nixpkgs-fmt : c'est le formateur de `nix fmt` et du hook
+      # pre-commit (cf. formatter.nix). Les deux styles sont incompatibles, et
+      # un format-on-save nixpkgs-fmt produisait un diff aussitôt réécrit.
+      nixfmt
     ];
 
     home.file = {
