@@ -58,8 +58,11 @@ read -r -p "Votre choix (1 ou 2) : " MODE
 case "$MODE" in
     1)
         read -r -p "Nombre de jours : " DAYS
-        if ! [[ "$DAYS" =~ ^[0-9]+$ ]]; then
-            err "Erreur : '$DAYS' n'est pas un nombre valide."
+        # ^[1-9] et pas ^[0-9] : « 0d » supprimerait TOUT l'historique de
+        # rollback d'un coup, alors que préserver ces points de retour est
+        # justement l'objet de ce script.
+        if ! [[ "$DAYS" =~ ^[1-9][0-9]*$ ]]; then
+            err "Erreur : '$DAYS' n'est pas un nombre de jours valide (entier ≥ 1)."
             exit 1
         fi
         echo "→ Système : suppression des générations de plus de $DAYS jours..."
@@ -67,8 +70,10 @@ case "$MODE" in
         ;;
     2)
         read -r -p "Nombre de générations à garder : " N
-        if ! [[ "$N" =~ ^[0-9]+$ ]]; then
-            err "Erreur : '$N' n'est pas un nombre valide."
+        # ^[1-9] et pas ^[0-9] : « +0 » supprimerait TOUT l'historique de
+        # rollback d'un coup (cf. commentaire du mode 1).
+        if ! [[ "$N" =~ ^[1-9][0-9]*$ ]]; then
+            err "Erreur : '$N' n'est pas un nombre de générations valide (entier ≥ 1)."
             exit 1
         fi
         echo "→ Système : on garde les $N générations les plus récentes..."

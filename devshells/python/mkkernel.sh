@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Le kernel doit pointer sur le python du venv (c'est lui qui a torch & co),
 # pas sur le python nix nu du devshell.
-if [ -z "$VIRTUAL_ENV" ]; then
+if [ -z "${VIRTUAL_ENV:-}" ]; then
   echo "⚠️ Active d'abord un venv : le kernel doit pointer sur son python." >&2
   exit 1
 fi
@@ -30,9 +30,12 @@ python -m ipykernel install --user --name="$KERNEL_NAME" --display-name="Python 
 # pour que le kernel marche partout. À refaire (mkkernel) si ces chemins
 # /nix/store changent après un rebuild.
 KDIR="$HOME/.local/share/jupyter/kernels/$KERNEL_NAME"
-export _KERNEL_LD_LIBRARY_PATH="$VIRTUAL_ENV/lib:$LD_LIBRARY_PATH"
+export _KERNEL_LD_LIBRARY_PATH="$VIRTUAL_ENV/lib:${LD_LIBRARY_PATH:-}"
+# ZE_* / ONEAPI_* ne sont posées que par le devshell xpu : sous `set -u`,
+# l'expansion indirecte doit tolérer une variable absente (sinon mkkernel
+# avorte dans le devshell python, après avoir déjà créé le kernelspec).
 for var in _KERNEL_LD_LIBRARY_PATH ZE_ENABLE_ALT_DRIVERS ONEAPI_DEVICE_SELECTOR; do
-  val="${!var}"
+  val="${!var-}"
   [ -n "$val" ] || continue
   jq --arg k "${var#_KERNEL_}" --arg v "$val" '.env = (.env // {}) + { ($k): $v }' \
     "$KDIR/kernel.json" > "$KDIR/kernel.json.tmp"
