@@ -177,6 +177,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Sans cet ordre, battery-alert (cf. plus bas) compare les seuils dans le
+    # mauvais sens et une bascule "critique" peut ne jamais se déclencher.
+    assertions = [
+      {
+        assertion =
+          cfg.criticalBatteryThreshold <= cfg.veryLowBatteryThreshold
+          && cfg.veryLowBatteryThreshold <= cfg.lowBatteryThreshold;
+        message = "userSettings.notifications : les seuils batterie doivent être croissants (criticalBatteryThreshold <= veryLowBatteryThreshold <= lowBatteryThreshold).";
+      }
+    ];
+
     # notify-send disponible sur le PATH (tests manuels, scripts).
     home.packages = [ cfg.pkgs.libnotify ];
 
