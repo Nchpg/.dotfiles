@@ -10,7 +10,7 @@ set -euo pipefail
 # l'heuristique) : on retrouve le pyvenv.cfg réellement créé après coup.
 MARKER="$(mktemp)"
 uv venv "$@"
-VENV="$(find . -maxdepth 2 -name pyvenv.cfg -newer "$MARKER" -print -quit | xargs -r dirname)"
+VENV="$(find . -maxdepth 2 -name pyvenv.cfg -newer "$MARKER" -print0 -quit | xargs -r0 dirname)"
 rm -f "$MARKER"
 VENV="${VENV:-.venv}"
 

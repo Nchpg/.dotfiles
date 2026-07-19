@@ -5,7 +5,7 @@ KERNEL_NAME="${1:-}"
 if [ -z "$KERNEL_NAME" ]; then
   echo "Usage : rmkernel <nom>   (tab pour compléter)" >&2
   echo "Kernels installés :" >&2
-  ls -1 "$HOME/.local/share/jupyter/kernels" 2>/dev/null | sed 's/^/  - /' >&2
+  find "$HOME/.local/share/jupyter/kernels" -mindepth 1 -maxdepth 1 -printf '  - %f\n' 2>/dev/null >&2
   exit 1
 fi
 # ipykernel installe en minuscules — accepter n'importe quelle casse.

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Helpers JSON partagés par les modules custom waybar. Ce fichier n'a pas de
 # shebang : il est inliné EN TÊTE de chaque script au build (cf. mkScript dans
 # modules/user/waybar/default.nix), avant le corps du script. Centralise

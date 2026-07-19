@@ -100,6 +100,9 @@ if ask_yn "Purger l'historique des profils utilisateur (garder seulement la gén
             echo "→ HM[$u] : purge de l'historique (on garde la génération courante)..."
             # Résolution du chemin + purge EN TANT QUE $u : on lit ainsi son
             # $HOME (même protégé) et on préserve les permissions du profil.
+            # shellcheck disable=SC2016 # single quotes voulues : ce bloc s'exécute
+            # dans le bash de run_as (sous l'user $u), pas ici -> $HOME/$p/... doivent
+            # s'étendre là-bas, pas dans CE shell (qui n'a pas le bon $HOME).
             run_as "$u" bash -c '
                 if   [ -d "$HOME/.local/state/nix/profiles" ]; then
                      dir="$HOME/.local/state/nix/profiles"                     # XDG
@@ -140,6 +143,9 @@ if ask_yn "Supprimer les fichiers *.hm-backup laissés par home-manager ?"; then
         echo "→ hm-backup[$u] : recherche dans $d ..."
         # -print0 / mapfile -d "" : robuste aux noms de fichiers exotiques
         # (espaces, voire newlines), contrairement à l'ancien xargs -d "\n".
+        # shellcheck disable=SC2016 # single quotes voulues : ce bloc s'exécute
+        # dans le bash de run_as (sous l'user $u), pas ici -> $HOME doit s'étendre
+        # là-bas, pas dans CE shell (qui n'a pas le bon $HOME).
         run_as "$u" bash -c '
             mapfile -d "" -t found < <(find "$HOME" -xdev -name "*.hm-backup" -type f -print0 2>/dev/null)
             if [ "${#found[@]}" -eq 0 ]; then echo "   aucun fichier."; exit 0; fi
