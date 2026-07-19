@@ -94,9 +94,12 @@ for namefile in /sys/class/hwmon/hwmon*/name; do
     v=$(cat "${namefile%/name}/fan1_input" 2>/dev/null)
     [[ $v =~ ^[0-9]+$ ]] && { fan_rpm=$v; break; }
 done
+# Valeurs alignées sur lg-control (modules/user/lg-control) : 0=Optimal,
+# 1=Silencieux, 2=Performance — même sysfs, même mapping des deux côtés.
 case "$(cat /sys/devices/platform/lg-laptop/fan_mode 2>/dev/null)" in
-    0) fan_mode="silencieux" ;;
-    1) fan_mode="performance" ;;
+    0) fan_mode="optimal" ;;
+    1) fan_mode="silencieux" ;;
+    2) fan_mode="performance" ;;
     *) fan_mode="" ;;
 esac
 
