@@ -101,6 +101,21 @@ let
       2> >(grep -v -F -- "is not in the list of known options, but still passed to Electron/Chromium" >&2)
   '';
 
+  # Le target vscode de stylix ne sert à rien ici : il thémise via
+  # programs.vscode.profiles.<n>.extensions de home-manager, alors qu'on
+  # installe VS Code par home.packages avec notre propre merge de settings.
+  # On se contente donc de suivre la POLARITÉ du thème stylix actif —
+  # l'extension jdinhlife.gruvbox fournit les deux variantes. Approximation
+  # assumée (le scheme dark est gruvbox-dark-custom, pas un Gruvbox amont) :
+  # c'est un mapping par variante, pas les couleurs base16 réelles.
+  themes = import ../../themes lib inputs;
+  colorTheme =
+    {
+      dark = "Gruvbox Dark Hard";
+      light = "Gruvbox Light Hard";
+    }
+    .${themes.polarity config.userSettings.stylix.theme};
+
   # /!\ vscode-config/settings.json doit rester du JSON STRICT (pas de
   # commentaires JSONC : le deep-merge ci-dessous passe par jq). Thèmes
   # alternatifs déjà installés si besoin : "Dracula Theme",
@@ -108,8 +123,8 @@ let
   settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
   finalConfigContent =
     lib.replaceStrings
-      [ "@shell@" "@claudeWrapper@" ]
-      [ config.userSettings.shell.default "${claudeWrapper}" ]
+      [ "@shell@" "@claudeWrapper@" "@colorTheme@" ]
+      [ config.userSettings.shell.default "${claudeWrapper}" colorTheme ]
       settingsTemplateContent;
 
   # Validé par jq au build : réintroduire un commentaire dans le template fait

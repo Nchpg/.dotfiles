@@ -1,5 +1,5 @@
 {
-    "workbench.colorTheme": "Gruvbox Dark Hard",
+    "workbench.colorTheme": "@colorTheme@",
     "workbench.iconTheme": "gruvbox-material-icon-theme",
     "explorer.compactFolders": false,
     "window.zoomLevel": 2,
