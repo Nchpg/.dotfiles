@@ -46,7 +46,7 @@ function searchf --description "Search files and their content using fzf"
                             max_start=\$(( total - height + 1 )); \
                             [ \$start -gt \$max_start ] && start=\$max_start; \
                             [ \$start -lt 1 ] && start=1; \
-                            bat --wrap=never --style=numbers --color=always --highlight-line=\$line \"\$file\" | tail -n +\$start | head -n \"\$height\" " \
+                            BAT_THEME=$__bat_preview_theme bat --wrap=never --style=numbers --color=always --highlight-line=\$line \"\$file\" | tail -n +\$start | head -n \"\$height\" " \
                  --preview-window=right:60%:nowrap \
                  --nth 3.. \
                  --delimiter=: \
@@ -93,13 +93,16 @@ end
 
 
 function man
+      # BAT_THEME est posé par le module Nix (cf. shell/fish/default.nix) : dans
+      # une preview fzf, bat n'a pas de tty, ne peut pas détecter la polarité du
+      # terminal et retomberait sur Monokai au lieu du thème gruvbox.
       set MAN_ARGS $argv
       if test (count $argv) -eq 0;
           set selected_page (command man -k . | sort | fzf --ansi --multi --delimiter=" - " --border --prompt='Manual > ' --height=90% --reverse -e --preview="
            echo {1} \
            | sed 's/, /\n/g;' \
            | sed 's/\([^(]*\)(\([0-9A-Za-z ]\))/\2\t\1/g' \
-           | xargs -n2 batman 2> /dev/null | bat --paging=never --language=man --style=plain --color=always
+           | xargs -n2 batman 2> /dev/null | BAT_THEME=$__bat_preview_theme bat --paging=never --language=man --style=plain --color=always
            ")
           if test -z "$selected_page"
             return
