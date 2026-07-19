@@ -41,6 +41,10 @@
       echo "${label}: $target n'est pas du JSON strict (édité à la main ?) — clés déclaratives non imposées." >&2
     fi
   else
-    install -m644 ${sourceFile} "$target"
+    # Pas de fichier existant dont reprendre le mode (cf. chmod --reference
+    # ci-dessus pour le cas merge) : 0600 par défaut, plus restrictif que le
+    # 0644 umask, au cas où le fichier cible contiendrait des jetons (ex.
+    # ~/.claude/settings.json) et serait recréé après une suppression.
+    install -m600 ${sourceFile} "$target"
   fi
 ''
