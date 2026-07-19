@@ -43,6 +43,22 @@
       url = "github:nix-community/nix-index-database";
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
+
+    # Registre base16/base24 upstream (tinted-theming/schemes, ~496 schemes) :
+    # déjà tiré transitivement par stylix, ici en input EXPLICITE et de
+    # premier niveau parce qu'on le CONSOMME directement (modules/themes lit
+    # ses .yaml pour peupler l'enum des thèmes) — un input qu'on utilise ne
+    # doit pas être atteint en creusant dans les inputs d'un autre.
+    #
+    # Rien n'est recopié dans le dépôt : seuls nos schemes PROPRES vivent
+    # dans modules/themes/schemes/. Un `nix flake update` suffit donc à
+    # récupérer les nouveaux thèmes amont, sans resynchronisation manuelle.
+    #
+    # `follows = "stylix/tinted-schemes"` (et non un `url` séparé) : une
+    # seule résolution dans le lock, garantie identique à celle que stylix
+    # utilise déjà en interne pour ses propres targets — sinon deux copies
+    # du registre pourraient diverger.
+    tinted-schemes.follows = "stylix/tinted-schemes";
   };
 
   outputs =
@@ -192,7 +208,7 @@
       # découvrirait qu'au moment de sélectionner le thème concerné.
       packages.${system}.wallpapers-all =
         let
-          themes = import ./modules/themes lib;
+          themes = import ./modules/themes lib inputs;
         in
         pkgs-stable.linkFarm "wallpapers-all" (
           map (name: {

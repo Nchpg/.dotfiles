@@ -298,7 +298,11 @@
         "nixpkgs-unstable": "nixpkgs-unstable",
         "sops-nix": "sops-nix",
         "spicetify-nix": "spicetify-nix",
-        "stylix": "stylix"
+        "stylix": "stylix",
+        "tinted-schemes": [
+          "stylix",
+          "tinted-schemes"
+        ]
       }
     },
     "sops-nix": {
