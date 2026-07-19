@@ -14,8 +14,11 @@
 }:
 let
   extra = lib.optionalString (term == "kitty" && kittyExtraOpts != "") "${kittyExtraOpts} ";
+  # Échappé par défense : tous les appels actuels passent un titre sans
+  # espace, mais rien ne garantit que ça reste vrai.
+  safeTitle = lib.escapeShellArg title;
 in
 if term == "alacritty" then
-  "${term} --title ${title} -e ${exec}"
+  "${term} --title ${safeTitle} -e ${exec}"
 else
-  "${term} ${extra}--title ${title} ${exec}"
+  "${term} ${extra}--title ${safeTitle} ${exec}"
