@@ -78,6 +78,13 @@ jobs:
           git ls-files -z '*.nix' ':!:*hardware-configuration.nix' \
             | xargs -r0 nix run nixpkgs#deadnix -- --fail
 
+      # Anti-patterns shell (quoting, word-splitting...) sur tous les scripts
+      # du repo, jusque-là jamais vérifiés par un linter.
+      - name: shellcheck
+        run: |
+          git ls-files -z '*.sh' '.githooks/*' \
+            | xargs -r0 nix run nixpkgs#shellcheck --
+
   security:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
