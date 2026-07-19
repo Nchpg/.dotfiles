@@ -15,7 +15,6 @@ let
     runtimeInputs = [
       cfg.pkgs.coreutils
       cfg.pkgs.gnugrep
-      cfg.pkgs.ncurses
       cfg.pkgs.power-profiles-daemon
       cfg.pkgs.gum
     ];
