@@ -56,6 +56,16 @@ let
   # sortie. Le wrapper amont finit par `exec sway`, on ne peut pas y accrocher
   # de trap : on enveloppe une couche au-dessus.
   swayLauncher = cfg.pkgs.writeShellScript "sway-with-session-cleanup" ''
+    # Ce lanceur est un script BASH, et bash incrémente puis exporte SHLVL à
+    # chaque démarrage. Comme on ne peut pas `exec` sway (le nettoyage doit
+    # tourner APRÈS sa sortie), ce bash reste dans l'arbre et sway hérite d'un
+    # SHLVL=1 -- que tout le monde hérite ensuite : chaque terminal ouvert
+    # démarrait donc son shell à SHLVL=2, avec le compteur de niveau affiché
+    # dans le prompt. Le wrapper amont qu'on remplace est un makeBinaryWrapper,
+    # il ne posait pas le problème. On purge la variable : le premier shell
+    # interactif repart de 1.
+    unset SHLVL
+
     # Appels informatifs : sway répond puis sort SANS ouvrir de session, donc on
     # ne doit pas dérouler cleanupSession derrière — sinon la commande tue la
     # session EN COURS (cibles arrêtées, WAYLAND_DISPLAY/SWAYSOCK désimportés,
