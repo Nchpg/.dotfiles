@@ -46,9 +46,9 @@ jobs:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       # Vérifie que tout est passé par `nix fmt` (le hook pre-commit le fait
       # en local, ceci rattrape les commits faits avec --no-verify).
@@ -62,9 +62,9 @@ jobs:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       # Anti-patterns Nix (lints désactivés : voir statix.toml, qui n'était
       # jusqu'ici exécuté nulle part).
@@ -82,13 +82,13 @@ jobs:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           # Historique complet : gitleaks scanne tous les commits, pas
           # seulement le dernier (un secret committé puis retiré fuit quand même).
           fetch-depth: 0
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       # Détection de secrets en clair (les secrets sops chiffrés ne le
       # déclenchent pas — vérifié).
@@ -98,7 +98,7 @@ jobs:
       # Santé du flake.lock : nixpkgs sur une branche supportée et pas trop
       # vieux (donc patchs de sécu récents). Informatif, ne bloque pas.
       - name: flake lock health
-        uses: DeterminateSystems/flake-checker-action@v12
+        uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
         with:
           fail-mode: false
           # Nos inputs nixpkgs ne s'appellent pas `nixpkgs` (défaut de l'action).
@@ -108,9 +108,9 @@ jobs:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@v22
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
       - name: nix flake check
         run: nix flake check --no-build
