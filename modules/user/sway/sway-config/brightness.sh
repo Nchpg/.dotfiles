@@ -3,11 +3,11 @@ set -euo pipefail
 
 BRIGHTNESS_STEPS=(1 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100)
 
+direction="${1:-}"  # "up" or "down"
+
 current=$(brightnessctl get)
 max=$(brightnessctl max)
 percent=$((100 * current / max))
-
-direction="$1"  # "up" or "down"
 
 if [[ "$direction" == "down" ]]; then
   for ((i=${#BRIGHTNESS_STEPS[@]}-1; i>=0; i--)); do
