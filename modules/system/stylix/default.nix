@@ -11,7 +11,7 @@ let
 
   # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
   # modules/user/stylix, cf. modules/themes/default.nix.
-  themes = import ../../themes lib;
+  themes = import ../../themes lib inputs;
   themesEnum = lib.types.enum themes.names;
 
   # Thème actif = la variante sélectionnée. C'est la SOURCE DE VÉRITÉ lue par

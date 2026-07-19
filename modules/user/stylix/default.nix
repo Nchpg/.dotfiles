@@ -2,6 +2,7 @@
   lib,
   config,
   osConfig,
+  inputs,
   ...
 }:
 
@@ -10,7 +11,7 @@ let
 
   # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
   # modules/system/stylix, cf. modules/themes/default.nix.
-  themes = import ../../themes lib;
+  themes = import ../../themes lib inputs;
 in
 {
   options = {
