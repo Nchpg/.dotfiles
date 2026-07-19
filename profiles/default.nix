@@ -9,34 +9,43 @@
 let
   users = config.systemSettings.users ++ [ { name = "root"; } ];
   homeDir = user: ./. + "/${target.profile}/home/${user.name}";
+  profileDir = ./. + "/${target.profile}";
 in
 {
-  imports = [
-    (./. + "/${target.profile}")
-  ];
+  # Gardé par pathExists, comme hosts/default.nix pour target.host : même si
+  # target.profile est aujourd'hui toujours issu du même `dirNames ./profiles`
+  # qui liste ce dossier (donc ce cas ne peut pas se produire en pratique), on
+  # garde le même filet que pour les hosts/users par symétrie et au cas où la
+  # source de `profiles` serait un jour découplée de ce scan.
+  imports = lib.optional (builtins.pathExists profileDir) profileDir;
 
   config = {
     # Chaque user déclaré doit avoir son dossier profiles/<profil>/home/<user>.
     # Sans ce garde, ajouter un user sans créer le dossier faisait échouer
     # l'éval avec un « path does not exist » cryptique ; ici on échoue avec un
     # message clair (l'import est conditionné au pathExists ci-dessous).
-    assertions =
-      map (user: {
-        assertion = builtins.pathExists (homeDir user);
-        message = "profiles/${target.profile}/home/${user.name} est introuvable : crée ce dossier (config home-manager du user « ${user.name} »).";
-      }) users
-      # Tout doublon de nom est silencieusement résolu par listToAttrs (ci-
-      # dessous et dans modules/system/users) : seule la PREMIÈRE entrée est
-      # gardée, donc un second user homonyme perdrait ses groupes et son
-      # isAdmin sans le moindre message. On couvre les deux cas d'un coup —
-      # "root" déclaré explicitement (il est déjà ajouté ci-dessus) et deux
-      # users du profil portant le même nom.
-      ++ [
-        {
-          assertion = lib.length (lib.unique (map (u: u.name) users)) == lib.length users;
-          message = "systemSettings.users contient des noms dupliqués (rappel : \"root\" est déjà ajouté automatiquement par profiles/default.nix, ne le déclare pas).";
-        }
-      ];
+    assertions = [
+      {
+        assertion = builtins.pathExists profileDir;
+        message = "profiles/${target.profile} est introuvable.";
+      }
+    ]
+    ++ map (user: {
+      assertion = builtins.pathExists (homeDir user);
+      message = "profiles/${target.profile}/home/${user.name} est introuvable : crée ce dossier (config home-manager du user « ${user.name} »).";
+    }) users
+    # Tout doublon de nom est silencieusement résolu par listToAttrs (ci-
+    # dessous et dans modules/system/users) : seule la PREMIÈRE entrée est
+    # gardée, donc un second user homonyme perdrait ses groupes et son
+    # isAdmin sans le moindre message. On couvre les deux cas d'un coup —
+    # "root" déclaré explicitement (il est déjà ajouté ci-dessus) et deux
+    # users du profil portant le même nom.
+    ++ [
+      {
+        assertion = lib.length (lib.unique (map (u: u.name) users)) == lib.length users;
+        message = "systemSettings.users contient des noms dupliqués (rappel : \"root\" est déjà ajouté automatiquement par profiles/default.nix, ne le déclare pas).";
+      }
+    ];
 
     home-manager.users = builtins.listToAttrs (
       map (user: {
