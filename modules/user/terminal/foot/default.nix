@@ -18,7 +18,7 @@ in
 
       settings = {
         main = {
-          shell = "${cfg.pkgs."${cfg.shell}"}/bin/${cfg.shell}";
+          shell = import ../../../../lib/mk-terminal-shell-bin.nix { inherit (cfg) pkgs shell; };
         };
       };
     };

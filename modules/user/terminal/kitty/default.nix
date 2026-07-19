@@ -36,7 +36,7 @@ in
           package = cfg.pkgs.kitty;
 
           settings = {
-            shell = "${cfg.pkgs."${cfg.shell}"}/bin/${cfg.shell}";
+            shell = import ../../../../lib/mk-terminal-shell-bin.nix { inherit (cfg) pkgs shell; };
             confirm_os_window_close = 0;
             window_padding_width = 4;
             term = "xterm-256color";
