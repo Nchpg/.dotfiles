@@ -6,7 +6,14 @@
 # Molette = luminosité, clic = bascule night light (cf. default.nix).
 export LC_ALL=C
 
-pct=$(brightnessctl -m | cut -d, -f4) # ex. "42%"
+pct=$(brightnessctl -m 2>/dev/null | cut -d, -f4) # ex. "42%"
+
+# Pas de périphérique de rétroéclairage (desktop, écran externe sans DDC...) :
+# même repli N/A que battery.sh/bluetooth.sh plutôt qu'un champ texte vide.
+if [[ -z "$pct" ]]; then
+    printf '{"text":"N/A","tooltip":"Rétroéclairage indisponible"}\n'
+    exit 0
+fi
 
 if systemctl --user is-active --quiet wlsunset; then
     alt=on
