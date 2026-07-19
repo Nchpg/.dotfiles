@@ -81,7 +81,7 @@ function fish_prompt
             continue
         end
 
-        set current (eval echo \$$var)
+        set current $$var
         set venv_name "$venv_name($current) "
     end
 
