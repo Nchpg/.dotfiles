@@ -143,7 +143,7 @@ in
       profiles = lib.mkOption {
         default = { };
         example = lib.literalExpression ''
-          { bouygues.tenantId = "bf2ec9bc-d21e-420c-8acf-29441b9f4d45"; }
+          { bouygues.tenantId = "00000000-0000-0000-0000-000000000000"; }
         '';
         description = ''
           Instances isolées supplémentaires, une par tenant. Chaque entrée crée
