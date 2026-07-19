@@ -704,8 +704,13 @@ in
           background: ${c.base0D};   /* accent (bleu Stylix) pour l'actif */
           color: ${c.base00};
         }
+        /* États d'ALERTE (urgent, batterie faible/critique) : variantes
+           « vives » base24 plutôt que les couleurs normales — c'est le seul
+           endroit où l'on veut vraiment que ça saute aux yeux. Sur un thème
+           base16, `bright-*` retombe sur la couleur normale (repli mkBase24
+           de base16.nix), donc le rendu est strictement inchangé. */
         #workspaces button.urgent {
-          background: ${c.base08};   /* rouge Stylix pour l'urgent */
+          background: ${c.bright-red};
           color: ${c.base00};
         }
 
@@ -731,8 +736,8 @@ in
         #custom-weather.rain   { color: ${c.base0D}; }  /* bleu : pluie / neige / orage  */
         #clock             { color: ${c.base05}; font-weight: bold; }
 
-        #custom-battery.warning  { color: ${c.base0A}; }
-        #custom-battery.critical { color: ${c.base08}; }
+        #custom-battery.warning  { color: ${c.bright-yellow}; }
+        #custom-battery.critical { color: ${c.bright-red}; }
 
         #tray {
           padding: 0 8px;
