@@ -3,6 +3,7 @@
   config,
   pkgs-stable,
   inputs,
+  target,
   ...
 }:
 
@@ -17,6 +18,35 @@ let
   # Thème actif = la variante sélectionnée. C'est la SOURCE DE VÉRITÉ lue par
   # GDM/console ici, et par le user nchpg (cf. modules/user/stylix).
   activeTheme = if cfg.variant == "light" then cfg.lightTheme else cfg.darkTheme;
+
+  # Galerie ouverte par `theme` sans argument. Construite au build depuis le
+  # même `pathByName` qui alimente l'enum des thèmes — ce qui est affiché est
+  # donc exactement ce qui est sélectionnable.
+  gallery = import ../../themes/gallery {
+    inherit themes;
+    pkgs = cfg.pkgs;
+  };
+  firefox = "${cfg.pkgs.firefox}/bin/firefox";
+
+  # Fichier que la galerie réécrit quand on applique un thème : le profil de
+  # CETTE cible, donc celui qui déclare réellement darkTheme/lightTheme.
+  profileFile = "profiles/${target.profile}/default.nix";
+
+  # Favoris de la galerie : versionnés dans le dépôt, écrits par le serveur.
+  # N'entrent pas dans la config construite (aucun rebuild à faire après un
+  # changement de favori) — c'est de la sélection personnelle, pas de l'état
+  # système. Exposés côté Nix via themes.favorites si un module veut s'en
+  # servir un jour.
+  favoritesFile = "modules/themes/gallery/favorites.json";
+
+  # Pose `flake` (le clone, via $MY_FLAKE) et échoue proprement s'il manque —
+  # même garde que `rebuild` et `genclean`. Sentinelle rebuild.sh (et non
+  # flake.nix) : la garde teste -x, et c'est de toute façon le script auquel
+  # cette commande délègue au final.
+  flakeGuard = import ../../../lib/mk-flake-guard.nix {
+    name = "theme";
+    scriptName = "rebuild.sh";
+  };
 in
 {
   # Module Stylix NIVEAU SYSTÈME : thémise ce que le module home-manager ne
@@ -98,26 +128,75 @@ in
 
     (lib.mkIf cfg.enable {
 
-      # Commande `theme {dark|light|toggle}` : rebuilde la cible du flake de
-      # l'autre variante via la commande `rebuild` (cf. modules/system/rebuild),
-      # qui gère déjà check git, reload sway et restart waybar. Aucun fichier
-      # modifié : la variante courante est celle de la cible qui a construit CE
-      # système (cfg.variant, injectée par le flake), l'état vit dans la
-      # génération active. Si les deux variantes sont déjà dans le store (arbre
-      # inchangé, CI passée), la bascule est quasi immédiate.
+      # Commande `theme` :
+      #   sans argument      → ouvre la galerie (aperçu de TOUS les thèmes
+      #                        sélectionnables, nom cliquable à recopier dans
+      #                        darkTheme/lightTheme).
+      #   dark|light|toggle  → rebuilde la cible du flake de l'autre variante
+      #                        via la commande `rebuild` (cf.
+      #                        modules/system/rebuild), qui gère déjà check
+      #                        git, reload sway et restart waybar.
+      #
+      # La bascule ne modifie AUCUN fichier : la variante courante est celle de
+      # la cible qui a construit CE système (cfg.variant, injectée par le
+      # flake), l'état vit dans la génération active. Si les deux variantes
+      # sont déjà dans le store (arbre inchangé, CI passée), c'est quasi
+      # immédiat.
       environment.systemPackages = [
         (cfg.pkgs.writeShellScriptBin "theme" ''
           set -euo pipefail
           current="${cfg.variant}"
 
           want="''${1:-}"
+
+          # Sans argument : la galerie. La page est déjà construite dans le
+          # store (cf. modules/themes/gallery) ; on la SERT en local plutôt
+          # que de l'ouvrir en file:// pour que le bouton « appliquer » puisse
+          # réécrire le profil — une page file:// n'a pas ce droit.
+          if [ -z "$want" ]; then
+            ${flakeGuard}
+            profile="$flake/${profileFile}"
+            favorites="$flake/${favoritesFile}"
+            for f in "$profile" "$favorites"; do
+              if [ ! -w "$f" ]; then
+                echo "theme : $f introuvable ou non modifiable." >&2
+                exit 1
+              fi
+            done
+
+            echo "Galerie des thèmes (variante actuelle : $current)"
+            set +e
+            THEME_BROWSER=${firefox} ${gallery.server} "$profile" "$favorites"
+            rc=$?
+            set -e
+            # 2 = fermé sans rien appliquer : pas une erreur.
+            [ "$rc" = 2 ] && exit 0
+            [ "$rc" = 0 ] || exit "$rc"
+
+            # Le rebuild vit ICI, dans le terminal, et pas dans le handler HTTP :
+            # il a besoin de sudo, et une requête web n'est pas le bon endroit
+            # pour déclencher une élévation de privilèges.
+            echo
+            printf 'Rebuild maintenant ? [y/N] '
+            read -r reply || reply=""
+            case "$reply" in
+              [yYoO]) exec rebuild ;;
+              *) echo "Config modifiée. Lance \`rebuild\` quand tu veux l'appliquer." ;;
+            esac
+            exit 0
+          fi
+
           if [ "$want" = "toggle" ]; then
             if [ "$current" = "dark" ]; then want=light; else want=dark; fi
           fi
 
           case "$want" in
             dark|light) ;;
-            *) echo "usage: theme {dark|light|toggle}   (variante actuelle : $current)" >&2; exit 1 ;;
+            *)
+              echo "usage: theme [dark|light|toggle]   (variante actuelle : $current)" >&2
+              echo "       sans argument : ouvre la galerie des thèmes" >&2
+              exit 1
+              ;;
           esac
 
           if [ "$want" = "$current" ]; then
