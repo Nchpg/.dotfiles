@@ -73,41 +73,41 @@ winddir=${dirs[$(((deg * 100 + 1125) / 2250 % 16))]}
 
 # Codes WMO (Open-Meteo) -> catégorie d'icône + description FR.
 case "$code" in
-    0)  cat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Ciel dégagé" ;;
-    1)  cat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Plutôt dégagé" ;;
-    2)  cat=$([[ $isday == 1 ]] && echo partly-day || echo partly-night); desc="Partiellement nuageux" ;;
-    3)  cat=cloudy;     desc="Couvert" ;;
-    45) cat=fog;        desc="Brouillard" ;;
-    48) cat=fog;        desc="Brouillard givrant" ;;
-    51) cat=rain-light; desc="Bruine légère" ;;
-    53) cat=rain-light; desc="Bruine modérée" ;;
-    55) cat=rain-light; desc="Bruine dense" ;;
-    56) cat=sleet;      desc="Bruine verglaçante légère" ;;
-    57) cat=sleet;      desc="Bruine verglaçante dense" ;;
-    61) cat=rain-light; desc="Pluie faible" ;;
-    63) cat=rain;       desc="Pluie modérée" ;;
-    65) cat=rain;       desc="Pluie forte" ;;
-    66) cat=sleet;      desc="Pluie verglaçante faible" ;;
-    67) cat=sleet;      desc="Pluie verglaçante forte" ;;
-    71) cat=snow;       desc="Neige faible" ;;
-    73) cat=snow;       desc="Neige modérée" ;;
-    75) cat=snow-heavy; desc="Neige forte" ;;
-    77) cat=snow;       desc="Grains de neige" ;;
-    80) cat=rain-light; desc="Averses faibles" ;;
-    81) cat=rain;       desc="Averses modérées" ;;
-    82) cat=rain;       desc="Averses violentes" ;;
-    85) cat=snow;       desc="Averses de neige faibles" ;;
-    86) cat=snow-heavy; desc="Averses de neige fortes" ;;
-    95) cat=thunder;    desc="Orage" ;;
-    96) cat=thunder;    desc="Orage, grêle légère" ;;
-    99) cat=thunder;    desc="Orage, grêle forte" ;;
-    *)  cat=cloudy;     desc="Conditions inconnues" ;;
+    0)  wcat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Ciel dégagé" ;;
+    1)  wcat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Plutôt dégagé" ;;
+    2)  wcat=$([[ $isday == 1 ]] && echo partly-day || echo partly-night); desc="Partiellement nuageux" ;;
+    3)  wcat=cloudy;     desc="Couvert" ;;
+    45)  wcat=fog;        desc="Brouillard" ;;
+    48)  wcat=fog;        desc="Brouillard givrant" ;;
+    51)  wcat=rain-light; desc="Bruine légère" ;;
+    53)  wcat=rain-light; desc="Bruine modérée" ;;
+    55)  wcat=rain-light; desc="Bruine dense" ;;
+    56)  wcat=sleet;      desc="Bruine verglaçante légère" ;;
+    57)  wcat=sleet;      desc="Bruine verglaçante dense" ;;
+    61)  wcat=rain-light; desc="Pluie faible" ;;
+    63)  wcat=rain;       desc="Pluie modérée" ;;
+    65)  wcat=rain;       desc="Pluie forte" ;;
+    66)  wcat=sleet;      desc="Pluie verglaçante faible" ;;
+    67)  wcat=sleet;      desc="Pluie verglaçante forte" ;;
+    71)  wcat=snow;       desc="Neige faible" ;;
+    73)  wcat=snow;       desc="Neige modérée" ;;
+    75)  wcat=snow-heavy; desc="Neige forte" ;;
+    77)  wcat=snow;       desc="Grains de neige" ;;
+    80)  wcat=rain-light; desc="Averses faibles" ;;
+    81)  wcat=rain;       desc="Averses modérées" ;;
+    82)  wcat=rain;       desc="Averses violentes" ;;
+    85)  wcat=snow;       desc="Averses de neige faibles" ;;
+    86)  wcat=snow-heavy; desc="Averses de neige fortes" ;;
+    95)  wcat=thunder;    desc="Orage" ;;
+    96)  wcat=thunder;    desc="Orage, grêle légère" ;;
+    99)  wcat=thunder;    desc="Orage, grêle forte" ;;
+    *)  wcat=cloudy;     desc="Conditions inconnues" ;;
 esac
 
 # Classe CSS (couleur dynamique du module, cf. style dans default.nix). On
 # regroupe les catégories en 4 ambiances : ensoleillé (jaune), couvert (gris),
 # pluie/neige (bleu), et le reste garde la couleur de base (cyan).
-case "$cat" in
+case "$wcat" in
     clear-*) class=sunny ;;
     cloudy | fog) class=cloudy ;;
     rain* | sleet | snow* | hail | thunder) class=rain ;;
@@ -127,4 +127,4 @@ tooltip+=$'\n'"Vent ${wind} km/h ${winddir}"
 [[ -n "$updated" ]] && tooltip+=$'\n'"Maj ${updated}"
 
 printf '{"text":"%s","alt":"%s","class":"%s","tooltip":"%s"}\n' \
-    "$(json_escape "$text")" "$cat" "$class" "$(json_escape "$tooltip")"
+    "$(json_escape "$text")" "$wcat" "$class" "$(json_escape "$tooltip")"
