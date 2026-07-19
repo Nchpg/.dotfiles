@@ -144,7 +144,7 @@ end
 
 function nix
   if test (count $argv) -gt 0; and test "$argv[1]" = "develop"
-    if contains -- "--command" $argv
+    if contains -- "--command" $argv; or contains -- "-c" $argv
       command nix $argv
     else
       command nix develop $argv[2..-1] --command fish
