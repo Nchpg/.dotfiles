@@ -37,12 +37,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = config.userSettings.sops.available;
-        message = "userSettings.wakatime a besoin du secret sops (API key), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
-      }
-    ];
+    assertions = import ../../../lib/assert-sops-available.nix {
+      inherit config;
+      optionName = "userSettings.wakatime";
+      need = "a besoin du secret sops (API key)";
+    };
 
     # CLI sur le PATH (usage manuel : `wakatime-cli --today`). Les plugins
     # nixpkgs embarquent deja leur propre chemin vers le cli du store.

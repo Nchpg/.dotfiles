@@ -42,12 +42,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = [
-      {
-        assertion = config.userSettings.sops.available;
-        message = "userSettings.gh a besoin du secret sops (token GitHub), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
-      }
-    ];
+    assertions = import ../../../lib/assert-sops-available.nix {
+      inherit config;
+      optionName = "userSettings.gh";
+      need = "a besoin du secret sops (token GitHub)";
+    };
 
     programs.gh = {
       enable = true;
