@@ -33,6 +33,23 @@ IDLE_TIMEOUT_SECONDS = 15 * 60
 SLOTS = {"dark": "darkTheme", "light": "lightTheme"}
 
 
+def js_string_body(value):
+    """json.dumps(value), échappé pour tenir dans un littéral JS '...'.
+
+    CURRENT/FAVORITES sont réinjectés tels quels dans la page (cf.
+    do_GET/main) à l'intérieur de `JSON.parse('__PLACEHOLDER__')`. JSON
+    n'échappe pas le guillemet simple (seul `"` l'est), donc un nom de thème
+    contenant une apostrophe casserait le littéral JS ; le tout vit en plus
+    dans un <script>, donc une séquence `</script` briserait la balise avant
+    même que le JS ne s'exécute. Les deux échappements ci-dessous couvrent
+    ces deux cas (le risque réel est quasi nul ici — noms de thèmes issus
+    d'un manifeste connu — mais le coût de le couvrir est négligeable).
+    """
+    encoded = json.dumps(value)
+    encoded = encoded.replace("\\", "\\\\").replace("'", "\\'")
+    return encoded.replace("</", "<\\/")
+
+
 class Applied(Exception):
     """Levée pour arrêter le serveur une fois le choix appliqué."""
 
@@ -138,9 +155,9 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             # montrer les thèmes réellement dans le profil, pas ceux d'il y a
             # dix minutes.
             page = html.replace(
-                "__THEME_CURRENT__", json.dumps(read_current(profile_path))
+                "__THEME_CURRENT__", js_string_body(read_current(profile_path))
             ).replace(
-                "__THEME_FAVORITES__", json.dumps(read_favorites(favorites_path))
+                "__THEME_FAVORITES__", js_string_body(read_favorites(favorites_path))
             )
             body = page.encode("utf-8")
             self.send_response(200)
