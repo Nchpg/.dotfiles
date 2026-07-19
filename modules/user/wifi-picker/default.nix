@@ -39,7 +39,7 @@ let
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;
     title = "nmtui-wifi";
-    exec = "nmtui";
+    exec = "${cfg.pkgs.networkmanager}/bin/nmtui";
     kittyExtraOpts = kittyQuit;
   };
 
@@ -51,6 +51,7 @@ in
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };
+    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
   config = lib.mkIf cfg.enable (
