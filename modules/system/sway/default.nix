@@ -56,13 +56,27 @@ let
   # sortie. Le wrapper amont finit par `exec sway`, on ne peut pas y accrocher
   # de trap : on enveloppe une couche au-dessus.
   swayLauncher = cfg.pkgs.writeShellScript "sway-with-session-cleanup" ''
-    # Appels informatifs : pas une session, on ne touche à rien (sinon
-    # `sway --version` dans un terminal tuerait la session en cours).
-    case "$1" in
-      -h | --help | -v | --version | -V | --get-socketpath)
-        exec ${swayBase}/bin/sway "$@"
-        ;;
-    esac
+    # Appels informatifs : sway répond puis sort SANS ouvrir de session, donc on
+    # ne doit pas dérouler cleanupSession derrière — sinon la commande tue la
+    # session EN COURS (cibles arrêtées, WAYLAND_DISPLAY/SWAYSOCK désimportés,
+    # barre et services de session avec).
+    #
+    # -C/--validate manquait : `sway --validate` pour vérifier sa config depuis
+    # un terminal coupait donc la session. C'est le cas qui a mordu.
+    #
+    # -V est --verbose et OUVRE une session (c'est -v qui est --version) : il
+    # était dans la liste par confusion, ce qui faisait démarrer `sway -V` en
+    # sautant le nettoyage. Retiré.
+    #
+    # On balaie TOUS les arguments et pas seulement $1 : `sway -c fichier -C`
+    # est valide, et une garde sur $1 le laisse passer.
+    for arg in "$@"; do
+      case "$arg" in
+        -h | --help | -v | --version | -C | --validate | --get-socketpath)
+          exec ${swayBase}/bin/sway "$@"
+          ;;
+      esac
+    done
 
     ${swayBase}/bin/sway "$@"
     ret=$?
