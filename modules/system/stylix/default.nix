@@ -220,6 +220,25 @@ in
         # court-circuitant notre option userSettings.stylix.theme.
         homeManagerIntegration.autoImport = false;
 
+        # Réactivé MALGRÉ autoEnable = false (dont il tire son défaut), parce
+        # que le target gnome en dépend entièrement : les extensions n'existent
+        # pas sur l'écran de login, donc la SEULE façon de thémiser GDM est de
+        # remplacer gnome-shell-theme.gresource dans le paquet gnome-shell —
+        # ce que stylix fait via un overlay nixpkgs gardé par cette option.
+        # Sans elle, targets.gnome.enable ci-dessous ne posait plus que les
+        # réglages dconf curseur/icônes et GDM restait au thème Adwaita sombre.
+        #
+        # COÛT, mesuré sur cette config : gnome-shell est recompilé depuis les
+        # sources (+ gnome-session et gnome-browser-connector qui en dépendent),
+        # et ~190 Mio de dépendances de build (mutter-dev, gtk4-dev, meson…)
+        # entrent dans le store. Les deux variantes produisent des gnome-shell
+        # DIFFÉRENTS : la première bascule dark↔light après chaque `rebuild -u`
+        # ou changement de thème repaye cette compilation (le toggle ne
+        # redevient immédiat qu'une fois les deux variantes dans le store).
+        # Effet de bord : le patch stylix retire l'indicateur « Dark Mode » des
+        # quick settings de GNOME Shell (session de secours).
+        overlays.enable = true;
+
         targets = {
           gnome.enable = true; # ⇒ thémise GDM (login screen)
           console.enable = true; # ⇒ thémise les TTY
