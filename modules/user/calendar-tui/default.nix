@@ -147,7 +147,9 @@ in
           # Repli sur $HOME (toujours privé) si XDG_RUNTIME_DIR est absent,
           # jamais sur /tmp.
           if [ -f "$HOME/.config/vdirsyncer/config" ]; then
-            ${syncCmd} >"''${XDG_RUNTIME_DIR:-$HOME/.cache}/calendar-tui-vdirsyncer.log" 2>&1 || true
+            {
+              ${syncCmd}
+            } >"''${XDG_RUNTIME_DIR:-$HOME/.cache}/calendar-tui-vdirsyncer.log" 2>&1 || true
           fi
 
           exec ${termCmd}'';
@@ -163,12 +165,11 @@ in
         # DROIT d'accès (keyOwner/root). Que la clé age soit bien présente et
         # déchiffre effectivement les secrets Google, c'est sops-nix qui le vérifie
         # à l'activation (impossible à l'éval, la clé est un fichier runtime).
-        assertions = [
-          {
-            assertion = config.userSettings.sops.available;
-            message = "userSettings.calendarTui a besoin des secrets sops (Google Agenda), mais le user « ${config.userSettings.user} » n'a pas accès à la clé (ni keyOwner ni root). Active-le pour le keyOwner, ou donne à ce user la clé age.";
-          }
-        ];
+        assertions = import ../../../lib/assert-sops-available.nix {
+          inherit config;
+          optionName = "userSettings.calendarTui";
+          need = "a besoin des secrets sops (Google Agenda)";
+        };
 
         home.packages = with cfg.pkgs; [
           khal
