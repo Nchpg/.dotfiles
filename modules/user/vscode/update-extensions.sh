@@ -30,11 +30,13 @@ fi
 # jq` qui échoue interrompt tout le script AVANT que l'appelant puisse tester
 # le résultat — la garde « ignoré » plus bas n'était jamais atteinte.
 query_latest_version() {
-    local publisher="$1" name="$2" response
+    local publisher="$1" name="$2" response body
+    body=$(jq -n --arg v "${publisher}.${name}" \
+        '{filters: [{criteria: [{filterType: 7, value: $v}]}], flags: 103}')
     response=$(curl -sf -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json;api-version=3.0-preview.1" \
-        -d "{\"filters\":[{\"criteria\":[{\"filterType\":7,\"value\":\"${publisher}.${name}\"}]}],\"flags\":103}") || return 1
+        -d "$body") || return 1
     printf '%s' "$response" | jq -r '.results[0].extensions[0].versions[0].version // empty' 2>/dev/null || return 1
 }
 
