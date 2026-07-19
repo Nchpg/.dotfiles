@@ -26,11 +26,11 @@
     },
     "[c]": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+        "editor.defaultFormatter": "ms-vscode.cpptools"
     },
     "[cpp]": {
         "editor.formatOnSave": true,
-        "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+        "editor.defaultFormatter": "ms-vscode.cpptools"
     },
     "editor.formatOnSaveMode": "file",
     "files.autoSave": "afterDelay",
