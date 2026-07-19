@@ -21,9 +21,11 @@ function searchf --description "Search files and their content using fzf"
                     colored_path=\"\$(echo -e \"\e[34m\$dirname/\e[90m\e[32m\$basename\e[0m\")\"
                 fi
 
-                # Utilisez echo -e pour gérer les séquences d'échappement ANSI si elles ne sont pas nettoyées.
-                # Cependant, string replace est meilleur pour nettoyer.
-                raw_file=\$(echo \"\$colored_path\" | sed -r 's/\x1B\[[0-9;]*m//g') # Nettoyage plus robuste des codes ANSI
+                # \$line est déjà le chemin réel non coloré (colored_path n'est
+                # qu'un ré-assemblage de dirname/basename pour l'affichage) :
+                # pas besoin de repasser par un aller-retour echo/sed pour le
+                # retrouver.
+                raw_file=\"\$line\"
 
                 if [ -f \"\$raw_file\" ]; then
                     if file \"\$raw_file\" | grep \"text\" > /dev/null 2>&1; then
