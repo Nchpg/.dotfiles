@@ -100,12 +100,12 @@ function man
       # terminal et retomberait sur Monokai au lieu du thème gruvbox.
       set MAN_ARGS $argv
       if test (count $argv) -eq 0;
-          set selected_page (command man -k . | sort | fzf --ansi --multi --delimiter=" - " --border --prompt='Manual > ' --height=90% --reverse -e --preview="
-           echo {1} \
-           | sed 's/, /\n/g;' \
-           | sed 's/\([^(]*\)(\([0-9A-Za-z ]\))/\2\t\1/g' \
-           | xargs -n2 batman 2> /dev/null | BAT_THEME=$__bat_preview_theme bat --paging=never --language=man --style=plain --color=always
-           ")
+          set selected_page (command man -k . | sort | fzf --ansi --multi --delimiter=" - " --border --prompt='Manual > ' --height=90% --reverse -e --preview="bash -c '
+           echo \"\$1\" \
+           | sed \"s/, /\n/g;\" \
+           | sed \"s/\([^(]*\)(\([0-9A-Za-z ]\))/\2\t\1/g\" \
+           | xargs -n2 batman 2>/dev/null | env BAT_THEME=$__bat_preview_theme bat --paging=never --language=man --style=plain --color=always
+           ' _ {1}")
           if test -z "$selected_page"
             return
           end
