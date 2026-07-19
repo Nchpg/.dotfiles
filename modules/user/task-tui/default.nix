@@ -83,6 +83,12 @@ in
         height = 850;
       })
       {
+        assertions = import ../../../lib/assert-sops-available.nix {
+          inherit config;
+          optionName = "userSettings.taskTui";
+          need = "a besoin des secrets sops (Google Tasks)";
+        };
+
         home.packages = [ tasks-tui ];
 
         # Secrets OAuth Google (les MEMES que vdirsyncer/calendar-tui : source de
