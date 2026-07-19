@@ -17,7 +17,9 @@ in
       package = cfg.pkgs.alacritty;
 
       settings = {
-        terminal.shell.program = "${cfg.pkgs."${cfg.shell}"}/bin/${cfg.shell}";
+        terminal.shell.program = import ../../../../lib/mk-terminal-shell-bin.nix {
+          inherit (cfg) pkgs shell;
+        };
       };
     };
 
