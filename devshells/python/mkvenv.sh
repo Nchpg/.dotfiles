@@ -9,9 +9,9 @@ set -euo pipefail
 # --prompt/--cache-dir prennent une valeur sans tiret et cassaient
 # l'heuristique) : on retrouve le pyvenv.cfg réellement créé après coup.
 MARKER="$(mktemp)"
+trap 'rm -f "$MARKER"' EXIT
 uv venv "$@"
 VENV="$(find . -maxdepth 2 -name pyvenv.cfg -newer "$MARKER" -print0 -quit | xargs -r0 dirname)"
-rm -f "$MARKER"
 VENV="${VENV:-.venv}"
 
 case "${SH:-$(basename "${SHELL:-bash}")}" in
