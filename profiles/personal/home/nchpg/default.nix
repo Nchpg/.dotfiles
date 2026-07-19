@@ -135,6 +135,10 @@
         enable = true;
       };
 
+      btCombine = {
+        enable = true;
+      };
+
       lgControl = {
         enable = true;
       };
