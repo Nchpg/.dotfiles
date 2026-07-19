@@ -29,6 +29,11 @@
         zsh.enable = true;
         bash.enable = true;
         fish.enable = true;
+        # Pas de préférence particulière pour root (pas de session graphique) :
+        # explicite plutôt que de dépendre du repli implicite de
+        # modules/user/shell/default.nix (premier shell activé par ordre
+        # alphabétique, actuellement bash).
+        default = "bash";
       };
     };
   };
