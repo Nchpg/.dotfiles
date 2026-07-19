@@ -39,7 +39,7 @@ function searchf --description "Search files and their content using fzf"
         " | fzf --ansi \
                  --multi \
                  --layout=reverse \
-                 --preview "header=\$(echo {} | cut -d: -f1-2); \
+                 --preview "bash -c 'header=\$(echo \"\$1\" | cut -d: -f1-2); \
                             file=\$(echo \"\$header\" | cut -d: -f1); \
                             line=\$(echo \"\$header\" | cut -d: -f2); \
                             total=\$(wc -l < \"\$file\"); \
@@ -48,7 +48,7 @@ function searchf --description "Search files and their content using fzf"
                             max_start=\$(( total - height + 1 )); \
                             [ \$start -gt \$max_start ] && start=\$max_start; \
                             [ \$start -lt 1 ] && start=1; \
-                            BAT_THEME=$__bat_preview_theme bat --wrap=never --style=numbers --color=always --highlight-line=\$line \"\$file\" | tail -n +\$start | head -n \"\$height\" " \
+                            BAT_THEME=$__bat_preview_theme bat --wrap=never --style=numbers --color=always --highlight-line=\$line \"\$file\" | tail -n +\$start | head -n \"\$height\"' _ {}" \
                  --preview-window=right:60%:nowrap \
                  --nth 3.. \
                  --delimiter=: \
