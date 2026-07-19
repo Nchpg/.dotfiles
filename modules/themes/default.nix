@@ -143,8 +143,8 @@ lib: inputs: rec {
     w.path or (pkgs.fetchurl w);
 
   # Bloc commun à poser dans `stylix = { ... }`.
-  #   wallpaper : surcharge optionnelle ; null = le fond par défaut du thème,
-  #               qui peut lui-même être absent (stylix vit sans image).
+  #   wallpaper : surcharge explicite (profil/user) ; null = résolution
+  #               automatique, cf. `chosen`.
   stylixSettings =
     {
       pkgs,
@@ -152,10 +152,18 @@ lib: inputs: rec {
       wallpaper ? null,
     }:
     let
-      chosen = if wallpaper != null then wallpaper else meta.themeWallpaper.${theme} or null;
+      themePolarity = polarity theme;
+      # Surcharge explicite > fond propre au thème > défaut de la polarité.
+      # Le dernier niveau garantit qu'aucun thème du catalogue ne se retrouve
+      # sans image, alors que themeWallpaper n'en couvre qu'une soixantaine.
+      chosen =
+        if wallpaper != null then
+          wallpaper
+        else
+          meta.themeWallpaper.${theme} or meta.defaultWallpaper.${themePolarity} or null;
     in
     {
-      polarity = polarity theme;
+      polarity = themePolarity;
       base16Scheme = parseScheme theme;
     }
     // lib.optionalAttrs (chosen != null) {
