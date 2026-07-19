@@ -173,20 +173,68 @@ let
     on-scroll-up = volUp;
     on-scroll-down = volDown;
   };
-  # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N> dans
-  # menus/volume.xml ; chaque action fixe le volume absolu via wpctl.
+  # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N>,
+  # générés ci-dessous (volumeMenuXml) ; chaque action fixe le volume absolu
+  # via wpctl. Source unique = volumePresets (même pattern que backlightPresets
+  # plus bas) : un menus/volume.xml statique désynchronisait silencieusement
+  # les ids dès que volumePresets était surchargé.
   volPresets = cfg.volumePresets;
   volPresetActions = lib.listToAttrs (
     map (
       p: lib.nameValuePair "vol${toString p}" "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%"
     ) volPresets
   );
+  volumeMenuXml = ''
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!-- Généré depuis `volumePresets` dans modules/user/waybar/default.nix. -->
+    <interface>
+      <object class="GtkMenu" id="menu">
+        <child>
+          <object class="GtkMenuItem" id="mute">
+            <property name="label">Mute / Unmute</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sep1"/>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="mixer">
+            <property name="label">Ouvrir le mixer</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sep2"/>
+        </child>
+  ''
+  + lib.concatMapStrings (p: ''
+    <child>
+      <object class="GtkMenuItem" id="vol${toString p}">
+        <property name="label">${toString p} %</property>
+      </object>
+    </child>
+  '') volPresets
+  + ''
+        <child>
+          <object class="GtkSeparatorMenuItem" id="sep3"/>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="volup">
+            <property name="label">Volume +5 %</property>
+          </object>
+        </child>
+        <child>
+          <object class="GtkMenuItem" id="voldown">
+            <property name="label">Volume -5 %</property>
+          </object>
+        </child>
+      </object>
+    </interface>
+  '';
 
   # Menus GTK au clic droit : fichiers XML installés dans menuDir, chaque entrée
   # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
   menuDir = "${home}/.config/waybar/menus";
   menuNames = [
-    "volume.xml"
     "notifications.xml"
   ];
 
@@ -453,6 +501,9 @@ in
         })
         (lib.nameValuePair ".config/waybar/menus/backlight.xml" {
           text = backlightMenuXml;
+        })
+        (lib.nameValuePair ".config/waybar/menus/volume.xml" {
+          text = volumeMenuXml;
         })
       ]
     );
