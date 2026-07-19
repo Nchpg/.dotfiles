@@ -6,10 +6,22 @@
 # une table pour les ~500 thèmes amont.
 #
 # themeWallpaper : nom de thème -> nom d'entrée du registre ci-dessous.
-# Volontairement PARTIEL. Un thème sans entrée reste utilisable (stylix vit
-# sans image). Surchargeable par profil/user via
+# Volontairement PARTIEL — seuls ~60 thèmes sur les ~510 y figurent, les
+# autres retombent sur defaultWallpaper. Surchargeable par profil/user via
 # systemSettings.stylix.wallpaper / userSettings.stylix.wallpaper.
 {
+  # Fond utilisé quand le thème n'a pas d'entrée dans themeWallpaper — donc
+  # pour la grande majorité du catalogue amont. Par POLARITÉ : un fond sombre
+  # sous un thème clair (ou l'inverse) jure immédiatement.
+  #
+  # Le défaut sombre est un fichier LOCAL : contrairement aux entrées
+  # distantes, il ne peut pas disparaître, ce qui compte pour un repli censé
+  # couvrir 450 thèmes.
+  defaultWallpaper = {
+    dark = "custom-kyoto";
+    light = "custom-kyoto";
+  };
+
   themeWallpaper = {
     alph = "alph";
     ashes = "ashes";
@@ -39,8 +51,10 @@
     fairy-floss = "fairy-floss";
     gigavolt = "gigavolt";
     gruvbox-dark-custom = "gruvbox-dark";
+    gruvbox-dark-custom-base24 = "gruvbox-dark";
     gruvbox-dark-hard = "gruvbox-dark";
     gruvbox-dark-medium = "gruvbox-dark";
+    gruvbox-light = "gruvbox-light";
     gruvbox-light-hard = "gruvbox-light";
     gruvbox-light-medium = "gruvbox-light";
     helios = "helios";
