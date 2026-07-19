@@ -13,7 +13,7 @@
         # garde les mêmes valeurs par défaut, en repli pour un profil qui ne les
         # préciserait pas.
         darkTheme = "gruvbox-dark-custom";
-        lightTheme = "gruvbox-light-hard";
+        lightTheme = "gruvbox-light";
       };
 
       # nchpg détient la clé age qui déchiffre secrets/secrets.yaml.
