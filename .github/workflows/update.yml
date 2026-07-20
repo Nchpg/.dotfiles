@@ -92,7 +92,7 @@ jobs:
           while IFS= read -r -d '' script; do
             echo "⬆️  Running $script..."
             "$script" || echo "::warning::$script en échec — état précédent conservé."
-          done < <(find modules -maxdepth 3 -name update.sh -print0 | sort -z)
+          done < <(find modules -maxdepth 4 -name update.sh -print0 | sort -z)
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts

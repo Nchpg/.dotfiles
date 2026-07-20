@@ -8,7 +8,7 @@
 set -euo pipefail
 
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
-dir="$flake/modules/user/kimi-code"
+dir="$flake/modules/user/agents/kimi-code"
 pinned_file="$dir/pinned.json"
 
 echo "🔎 Checking latest Kimi Code version (npm registry)..."

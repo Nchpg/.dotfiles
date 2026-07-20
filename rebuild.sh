@@ -67,7 +67,7 @@ if [[ "$UPDATE" -eq 1 ]]; then
     # Chargé dans un tableau (pas de `while read < <(find ...)`) : sinon le
     # `read -p` de confirmation ci-dessous lirait le flux de `find` au lieu du
     # terminal, et sauterait silencieusement toutes les mises à jour.
-    mapfile -d '' -t update_scripts < <(find modules -maxdepth 3 -name update.sh -print0 | sort -z)
+    mapfile -d '' -t update_scripts < <(find modules -maxdepth 4 -name update.sh -print0 | sort -z)
     for script in "${update_scripts[@]}"; do
         module_dir="$(dirname "$script")"
 

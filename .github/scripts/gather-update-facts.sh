@@ -142,7 +142,7 @@ while IFS= read -r -d '' pinned_file; do
         old_pinned_map=$(jq --arg m "$module" --argjson e "$old_entry" '.[$m] = $e' <<<"$old_pinned_map")
     fi
     new_pinned_map=$(jq --arg m "$module" --argjson e "$new_entry" '.[$m] = $e' <<<"$new_pinned_map")
-done < <(find modules -maxdepth 3 -name 'pinned.json' -print0 | sort -z)
+done < <(find modules -maxdepth 4 -name 'pinned.json' -print0 | sort -z)
 
 pinned_facts=$(diff_version_map "$old_pinned_map" "$new_pinned_map" | jq 'map({module: .key, oldVersion, newVersion})')
 

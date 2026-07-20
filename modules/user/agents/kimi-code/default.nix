@@ -6,7 +6,7 @@
 }:
 
 let
-  cfg = config.userSettings.kimiCode;
+  cfg = config.userSettings.agents.kimiCode;
 
   # Charge la version + le hash épinglés automatiquement par update.sh
   pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
@@ -17,7 +17,7 @@ let
   # était le checksum du binaire natif SEA (cf. plus bas) — un artefact
   # totalement différent de ce que npx installe réellement depuis le registre
   # npm, donc jamais vérifié en pratique malgré les apparences.
-  kimiTarball = pkgs-unstable.fetchurl {
+  kimiTarball = cfg.pkgs.fetchurl {
     url = "https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-${pinned.version}.tgz";
     sha256 = pinned.sha256;
   };
@@ -31,18 +31,23 @@ let
   # Node.js, qui crashe en SIGILL sur les CPU hybrides récents (Meteor Lake,
   # etc.). En passant par npx + le Node.js de nixpkgs, on s'appuie sur un
   # runtime compilé pour le système → plus de crash.
-  kimi-wrapper = pkgs-unstable.writeShellScriptBin "kimi" ''
-    exec ${pkgs-unstable.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
+  kimi-wrapper = cfg.pkgs.writeShellScriptBin "kimi" ''
+    exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
   '';
 
-  kimi-code-wrapper = pkgs-unstable.writeShellScriptBin "kimi-code" ''
-    exec ${pkgs-unstable.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
+  kimi-code-wrapper = cfg.pkgs.writeShellScriptBin "kimi-code" ''
+    exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
   '';
 in
 {
-  options.userSettings.kimiCode = {
+  options.userSettings.agents.kimiCode = {
     enable = lib.mkEnableOption "Kimi Code CLI";
-    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+    # Défaut sur unstable, comme les autres agents IA de ce dossier :
+    # versions qui bougent vite, pas de raison d'attendre stable.
+    pkgs = import ../../../../lib/mk-pkgs-option.nix {
+      inherit lib config;
+      default = pkgs-unstable;
+    };
   };
 
   config = lib.mkIf cfg.enable {
