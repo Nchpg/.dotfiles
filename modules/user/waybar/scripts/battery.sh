@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Batterie (module custom). Remplace le module `battery` natif pour pouvoir
 # afficher, EN PLUS du %/temps/santé/cycles, deux infos que le tooltip-format
 # natif ne sait pas produire (ses placeholders sont figés) :
@@ -70,7 +71,7 @@ energy_full_design=$(<"$bat/energy_full_design")
 if [[ $energy_full_design =~ ^[0-9]+$ ]] && (( energy_full_design > 0 )); then
     health=$(( (energy_full * 100 + energy_full_design / 2) / energy_full_design ))
 fi
-cycles=$(cat "$bat/cycle_count" 2>/dev/null)
+cycles=$(cat "$bat/cycle_count" 2>/dev/null) || true # absent sur certaines batteries
 
 # --- Profil d'alimentation (power-profiles-daemon) ---------------------------
 profile=""
@@ -91,7 +92,7 @@ fi
 fan_rpm=""
 for namefile in /sys/class/hwmon/hwmon*/name; do
     [[ $(<"$namefile") == acpi_fan ]] || continue
-    v=$(cat "${namefile%/name}/fan1_input" 2>/dev/null)
+    v=$(cat "${namefile%/name}/fan1_input" 2>/dev/null) || true
     [[ $v =~ ^[0-9]+$ ]] && { fan_rpm=$v; break; }
 done
 # Valeurs alignées sur lg-control (modules/user/lg-control) : 0=Optimal,
