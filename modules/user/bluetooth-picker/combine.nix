@@ -1,7 +1,7 @@
 { config, lib, ... }:
 
 let
-  cfg = config.userSettings.btCombine;
+  cfg = config.userSettings.bluetoothPicker.combine;
   term = config.userSettings.terminal.default;
   c = config.lib.stylix.colors.withHashtag;
 
@@ -181,8 +181,15 @@ let
   };
 in
 {
-  options.userSettings.btCombine = {
-    enable = lib.mkEnableOption "sortie Bluetooth combinée (diffuse vers plusieurs appareils BT à la fois)";
+  options.userSettings.bluetoothPicker.combine = {
+    # Défaut : suit bluetooth-picker (son message d'erreur renvoie vers
+    # $mod+b pour connecter des appareils — sans lui, ce bind n'existe pas).
+    # Surchargeable : mettre false pour désactiver juste la combinaison.
+    enable =
+      lib.mkEnableOption "sortie Bluetooth combinée (diffuse vers plusieurs appareils BT à la fois)"
+      // {
+        default = config.userSettings.bluetoothPicker.enable;
+      };
     pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
   };
 
