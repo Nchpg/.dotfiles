@@ -18,9 +18,7 @@ let
     ${vdirsyncerBin} sync
   '';
 
-  # L'ID de collection (= adresse/identifiant Google, PII) vient de sops : on
-  # insère un placeholder, remplacé par la vraie valeur à l'activation. La config
-  # khal est donc générée via sops.templates (cf. plus bas), pas xdg.configFile.
+  # ID de collection (PII) depuis sops, placeholder remplacé à l'activation.
   khalCalendars = concatStringsSep "\n" (
     mapAttrsToList (name: calendar: ''
       [[${name}]]
@@ -30,15 +28,12 @@ let
     '') cfg.calendars
   );
 
-  # Secrets sops a declarer pour chaque calendrier (nom = collectionSecret).
   calendarSecrets = lib.listToAttrs (
     mapAttrsToList (_: calendar: lib.nameValuePair calendar.collectionSecret { }) cfg.calendars
   );
 
-  # vdirsyncer a besoin du client_id/client_secret Google directement dans sa
-  # config. On genere le fichier final via un template sops : les placeholders
-  # ci-dessous sont remplaces a l'activation par les vraies valeurs dechiffrees.
-  # Rien de secret ne transite par Git ni par le Nix store.
+  # Placeholders remplacés à l'activation par sops : rien de secret ne
+  # transite par Git ni par le Nix store.
   vdirsyncerConfig = ''
     [general]
     status_path = "~/.local/state/vdirsyncer/status/"
@@ -142,10 +137,7 @@ in
         scriptBody = ''
           set -eu
 
-          # Log dans XDG_RUNTIME_DIR (privé) plutôt que /tmp partagé : un nom
-          # prévisible dans /tmp est écrasable/lisible par les autres users.
-          # Repli sur $HOME (toujours privé) si XDG_RUNTIME_DIR est absent,
-          # jamais sur /tmp.
+          # XDG_RUNTIME_DIR (privé) ou $HOME en repli, jamais /tmp partagé.
           if [ -f "$HOME/.config/vdirsyncer/config" ]; then
             {
               ${syncCmd}
@@ -159,12 +151,9 @@ in
         height = 950;
       })
       {
-        # calendar-tui déclare des secrets sops (identifiants Google + IDs de
-        # collection). Sans accès à la clé, l'activation échouerait au déchiffrement
-        # avec un message obscur : on l'attrape ici à l'éval. NB : ceci vérifie le
-        # DROIT d'accès (keyOwner/root). Que la clé age soit bien présente et
-        # déchiffre effectivement les secrets Google, c'est sops-nix qui le vérifie
-        # à l'activation (impossible à l'éval, la clé est un fichier runtime).
+        # Vérifie le DROIT d'accès (keyOwner/root) à l'éval, message clair au
+        # lieu d'un échec obscur au déchiffrement. La présence effective de la
+        # clé age est vérifiée par sops-nix à l'activation (fichier runtime).
         assertions = import ../../../lib/assert-sops-available.nix {
           inherit config;
           optionName = "userSettings.calendarTui";
@@ -176,9 +165,8 @@ in
           vdirsyncer
         ];
 
-        # Config khal generee via sops (les chemins de calendriers contiennent des
-        # placeholders -> IDs injectes a l'activation). Les couleurs Stylix, elles,
-        # sont resolues a l'eval (mix placeholder runtime + interpolation build OK).
+        # Couleurs Stylix résolues à l'éval, IDs injectés à l'activation
+        # (mix placeholder runtime + interpolation build OK).
         sops.templates."khal-config" = {
           path = "${config.home.homeDirectory}/.config/khal/config";
           content = ''
@@ -243,11 +231,8 @@ in
           '';
         };
 
-        # Secrets OAuth Google (partages avec task-tui) dechiffres depuis
-        # secrets/secrets.yaml. Le template ci-dessous genere
-        # ~/.config/vdirsyncer/config avec les vraies valeurs a l'activation
-        # home-manager (jamais en clair dans le store ni dans Git).
-        # google/* = creds OAuth ; calendars/* = IDs d'agendas (PII), un par calendrier.
+        # google/* = creds OAuth (partagés avec task-tui) ; calendars/* = IDs
+        # d'agendas (PII), un par calendrier.
         sops.secrets = calendarSecrets // {
           "google/client_id" = { };
           "google/client_secret" = { };
@@ -259,8 +244,7 @@ in
 
         home.file.".calendars/google/.keep".text = "";
 
-        # Synchro périodique Google Calendar <-> vdir local. Le service ne fait rien
-        # tant que ~/.config/vdirsyncer/config n'a pas été créé depuis le template.
+        # No-op tant que ~/.config/vdirsyncer/config n'a pas été créé.
         systemd.user.services.calendar-tui-sync = {
           Unit.Description = "Synchronisation Google Calendar pour ikhal";
           Service = {
@@ -281,20 +265,12 @@ in
           Install.WantedBy = [ "timers.target" ];
         };
 
-        # Setup OAuth (le fichier ~/.config/vdirsyncer/config est desormais genere
-        # automatiquement par sops a chaque `nixos-rebuild switch`) :
-        #
-        # Dans Google Cloud Console :
-        #   1. Activer l'API CalDAV (pas seulement Google Calendar API)
-        #   2. Créer un OAuth Client ID de type "Desktop application"
-        #
-        # Puis renseigner les secrets une fois (depuis la racine du repo) :
-        #   sops secrets/secrets.yaml
-        #     -> google.client_id / google.client_secret / google.project_id
-        #     -> calendars.perso / calendars.epita / calendars.feries (IDs agendas)
-        #
-        # Apres `switch`, lancer une fois :  vdirsyncer discover && vdirsyncer sync
-        # Ensuite : Mod+c ouvre ikhal. La synchro tourne aussi via timer user.
+        # Setup OAuth (config vdirsyncer générée automatiquement par sops) :
+        # Google Cloud Console -> activer l'API CalDAV + créer un OAuth Client
+        # ID "Desktop application", puis `sops secrets/secrets.yaml` pour
+        # renseigner google.client_id/client_secret/project_id et
+        # calendars.perso/epita/feries. Après switch : vdirsyncer discover
+        # && vdirsyncer sync une fois, puis Mod+c ouvre ikhal.
       }
     ]
   );

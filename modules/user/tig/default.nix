@@ -18,11 +18,8 @@ in
     ];
 
     home.file.".tigrc".text = ''
-      # Couleurs héritées du TERMINAL (palette ANSI posée par stylix) au lieu
-      # d'indices 256 en dur : suivent le thème et la polarité sans double jeu
-      # dark/light à entretenir. cursor en vidéo inversée (lisible partout),
-      # titres en gris « commentaire » (ANSI 8 = base03, prévu pour les deux
-      # polarités par base16).
+      # Couleurs héritées du TERMINAL (palette ANSI posée par stylix), pas
+      # d'indices 256 en dur : suivent thème et polarité sans double jeu.
       color cursor                        default     default     reverse
       color title-focus                   8           default
       color title-blur                    8           default

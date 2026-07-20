@@ -1,15 +1,7 @@
 { config, lib, ... }:
 
-# WakaTime (suivi du temps de code) pour tous les editeurs. Comme gh/task-tui,
-# l'API key vit dans secrets/secrets.yaml et on GENERE ~/.wakatime.cfg via sops
-# (jamais en clair dans le repo ni le Nix store). Tous les plugins WakaTime
-# (vim, neovim, vscode) lisent ce meme fichier -> une seule source de verite.
-#
-# Les plugins WakaTime de nixpkgs sont patches pour utiliser le wakatime-cli du
-# store, donc aucun telechargement reseau a l'execution.
-#
-# L'activation des plugins cote editeurs est conditionnee a `wakatime.enable`
-# (cf. modules vim/neovim/vscode), pour ne pas tracer si le module est off.
+# API key dans secrets/secrets.yaml, ~/.wakatime.cfg généré via sops (jamais
+# en clair) : tous les plugins (vim, neovim, vscode) lisent ce même fichier.
 let
   cfg = config.userSettings.wakatime;
 in
@@ -43,8 +35,7 @@ in
       need = "a besoin du secret sops (API key)";
     };
 
-    # CLI sur le PATH (usage manuel : `wakatime-cli --today`). Les plugins
-    # nixpkgs embarquent deja leur propre chemin vers le cli du store.
+    # CLI sur le PATH (usage manuel : `wakatime-cli --today`).
     home.packages = [ cfg.pkgs.wakatime-cli ];
 
     sops.secrets.${cfg.apiKeySops} = { };

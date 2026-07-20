@@ -1,45 +1,30 @@
-# API du dossier des thèmes, partagée par modules/system/stylix,
-# modules/user/stylix et flake.nix :
-#   themes = import ../../themes lib inputs;
+# API des thèmes, partagée par modules/system/stylix, modules/user/stylix et
+# flake.nix : themes = import ../../themes lib inputs;
 #
-# Les schemes amont (tinted-theming/schemes) ne sont PAS vendorés : ils sont
-# lus depuis l'input `tinted-schemes`. schemes/ ne contient que les nôtres —
-# originaux, ou homonymes d'un thème amont dont on veut des couleurs
-# différentes (ex. dracula : palette officielle plutôt que l'adaptation
-# base16). Les parcourir avec un aperçu : commande `theme` sans argument.
+# Les schemes amont (tinted-theming/schemes) ne sont pas vendorés, lus depuis
+# l'input `tinted-schemes`. schemes/ ne contient que les nôtres (originaux,
+# ou homonymes d'un thème amont dont on veut des couleurs différentes).
 #
-# Résolution d'un nom vers son fichier (cf. pathByName) :
-#   1. schemes/<nom>.yaml — priorité absolue, masque l'amont.
-#   2. <tinted-schemes>/base16/<nom>.yaml
-#   3. <tinted-schemes>/base24/<nom>.yaml, sous <nom> si libre, sinon sous
-#      <nom>-base24 : 43 noms existent dans les deux specs avec des couleurs
-#      différentes, les deux doivent rester accessibles.
+# Résolution d'un nom (cf. pathByName) : schemes/<nom>.yaml en priorité
+# absolue, puis <tinted-schemes>/base16/<nom>.yaml, puis base24/<nom>.yaml
+# (suffixé -base24 si le nom est déjà pris en base16, 43 collisions upstream).
 #
-# NB : pas un module NixOS (fonction lib: inputs: ...) — ce dossier est hors
-# du périmètre de lib/import-all.nix, qui ne parcourt que modules/system et
-# modules/user.
+# NB : pas un module NixOS — hors du périmètre de lib/import-all.nix.
 lib: inputs: rec {
   localDir = ./schemes;
   upstream = inputs.tinted-schemes;
 
-  # Parse un scheme yaml en Nix pur, pour le passer à `stylix.base16Scheme`
-  # sous forme d'attrset — que mkSchemeAttrs accepte et prend tel quel.
-  #
-  # Le parseur de stylix (base16.nix/fromYaml, sans IFD) échoue sinon sur les
-  # commentaires en fin de ligne et les `description: |` multi-lignes : 4
-  # fichiers amont sur 495, qu'il fallait exclure de l'enum. Sa propre doc
-  # reconnaît la limite (« does weird things with some documents »).
-  #
-  # Le format amont est assez régulier pour qu'un `builtins.match` par ligne
-  # suffise — vérifié identique à PyYAML sur les 513 fichiers.
+  # Le parseur stylix (fromYaml, sans IFD) échoue sur les commentaires en fin
+  # de ligne et les `description: |` multi-lignes (4 fichiers amont sur 495).
+  # Format assez régulier pour qu'un `builtins.match` par ligne suffise —
+  # vérifié identique à PyYAML sur les 513 fichiers.
   parseScheme =
     name:
     let
       path = pathByName.${name};
       lines = lib.splitString "\n" (builtins.readFile path);
 
-      # `  base0A: "#ffbb08"  # yellow` -> [ "base0A" "ffbb08" ]
-      # Le # du hex et les guillemets sont optionnels : les deux formes existent.
+      # `  base0A: "#ffbb08"  # yellow` -> [ "base0A" "ffbb08" ] ; # et guillemets optionnels.
       colorMatch =
         l: builtins.match "[[:space:]]*(base[0-9A-Fa-f]{2}):[[:space:]]*\"?#?([0-9a-fA-F]{6})\"?.*" l;
 
@@ -69,8 +54,7 @@ lib: inputs: rec {
     lib.throwIf (colors == { }) "modules/themes : aucune couleur lue dans ${toString path}" (
       colors
       // {
-        # slug : nomme les fichiers générés par stylix (base16-<slug>.conf).
-        # Sans lui, tout s'appellerait « untitled ».
+        # Nomme les fichiers générés par stylix (base16-<slug>.conf).
         slug = name;
         scheme = if field "name" != null then field "name" else name;
       }
@@ -78,7 +62,7 @@ lib: inputs: rec {
       // lib.optionalAttrs (field "variant" != null) { variant = field "variant"; }
     );
 
-  # .yml toléré en plus de .yaml : l'amont contient un cyberpunk.yml.
+  # .yml toléré en plus de .yaml (cyberpunk.yml en amont).
   yamlNames =
     dir:
     builtins.filter (x: x != null) (
@@ -102,12 +86,10 @@ lib: inputs: rec {
   base16Names = yamlNames (upstream + "/base16");
   base24Names = yamlNames (upstream + "/base24");
 
-  # Noms déjà pris : un base24 homonyme est suffixé plutôt que d'en écraser
-  # un silencieusement.
+  # Un base24 homonyme est suffixé plutôt que d'écraser silencieusement.
   claimedNames = localNames ++ base16Names;
 
-  # Source unique des noms publics : `names` en dérive, et la galerie lit le
-  # même attrset — aucun nom n'est reconstruit par manipulation de chaîne.
+  # Source unique des noms publics, lue telle quelle par la galerie.
   pathByName =
     (lib.genAttrs localNames (n: yamlPath localDir n))
     // (lib.genAttrs (lib.subtractLists localNames base16Names) (n: yamlPath (upstream + "/base16") n))
@@ -120,15 +102,11 @@ lib: inputs: rec {
       ) base24Names
     ));
 
-  # Pour lib.types.enum : une typo dans un profil casse l'éval immédiatement.
-  names = builtins.attrNames pathByName;
+  names = builtins.attrNames pathByName; # pour lib.types.enum : typo -> éval cassée
 
-  # Repli sur "dark" : quelques schemes amont anciens ne déclarent pas
-  # `variant`, et c'est la valeur par défaut de la spec.
-  polarity = name: (parseScheme name).variant or "dark";
+  polarity = name: (parseScheme name).variant or "dark"; # défaut de la spec
 
-  # Écrit par la galerie. Purement indicatif : rien dans la config construite
-  # n'en dépend, donc changer un favori ne demande aucun rebuild.
+  # Écrit par la galerie ; purement indicatif, aucun rebuild au changement.
   favorites = builtins.fromJSON (builtins.readFile ./gallery/favorites.json);
 
   meta = import ./wallpapers.nix;
@@ -142,9 +120,8 @@ lib: inputs: rec {
     in
     w.path or (pkgs.fetchurl w);
 
-  # Bloc commun à poser dans `stylix = { ... }`.
-  #   wallpaper : surcharge explicite (profil/user) ; null = résolution
-  #               automatique, cf. `chosen`.
+  # Bloc commun à poser dans `stylix = { ... }`. wallpaper = surcharge
+  # explicite ; null = résolution automatique (cf. `chosen`).
   stylixSettings =
     {
       pkgs,
@@ -153,9 +130,8 @@ lib: inputs: rec {
     }:
     let
       themePolarity = polarity theme;
-      # Surcharge explicite > fond propre au thème > défaut de la polarité.
-      # Le dernier niveau garantit qu'aucun thème du catalogue ne se retrouve
-      # sans image, alors que themeWallpaper n'en couvre qu'une soixantaine.
+      # Surcharge explicite > fond du thème > défaut de la polarité (garantit
+      # une image même hors des ~60 thèmes couverts par themeWallpaper).
       chosen =
         if wallpaper != null then
           wallpaper

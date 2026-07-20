@@ -1,10 +1,8 @@
 { config, lib, ... }:
 
-# Python + uv disponibles PARTOUT (hors devshell) : scripts ponctuels,
-# `uv run script.py`, `uvx <outil>`, venvs ad hoc. Le devshell python
-# (devshells/python.nix) reste l'environnement de travail des projets
-# (mkvenv/mkkernel/lab, LD_LIBRARY_PATH pour les wheels compilés type
-# numpy/torch) — ici, uniquement le socle léger.
+# Socle léger, hors devshell (scripts ponctuels, uv run/uvx, venvs ad hoc).
+# Le devshell python (devshells/python.nix) reste l'environnement de travail
+# des projets (LD_LIBRARY_PATH pour les wheels compilés type numpy/torch).
 let
   cfg = config.userSettings.python;
 in
@@ -16,19 +14,13 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [
-      # Même interpréteur que le devshell python (python313) : les venvs créés
-      # dedans ou dehors pointent sur le même python → interchangeables.
+      # Même interpréteur que le devshell (python313) : venvs interchangeables.
       cfg.pkgs.python313
       cfg.pkgs.uv
     ];
 
-    # uv préfère par défaut SES interpréteurs téléchargés (python-build-
-    # standalone, binaires non-Nix qui ne tournent ici que grâce à nix-ld).
-    # "system" inverse la préférence : le python nix ci-dessus d'abord, et le
-    # téléchargement uv seulement en repli explicite quand on demande une
-    # version que nix ne fournit pas (ex. `uv venv --python 3.12`).
-    # Le cache (~/.cache/uv, défaut) est le même que celui du devshell :
-    # wheels et interpréteurs partagés, installs par hardlinks.
+    # uv préfère par défaut ses interpréteurs téléchargés (non-Nix, tournent
+    # via nix-ld) : "system" inverse la préférence vers le python nix ci-dessus.
     xdg.configFile."uv/uv.toml".text = ''
       python-preference = "system"
     '';

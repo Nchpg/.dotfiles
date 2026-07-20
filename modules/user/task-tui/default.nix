@@ -5,21 +5,15 @@ let
   py = cfg.pkgs.python3Packages;
   term = config.userSettings.terminal.default;
 
-  # tasks-tui hérite de la palette du terminal (curses) → thème Stylix
-  # automatique via kitty, comme bluetui pour le bluetooth-picker.
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;
     title = "tasks-tui";
     exec = "tasks-tui";
   };
 
-  # tasks-tui-app (huiiy/GTask) : TUI curses pour Google Tasks, publié sur PyPI.
-  # Pas dans nixpkgs, donc on le package ici via buildPythonApplication.
-  # Source de vérité : pyproject.toml setuptools, entry point
-  #   tasks-tui = tasks_tui.main:cli
-  # Dépendances : les libs Google + unicurses. NB : unicurses est importé par
-  # tasks_tui/main.py mais ABSENT du pyproject.toml upstream (bug d'empaquetage),
-  # on le rajoute donc à la main sinon l'app crash au démarrage.
+  # Publié sur PyPI, pas dans nixpkgs. unicurses est importé par
+  # tasks_tui/main.py mais ABSENT du pyproject.toml upstream (bug
+  # d'empaquetage) : rajouté à la main sinon l'app crash au démarrage.
   tasks-tui = py.buildPythonApplication rec {
     pname = "tasks-tui-app";
     version = "0.1.7";
@@ -34,10 +28,9 @@ let
 
     build-system = [ py.setuptools ];
 
-    # Unifier la sortie avec les autres TUIs : Esc quitte comme q. On ajoute
-    # le code touche 27 (Esc) à la condition de quit. On passe ainsi par le
-    # MÊME chemin propre que q (synchro vers Google AVANT de fermer), contrairement
-    # à une fermeture forcée de la fenêtre qui perdrait les modifs non synchronisées.
+    # Esc quitte comme q (code touche 27), même chemin propre (synchro
+    # Google avant fermeture) plutôt qu'une fermeture forcée qui perdrait
+    # les modifs non synchronisées.
     postPatch = ''
       substituteInPlace tasks_tui/main.py \
         --replace "[ord('q'), ord('Q')]" "[ord('q'), ord('Q'), 27]"
@@ -51,9 +44,7 @@ let
       python-dateutil # idem : importé (dateutil) mais absent du pyproject
     ];
 
-    # Le paquet n'embarque pas de tests. On importe tasks_tui.main pour valider
-    # toute la chaîne d'imports (dont unicurses) au build.
-    doCheck = false;
+    doCheck = false; # pas de tests amont
     pythonImportsCheck = [ "tasks_tui.main" ];
 
     meta = {
@@ -91,10 +82,8 @@ in
 
         home.packages = [ tasks-tui ];
 
-        # Secrets OAuth Google (les MEMES que vdirsyncer/calendar-tui : source de
-        # verite unique dans secrets/secrets.yaml sous `google:`). On ne stocke pas
-        # le client_secrets.json complet : on le GENERE a partir des sous-cles, pour
-        # eviter toute duplication des identifiants.
+        # Mêmes secrets OAuth que vdirsyncer/calendar-tui (source unique
+        # sous `google:`) : client_secrets.json généré depuis les sous-clés.
         sops.secrets."google/client_id" = { };
         sops.secrets."google/client_secret" = { };
         sops.secrets."google/project_id" = { };
@@ -112,15 +101,10 @@ in
             };
           };
         };
-        # L'app lit ce client_secrets.json, puis ecrit ~/.gtask/token.json au 1er
-        # lancement (flux navigateur) -- token runtime mutable, hors sops.
-        #
-        # Setup (une fois) : memes identifiants OAuth que calendar-tui, dans un projet
-        # Google Cloud ou l'API « Google Tasks » est aussi activee. Renseigner via
-        #   sops secrets/secrets.yaml   ->   google.client_id / client_secret / project_id
-        # puis `nixos-rebuild switch`, puis `tasks-tui` (1er lancement = navigateur).
-        #
-        # Raccourcis : j/k naviguer, o ajouter, c cocher, w sync, q quitter, ? aide.
+        # L'app écrit ~/.gtask/token.json au 1er lancement (flux navigateur),
+        # token runtime mutable, hors sops. Setup : mêmes identifiants OAuth
+        # que calendar-tui, projet Google Cloud avec l'API "Google Tasks"
+        # activée, via `sops secrets/secrets.yaml`.
       }
     ]
   );

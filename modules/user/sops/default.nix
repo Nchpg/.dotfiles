@@ -5,23 +5,15 @@
   ...
 }:
 
-# Configuration globale sops-nix cote home-manager. Les secrets individuels
-# (et templates) sont declares dans les modules qui les consomment
-# (calendar-tui, task-tui), pour rester cohesifs et ne se deployer que quand
-# le module est active.
-#
-# Le detenteur de la cle est declare par le profil (systemSettings.sops.keyOwner,
-# cf. modules/system/sops). Cle de dechiffrement : ~/.config/sops/age/keys.txt
-# chez ce user, derivee une fois de sa cle SSH ed25519 via :
-#   ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ~/.config/sops/age/keys.txt
-#
-# Editer les secrets :  sops secrets/secrets.yaml   (depuis la racine du repo)
+# Config globale sops-nix ; secrets/templates individuels déclarés dans les
+# modules qui les consomment (calendar-tui, task-tui).
+# Clé de déchiffrement : ~/.config/sops/age/keys.txt, dérivée une fois de la
+# clé SSH via `ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ...`.
+# Éditer les secrets : sops secrets/secrets.yaml (depuis la racine du repo).
 let
   keyOwner = osConfig.systemSettings.sops.keyOwner;
 
-  # Ce user a-t-il accès aux secrets ? Il faut qu'il puisse lire la clé age :
-  # le keyOwner (à qui elle appartient) ou root (qui outrepasse les
-  # permissions). Les autres (guest) n'y ont pas accès.
+  # Peut lire la clé age : le keyOwner ou root (outrepasse les permissions).
   hasSopsAccess = config.userSettings.user == keyOwner || config.userSettings.user == "root";
 in
 {
@@ -41,10 +33,7 @@ in
   config = {
     userSettings.sops.available = hasSopsAccess;
 
-    # Outils pour editer les secrets et enroler de nouvelles machines. Seulement
-    # pour le detenteur de la cle : les autres users n'editent pas les secrets.
-    # defaultPkgs (et pas l'instance globale `pkgs`) : même source que les
-    # autres modules user.
+    # Seulement pour le détenteur de la clé.
     home.packages = lib.mkIf (config.userSettings.user == keyOwner) (
       with config.userSettings.defaultPkgs;
       [
@@ -54,22 +43,16 @@ in
       ]
     );
 
-    # Seulement pour le keyOwner et root : les autres users (guest) ne peuvent
-    # pas lire la cle, donc tout secret declare chez eux echouerait a
-    # l'activation avec une erreur obscure — autant ne pas leur poser de config
-    # sops du tout (l'erreur devient alors "no keyFile", explicite).
+    # Autres users (guest) : pas de config sops du tout, sinon erreur obscure
+    # à l'activation plutôt qu'un "no keyFile" explicite.
     sops = lib.mkIf hasSopsAccess {
       defaultSopsFile = ../../../secrets/secrets.yaml;
       defaultSopsFormat = "yaml";
 
       age = {
-        # Cle age unique = celle du keyOwner. root la reutilise : il peut lire ce
-        # fichier (root outrepasse les permissions) et de toute facon root peut
-        # deja tout dechiffrer sur la machine -> aucune perte de securite, et pas
-        # de cle separee a maintenir pour root.
+        # root réutilise la clé du keyOwner : il peut déjà tout déchiffrer
+        # sur la machine, aucune perte de sécurité, pas de clé à part.
         keyFile = "/home/${keyOwner}/.config/sops/age/keys.txt";
-        # On utilise directement keys.txt (derivee de la cle SSH), pas de
-        # generation auto ni de derivation a l'activation.
         generateKey = false;
       };
     };

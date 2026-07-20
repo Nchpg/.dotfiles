@@ -1,36 +1,21 @@
 { config, lib, ... }:
 
-# Microsoft a abandonné le client Teams natif Linux. `teams-for-linux` est un
-# wrapper Electron non-officiel (libre, MIT) qui reste la meilleure option
-# desktop : tray, notifications et partage d'écran.
+# `teams-for-linux` (wrapper Electron non-officiel) : le switcher d'orga
+# Teams v2 tourne en boucle sur un tenant invité (erreur renderer "user:1
+# ... not authenticated"). Un accès invité n'est pas un compte séparé,
+# c'est ta propre identité invitée chez l'autre tenant : la parade est une
+# instance dédiée (`profiles`) avec son propre --user-data-dir et une URL
+# deep-link ?tenantId=<GUID> qui charge Teams direct dans ce tenant.
 #
-# Particularités gérées ici :
-#   1. Electron => rendu Wayland natif + partage d'écran (portail PipeWire)
-#      dépendent de flags passés au lancement (cf. `extraArgs`).
-#   2. Le client Teams v2 n'arrive PAS à basculer vers un tenant invité dans
-#      Electron (switcher d'orga qui tourne en boucle, erreur renderer
-#      `user:1 ... not authenticated`). Un accès invité n'est PAS un compte
-#      séparé : c'est ta propre identité (ex. EPITA) invitée chez l'autre
-#      tenant. La parade fiable = une instance dédiée (`profiles`) avec son
-#      propre `--user-data-dir` ET une URL deep-link `?tenantId=<GUID>` qui
-#      charge Teams direct dans le contexte du tenant invité, sans switcher.
-#
-# On n'expose PAS le binaire amont `teams-for-linux` : on fournit des wrappers
-# nommés `teams` (instance par défaut) et `teams-<nom>` (instances dédiées),
-# avec une icône custom (cf. teams.svg). Le binaire amont reste dans la closure
-# mais hors PATH/menu.
+# Binaire amont hors PATH/menu : wrappers `teams` (défaut) et `teams-<nom>`
+# (profils) avec icône custom.
 let
   cfg = config.userSettings.teams;
 
   baseBin = "${cfg.pkgs.teams-for-linux}/bin/teams-for-linux";
   argsStr = lib.concatMapStringsSep " " lib.escapeShellArg cfg.extraArgs;
 
-  # Icône du tray (--appIcon) : la défaut de teams-for-linux est moche, on
-  # réutilise la vraie icône Teams (teams.png) déjà embarquée dans le module.
-  trayIcon = "${./teams.png}";
-
-  # config.json de teams-for-linux (lu depuis le --user-data-dir de chaque
-  # instance). Généré depuis cfg.settings, déployé dans chaque dossier.
+  trayIcon = "${./teams.png}"; # défaut teams-for-linux moche
   jsonFormat = cfg.pkgs.formats.json { };
   configFile = jsonFormat.generate "teams-for-linux-config.json" cfg.settings;
 
@@ -44,9 +29,6 @@ let
     else
       null;
 
-  # Instance principale : commande `teams`, session par défaut
-  # (~/.config/teams-for-linux, gérée par l'app amont). --appTitle distingue le
-  # tooltip du tray / le titre de fenêtre quand plusieurs instances tournent.
   mainCmd = cfg.pkgs.writeShellScriptBin "teams" ''
     exec ${baseBin} \
       --class=teams \
@@ -55,8 +37,7 @@ let
       ${argsStr} "$@"
   '';
 
-  # Une commande `teams-<nom>` par profil : session isolée + deep-link tenant.
-  # NB : le --user-data-dir garde le nom "teams-for-linux-<nom>" pour ne pas
+  # --user-data-dir garde le nom "teams-for-linux-<nom>" pour ne pas
   # invalider une session déjà connectée (le nom de l'exe seul change).
   mkProfile =
     name: p:
@@ -110,10 +91,8 @@ in
         type = lib.types.listOf lib.types.str;
         default = [
           "--ozone-platform-hint=auto"
-          # WaylandWindowDecorations : rendu Wayland natif sous Sway (sinon flou
-          # / XWayland). WebRTCPipeWireCapturer : partage d'écran via le portail
-          # PipeWire — sans lui teams-for-linux avertit au démarrage que le
-          # partage d'écran Wayland risque de ne pas fonctionner.
+          # WaylandWindowDecorations : rendu natif (sinon flou/XWayland).
+          # WebRTCPipeWireCapturer : partage d'écran via le portail PipeWire.
           "--enable-features=WaylandWindowDecorations,WebRTCPipeWireCapturer"
         ];
         description = ''
@@ -125,9 +104,7 @@ in
       settings = lib.mkOption {
         inherit (jsonFormat) type;
         default = {
-          # Désactive la fenêtre d'aperçu (« thumbnail ») de partage d'écran,
-          # toujours-au-dessus, qui s'ouvre en grand et fait un effet miroir
-          # quand on partage l'écran qu'on regarde.
+          # Sinon effet miroir quand on partage l'écran qu'on regarde.
           screenSharing.thumbnail.enabled = false;
         };
         example = {
@@ -194,13 +171,9 @@ in
     home.packages = [ mainCmd ] ++ lib.mapAttrsToList mkProfile cfg.profiles;
 
     home.file = {
-      # Icône officielle Teams (512px) dans le thème d'icônes utilisateur,
-      # référencée par `icon = "teams"` dans les entrées de menu.
       ".local/share/icons/hicolor/512x512/apps/teams.png".source = ./teams.png;
-      # config.json de l'instance principale.
       ".config/teams-for-linux/config.json".source = configFile;
     }
-    # config.json de chaque instance dédiée (même --user-data-dir).
     // lib.mapAttrs' (
       name: _: lib.nameValuePair ".config/teams-for-linux-${name}/config.json" { source = configFile; }
     ) cfg.profiles;

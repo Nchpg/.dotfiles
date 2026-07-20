@@ -1,9 +1,6 @@
 # Devshell Python minimal : python nix + uv, aucun paquet figé. Chaque projet
-# a son .venv uv ; wheels et interpréteurs sont téléchargés une fois puis
-# hardlinkés depuis le cache partagé ~/.cache/uv. Les outils (mkvenv,
-# mkkernel, …) sont de vrais scripts dans python/.
-#
-# Exposé en fonction pour être étendu par d'autres devshells — voir xpu.nix.
+# a son .venv uv, wheels/interpréteurs hardlinkés depuis ~/.cache/uv partagé.
+# Exposé en fonction pour être étendu par d'autres devshells (cf. xpu.nix).
 {
   pkgs,
   name ? "python-dev",
@@ -25,21 +22,16 @@ let
       text = builtins.readFile source;
     };
 
-  # Complétion tab des noms de kernels. bash la découvre via XDG_DATA_DIRS ;
-  # le fish nixpkgs (patché pour ignorer XDG_DATA_DIRS) et zsh passent par les
-  # variables NIX_DEVSHELL_{FISH,ZSH}_COMPLETIONS, consommées par
-  # modules/user/shell/{fish/.fish,zsh/.zshrc}.
-  # NB : fish autoloade par nom de commande → fichier nommé <commande>.fish.
+  # bash découvre via XDG_DATA_DIRS ; fish (patché pour l'ignorer) et zsh
+  # passent par NIX_DEVSHELL_{FISH,ZSH}_COMPLETIONS (shell/{fish,zsh}).
   fishCompletions = completion "/share/fish/vendor_completions.d/rmkernel.fish" ./python/completions/rmkernel.fish;
   bashCompletions = completion "/share/bash-completion/completions/rmkernel" ./python/completions/rmkernel.bash;
   zshCompletions = completion "/share/zsh/site-functions/_rmkernel" ./python/completions/_rmkernel;
 
-  # Libs que la plupart des wheels compilés (numpy, torch, …) dlopen à l'import.
-  # PAS de glibc ici : mettre une glibc dans LD_LIBRARY_PATH fait charger sa
-  # libc à tout binaire lancé dans le shell, y compris ceux linkés contre une
-  # AUTRE glibc (ld.so ≠ libc → segfault possible dès que stable et unstable
-  # divergent — xpu.nix instancie ce shell en unstable). Les wheels manylinux
-  # trouvent leur libc via le loader système/nix-ld.
+  # Dlopen par les wheels compilés (numpy, torch...) à l'import. PAS de glibc
+  # ici : ça ferait charger sa libc à tout binaire du shell, y compris ceux
+  # linkés contre une AUTRE glibc (segfault possible, xpu.nix instancie ce
+  # shell en unstable). Les wheels manylinux trouvent leur libc via nix-ld.
   commonLibs = [
     pkgs.stdenv.cc.cc.lib
     pkgs.zlib
@@ -72,7 +64,6 @@ pkgs.mkShell {
   );
 
   shellHook = ''
-    # Cache uv partagé entre devshells/projets, hardlinks vers les .venv.
     export UV_CACHE_DIR="''${UV_CACHE_DIR:-$HOME/.cache/uv}"
     export UV_LINK_MODE="''${UV_LINK_MODE:-hardlink}"
 
@@ -89,9 +80,7 @@ pkgs.mkShell {
   ''
   + extraShellHook;
 
-  # Variables d'environnement additionnelles (xpu : ZE_ENABLE_ALT_DRIVERS…).
-  # Via `env` (attribut dédié de mkShell) et non un `//` sur l'attrset :
-  # un extraEnv.packages ou .shellHook ne peut plus écraser silencieusement
-  # les attributs ci-dessus.
+  # Via `env` (pas un `//` sur l'attrset) : extraEnv.packages/.shellHook ne
+  # peut plus écraser silencieusement les attributs ci-dessus.
   env = extraEnv;
 }

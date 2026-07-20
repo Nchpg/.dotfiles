@@ -1,20 +1,10 @@
 { pkgs-stable, target, ... }:
 
 {
-  # Commande `rebuild` : enrobe le script ./rebuild.sh du dépôt.
-  # Profil, host et variante par défaut sont ceux de la config qui a construit
-  # ce système (specialArg `target`, injectés à la génération du script — plus
-  # robuste que de parser le hostname, qui casse si un profil contient un
-  # tiret). La variante par défaut = celle du système courant : un `rebuild`
-  # seul reste donc en dark ou light, c'est ce qui rend le thème persistant
-  # sans aucun fichier d'état (cf. modules/system/stylix, commande `theme`).
-  #   rebuild                  → ./rebuild.sh --profile personal --host gram --variant <courante>
-  #   rebuild -p work          → idem avec --profile work
-  #   rebuild -H portable      → idem avec --host portable
-  #   rebuild -V light         → idem avec --variant light (utilisé par `theme`)
-  #   rebuild -u               → idem + bump de l'input claude-code avant build
-  #   rebuild -y               → pas de confirmation si le working tree est sale
-  # rebuild.sh garde toute sa logique (check git + confirmation, swaymsg reload).
+  # Enrobe ./rebuild.sh. Profil/host/variante par défaut = ceux de la config
+  # qui a construit ce système (specialArg `target`, plus robuste que parser
+  # le hostname). Variante par défaut = celle du système courant : `rebuild`
+  # seul reste dans la même dark/light, sans fichier d'état (cf. `theme`).
   environment.systemPackages = [
     # Diff des paquets entre générations, affiché par rebuild.sh après le switch.
     pkgs-stable.nvd

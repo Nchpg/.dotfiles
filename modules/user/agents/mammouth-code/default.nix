@@ -8,13 +8,11 @@
 let
   cfg = config.userSettings.agents.mammouthCode;
 
-  # Charge la version + le hash épinglés automatiquement par update.sh
+  # Version + hash épinglés automatiquement par update.sh
   pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
 
-  # Binaire précompilé (fork d'OpenCode) distribué en release GitHub, pas en
-  # paquet npm ni nixpkgs (cf. update.sh) : `fetchurl` + hash vérifié par Nix
-  # (FOD), `autoPatchelfHook` pour patcher l'interpréteur ELF vers le glibc de
-  # nixpkgs (le binaire upstream cible un Linux générique, pas NixOS).
+  # Binaire précompilé (fork d'OpenCode) en release GitHub, pas npm/nixpkgs :
+  # autoPatchelfHook patche l'interpréteur ELF vers le glibc de nixpkgs.
   mammouth-code = cfg.pkgs.stdenv.mkDerivation {
     pname = "mammouth-code";
     version = pinned.version;
@@ -26,11 +24,9 @@ let
 
     nativeBuildInputs = [ cfg.pkgs.autoPatchelfHook ];
     dontBuild = true;
-    # Le binaire est un exécutable Bun single-file : le JS de l'app est ajouté
-    # en trailer après le binaire `bun` lui-même. Le strip par défaut de Nix
-    # arrache ce trailer, ne laissant que le runtime `bun` nu (constaté : mammouth
-    # affichait le CLI générique de Bun au lieu de l'app). Même fix que
-    # claude-code-nix pour son propre binaire SEA.
+    # Exécutable Bun single-file : le JS de l'app est un trailer après le
+    # binaire bun. Le strip par défaut l'arrache (mammouth affichait le CLI
+    # générique de Bun au lieu de l'app).
     dontStrip = true;
 
     installPhase = ''
@@ -51,7 +47,6 @@ in
 {
   options.userSettings.agents.mammouthCode = {
     enable = lib.mkEnableOption "Mammouth Code CLI";
-    # Défaut sur unstable, comme les autres agents IA de ce dossier.
     pkgs = import ../../../../lib/mk-pkgs-option.nix {
       inherit lib config;
       default = pkgs-unstable;

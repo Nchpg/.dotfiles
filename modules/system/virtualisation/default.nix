@@ -5,9 +5,7 @@
   ...
 }:
 
-# Docker et libvirt (KVM/QEMU), activables séparément par profil.
-# L'accès des users est géré à part : options allowDocker / allowLibvirt
-# dans modules/system/users (groupes docker / libvirtd, quasi root-équivalents).
+# Accès users géré à part : allowDocker/allowLibvirt dans modules/system/users.
 let
   cfg = config.systemSettings.virtualisation;
 in

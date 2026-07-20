@@ -5,22 +5,16 @@
   ...
 }:
 
-# nix-locate, comma et les suggestions command-not-found, via la base
-# hebdomadaire pré-construite de nix-index-database (module HM importé dans
-# profiles/default.nix). Remplace le command-not-found des channels, coupés
-# dans modules/system/configuration.nix (nix.channel.enable = false).
+# Remplace le command-not-found des channels, coupés dans
+# modules/system/configuration.nix (nix.channel.enable = false).
 let
   cfg = config.userSettings.nixIndex;
 
-  # Handler command-not-found maison, partagé par les trois shells. On ne
-  # propose que `nix-shell -p <paquet>` : le pavé `nix profile install` du
-  # script upstream n'est jamais utilisé ici (tout paquet permanent passe par
-  # la config). nix-shell -p marche sans channels : nix.channel.enable = false
-  # pose NIX_PATH=nixpkgs=flake:nixpkgs (résolu via le flake registry).
+  # Ne propose que `nix-shell -p <paquet>` (pas `nix profile install`, jamais
+  # utilisé ici). Marche sans channels : NIX_PATH=nixpkgs=flake:nixpkgs.
   cnfScript = pkgs.writeShellScript "command-not-found-suggest" ''
     cmd=$1
-    # Recherche uniquement sur un vrai terminal : pas de latence nix-locate
-    # dans les scripts/pipes (même garde que le script upstream).
+    # Vrai terminal seulement : pas de latence nix-locate dans les scripts/pipes.
     if [ ! -t 2 ]; then
       echo "$cmd: command not found" >&2
       exit 127
@@ -52,20 +46,15 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Installe nix-index (base pré-construite incluse) : `nix-locate bin/foo`
-    # → quel paquet fournit ce fichier. Les intégrations shell upstream sont
-    # coupées au profit du handler maison (cnfScript ci-dessus).
+    # Intégrations shell upstream coupées au profit de cnfScript ci-dessous.
     programs.nix-index = {
       enable = true;
       enableBashIntegration = false;
       enableZshIntegration = false;
       enableFishIntegration = false;
     };
-    # `, cmd args` : exécute un programme une fois, sans l'installer.
     programs.nix-index-database.comma.enable = true;
 
-    # Hooks command-not-found des trois shells → cnfScript. Chaque shell a son
-    # nom de fonction ; sans effet sur les shells non activés par le user.
     programs.bash.initExtra = ''
       command_not_found_handle() {
         ${cnfScript} "$@"

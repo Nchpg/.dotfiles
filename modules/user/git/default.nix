@@ -41,21 +41,16 @@ in
 
         home.packages = with cfg.pkgs; [
           git-graph
-          # delta est référencé plus bas par core.pager et interactive.diffFilter :
-          # il se trouvait uniquement dans shell/default.nix, donc ce module
-          # cassait dès qu'il était activé sans le module shell.
-          delta
+          delta # référencé par core.pager/diffFilter, module autonome de shell
         ];
 
         programs.git = {
           enable = true;
           package = cfg.pkgs.git;
-          # HM 26.05 : aliases/extraConfig/userName/userEmail fusionnés dans `settings`
-          # (freeform → sections gitconfig). user.* n'accepte plus null → on ne les
-          # définit que s'ils sont renseignés (profils guest/root les laissent vides).
+          # HM 26.05 : user.* n'accepte plus null -> défini seulement si renseigné
+          # (profils guest/root le laissent vide).
           settings = {
             user.name = lib.mkIf (cfg.userName != null) cfg.userName;
-            # L'email littéral n'est posé que si on NE passe PAS par sops.
             user.email = lib.mkIf (cfg.userEmail != null && cfg.userEmailSops == null) cfg.userEmail;
 
             alias = {
@@ -63,10 +58,8 @@ in
               co = "checkout";
               br = "branch";
               ci = "commit";
-              # Le motif était `*--format*|*-f*` : `*-f*` attrapait aussi
-              # --first-parent, --follow, une branche « wip-fix » ou un fichier
-              # « mon-fichier.c », et abandonnait alors le format enrichi sans
-              # rien dire. On ne matche plus `-f` qu'en argument exact.
+              # `-f` ne matche qu'en argument exact : le motif `*-f*` attrapait
+              # aussi --first-parent, --follow, ou un fichier "mon-fichier.c".
               lg = "!f() { case \"$*\" in *--format*|*\" -f \"*|-f|\"-f \"*|*\" -f\") git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
             };
 
@@ -79,11 +72,7 @@ in
               navigate = true;
               side-by-side = true;
               line-numbers = true;
-              # Thème intégré qui colore avec les 16 couleurs ANSI du terminal
-              # → suit le thème stylix actif, dark comme light. L'ancien
-              # "base16-stylix" (tmTheme généré par le target stylix de bat)
-              # n'existe plus depuis que ce target est coupé (modules/user/bat) ;
-              # il ne survivait que via le cache ~/.cache/bat.
+              # Colore avec les 16 ANSI du terminal -> suit le thème stylix actif.
               syntax-theme = "base16";
               diff-stat = true;
               hunk-header-style = "syntax bold";
@@ -95,8 +84,8 @@ in
         };
       }
 
-      # Email git via sops : on génère un fragment gitconfig `[user] email = …` et on
-      # l'inclut. Le vrai email n'apparaît ni dans le repo ni dans le Nix store.
+      # Fragment gitconfig généré via sops : l'email n'apparaît ni dans le
+      # repo ni dans le store.
       (lib.mkIf (cfg.userEmailSops != null) {
         assertions = import ../../../lib/assert-sops-available.nix {
           inherit config;

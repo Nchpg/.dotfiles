@@ -8,14 +8,13 @@
 let
   cfg = config.systemSettings.lgLaptop;
 
-  # Attribut du driver LG qu'on veut rendre modifiable sans root (via le TUI).
-  # La limite batterie n'y est pas : elle est gérée par un service systemd (cf. plus bas).
+  # Modifiable sans root via le TUI ; la limite batterie est gérée à part par
+  # un service systemd (cf. plus bas).
   attrs = "/sys/devices/platform/lg-laptop/fan_mode";
   inherit (pkgs-stable) coreutils;
 
-  # Attribut vendeur LG du seuil de charge. On l'utilise (plutôt que l'interface
-  # standard charge_control_end_threshold, qui le reflète) parce que c'est celui
-  # dont on a vérifié qu'il est inscriptible et effectif sur cette machine.
+  # Attribut vendeur LG (pas charge_control_end_threshold, qui le reflète
+  # seulement) : vérifié inscriptible et effectif sur cette machine.
   threshold = "/sys/devices/platform/lg-laptop/battery_care_limit";
   inherit (pkgs-stable) bash;
 in
@@ -48,15 +47,12 @@ in
       ACTION=="add", SUBSYSTEM=="platform", KERNEL=="lg-laptop", RUN+="${coreutils}/bin/chgrp wheel ${attrs}", RUN+="${coreutils}/bin/chmod g+w ${attrs}"
     '';
 
-    # Limite de charge batterie : les valeurs sysfs LG ne persistent pas au reboot.
-    # Un service oneshot la réécrit quand le système est prêt (plus fiable qu'une
-    # règle udev qui s'exécute trop tôt dans le boot, quand l'EC n'est pas prêt).
+    # Les valeurs sysfs LG ne persistent pas au reboot : réécrites par un
+    # oneshot (plus fiable qu'une règle udev, trop tôt pour l'EC).
     systemd.services.lg-battery-care-limit = lib.mkIf (cfg.batteryCareLimit != null) {
       description = "Applique la limite de charge batterie LG";
       wantedBy = [ "multi-user.target" ];
-      # Si le driver lg-laptop n'est pas chargé, on skip proprement au lieu
-      # d'avoir une unit `failed` au boot.
-      unitConfig.ConditionPathExists = threshold;
+      unitConfig.ConditionPathExists = threshold; # driver non chargé -> skip propre
       serviceConfig = {
         Type = "oneshot";
         RemainAfterExit = true;

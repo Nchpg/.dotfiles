@@ -4,26 +4,13 @@ let
   cfg = config.userSettings.displays;
   inherit (cfg) pkgs;
 
-  # Wrapper qui SHADOW le binaire `nwg-displays`. Toute invocation — terminal,
-  # rofi/.desktop, $mod+o, n'importe quoi — passe par cette logique unique, et
-  # appelle le VRAI binaire par son chemin du store (pas de récursion). Sans ce
-  # wrapper, lancer nwg-displays autrement que par notre script laissait la
-  # fenêtre coincée hors-écran (cf. point 2 ci-dessous).
-  #
-  # Dimensionnement de nwg-displays (appli GTK). Deux pièges :
-  #
-  #  1. nwg-displays se redimensionne lui-même ~0,5 s APRÈS l'ouverture (reflow
-  #     GTK async qui repousse la hauteur à celle de l'écran). Un `resize set`
-  #     appliqué trop tôt se fait écraser → on attend que la taille se STABILISE
-  #     (deux mesures identiques) avant de forcer 1250x800.
-  #
-  #  2. Pendant ce reflow, le saut de taille est VISIBLE. La parade : la fenêtre
-  #     naît hors-écran (move position en for_window, voir conf.d → invisible,
-  #     bordure comprise) ; elle y fait tout son reflow, et on ne la ramène au
-  #     centre qu'une fois posée. C'est ce wrapper — et lui seul — qui fait ce
-  #     "ramène au centre", d'où la nécessité que tout passe par lui.
-  # Dépendances épinglées en tête de PATH (même pattern que les scripts
-  # waybar) : le wrapper ne dépend plus du PATH ambiant pour swaymsg/jq/grep.
+  # Wrapper qui SHADOW `nwg-displays` (toute invocation y passe, appelle le
+  # vrai binaire par chemin store). Deux pièges GTK à contourner :
+  #  1. nwg-displays se redimensionne lui-même ~0,5s APRÈS l'ouverture (reflow
+  #     async) : on attend que la taille se STABILISE avant de forcer 1250x800.
+  #  2. Le saut de taille pendant ce reflow est visible : la fenêtre naît
+  #     hors-écran (cf. conf.d), fait son reflow là, et ce wrapper la ramène
+  #     au centre une fois posée — d'où la nécessité que tout passe par lui.
   scriptPath = lib.makeBinPath [
     pkgs.sway # swaymsg, swaynag
     pkgs.jq
@@ -35,15 +22,14 @@ let
   nwg-displays-wrapped = pkgs.writeShellScriptBin "nwg-displays" ''
     export PATH="${scriptPath}:$PATH"
 
-    # Déjà ouvert ? on ferme. Sinon on ouvre. ($mod+o sert d'ouvre/ferme.)
+    # Toggle ouvre/ferme.
     if swaymsg -t get_tree | grep -q '"nwg-displays"'; then
       exec swaymsg '[app_id="nwg-displays"] kill'
     fi
 
-    # Écran actuellement focus, mémorisé AVANT de lancer nwg-displays (qui vole le
-    # focus). Le masquage hors-écran rattache la fenêtre à l'écran le plus proche
-    # du point (souvent le secondaire) → on la renvoie ensuite explicitement sur
-    # cet écran, sinon `move position center` la centrerait sur le mauvais.
+    # Focus mémorisé AVANT le vol de focus par nwg-displays : le masquage
+    # hors-écran rattache la fenêtre à l'écran le plus proche (souvent le
+    # secondaire), donc on la renvoie explicitement sur l'écran focus.
     out="$(swaymsg -t get_outputs | jq -r '.[] | select(.focused).name')"
 
     ${pkgs.nwg-displays}/bin/nwg-displays >/dev/null 2>&1 &
@@ -54,9 +40,8 @@ let
         | jq -r '.. | objects | select(.app_id? == "nwg-displays").rect | "\(.width)x\(.height)"'
     }
 
-    # Attendre que la taille soit posée ET stable (le reflow GTK est passé).
-    # Bornée à 10 s (40 x 0,25 s) : si nwg-displays ne s'ouvre jamais (crash,
-    # dépendance GTK cassée), on prévient au lieu de bloquer indéfiniment.
+    # Bornée à 10s (40 x 0,25s) : si nwg-displays crashe, on prévient au lieu
+    # de bloquer indéfiniment.
     prev=""
     cur="$(geo)"
     tries=0
@@ -71,8 +56,6 @@ let
       cur="$(geo)"
     done
 
-    # Sur l'écran focus, taille finale, centré, visible, focus, ET on entre dans
-    # le mode "displays" (cf. conf.d) qui active la touche q pour fermer.
     exec swaymsg "[app_id=\"nwg-displays\"] move container to output \"$out\", resize set 1250 800, move position center, focus; mode \"displays\""
   '';
 in
@@ -83,15 +66,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # nwg-displays : interface graphique d'agencement des écrans (position en
-    # drag & drop, résolution, taux de rafraîchissement, scale, rotation).
-    # wlr-randr est le backend qu'il interroge sous wlroots/Sway pour lire et
-    # appliquer l'état des sorties.
-    #
-    # On installe le VRAI paquet (pour son .desktop, son icône et le binaire
-    # réel appelé par le wrapper) ET le wrapper en hiPrio : les deux fournissent
-    # bin/nwg-displays, hiPrio fait gagner le wrapper sur cette collision, le
-    # reste du paquet (share/applications, share/icons) est conservé.
+    # Vrai paquet (pour .desktop/icône/binaire appelé par le wrapper) ET le
+    # wrapper en hiPrio : les deux fournissent bin/nwg-displays, hiPrio fait
+    # gagner le wrapper.
     home.packages = [
       (lib.hiPrio nwg-displays-wrapped)
       pkgs.nwg-displays
@@ -100,28 +77,17 @@ in
       pkgs.jq # parse la sortie JSON de swaymsg (wrapper + script clonage)
     ];
 
-    # nwg-displays sauvegarde l'agencement dans ~/.config/sway/outputs. On
-    # l'inclut ici pour que Sway l'applique au démarrage ET au branchement à
-    # chaud d'un écran (Sway réévalue les directives `output` quand une sortie
-    # apparaît → l'HDMI se positionne tout seul une fois sauvegardé).
-    #
-    # NB : on ne gère PAS ce fichier en déclaratif (un home.file en ferait un
-    # symlink read-only, et nwg-displays ne pourrait plus l'écrire). Sway ignore
-    # simplement l'include tant que tu n'as pas fait une première sauvegarde
-    # depuis la GUI.
+    # ~/.config/sway/outputs (sauvegardé par nwg-displays) inclus pour que
+    # Sway l'applique au démarrage et au branchement à chaud. Pas en
+    # déclaratif : un home.file en ferait un symlink read-only, or
+    # nwg-displays doit pouvoir l'écrire.
 
-    # Clonage d'écran (toggle). Sway n'a pas de "mirror" natif : on recopie
-    # l'écran interne (eDP) sur l'écran externe via wl-mirror, en plein écran sur
-    # ce dernier. Re-appuyer coupe le miroir → retour en mode étendu.
     home.file.".config/sway/launchers/mirror" = {
       text = ''
         #!/bin/sh
-        # Dépendances épinglées (cf. scriptPath) : pas de dépendance au PATH
-        # ambiant. wl-mirror vient de home.packages mais on le résout aussi
-        # par chemin store, même robustesse.
         export PATH="${scriptPath}:${pkgs.wl-mirror}/bin:$PATH"
 
-        # Un miroir tourne déjà ? on l'arrête (toggle).
+        # Toggle : arrête le miroir s'il tourne déjà.
         if pkill -x wl-mirror; then
           exit 0
         fi
@@ -136,8 +102,6 @@ in
           exit 1
         fi
 
-        # wl-mirror recopie $internal (positionnel) et se met en plein écran sur
-        # $external (--fullscreen-output, qui implique --fullscreen).
         exec wl-mirror --fullscreen-output "$external" "$internal"
       '';
       executable = true;
@@ -146,25 +110,14 @@ in
     home.file.".config/sway/conf.d/displays.conf".text = ''
       include ~/.config/sway/outputs
 
-      # Flottant + bordure fine. On la fait NAÎTRE hors-écran (move position très
-      # au-delà des sorties) : elle y fait son reflow GTK initial sans qu'on voie
-      # le saut de taille. Le wrapper applique 1250x800 puis la ramène au centre
-      # une fois posée (voir wrapper plus haut).
+      # Naît hors-écran pour le reflow GTK initial (cf. wrapper plus haut).
       for_window [app_id="nwg-displays"] floating enable, border pixel 2, move position 100000 100000
 
-      # $mod+o ("o" comme output ; $mod+p est pris par volume-mixer) : ouvre /
-      # ferme nwg-displays (le wrapper entre dans le mode "displays" ci-dessous).
       bindsym $mod+o exec nwg-displays
-
-      # $mod+Shift+o : (dé)clone l'écran interne sur l'écran externe.
       bindsym $mod+Shift+o exec ~/.config/sway/launchers/mirror
 
-      # Mode actif UNIQUEMENT tant que nwg-displays est ouvert (le wrapper y
-      # entre, voir plus haut). La fenêtre n'a pas de barre de titre → ses seules
-      # voies de fermeture passent par ce mode, donc on ressort toujours en
-      # "default" : pas de mode coincé.
-      #   q / Échap : ferment la fenêtre.
-      #   $mod+o    : re-câblé pour fermer aussi (sinon le toggle serait inerte).
+      # Actif tant que nwg-displays est ouvert (fenêtre sans barre de titre :
+      # ces trois binds sont ses seules voies de fermeture).
       mode "displays" {
         bindsym q [app_id="nwg-displays"] kill; mode default
         bindsym Escape [app_id="nwg-displays"] kill; mode default

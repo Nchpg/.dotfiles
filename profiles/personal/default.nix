@@ -5,13 +5,8 @@
     systemSettings = {
       stylix = {
         enable = true;
-        # Pas de `variant` ici : la variante dark/light est portée par la
-        # CIBLE du flake (personal-gram vs personal-gram-light) — bascule via
-        # la commande `theme`, sans modifier la config.
-        # Thèmes explicites au niveau profil (couche d'intention) : on voit ici
-        # quel thème est actif sans aller lire le défaut du module. Le module
-        # garde les mêmes valeurs par défaut, en repli pour un profil qui ne les
-        # préciserait pas.
+        # Pas de `variant` ici : portée par la CIBLE du flake (personal-gram
+        # vs personal-gram-light), bascule via `theme` sans modifier la config.
         darkTheme = "gruvbox-dark-custom";
         lightTheme = "gruvbox-light";
       };
@@ -41,8 +36,7 @@
       };
 
       swap = {
-        # Pas de swap disque sur gram : zram (rapide, sans usure SSD) + earlyoom
-        # (kill anticipé et ciblé plutôt qu'un freeze puis un OOM noyau aveugle).
+        # Pas de swap disque sur gram : zram + earlyoom.
         zram.enable = true;
         earlyoom.enable = true;
       };

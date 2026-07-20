@@ -9,8 +9,7 @@
 let
   cfg = config.userSettings.stylix;
 
-  # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
-  # modules/system/stylix, cf. modules/themes/default.nix.
+  # Partagée avec modules/system/stylix, cf. modules/themes/default.nix.
   themes = import ../../themes lib inputs;
 in
 {
@@ -18,9 +17,8 @@ in
     userSettings.stylix = {
       enable = lib.mkEnableOption "Enable stylix theming";
       theme = lib.mkOption {
-        # Par défaut, on suit le thème système (systemSettings.stylix.theme) :
-        # ainsi basculer le thème système flippe aussi la session de l'user.
-        # Un user peut toujours surcharger (cf. root / guest qui fixent le leur).
+        # Suit le thème système par défaut : basculer le système flippe aussi
+        # la session (root/guest surchargent le leur).
         default = osConfig.systemSettings.stylix.theme;
         type = lib.types.enum themes.names;
         description = "Theme for stylix to use system wide. A list of themes can be found in the `modules/themes/schemes` directory.";
@@ -47,12 +45,9 @@ in
         gnome.enable = true;
       };
 
-      # Polices partagées avec le module système (GDM) et installées par
-      # modules/system/fonts — source unique : modules/themes/fonts.nix.
+      # Source unique : modules/themes/fonts.nix.
       fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
     }
-    # Scheme base16 + polarité + wallpaper du thème choisi (bloc commun avec
-    # le module système, cf. modules/themes/default.nix).
     // themes.stylixSettings {
       inherit (cfg) pkgs theme wallpaper;
     };

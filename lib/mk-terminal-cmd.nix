@@ -1,10 +1,5 @@
-# Commande de lancement d'un programme dans le terminal par défaut de
-# l'utilisateur, dans une fenêtre titrée (matchée ensuite par un for_window
-# sway). alacritty exige `-e` pour lancer un programme direct ; kitty et foot
-# l'acceptent tel quel. Pattern répété à l'identique dans bluetooth-picker,
-# calendar-tui, lg-control, systemd-manager-tui, task-tui, volume-mixer,
-# wifi-picker — seuls le titre, la commande et d'éventuelles options kitty
-# changent.
+# Lance un programme dans le terminal par défaut, fenêtre titrée (matchée
+# par un for_window sway). alacritty exige `-e`, kitty/foot l'acceptent tel quel.
 {
   lib,
   term, # config.userSettings.terminal.default

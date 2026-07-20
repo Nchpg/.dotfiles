@@ -43,9 +43,8 @@
                 default = null;
                 description = ''
                   Shell de LOGIN (TTY, SSH). null = bash (défaut NixOS).
-                  Les terminaux graphiques, eux, suivent userSettings.shell.default
-                  (home-manager) — avant cette option, un login TTY/SSH tombait
-                  toujours sur bash même avec fish configuré partout ailleurs.
+                  Les terminaux graphiques suivent userSettings.shell.default
+                  (home-manager), indépendamment de ce réglage.
                 '';
               };
             };
@@ -56,11 +55,9 @@
   };
 
   config = {
-    # Mots de passe NON gérés en déclaratif : on laisse mutableUsers = true
-    # (défaut NixOS), donc les mots de passe se posent/modifient à la main avec
-    # `passwd` et persistent aux rebuilds.
+    # Mots de passe non déclaratifs : mutableUsers = true (défaut NixOS),
+    # posés/modifiés à la main via `passwd`.
 
-    # CHECKS
     assertions = [
       {
         assertion = lib.any (user: user.isAdmin) config.systemSettings.users;
@@ -77,17 +74,11 @@
         inherit (user) name;
         value = {
           isNormalUser = true;
-          # libvirtd n'est PAS dans la base commune : le groupe est quasi
-          # équivalent root (une VM peut monter le disque hôte) → opt-in,
-          # comme docker.
-          # networkmanager pour tous : un user doit pouvoir gérer son wifi
-          # (se connecter à un nouveau réseau crée une connexion système, ce qui
-          # exige ce groupe — cf. la policy polkit modify.system).
-          # video/render pour tous : accès direct aux nœuds GPU (rétroéclairage,
-          # /dev/dri/renderD*) nécessaire pour l'usage desktop courant (Vulkan,
-          # VA-API, contrôle de luminosité). Pas d'opt-in comme docker/libvirtd
-          # : sur une machine mono-user de confiance, l'accès GPU d'un autre
-          # user n'est pas un modèle de menace pertinent ici.
+          # networkmanager pour tous : gérer son wifi crée une connexion
+          # système (policy polkit modify.system). video/render pour tous :
+          # accès GPU (luminosité, Vulkan, VA-API), pas un souci sur une
+          # machine mono-user de confiance. libvirtd reste opt-in comme
+          # docker : quasi équivalent root (une VM peut monter le disque hôte).
           extraGroups = [
             "networkmanager"
             "video"
@@ -103,9 +94,7 @@
       }) config.systemSettings.users
     );
 
-    # Un shell de login ≠ bash doit être activé côté système : ça l'ajoute à
-    # /etc/shells (sinon le login est refusé) et fournit les complétions des
-    # paquets système.
+    # Ajoute le shell à /etc/shells (sinon login refusé) + complétions système.
     programs.fish.enable = lib.any (user: user.shell == "fish") config.systemSettings.users;
     programs.zsh.enable = lib.any (user: user.shell == "zsh") config.systemSettings.users;
 

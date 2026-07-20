@@ -4,9 +4,6 @@ let
   cfg = config.userSettings.bluetoothPicker;
   term = config.userSettings.terminal.default;
 
-  # bluetui (ratatui) utilise la palette du terminal : il hérite donc
-  # automatiquement du thème Stylix via le terminal (kitty), comme nmtui
-  # avec NEWT_COLORS pour le wifi-picker.
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;
     title = "bluetui";
@@ -15,8 +12,7 @@ let
 in
 {
   options.userSettings.bluetoothPicker = {
-    # Défaut : suit waybar (son bloc bluetooth a un on-click vers ce picker).
-    # Surchargeable : mettre false pour une waybar sans bouton bluetooth.
+    # Suit waybar : son bloc bluetooth a un on-click vers ce picker.
     enable = lib.mkEnableOption "sélecteur Bluetooth (bluetui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };

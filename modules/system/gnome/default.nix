@@ -18,9 +18,8 @@ in
   config = lib.mkIf cfg.enable {
     services.desktopManager.gnome.enable = true;
 
-    # GNOME sert de session de secours (la session principale est sway) : on
-    # retire la suite d'applications que rien n'utilise ici. On garde le socle
-    # utile en dépannage : nautilus, console, visionneuse d'images, settings.
+    # Session de secours (la principale est sway) : suite d'apps retirée,
+    # remplacée par équivalent home-manager. Garde nautilus/console/settings.
     environment.gnome.excludePackages = with pkgs-stable; [
       epiphany # navigateur (firefox/chrome via home-manager)
       geary # client mail

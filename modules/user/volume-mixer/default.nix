@@ -4,9 +4,6 @@ let
   cfg = config.userSettings.volumeMixer;
   term = config.userSettings.terminal.default;
 
-  # ncpamixer (ncurses) utilise la palette du terminal : il hérite donc
-  # automatiquement du thème Stylix via le terminal (kitty).
-  # Padding interne plus large que le terminal courant pour ne pas coller aux bords.
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;
     title = "ncpamixer";
@@ -16,8 +13,7 @@ let
 in
 {
   options.userSettings.volumeMixer = {
-    # Défaut : suit waybar (l'entrée « mixer » du menu volume ouvre ce module).
-    # Surchargeable : mettre false pour une waybar sans mixeur.
+    # Suit waybar : l'entrée "mixer" du menu volume ouvre ce module.
     enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };

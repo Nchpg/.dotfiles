@@ -10,8 +10,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Le bind $mod+v repose sur rofi : on échoue à l'éval avec un message clair
-    # plutôt qu'avec un raccourci silencieusement cassé.
+    # $mod+v repose sur rofi : message clair plutôt qu'un bind silencieusement cassé.
     assertions = [
       {
         assertion = config.userSettings.rofi.enable;
@@ -19,18 +18,14 @@ in
       }
     ];
 
-    # Daemon : surveille le presse-papier et stocke chaque entrée dans l'historique.
     services.cliphist.enable = true;
 
-    # wl-copy est une dépendance de CE module (le bind ci-dessous) : sans ça il
-    # ne venait que de flameshot, et désactiver flameshot cassait le bind.
+    # wl-copy dépend de CE module (bind ci-dessous) : sinon venait de
+    # flameshot, et le désactiver cassait le bind.
     home.packages = [ cfg.pkgs.wl-clipboard ];
 
-    # Raccourci sway : $mod+v ouvre l'historique dans rofi, la sélection est
-    # copiée. Le passage par `cliphist decode` (au lieu de l'ancien `cut -f2-`
-    # qui jetait l'ID) restitue le contenu réel : images et multi-lignes
-    # inclus. Binaires en chemins store : le bind ne dépend pas du PATH de la
-    # session (même pattern que waybar).
+    # `cliphist decode` (pas `cut -f2-`) restitue le contenu réel : images et
+    # multi-lignes inclus. Chemins store : indépendant du PATH de session.
     home.file.".config/sway/conf.d/cliphist.conf".text =
       let
         cliphist = lib.getExe cfg.pkgs.cliphist;
