@@ -52,6 +52,12 @@ NC='\033[0m' # No Color
 
 cd "$(dirname "$0")"
 
+# git ne suit pas les permissions (hors bit exécutable) : un chmod fait à la
+# main est perdu au prochain checkout/clone. secrets.yaml est chiffré (sops),
+# donc la valeur réelle de ce durcissement est faible, mais autant le
+# réappliquer ici à chaque rebuild, sans rien devoir se rappeler de faire.
+[[ -f secrets/secrets.yaml ]] && chmod 600 secrets/secrets.yaml || true
+
 # Bump claude-code seulement sur demande (--update / rebuild -u) : le faire à
 # chaque rebuild salissait flake.lock (→ warning git systématique) et
 # re-téléchargeait claude-code inutilement.
