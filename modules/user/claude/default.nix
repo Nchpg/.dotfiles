@@ -44,6 +44,10 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
+        home.sessionVariables = {
+          NODE_OPTIONS = "--dns-result-order=ipv4first";
+        };
+
         home.packages = [
           # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
           # bump avec `rebuild -u`).
