@@ -59,7 +59,11 @@ if [[ "$UPDATE" -eq 1 ]]; then
     echo "⬆️  Updating claude-code flake input to latest..."
     # Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
     nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
+
+    echo "⬆️  Updating kimi-code to latest..."
+    ./modules/user/kimi-code/update.sh || echo "⚠️  bump kimi-code ignoré (offline/rate-limit) — version lockée conservée."
 fi
+
 
 echo "🔎 Checking Git status before rebuild..."
 

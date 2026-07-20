@@ -68,6 +68,10 @@
         settings.preferredNotifChannel = "notifications_disabled";
       };
 
+      kimiCode = {
+        enable = true;
+      };
+
       gh = {
         enable = true;
         # Renseigne ton login GitHub si tu veux qu'il apparaisse dans hosts.yml.
