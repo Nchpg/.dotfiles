@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Lancé par le service systemd wlsunset (cf. default.nix). Récupère la ville
 # météo courante et SES coordonnées (cache partagé avec weather.sh via lib.sh),
 # pour que le night light suive le même lieu que la météo. Repli sur Angers si

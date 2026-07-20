@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Stockage racine. Texte compact dans la barre (icône + utilisé + %) + détail
 # en tooltip.
 #

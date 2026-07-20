@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # RAM / CPU / GPU pour waybar (module custom, sortie JSON : texte compact dans
 # la barre + détail en tooltip).
 #
@@ -31,7 +32,7 @@ cpu() {
     idle=$((idle + iowait))
     total=$((user + nice + system + idle + irq + softirq + steal))
     if [[ -r "$state" ]]; then
-        read -r prev_idle prev_total < "$state"
+        read -r prev_idle prev_total < "$state" || true # état vide/tronqué -> pct=0
         d_idle=$((idle - prev_idle))
         d_total=$((total - prev_total))
         if (( d_total > 0 )); then
@@ -59,7 +60,7 @@ gpu() {
     now_idle=$(<"$idle_file")
     now_ms=$(date +%s%3N)
     if [[ -r "$state" ]]; then
-        read -r prev_idle prev_ms < "$state"
+        read -r prev_idle prev_ms < "$state" || true # état vide/tronqué -> busy=0
         d_idle=$((now_idle - prev_idle))
         d_ms=$((now_ms - prev_ms))
         if (( d_ms > 0 )); then
@@ -94,10 +95,12 @@ done
 # 100 % = tous les cœurs pleinement sollicités ; >100 % = des tâches attendent.
 read -r load1 load5 load15 _ < /proc/loadavg
 ncpu=$(nproc)
+# printf awk sans \n final -> read renvoie 1 (EOF avant saut de ligne) même en
+# ayant bien lu les 3 champs : || true, sinon set -e tue le script ici.
 read -r load1_pct load5_pct load15_pct < <(
     awk -v n="$ncpu" -v a="$load1" -v b="$load5" -v c="$load15" \
-        'BEGIN { printf "%d %d %d", a/n*100+0.5, b/n*100+0.5, c/n*100+0.5 }'
-)
+        'BEGIN { printf "%d %d %d\n", a/n*100+0.5, b/n*100+0.5, c/n*100+0.5 }'
+) || true
 
 # --- Sortie JSON (emit + json_escape : cf. lib.sh) ---
 text="󰍛   RAM : ${mem_pct}%  CPU ${cpu_pct}%  GPU ${gpu_val}"

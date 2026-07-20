@@ -46,7 +46,7 @@ weather_statedir() { printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/waybar";
 # Ville courante (écrite par le menu clic-droit du module météo). Défaut Angers.
 weather_city() {
     local city
-    city=$(cat "$(weather_statedir)/weather-city" 2>/dev/null)
+    city=$(cat "$(weather_statedir)/weather-city" 2>/dev/null) || true
     [[ -z "$city" ]] && city="Angers"
     printf '%s' "$city"
 }
@@ -63,9 +63,11 @@ weather_coords() { # $1 = ville
         cat "$coordcache"
         return 0
     fi
+    # || true : curl en échec (pas de réseau) ne doit pas tuer le script
+    # appelant (set -e) avant le repli return 1 ci-dessous.
     geo=$(curl -fsS --max-time 8 -G "https://geocoding-api.open-meteo.com/v1/search" \
         --data-urlencode "name=${city}" \
-        --data "count=1&language=fr&format=json" 2>/dev/null)
+        --data "count=1&language=fr&format=json" 2>/dev/null) || true
     read -r lat lon <<<"$(jq -r '.results[0] | "\(.latitude) \(.longitude)"' <<<"$geo" 2>/dev/null)"
     [[ -n "$lat" && "$lat" != "null" ]] || return 1
     mkdir -p "$statedir"

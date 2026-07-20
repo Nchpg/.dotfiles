@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Module luminosité (custom) : affiche le % de rétroéclairage, et son ICÔNE
 # reflète l'état du night light (service wlsunset) — lune si actif, glyphe
 # luminosité sinon. La couleur reste fixe (orange, cf. CSS). On émet la
@@ -6,7 +7,7 @@
 # Molette = luminosité, clic = bascule night light (cf. default.nix).
 export LC_ALL=C
 
-pct=$(brightnessctl -m 2>/dev/null | cut -d, -f4) # ex. "42%"
+pct=$(brightnessctl -m 2>/dev/null | cut -d, -f4) || true # ex. "42%"
 
 # Pas de périphérique de rétroéclairage (desktop, écran externe sans DDC...) :
 # même repli N/A que battery.sh/bluetooth.sh plutôt qu'un champ texte vide.

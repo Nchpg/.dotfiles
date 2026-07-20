@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Morceau Spotify en cours (MPRIS/playerctl), piloté par ÉVÉNEMENTS via
 # `playerctl --follow` plutôt que par polling : mise à jour instantanée au
 # changement de piste, play/pause, etc. (--follow réémet à chaque

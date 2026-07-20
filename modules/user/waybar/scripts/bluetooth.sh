@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # État Bluetooth + appareils connectés. Sortie JSON :
 #   - barre   : icône + noms TRONQUÉS (15 car.) + batterie
 #   - tooltip : noms COMPLETS + batterie, un par ligne
@@ -15,14 +16,14 @@ if ! command -v bluetoothctl &>/dev/null; then
     exit 0
 fi
 
-powered=$(bluetoothctl show | grep -E 'Powered: yes')
+powered=$(bluetoothctl show | grep -E 'Powered: yes') || true # pas de match si off
 if [[ -z "$powered" ]]; then
     emit "󰂯  Off" ""
     exit 0
 fi
 
 # bluetoothctl injecte des codes ANSI : on les retire (sinon troncature parasite).
-connected_devices=$(bluetoothctl devices Connected | sed 's/\x1b\[[0-9;]*m//g')
+connected_devices=$(bluetoothctl devices Connected | sed 's/\x1b\[[0-9;]*m//g') || true
 if [[ -z "$connected_devices" ]]; then
     emit "󰂯  On" ""
     exit 0
@@ -43,8 +44,10 @@ while read -r _ mac full_name; do
     fi
 
     # Suffixe batterie (icône dynamique + %), identique barre et tooltip.
+    # || true : pas de batterie reportée -> greps sans match, pipeline non-zéro
+    # sous pipefail, ne doit pas tuer la boucle (repli déjà géré ci-dessous).
     battery_pct=$(bluetoothctl info "$mac" 2>/dev/null \
-        | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+')
+        | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+') || true
     suffix=""
     [[ -n "$battery_pct" ]] && suffix="  $(bat_icon "$battery_pct")  ${battery_pct}%"
 

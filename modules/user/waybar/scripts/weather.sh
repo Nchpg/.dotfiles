@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -euo pipefail
 # Météo courante via Open-Meteo (gratuit, sans clé API). Sortie JSON :
 # barre = icône + température, tooltip = lieu / description / ressenti / vent.
 #
@@ -35,17 +36,22 @@ cache="$statedir/weather-${safe}.json"     # cache du relevé courant (par ville
 read -r lat lon <<<"$(weather_coords "$location")"
 
 # --- Relevé courant pour ces coordonnées ; à défaut on bascule sur le cache ---
+# json initialisé à vide : sous `set -u`, si lat est vide (géocodage
+# indisponible), le bloc ci-dessous est sauté et $json serait sinon "unbound".
+json=""
 if [[ -n "$lat" && "$lat" != "null" ]]; then
+    # || true : curl en échec (pas de réseau) ne doit pas tuer le script avant
+    # le repli sur le cache juste en dessous.
     json=$(curl -fsS --max-time 8 -G "https://api.open-meteo.com/v1/forecast" \
         --data-urlencode "latitude=${lat}" \
         --data-urlencode "longitude=${lon}" \
         --data "current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_direction_10m,is_day&timezone=auto" \
-        2>/dev/null)
+        2>/dev/null) || true
 fi
 if [[ -n "$json" ]] && jq -e .current >/dev/null 2>&1 <<<"$json"; then
     printf '%s' "$json" >"$cache"
 else
-    json=$(cat "$cache" 2>/dev/null)
+    json=$(cat "$cache" 2>/dev/null) || true # pas de cache -> repli "offline" plus bas
 fi
 
 # Pas de relevé exploitable (ni réseau, ni cache au bon format) -> offline.
@@ -117,7 +123,7 @@ esac
 text="${temp}°"
 # Dernière actualisation = date d'écriture du cache (mtime). En cas de relevé
 # frais c'est « maintenant » ; hors-ligne, c'est le dernier relevé réussi.
-updated=$(date -r "$cache" '+%d/%m %H:%M' 2>/dev/null)
+updated=$(date -r "$cache" '+%d/%m %H:%M' 2>/dev/null) || true
 # En-tête = le preset choisi (et non le lieu géocodé renvoyé par l'API).
 # Tooltip multi-lignes en VRAIES nouvelles lignes ; json_escape (lib.sh) les
 # convertit en \n.
