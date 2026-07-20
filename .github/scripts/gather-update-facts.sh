@@ -107,35 +107,49 @@ for name in $root_inputs; do
     flake_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$flake_facts")
 done
 
+# Diff générique entre deux maps JSON {clé: {version, ...}} : liste des clés
+# dont `.version` a changé, en {key, oldVersion, newVersion}. Partagé par les
+# pinned.json (1 fichier par module, assemblés en map ci-dessous) et
+# extensions.json (déjà une map, 1 clé par extension) — même notion de
+# "version épinglée qui a bougé", juste un stockage différent en amont (un
+# fichier par entité vs une seule map à plusieurs entités, chacun adapté à son
+# usage : pas de raison de forcer les deux dans le même format de fichier).
+# `// "nouveau"` : pour une entrée AJOUTÉE, $old[clé] vaut null et la PR
+# afficherait sinon littéralement « foo : null → 1.2.3 ».
+diff_version_map() {
+    local old="$1" new="$2"
+    jq -n --argjson old "$old" --argjson new "$new" '
+      [ $new | keys[] | select($old[.].version != $new[.].version) | {
+          key: .,
+          oldVersion: ($old[.].version // "nouveau"),
+          newVersion: $new[.].version
+        }
+      ]'
+}
+
 # Modules à pin unique (kimi-code, et tout futur module du même moule) :
 # auto-découverts par leur pinned.json, pas de liste en dur ici non plus.
-pinned_facts="[]"
+# Assemblés en une map {module: <contenu du pinned.json>} pour être diffés par
+# la même fonction que les extensions vscode.
+old_pinned_map="{}"
+new_pinned_map="{}"
 while IFS= read -r -d '' pinned_file; do
     module=$(basename "$(dirname "$pinned_file")")
-    old_version=$(at_head "$pinned_file" | jq -r '.version // empty')
-    new_version=$(jq -r '.version // empty' "$pinned_file")
+    old_entry=$(at_head "$pinned_file" | jq -c '. // empty')
+    new_entry=$(jq -c '.' "$pinned_file")
 
-    if [ "$old_version" = "$new_version" ]; then
-        continue
+    if [ -n "$old_entry" ]; then
+        old_pinned_map=$(jq --arg m "$module" --argjson e "$old_entry" '.[$m] = $e' <<<"$old_pinned_map")
     fi
-
-    entry=$(jq -n --arg module "$module" --arg oldVersion "${old_version:-nouveau}" --arg newVersion "$new_version" \
-        '{module: $module, oldVersion: $oldVersion, newVersion: $newVersion}')
-    pinned_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$pinned_facts")
+    new_pinned_map=$(jq --arg m "$module" --argjson e "$new_entry" '.[$m] = $e' <<<"$new_pinned_map")
 done < <(find modules -maxdepth 3 -name 'pinned.json' -print0 | sort -z)
 
+pinned_facts=$(diff_version_map "$old_pinned_map" "$new_pinned_map" | jq 'map({module: .key, oldVersion, newVersion})')
+
 ext_file="modules/user/vscode/extensions.json"
-vscode_facts=$(jq -n --argjson old "$(at_head "$ext_file" | jq -c '. // {}')" --slurpfile new "$ext_file" '
-  ($new[0]) as $n |
-  [ $n | keys[] | select($old[.].version != $n[.].version) | {
-      key: .,
-      # `// "nouvelle"` : pour une extension AJOUTÉE, $old[.] vaut null et le
-      # corps de la PR affichait littéralement « foo.bar : null → 1.2.3 ».
-      oldVersion: ($old[.].version // "nouvelle"),
-      newVersion: $n[.].version
-    }
-  ]
-')
+old_ext_map=$(at_head "$ext_file" | jq -c '. // {}')
+new_ext_map=$(jq -c '.' "$ext_file")
+vscode_facts=$(diff_version_map "$old_ext_map" "$new_ext_map")
 
 # Argument optionnel : extensions qu'update.sh (vscode) n'a PAS pu vérifier
 # (API Marketplace en erreur, téléchargement échoué). Elles ne font pas
