@@ -28,8 +28,8 @@ done
 # Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
     echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light] [--update] [--yes]" >&2
-    echo "  --update : bump l'input claude-code avant le build" >&2
-    echo "  --yes    : pas de confirmation si le working tree est sale" >&2
+    echo "  --update : bump l'input claude-code + les modules à update.sh (confirmation par module)" >&2
+    echo "  --yes    : pas de confirmation (working tree sale, ni bump de module)" >&2
     exit 1
 fi
 
@@ -60,8 +60,31 @@ if [[ "$UPDATE" -eq 1 ]]; then
     # Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
     nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
 
-    echo "⬆️  Updating kimi-code to latest..."
-    ./modules/user/kimi-code/update.sh || echo "⚠️  bump kimi-code ignoré (offline/rate-limit) — version lockée conservée."
+    # Auto-discovery : tout module qui veut être bumpé par `rebuild -u` place un
+    # `update.sh` (nom exact) à sa racine — pas de liste à tenir à jour ici.
+    # Même mécanisme côté CI, cf. update.yml. Chaque échec reste local au
+    # module (offline, API tierce down, ...), jamais fatal pour les autres.
+    # Chargé dans un tableau (pas de `while read < <(find ...)`) : sinon le
+    # `read -p` de confirmation ci-dessous lirait le flux de `find` au lieu du
+    # terminal, et sauterait silencieusement toutes les mises à jour.
+    mapfile -d '' -t update_scripts < <(find modules -maxdepth 3 -name update.sh -print0 | sort -z)
+    for script in "${update_scripts[@]}"; do
+        module_dir="$(dirname "$script")"
+
+        # Contrairement à la CI (protégée par une PR à relire avant merge), un
+        # `rebuild -u` local enchaîne directement sur `nixos-rebuild switch` :
+        # sans ce garde-fou, une version fraîchement publiée (donc jamais
+        # auditée) s'appliquerait sur la machine sans confirmation. --yes
+        # (genclean) saute la question, comme pour le git status plus bas.
+        if [[ "$YES" -ne 1 ]]; then
+            read -p "Mettre à jour ce module ($module_dir) ? [y/N] " -n 1 -r
+            echo
+            [[ $REPLY =~ ^[Yy]$ ]] || continue
+        fi
+
+        echo "⬆️  Running $script..."
+        MY_FLAKE="$PWD" "$script" || echo "⚠️  $script ignoré (échec) — état précédent conservé."
+    done
 fi
 
 

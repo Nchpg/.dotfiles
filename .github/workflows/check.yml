@@ -166,7 +166,7 @@ jobs:
       # migration NixOS), quand les fonds non référencés seront collectés.
       # Conservée telle quelle : elle coûte 1 s et se réactivera seule.
       # Le seul contrôle fiable d'une FOD est celui qui télécharge SANS
-      # consulter le store — cf. update-extensions.sh.
+      # consulter le store — cf. modules/user/vscode/update.sh.
       - name: build all wallpapers
         continue-on-error: true
         run: nix build .#wallpapers-all --no-link --keep-going

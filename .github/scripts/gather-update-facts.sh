@@ -1,24 +1,33 @@
 #!/usr/bin/env bash
-# Compare un flake.lock + extensions.json AVANT/APRÈS un bump et produit un
+# Compare l'état AVANT (HEAD, avant tout bump) et APRÈS (working tree, une
+# fois flake.lock / pinned.json / extensions.json mis à jour) et produit un
 # JSON de FAITS : pour chaque input flake racine dont le lock a changé, date
 # + rev avant/après, nombre de commits entre les deux (si c'est un dépôt
-# GitHub) et lien de comparaison. Idem pour les extensions VS Code dont la
+# GitHub) et lien de comparaison. Idem pour chaque module à `pinned.json`
+# (auto-découvert, cf. update.yml) et pour les extensions VS Code dont la
 # version a bougé. Si nixpkgs-stable change, compare aussi la version du
 # noyau (linuxPackages_latest) avant/après.
+#
+# Tout est comparé via `git show HEAD:<path>` vs le fichier courant : comme
+# flake.lock, pinned.json et extensions.json sont tous trackés, pas besoin de
+# copier un "avant" à part avant de lancer les bumps.
 #
 # Volontairement minimal : pas de contenu de commit récupéré ni interprété
 # (juste un compte + un lien) — consommé par render-pr-body.sh, qui construit
 # le corps de la PR de façon 100% déterministe (aucun LLM).
 #
-# Usage: gather-update-facts.sh <old-flake.lock> <new-flake.lock> <old-extensions.json> <new-extensions.json>
+# Usage: gather-update-facts.sh [skipped-extensions.json]
 # Nécessite GH_TOKEN dans l'environnement (auth API GitHub, sinon rate-limit
 # anonyme trop bas pour ~8 inputs).
 set -euo pipefail
 
-old_lock="$1"
-new_lock="$2"
-old_ext="$3"
-new_ext="$4"
+# Contenu d'un fichier à HEAD, ou vide s'il n'existait pas encore.
+at_head() {
+    git show "HEAD:$1" 2>/dev/null || true
+}
+
+new_lock="flake.lock"
+old_lock_content=$(at_head "$new_lock")
 
 gh_api() {
     curl -sf -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$@"
@@ -47,7 +56,7 @@ root_inputs=$(jq -r '.nodes.root.inputs | keys[]' "$new_lock")
 
 flake_facts="[]"
 for name in $root_inputs; do
-    old_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' "$old_lock")
+    old_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' <<<"$old_lock_content")
     new_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' "$new_lock")
 
     if [ -z "$old_locked" ] || [ "$old_locked" = "$new_locked" ]; then
@@ -98,26 +107,44 @@ for name in $root_inputs; do
     flake_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$flake_facts")
 done
 
-vscode_facts=$(jq -n --slurpfile old "$old_ext" --slurpfile new "$new_ext" '
-  ($old[0]) as $o | ($new[0]) as $n |
-  [ $n | keys[] | select($o[.].version != $n[.].version) | {
+# Modules à pin unique (kimi-code, et tout futur module du même moule) :
+# auto-découverts par leur pinned.json, pas de liste en dur ici non plus.
+pinned_facts="[]"
+while IFS= read -r -d '' pinned_file; do
+    module=$(basename "$(dirname "$pinned_file")")
+    old_version=$(at_head "$pinned_file" | jq -r '.version // empty')
+    new_version=$(jq -r '.version // empty' "$pinned_file")
+
+    if [ "$old_version" = "$new_version" ]; then
+        continue
+    fi
+
+    entry=$(jq -n --arg module "$module" --arg oldVersion "${old_version:-nouveau}" --arg newVersion "$new_version" \
+        '{module: $module, oldVersion: $oldVersion, newVersion: $newVersion}')
+    pinned_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$pinned_facts")
+done < <(find modules -maxdepth 3 -name 'pinned.json' -print0 | sort -z)
+
+ext_file="modules/user/vscode/extensions.json"
+vscode_facts=$(jq -n --argjson old "$(at_head "$ext_file" | jq -c '. // {}')" --slurpfile new "$ext_file" '
+  ($new[0]) as $n |
+  [ $n | keys[] | select($old[.].version != $n[.].version) | {
       key: .,
-      # `// "nouvelle"` : pour une extension AJOUTÉE, $o[.] vaut null et le
+      # `// "nouvelle"` : pour une extension AJOUTÉE, $old[.] vaut null et le
       # corps de la PR affichait littéralement « foo.bar : null → 1.2.3 ».
-      oldVersion: ($o[.].version // "nouvelle"),
+      oldVersion: ($old[.].version // "nouvelle"),
       newVersion: $n[.].version
     }
   ]
 ')
 
-# 5e argument optionnel : extensions qu'update-extensions.sh n'a PAS pu
-# vérifier (API Marketplace en erreur, téléchargement échoué). Elles ne font
-# pas échouer le run, donc sans ça elles ne seraient visibles que dans le log.
+# Argument optionnel : extensions qu'update.sh (vscode) n'a PAS pu vérifier
+# (API Marketplace en erreur, téléchargement échoué). Elles ne font pas
+# échouer le run, donc sans ça elles ne seraient visibles que dans le log.
 skipped_ext="[]"
-if [ -n "${5:-}" ] && [ -s "$5" ]; then
-    skipped_ext=$(cat "$5")
+if [ -n "${1:-}" ] && [ -s "$1" ]; then
+    skipped_ext=$(cat "$1")
 fi
 
-jq -n --argjson flakeInputs "$flake_facts" --argjson vscodeExtensions "$vscode_facts" \
-    --argjson skippedExtensions "$skipped_ext" \
-    '{flakeInputs: $flakeInputs, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions}'
+jq -n --argjson flakeInputs "$flake_facts" --argjson pinnedUpdates "$pinned_facts" \
+    --argjson vscodeExtensions "$vscode_facts" --argjson skippedExtensions "$skipped_ext" \
+    '{flakeInputs: $flakeInputs, pinnedUpdates: $pinnedUpdates, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions}'
