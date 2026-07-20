@@ -1,9 +1,7 @@
 { config, lib, ... }:
 
 {
-  # Déclare qui détient la clé age de la machine. Consommé par le module
-  # home-manager modules/user/sops (chemin du keyFile + installation des
-  # outils d'édition pour ce user uniquement). Défini par le profil.
+  # Consommé par modules/user/sops (chemin du keyFile + outils pour ce user).
   options = {
     systemSettings.sops = {
       keyOwner = lib.mkOption {

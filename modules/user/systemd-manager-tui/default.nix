@@ -4,16 +4,10 @@ let
   cfg = config.userSettings.systemdManagerTui;
   term = config.userSettings.terminal.default;
 
-  # systemd-manager-tui (ratatui) utilise la palette du terminal : il hérite
-  # donc automatiquement du thème Stylix via le terminal (kitty), comme bluetui
-  # pour le bluetooth-picker. Aucun fichier de thème à générer.
-  #
-  # En amont, seul Ctrl+C quitte l'app (touches en dur, aucun fichier de config).
-  # On patche la source pour quitter AUSSI avec `q`/`Esc`, mais UNIQUEMENT sur
-  # l'écran liste et hors édition du filtre — sinon on casserait la frappe de
-  # « q » dans la recherche et le retour arrière `q`/`Esc` depuis les écrans
-  # Détails/Log (qui, eux, reviennent déjà à la liste). On ancre sur la signature
-  # (unique) de on_key_event et on injecte le test juste après l'accolade.
+  # En amont, seul Ctrl+C quitte l'app (touches en dur). Patché pour quitter
+  # aussi avec q/Esc, mais UNIQUEMENT sur l'écran liste hors édition du
+  # filtre (sinon casse la frappe de "q" dans la recherche, et le retour
+  # arrière q/Esc des écrans Détails/Log qui reviennent déjà à la liste).
   systemd-manager-tui = cfg.pkgs.systemd-manager-tui.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
       substituteInPlace src/terminal/app.rs \

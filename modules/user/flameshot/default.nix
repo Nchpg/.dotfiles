@@ -24,22 +24,16 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = with cfg.pkgs; [
       cfg.package
-      grim # backend de capture wlroots (requis par flameshot)
+      grim # backend de capture wlroots
       slurp # sélection de zone
-      wl-clipboard # wl-copy/wl-paste (utilisé aussi par le bind Shift+Print de Sway)
+      wl-clipboard # utilisé aussi par le bind Shift+Print de Sway
     ];
 
-    # Config flameshot déclarative : barre d'outils sans Upload/Open With/Pin,
-    # icône de barre désactivée (disabledTrayIcon). La clé `buttons` est un blob
-    # QVariant Qt5 généré avec le Qt de flameshot ("please don't edit by hand").
-    #
-    # NB : l'intégration Sway (bind Print/Shift+Print, daemon flameshot lancé au
-    # démarrage, règles for_window) vit dans modules/user/sway/sway-config, car
-    # c'est de la syntaxe de config Sway, pas du Nix.
-    # NB : flameshot.ini ne tolère PAS de commentaires (# rejeté : « Unrecognized
-    # setting »), d'où la doc ici. Réglages Wayland du .ini :
-    #   useGrimAdapter=true     -> capture via grim (flameshot compilé wlrSupport)
-    #   disabledGrimWarning=true -> coupe le warning « grim = wlroots » (flameshot 13+)
+    # `buttons` est un blob QVariant Qt5 ("please don't edit by hand").
+    # Intégration Sway (binds, daemon, for_window) dans sway-config, pas ici.
+    # flameshot.ini ne tolère pas de commentaires, d'où la doc ici :
+    #   useGrimAdapter=true      -> capture via grim (flameshot compilé wlrSupport)
+    #   disabledGrimWarning=true -> coupe le warning "grim = wlroots" (13+)
     home.file.".config/flameshot/flameshot.ini".source = ./flameshot.ini;
   };
 }

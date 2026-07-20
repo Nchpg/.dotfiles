@@ -10,56 +10,37 @@
 let
   cfg = config.systemSettings.stylix;
 
-  # API des thèmes (noms auto-découverts, bloc stylix commun) — partagée avec
-  # modules/user/stylix, cf. modules/themes/default.nix.
+  # Partagée avec modules/user/stylix, cf. modules/themes/default.nix.
   themes = import ../../themes lib inputs;
   themesEnum = lib.types.enum themes.names;
 
-  # Thème actif = la variante sélectionnée. C'est la SOURCE DE VÉRITÉ lue par
-  # GDM/console ici, et par le user nchpg (cf. modules/user/stylix).
+  # SOURCE DE VÉRITÉ lue par GDM/console ici, et par nchpg (modules/user/stylix).
   activeTheme = if cfg.variant == "light" then cfg.lightTheme else cfg.darkTheme;
 
-  # Galerie ouverte par `theme` sans argument. Construite au build depuis le
-  # même `pathByName` qui alimente l'enum des thèmes — ce qui est affiché est
-  # donc exactement ce qui est sélectionnable.
   gallery = import ../../themes/gallery {
     inherit themes;
     pkgs = cfg.pkgs;
   };
   firefox = "${cfg.pkgs.firefox}/bin/firefox";
 
-  # Fichier que la galerie réécrit quand on applique un thème : le profil de
-  # CETTE cible, donc celui qui déclare réellement darkTheme/lightTheme.
+  # Fichier réécrit par la galerie quand on applique un thème : le profil de
+  # CETTE cible, qui déclare réellement darkTheme/lightTheme.
   profileFile = "profiles/${target.profile}/default.nix";
 
-  # Favoris de la galerie : versionnés dans le dépôt, écrits par le serveur.
-  # N'entrent pas dans la config construite (aucun rebuild à faire après un
-  # changement de favori) — c'est de la sélection personnelle, pas de l'état
-  # système. Exposés côté Nix via themes.favorites si un module veut s'en
-  # servir un jour.
+  # Versionnés dans le dépôt, écrits par le serveur de galerie ; pas dans la
+  # config construite (sélection personnelle, pas état système).
   favoritesFile = "modules/themes/gallery/favorites.json";
 
-  # Pose `flake` (le clone, via $MY_FLAKE) et échoue proprement s'il manque —
-  # même garde que `rebuild` et `genclean`. Sentinelle rebuild.sh (et non
-  # flake.nix) : la garde teste -x, et c'est de toute façon le script auquel
-  # cette commande délègue au final.
   flakeGuard = import ../../../lib/mk-flake-guard.nix {
     name = "theme";
     scriptName = "rebuild.sh";
   };
 in
 {
-  # Module Stylix NIVEAU SYSTÈME : thémise ce que le module home-manager ne
-  # peut pas atteindre (il tourne avant/à côté de la session user) :
-  #   - GDM (écran de login) via le target `gnome` → « GNOME and GDM »
-  #   - la console / TTY
-  #
-  # Bascule dark/light : `variant` est injecté par la CIBLE du flake
-  # (personal-gram = dark, personal-gram-light = light) — la commande
-  # `theme dark|light|toggle` rebuilde simplement l'autre cible, sans
-  # modifier aucun fichier. PERSISTANT : systemd-boot démarre la dernière
-  # génération activée, et `rebuild` seul reste sur la variante courante
-  # (sa cible par défaut vient du système qui tourne).
+  # Module Stylix NIVEAU SYSTÈME : thémise ce que le home-manager ne peut pas
+  # atteindre (GDM via le target `gnome`, console/TTY). `variant` est injecté
+  # par la CIBLE du flake (personal-gram = dark, -light = light) : `theme
+  # dark|light|toggle` rebuilde l'autre cible sans modifier aucun fichier.
   imports = [ inputs.stylix.nixosModules.stylix ];
 
   options = {
@@ -119,29 +100,13 @@ in
 
   config = lib.mkMerge [
     {
-      # Expose le thème actif (consommé par modules/user/stylix via
-      # systemSettings). Hors du mkIf : le calcul ne dépend pas de `enable`,
-      # et l'option étant readOnly sans default, un profil sans stylix
-      # système casserait l'éval du module user sinon.
+      # Hors du mkIf : le calcul ne dépend pas de `enable`, et l'option étant
+      # readOnly sans default, un profil sans stylix système casserait
+      # l'éval du module user sinon.
       systemSettings.stylix.theme = activeTheme;
     }
 
     (lib.mkIf cfg.enable {
-
-      # Commande `theme` :
-      #   sans argument      → ouvre la galerie (aperçu de TOUS les thèmes
-      #                        sélectionnables, nom cliquable à recopier dans
-      #                        darkTheme/lightTheme).
-      #   dark|light|toggle  → rebuilde la cible du flake de l'autre variante
-      #                        via la commande `rebuild` (cf.
-      #                        modules/system/rebuild), qui gère déjà check
-      #                        git, reload sway et restart waybar.
-      #
-      # La bascule ne modifie AUCUN fichier : la variante courante est celle de
-      # la cible qui a construit CE système (cfg.variant, injectée par le
-      # flake), l'état vit dans la génération active. Si les deux variantes
-      # sont déjà dans le store (arbre inchangé, CI passée), c'est quasi
-      # immédiat.
       environment.systemPackages = [
         (cfg.pkgs.writeShellScriptBin "theme" ''
           set -euo pipefail
@@ -149,10 +114,8 @@ in
 
           want="''${1:-}"
 
-          # Sans argument : la galerie. La page est déjà construite dans le
-          # store (cf. modules/themes/gallery) ; on la SERT en local plutôt
-          # que de l'ouvrir en file:// pour que le bouton « appliquer » puisse
-          # réécrire le profil — une page file:// n'a pas ce droit.
+          # Sans argument : galerie servie en local (pas file://) pour que le
+          # bouton "appliquer" puisse réécrire le profil.
           if [ -z "$want" ]; then
             ${flakeGuard}
             profile="$flake/${profileFile}"
@@ -173,9 +136,8 @@ in
             [ "$rc" = 2 ] && exit 0
             [ "$rc" = 0 ] || exit "$rc"
 
-            # Le rebuild vit ICI, dans le terminal, et pas dans le handler HTTP :
-            # il a besoin de sudo, et une requête web n'est pas le bon endroit
-            # pour déclencher une élévation de privilèges.
+            # Le rebuild vit ici (terminal) et pas dans le handler HTTP : il a
+            # besoin de sudo.
             echo
             printf 'Rebuild maintenant ? [y/N] '
             read -r reply || reply=""
@@ -213,30 +175,19 @@ in
         enable = true;
         autoEnable = false; # on n'active que ce qu'on veut
 
-        # On gère nous-mêmes le module Stylix home-manager (importé dans
-        # profiles/default.nix) et le suivi du thème (défaut de userSettings.stylix
-        # = systemSettings.stylix.theme). On coupe donc l'auto-import de Stylix,
-        # sinon il forcerait son scheme dans CHAQUE user en read-only (followSystem),
-        # court-circuitant notre option userSettings.stylix.theme.
+        # Module home-manager géré à part (profiles/default.nix, suivi via
+        # userSettings.stylix.theme) : sans ce false, l'auto-import forcerait
+        # son scheme dans CHAQUE user en read-only (followSystem).
         homeManagerIntegration.autoImport = false;
 
-        # Réactivé MALGRÉ autoEnable = false (dont il tire son défaut), parce
-        # que le target gnome en dépend entièrement : les extensions n'existent
-        # pas sur l'écran de login, donc la SEULE façon de thémiser GDM est de
-        # remplacer gnome-shell-theme.gresource dans le paquet gnome-shell —
-        # ce que stylix fait via un overlay nixpkgs gardé par cette option.
-        # Sans elle, targets.gnome.enable ci-dessous ne posait plus que les
-        # réglages dconf curseur/icônes et GDM restait au thème Adwaita sombre.
-        #
-        # COÛT, mesuré sur cette config : gnome-shell est recompilé depuis les
-        # sources (+ gnome-session et gnome-browser-connector qui en dépendent),
-        # et ~190 Mio de dépendances de build (mutter-dev, gtk4-dev, meson…)
-        # entrent dans le store. Les deux variantes produisent des gnome-shell
-        # DIFFÉRENTS : la première bascule dark↔light après chaque `rebuild -u`
-        # ou changement de thème repaye cette compilation (le toggle ne
-        # redevient immédiat qu'une fois les deux variantes dans le store).
-        # Effet de bord : le patch stylix retire l'indicateur « Dark Mode » des
-        # quick settings de GNOME Shell (session de secours).
+        # Réactivé malgré autoEnable = false : seule façon de thémiser GDM
+        # (pas d'extensions sur l'écran de login) est de remplacer
+        # gnome-shell-theme.gresource via l'overlay nixpkgs de stylix. Sans
+        # ça, GDM reste en Adwaita sombre.
+        # COÛT : gnome-shell recompilé depuis les sources (+session,
+        # browser-connector, ~190 Mio de deps de build). dark/light produisent
+        # deux gnome-shell différents : la première bascule après un
+        # `rebuild -u` ou un changement de thème repaye la compilation.
         overlays.enable = true;
 
         targets = {
@@ -244,13 +195,9 @@ in
           console.enable = true; # ⇒ thémise les TTY
         };
 
-        # Polices partagées avec le module user (rendu cohérent sur GDM) et
-        # installées par modules/system/fonts — source unique :
-        # modules/themes/fonts.nix.
+        # Source unique : modules/themes/fonts.nix.
         fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
       }
-      # Scheme base16 + polarité + wallpaper du thème actif (bloc commun avec le
-      # module user, cf. modules/themes/default.nix).
       // themes.stylixSettings {
         inherit (cfg) pkgs wallpaper;
         theme = activeTheme;

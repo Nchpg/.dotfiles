@@ -1,19 +1,14 @@
 # Le paquet displaylink de nixpkgs utilise requireFile (licence Synaptics à
-# accepter à la main via nix-prefetch-url, une fois par host). L'URL étant
-# téléchargeable directement, on remplace le src par un fetchurl : le rebuild
-# récupère le zip tout seul, sur n'importe quel host.
-# Appliqué sur pkgs-stable dans flake.nix (nixpkgs.overlays serait ignoré,
-# cf. modules/system/configuration.nix). Vit hors de modules/ car
-# lib/import-all.nix chargerait tout .nix de là-bas comme module NixOS.
-# Seule l'URL est à maintenir quand nixpkgs bump displaylink : `name` et
-# `hash` sont repris du requireFile amont (il expose outputHash), donc ils
-# suivent le bump tout seuls. Conséquence voulue : si l'URL n'est PAS mise à
-# jour en même temps, on échoue sur un mismatch de hash explicite — au lieu de
-# l'ancien symptôme, un `chmod: No such file or directory` opaque dû au
-# désaccord entre `version` (amont, bumpée) et le zip (figé ici), car l'amont
-# dérive le nom du .run de `version`.
-# NB : contourner le requireFile revient à court-circuiter l'acceptation
-# explicite de l'EULA Synaptics — choix assumé pour un dépôt personnel.
+# accepter à la main). L'URL étant téléchargeable directement, on remplace le
+# src par un fetchurl : le rebuild récupère le zip tout seul, sur n'importe
+# quel host. Appliqué sur pkgs-stable dans flake.nix (nixpkgs.overlays serait
+# ignoré). Vit hors de modules/ : lib/import-all.nix chargerait tout .nix de
+# là-bas comme module NixOS.
+# Seule l'URL est à maintenir au bump nixpkgs : `name`/`hash` suivent le
+# requireFile amont automatiquement, donc un désaccord URL/version échoue sur
+# un mismatch de hash explicite plutôt qu'un `chmod: No such file` opaque.
+# NB : contourne l'acceptation explicite de l'EULA Synaptics — assumé pour un
+# dépôt personnel.
 final: prev: {
   displaylink = prev.displaylink.overrideAttrs (old: {
     src = final.fetchurl {

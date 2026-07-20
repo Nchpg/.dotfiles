@@ -1,8 +1,6 @@
 { config, lib, ... }:
 
-# Applications desktop et confort dev, gatées par profil : root/guest n'ont
-# aucune raison d'embarquer Discord dans leur closure. (Le strict minimum
-# commun à tous reste dans modules/user/common.nix.)
+# Gatées par profil : root/guest n'ont aucune raison d'embarquer Discord.
 let
   cfg = config.userSettings.desktopApps;
 in

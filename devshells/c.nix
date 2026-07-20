@@ -3,9 +3,8 @@
 pkgs.mkShell {
   name = "c-dev";
 
-  # Outils (compilateur, debugger, build system) : `packages` — la sémantique
-  # mkShell des outils qu'on exécute. Les bibliothèques contre lesquelles on
-  # linke restent en buildInputs (pkg-config les y découvre).
+  # Outils exécutés en packages, bibliothèques linkées en buildInputs
+  # (pkg-config les y découvre).
   packages = [
     pkgs.gcc
     pkgs.gdb

@@ -5,11 +5,9 @@ let
   term = config.userSettings.terminal.default;
   c = config.lib.stylix.colors.withHashtag;
 
-  # TUI pour piloter le driver LG : ventilateur + profil d'alimentation
-  # (power-profiles-daemon). Titre stylé + état courant, puis menu gum
-  # (flèches + Entrée) avec sous-menus. Couleurs Stylix. L'écriture de fan_mode
-  # marche sans root grâce à la règle udev du module système lg-laptop.
-  # La limite batterie est gérée en dur (déclaratif), pas ici.
+  # Ventilateur + profil d'alimentation via menu gum. Écriture de fan_mode
+  # sans root grâce à la règle udev du module système lg-laptop. Limite
+  # batterie gérée en dur (déclaratif), pas ici.
   lg-control = cfg.pkgs.writeShellApplication {
     name = "lg-control";
     runtimeInputs = [
@@ -81,10 +79,8 @@ let
     '';
   };
 
-  # kitty mappe q vers la fermeture de la fenêtre pour unifier la sortie de tous
-  # les TUIs (gum ne quitte qu'avec Esc / Ctrl-C / l'entrée « Quitter », jamais
-  # avec q). Esc reste géré nativement par gum (annule / revient en arrière).
-  # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
+  # gum ne quitte qu'avec Esc/Ctrl-C/"Quitter", jamais q : mappé côté kitty
+  # pour unifier la sortie de tous les TUIs.
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;

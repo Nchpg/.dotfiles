@@ -1,15 +1,11 @@
-# PyTorch natif sur Intel Arc (XPU) — hérite du devshell python.
-# Recevoir `pkgs = pkgs-unstable` pour matcher la stack graphique système
-# (intel-compute-runtime / level-zero de nixos-unstable).
+# PyTorch natif sur Intel Arc (XPU), hérite du devshell python. `pkgs` doit
+# être pkgs-unstable pour matcher la stack graphique système.
 #
-# Ce qui fait marcher ça sur NixOS :
-#   * intel-compute-runtime range le driver GPU Level-Zero
-#     (libze_intel_gpu.so) dans un output `drivers` SÉPARÉ que le système ne
-#     réalise jamais par défaut — on le référence explicitement et on le
-#     donne au loader via ZE_ENABLE_ALT_DRIVERS.
-#   * torch-xpu est le wheel officiel (download.pytorch.org/whl/xpu) installé
-#     dans un venv uv : simple extension python, il suffit que ses deps
-#     soient sur LD_LIBRARY_PATH — pas besoin de FHS env.
+# intel-compute-runtime range le driver Level-Zero (libze_intel_gpu.so) dans
+# un output `drivers` SÉPARÉ que le système ne réalise jamais par défaut :
+# référencé explicitement et donné au loader via ZE_ENABLE_ALT_DRIVERS.
+# torch-xpu (wheel officiel) est une simple extension python : ses deps sur
+# LD_LIBRARY_PATH suffisent, pas besoin de FHS env.
 { pkgs }:
 
 let
@@ -26,8 +22,7 @@ import ./python.nix {
     pkgs.level-zero # headers/loader ze_*
   ];
 
-  # Libs runtime du wheel torch-xpu + driver Intel (les libs génériques —
-  # gcc.lib, zlib, … — viennent déjà de python.nix).
+  # Libs génériques (gcc.lib, zlib...) déjà fournies par python.nix.
   extraLibs = [
     pkgs.level-zero
     icr
@@ -47,8 +42,7 @@ import ./python.nix {
   };
 
   extraShellHook = ''
-    # Filet de sécurité : exposer les libs embarquées par le venv (runtime
-    # SYCL/oneAPI du wheel torch-xpu) si un venv est déjà actif.
+    # Filet : expose les libs embarquées par le venv si déjà actif.
     if [ -n "$VIRTUAL_ENV" ]; then
       export LD_LIBRARY_PATH="$VIRTUAL_ENV/lib:$LD_LIBRARY_PATH"
     fi

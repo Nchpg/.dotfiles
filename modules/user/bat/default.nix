@@ -6,8 +6,7 @@ in
 {
   options = {
     userSettings.bat = {
-      # Défaut true : bat fait partie du socle commun à tous les users (root et
-      # guest inclus), comme les utilitaires de modules/user/common.nix.
+      # Défaut true : socle commun à tous les users (comme common.nix).
       enable = lib.mkEnableOption "bat (cat amélioré) + batgrep/batman" // {
         default = true;
       };
@@ -19,14 +18,10 @@ in
     programs.bat = {
       enable = true;
       package = cfg.pkgs.bat;
-      # Polarité déléguée à bat lui-même (≥ 0.25) : il détecte le fond du
-      # terminal à chaque invocation et choisit le bon thème — thèmes NATIFS
-      # bat (rendu riche, cf. gruvbox-dark historique), aucun branchement
-      # dark/light côté Nix. Choix de style assumé : bat reste gruvbox quel
-      # que soit darkTheme/lightTheme. Dans un TTY/ssh sans détection, bat
-      # retombe sur theme-dark (bénin). Nécessite de couper le target stylix
-      # (ci-dessous), qui poserait sinon un `theme` prioritaire sur la paire
-      # theme-dark/theme-light.
+      # Polarité déléguée à bat lui-même (≥ 0.25, détecte le fond du terminal) :
+      # thèmes natifs gruvbox, pas de branchement dark/light côté Nix, reste
+      # gruvbox quel que soit darkTheme/lightTheme. Nécessite de couper le
+      # target stylix (ci-dessous), qui poserait sinon un `theme` prioritaire.
       config = {
         theme-dark = "gruvbox-dark";
         theme-light = "gruvbox-light";

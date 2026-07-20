@@ -1,14 +1,8 @@
 { config, lib, ... }:
 
-# Gestion du swap, en trois briques indépendantes (chacune opt-in) :
-#   - zram     : swap compressé EN RAM (zstd ~3:1). Aucune usure SSD, ordres de
-#                grandeur plus rapide qu'un swap disque. Utilisé en premier
-#                (priorité haute).
-#   - file /   : swap disque classique (filet supplémentaire, hibernation...).
-#     partition  Non utilisés sur gram, gardés pour la flexibilité multi-host.
-#   - earlyoom : tue le plus gros process AVANT l'épuisement total de la
-#                mémoire → un hoquet court au lieu d'un freeze de plusieurs
-#                minutes (thrashing) suivi d'un OOM-kill noyau aveugle.
+# Trois briques indépendantes (chacune opt-in) : zram (swap compressé en
+# RAM, priorité haute), file/partition (swap disque, non utilisés sur gram),
+# earlyoom (tue le plus gros process avant l'épuisement mémoire).
 let
   cfg = config.systemSettings.swap;
 in
@@ -93,17 +87,12 @@ in
         # Agit quand RAM ET swap passent sous 5 % libres (SIGTERM), SIGKILL à 2,5 %.
         freeMemThreshold = 5;
         freeSwapThreshold = 5;
-        # Notification desktop au kill (via le daemon de notifs de la session).
-        # Le module upstream avertit que n'importe quel utilisateur LOCAL peut
-        # alors spammer des notifications (DoS) — sans risque en mono-user
-        # (systemSettings.users n'a que nchpg/guest de confiance), à
-        # réévaluer si un compte non-fiable est ajouté un jour.
+        # Upstream avertit qu'un user LOCAL peut spammer des notifs (DoS) —
+        # sans risque en mono-user de confiance, à réévaluer sinon.
         enableNotifications = true;
         extraArgs = [
-          # Sacrifier un navigateur en priorité, jamais la session elle-même
-          # (sway/waybar/gdm). Pas de `node` ici : Claude Code et les serveurs
-          # de dev sont des process node — on les laisse en cibles ordinaires
-          # (earlyoom prend alors le plus gros consommateur).
+          # Jamais la session (sway/waybar/gdm). Pas de `node` : laissé en
+          # cible ordinaire (earlyoom prend le plus gros consommateur).
           "--prefer"
           "^(chrome|chromium|firefox)$"
           "--avoid"

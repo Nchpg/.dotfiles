@@ -5,13 +5,9 @@
   ...
 }:
 
-# Réglages Claude Code déclaratifs.
-#
-# Subtilité : Claude Code ÉCRIT lui-même dans ~/.claude/settings.json (modèle via
-# /model, thème via /config, etc.). Un symlink lecture-seule du store casserait
-# ces écritures. On fait donc un DEEP-MERGE au rebuild : on impose seulement les
-# clés de `settings` (elles sont déclaratives → ré-appliquées à chaque rebuild),
-# tout le reste que Claude gère au runtime est préservé.
+# Claude Code ÉCRIT lui-même dans ~/.claude/settings.json (modèle, thème...) :
+# un symlink lecture-seule casserait ces écritures. Deep-merge au rebuild à
+# la place (cf. `settings` plus bas).
 let
   inherit (config.home) homeDirectory;
   cfg = config.userSettings.agents.claude;
@@ -32,12 +28,7 @@ in
       example = {
         preferredNotifChannel = "notifications_disabled";
       };
-      description = ''
-        Clés imposées dans ~/.claude/settings.json. Fusionnées (deep-merge) dans
-        le fichier existant à chaque rebuild : ces clés sont déclaratives (le
-        rebuild les ré-applique), tandis que les autres réglages que Claude Code
-        écrit lui-même (modèle, thème…) sont conservés.
-      '';
+      description = "Clés imposées dans ~/.claude/settings.json (deep-merge à chaque rebuild).";
     };
   };
 
@@ -49,24 +40,14 @@ in
         };
 
         home.packages = [
-          # Claude Code via le flake dédié (toujours à jour, cf. flake.nix ;
-          # bump avec `rebuild -u`).
+          # Flake dédié, toujours à jour (bump via `rebuild -u`).
           inputs.claude-code.packages.${cfg.pkgs.stdenv.hostPlatform.system}.default
-          # pdftoppm (PDF -> image) et pdftotext, utilisés par la lecture de PDF.
-          cfg.pkgs.poppler-utils
+          cfg.pkgs.poppler-utils # pdftoppm/pdftotext, lecture de PDF
         ];
-
-        # Skills partagées entre agents : cf. modules/user/agents/skills.nix
-        # (écrit ~/.claude/skills/, ~/.agents/skills/, ~/.vibe/skills/ depuis
-        # une seule source, pas seulement pour Claude).
       }
 
-      # Statusline : barre du bas de Claude Code (modèle · coût · jauge de
-      # contexte · rate limits 5 h / 7 j avec compte à rebours). La logique vit
-      # dans ./statusline.js ; le wrapper épingle SON node (le `node` du PATH
-      # n'est qu'une dépendance implicite d'autres modules — nodejs-slim est
-      # déjà dans le profil, donc aucun poids ajouté). La clé statusLine passe
-      # par le deep-merge de `settings` ci-dessous.
+      # Logique dans ./statusline.js, wrapper épinglant nodejs-slim (déjà
+      # dans le profil, pas de poids ajouté).
       (lib.mkIf cfg.statusline.enable {
         userSettings.agents.claude.settings.statusLine = {
           type = "command";

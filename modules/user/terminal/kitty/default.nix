@@ -8,13 +8,10 @@
 let
   cfg = config.userSettings.terminal.kitty;
 
-  # Stylix code en dur `target = "base16"` pour kitty (son
-  # modules/kitty/hm.nix) : même avec un scheme base24, color9-14 restent
-  # mappés sur base08-0E, donc « rouge vif » = « rouge ». Cf. plus bas pour
-  # le rétablissement.
-  #
-  # `? base12` et non le repli mkBase24 de base16.nix : parseScheme n'invente
-  # pas les slots absents, donc un thème base16 n'active rien ici.
+  # Stylix code en dur `target = "base16"` pour kitty : même avec un scheme
+  # base24, color9-14 restent mappés sur base08-0E ("rouge vif" = "rouge").
+  # Rétabli plus bas. `? base12` (pas le repli mkBase24 de base16.nix) :
+  # parseScheme n'invente pas les slots absents.
   themes = import ../../../themes lib inputs;
   scheme = themes.parseScheme config.userSettings.stylix.theme;
   isBase24 = config.userSettings.stylix.enable && scheme ? base12;
@@ -57,14 +54,6 @@ in
             wayland_titlebar_color = "system";
             macos_titlebar_color = "system";
           };
-          # Toutes les couleurs viennent de stylix (targets.kitty, activé plus
-          # bas) : kitty suit le thème choisi dans les DEUX polarités. L'ancien
-          # jeu de couleurs custom appliqué en dark (fond #262626, accents
-          # pastel) vivait dans le scheme modules/themes/schemes/custom.nix,
-          # supprimé depuis (cf. gruvbox-dark-custom pour un rendu proche) —
-          # pour retrouver ce rendu partout : darkTheme = "gruvbox-dark-custom"
-          # dans le profil.
-
           extraConfig = ''
             enable_audio_bell no
             map ctrl+equal change_font_size all +2.0
@@ -74,26 +63,19 @@ in
             map ctrl+c copy_or_interrupt
             map ctrl+alt+c copy_to_clipboard
             map ctrl+shift+v paste_from_clipboard
-            # Surtout PAS de `map ctrl+v paste_from_clipboard` : kitty
-            # intercepterait la touche pour faire un collage TEXTE, et les TUI
-            # comme Claude Code ne la recevraient jamais — or leur collage
-            # d'image fonctionne en recevant Ctrl+V puis en lisant eux-mêmes le
-            # presse-papier (wl-paste). Presse-papier avec image + bind kitty =
-            # rien ne se passe. Sans bind, Ctrl+V est transmis à l'application ;
-            # le collage texte reste sur Ctrl+Shift+V.
+            # Surtout PAS de `map ctrl+v` : des TUI comme Claude Code collent
+            # une image en recevant Ctrl+V et en lisant eux-mêmes wl-paste ;
+            # un bind kitty interceptant la touche pour un collage TEXTE
+            # casserait ça silencieusement (rien ne se passe).
           '';
         };
 
         stylix.targets.kitty.enable = true;
       }
 
-      # Bloc séparé car `extraConfig` est déjà défini plus haut : deux
-      # définitions du même attribut dans un attrset sont une erreur d'éval.
-      #
-      # mkAfter : doit passer APRÈS l'`include` de stylix, sinon celui-ci
-      # l'écraserait — kitty applique la dernière valeur lue, donc pas besoin
-      # de désactiver son target. Reprend tinted-kitty/base24.mustache : les 6
-      # couleurs vives, plus la sélection que ce template inverse.
+      # Bloc séparé : deux définitions du même attribut dans un attrset sont
+      # une erreur d'éval. mkAfter : doit passer après l'include de stylix
+      # (kitty applique la dernière valeur lue, pas besoin de couper le target).
       (lib.mkIf isBase24 {
         programs.kitty.extraConfig = lib.mkAfter ''
 

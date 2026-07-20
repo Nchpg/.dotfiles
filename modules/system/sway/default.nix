@@ -10,76 +10,56 @@ let
 
   systemctl = "${cfg.pkgs.systemd}/bin/systemctl";
 
-  # Variables poussées dans le gestionnaire systemd user + D-Bus au démarrage de
-  # sway (cf. modules/user/sway/sway-config/config.template). Elles désignent un
-  # compositor précis : laissées derrière, elles pointent un mort.
+  # Poussées dans le gestionnaire systemd user + D-Bus au démarrage de sway
+  # (cf. config.template) : elles désignent un compositor précis, laissées
+  # derrière elles pointent un mort.
   sessionVars = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE SWAYSOCK";
 
-  # Redescend la session graphique et purge l'environnement hérité.
-  #
   # sway-session.target n'a que BindsTo = graphical-session.target : ça fait
-  # MONTER la cible graphique au start, mais rien ne la fait redescendre quand
-  # sway se termine. Or le gestionnaire systemd user survit à la déconnexion —
-  # logind tourne avec KillUserProcesses=false (défaut NixOS), donc il laisse
-  # les process du user en vie et user@$UID.service reste debout d'un login à
-  # l'autre. Sans ce nettoyage l'état traverse donc le logout : au login sway
-  # suivant `start sway-session.target` est un no-op (cible déjà active) et
-  # waybar/swayidle/wlsunset ne redémarrent jamais — pire, waybar tape l'ancien
-  # SWAYSOCK, crashe en boucle et finit en start-limit-hit. Côté GNOME,
-  # gnome-session hérite d'un XDG_CURRENT_DESKTOP=sway et d'une cible graphique
-  # déjà montée, et refuse de démarrer.
+  # monter la cible au start mais rien ne la redescend quand sway se termine.
+  # Le gestionnaire systemd user survit à la déconnexion (KillUserProcesses
+  # = false, défaut NixOS) : sans ce nettoyage, au login suivant `start
+  # sway-session.target` est un no-op (cible déjà active), waybar/swayidle/
+  # wlsunset ne redémarrent jamais — pire, waybar tape l'ancien SWAYSOCK et
+  # finit en start-limit-hit. Côté GNOME, gnome-session hérite d'un
+  # XDG_CURRENT_DESKTOP=sway et refuse de démarrer.
   #
-  # Idempotent : sur une session neuve les cibles sont inactives et les stop
-  # sont des no-op. `|| true` obligatoire, le wrapper sway tourne sous
-  # `set -o errexit`.
+  # Idempotent (no-op sur session neuve). `|| true` obligatoire : le wrapper
+  # sway tourne sous `set -o errexit`.
   cleanupSession = ''
     ${systemctl} --user stop graphical-session.target sway-session.target || true
     ${systemctl} --user unset-environment ${sessionVars} || true
     ${systemctl} --user reset-failed || true
   '';
 
-  # Paquet sway équivalent à ce que construirait le module NixOS (wrapper gtk,
-  # XDG_CURRENT_DESKTOP, dbus), avec le nettoyage AVANT le lancement du
-  # compositor. On le construit à la main parce qu'on remplace ensuite
-  # bin/sway : `programs.sway.package` passe par genFinalPackage, qui ne
-  # réapplique `wrapperFeatures`/`extraSessionCommands` que sur un paquet
-  # encore overridable — un symlinkJoin ne l'est plus, les options seraient
-  # silencieusement ignorées.
+  # Équivalent à ce que construirait le module NixOS (wrapper gtk,
+  # XDG_CURRENT_DESKTOP, dbus) mais construit à la main : bin/sway est
+  # remplacé plus bas, et genFinalPackage ne réapplique wrapperFeatures/
+  # extraSessionCommands que sur un paquet encore overridable (pas un
+  # symlinkJoin) — les options seraient silencieusement ignorées sinon.
   swayBase = cfg.pkgs.sway.override {
     withGtkWrapper = true; # = programs.sway.wrapperFeatures.gtk
     isNixOS = true;
     extraSessionCommands = cleanupSession;
   };
 
-  # Le nettoyage au démarrage ne suffit pas : il répare la session sway
-  # suivante, pas une bascule sway -> GNOME. Il faut donc AUSSI nettoyer à la
-  # sortie. Le wrapper amont finit par `exec sway`, on ne peut pas y accrocher
-  # de trap : on enveloppe une couche au-dessus.
+  # Le nettoyage au démarrage répare la session sway suivante, pas une
+  # bascule sway -> GNOME : il faut AUSSI nettoyer à la sortie. Le wrapper
+  # amont finit par `exec sway`, impossible d'y accrocher un trap — on
+  # enveloppe une couche au-dessus.
   swayLauncher = cfg.pkgs.writeShellScript "sway-with-session-cleanup" ''
-    # Ce lanceur est un script BASH, et bash incrémente puis exporte SHLVL à
-    # chaque démarrage. Comme on ne peut pas `exec` sway (le nettoyage doit
-    # tourner APRÈS sa sortie), ce bash reste dans l'arbre et sway hérite d'un
-    # SHLVL=1 -- que tout le monde hérite ensuite : chaque terminal ouvert
-    # démarrait donc son shell à SHLVL=2, avec le compteur de niveau affiché
-    # dans le prompt. Le wrapper amont qu'on remplace est un makeBinaryWrapper,
-    # il ne posait pas le problème. On purge la variable : le premier shell
-    # interactif repart de 1.
+    # Ce lanceur est du bash (pas un exec direct, cf. ci-dessus) : bash
+    # exporte SHLVL, que sway et tous ses enfants héritent ensuite (chaque
+    # terminal ouvert démarrait à SHLVL=2). Le wrapper amont (makeBinaryWrapper)
+    # ne posait pas ce problème. Purgé pour repartir de 1.
     unset SHLVL
 
-    # Appels informatifs : sway répond puis sort SANS ouvrir de session, donc on
-    # ne doit pas dérouler cleanupSession derrière — sinon la commande tue la
-    # session EN COURS (cibles arrêtées, WAYLAND_DISPLAY/SWAYSOCK désimportés,
-    # barre et services de session avec).
-    #
-    # -C/--validate manquait : `sway --validate` pour vérifier sa config depuis
-    # un terminal coupait donc la session. C'est le cas qui a mordu.
-    #
-    # -V est --verbose et OUVRE une session (c'est -v qui est --version) : il
-    # était dans la liste par confusion, ce qui faisait démarrer `sway -V` en
-    # sautant le nettoyage. Retiré.
-    #
-    # On balaie TOUS les arguments et pas seulement $1 : `sway -c fichier -C`
-    # est valide, et une garde sur $1 le laisse passer.
+    # Appels informatifs (--validate, --version...) : sway sort SANS ouvrir de
+    # session, donc pas de cleanupSession derrière (ça tuerait la session EN
+    # COURS). Liste testée : -C/--validate coupait la session avant son ajout.
+    # -V = --verbose (OUVRE une session, pas --version = -v) : retiré, il
+    # était là par confusion. On balaie TOUS les arguments (pas juste $1) :
+    # `sway -c fichier -C` est valide.
     for arg in "$@"; do
       case "$arg" in
         -h | --help | -v | --version | -C | --validate | --get-socketpath)
@@ -94,11 +74,9 @@ let
     exit $ret
   '';
 
-  # bin/sway remplacé par le lanceur. Le reste du paquet (etc/sway/config,
-  # share/backgrounds, share/wayland-sessions/sway.desktop) est conservé tel
-  # quel : le .desktop fait `Exec=sway`, résolu via PATH -> ce lanceur. GDM et
-  # un lancement manuel depuis un TTY passent donc tous les deux par le
-  # nettoyage, et il n'y a toujours qu'une seule entrée « Sway » dans GDM.
+  # bin/sway remplacé par le lanceur ; le reste (dont sway.desktop, qui fait
+  # Exec=sway résolu via PATH) est conservé : GDM et un lancement TTY passent
+  # donc tous les deux par le nettoyage, une seule entrée "Sway" dans GDM.
   swayPackage = cfg.pkgs.symlinkJoin {
     name = "sway-session-cleanup-${swayBase.version}";
     paths = [ swayBase ];
@@ -108,17 +86,13 @@ let
     '';
     inherit (swayBase) meta;
 
-    # On repart du passthru amont : `providedSessions` en fait partie, et
-    # services.displayManager.sessionPackages le vérifie (type « package with
-    # provided sessions »). L'écraser casse l'évaluation.
+    # passthru amont conservé : `providedSessions` en fait partie, requis par
+    # services.displayManager.sessionPackages. L'écraser casse l'évaluation.
     passthru = swayBase.passthru // {
-      # genFinalPackage (nixos/modules/programs/wayland/lib.nix) lit
-      # `pkg.override` sans garde pour décider s'il peut réappliquer
-      # wrapperFeatures/extraSessionCommands. Un symlinkJoin n'a pas cet
-      # attribut -> « attribute 'override' missing » à l'évaluation. Ce stub
-      # n'accepte aucun argument nommé, donc l'intersection est vide et
-      # genFinalPackage renvoie le paquet tel quel : exactement ce qu'on veut,
-      # les deux options sont déjà appliquées dans swayBase.
+      # genFinalPackage lit `pkg.override` sans garde ; un symlinkJoin ne l'a
+      # pas -> "attribute 'override' missing". Ce stub n'accepte aucun
+      # argument nommé (intersection vide), donc genFinalPackage renvoie le
+      # paquet tel quel — les deux options sont déjà dans swayBase.
       override = _: swayPackage;
     };
   };
@@ -138,29 +112,22 @@ in
   config = lib.mkIf cfg.enable {
     programs.sway = {
       enable = true;
-      # Le wrapper gtk et le nettoyage de session sont déjà dans swayPackage
-      # (cf. let) — wrapperFeatures/extraSessionCommands n'auraient aucun effet
-      # ici, genFinalPackage ne les réapplique pas sur un symlinkJoin.
+      # wrapperFeatures/extraSessionCommands n'auraient aucun effet ici
+      # (genFinalPackage ne les réapplique pas sur un symlinkJoin) : déjà
+      # dans swayPackage.
       package = swayPackage;
-      # Le défaut du module NixOS installe foot, swaylock, swayidle, wmenu,
-      # brightnessctl, grim et pulseaudio (!) — tous en doublon avec le côté
-      # user (modules/user/{terminal,sway,flameshot}) ou inutiles (pipewire).
+      # Défaut NixOS = foot/swaylock/swayidle/wmenu/brightnessctl/grim/
+      # pulseaudio, tous en doublon avec le côté user ou inutiles.
       extraPackages = [ ];
     };
 
-    # Partage d'écran (Discord/Chrome) sur Wayland : active xdg-desktop-portal
-    # avec le backend wlroots + PipeWire. programs.sway route déjà ScreenCast/
-    # Screenshot vers wlr ; ici on active le portail et on s'assure que gtk est
-    # présent pour le reste (FileChooser, etc.).
     xdg.portal = {
       enable = true;
       wlr.enable = true; # backend Screencast/Screenshot pour wlroots
       extraPortals = [ cfg.pkgs.xdg-desktop-portal-gtk ];
 
-      # Routage des interfaces de portail. Sans ça, avec XDG_CURRENT_DESKTOP=sway
-      # et plusieurs backends, FileChooser n'est servi par personne (dialogue Qt
-      # moche dans flameshot). On met gtk par défaut (joli sélecteur de fichiers)
-      # tout en gardant wlr pour la capture/partage d'écran.
+      # Sans routage explicite, avec plusieurs backends, FileChooser n'est
+      # servi par personne (dialogue Qt moche dans flameshot).
       config.common = {
         default = [ "gtk" ];
         "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];

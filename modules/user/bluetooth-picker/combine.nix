@@ -5,25 +5,17 @@ let
   term = config.userSettings.terminal.default;
   c = config.lib.stylix.colors.withHashtag;
 
-  # Sortie Bluetooth combinée : diffuse le même flux audio vers plusieurs
-  # appareils Bluetooth à la fois. PipeWire n'a pas d'équivalent déclaratif
-  # simple à ça (le module combine-stream cible des noms de nœuds fixes) :
-  # ici on construit et lance à la volée un mini contexte pipewire (8 modules
-  # de base + combine-stream) qui fait tourner un nœud virtuel "sink" tant
-  # que le process vit, puis on le passe en sortie par défaut.
-  #
-  # Le process porte le sink : le tuer suffit à tout défaire proprement —
-  # WirePlumber retombe alors sur son choix normal (priority.session, cf.
-  # modules/system/audio) sans intervention supplémentaire (vérifié en
-  # conditions réelles : default.audio.sink revient seul sur le haut-parleur
-  # dès que le process meurt).
+  # PipeWire n'a pas d'équivalent déclaratif simple à une sortie combinée
+  # (combine-stream cible des noms de nœuds fixes) : on construit et lance à
+  # la volée un mini contexte pipewire qui fait tourner un nœud virtuel
+  # "sink" tant que le process vit, puis on le passe en sortie par défaut.
+  # Tuer le process suffit à tout défaire (WirePlumber retombe sur
+  # priority.session, vérifié en conditions réelles).
   #
   # stream.rules / matches / actions.create-stream est la syntaxe RÉELLEMENT
   # supportée par libpipewire-module-combine-stream (vérifié contre le
-  # binaire pipewire installé) : un ancien souvenir de `combine.streams` +
-  # `target.object` est silencieusement ignoré par le module, qui retombe
-  # alors sur TOUS les sinks du système — d'où le risque, si cette syntaxe
-  # est un jour retouchée, de combiner silencieusement bien plus que prévu.
+  # binaire installé) : `combine.streams` + `target.object` est ignoré
+  # silencieusement, avec retombée sur TOUS les sinks du système.
   bt-combine = cfg.pkgs.writeShellApplication {
     name = "bt-combine";
     runtimeInputs = [
@@ -66,8 +58,7 @@ let
         exit 0
       fi
 
-      # Sorties Bluetooth actuellement connectées (device.api=bluez5, sinks
-      # audio réels) : name\tdescription, une par ligne.
+      # Sorties Bluetooth connectées : name\tdescription, une par ligne.
       mapfile -t sink_lines < <(
         pw-dump | jq -r '
           .[] | select(.info.props."media.class" == "Audio/Sink"
@@ -151,8 +142,7 @@ let
       disown
       echo $! > "$pid_file"
 
-      # Attend que le nœud apparaisse (jusqu'à ~3s) avant de le prendre pour
-      # défaut : sa création est asynchrone côté pipewire.
+      # Création asynchrone côté pipewire : attend jusqu'à ~3s.
       node_id=""
       for _ in $(seq 1 30); do
         node_id=$(pw-dump | jq -r '.[] | select(.info.props."node.name" == "bt_combine") | .id' | head -1)
@@ -182,9 +172,7 @@ let
 in
 {
   options.userSettings.bluetoothPicker.combine = {
-    # Défaut : suit bluetooth-picker (son message d'erreur renvoie vers
-    # $mod+b pour connecter des appareils — sans lui, ce bind n'existe pas).
-    # Surchargeable : mettre false pour désactiver juste la combinaison.
+    # Suit bluetooth-picker : son message d'erreur renvoie vers $mod+b.
     enable =
       lib.mkEnableOption "sortie Bluetooth combinée (diffuse vers plusieurs appareils BT à la fois)"
       // {

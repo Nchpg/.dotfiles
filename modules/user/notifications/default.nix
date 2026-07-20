@@ -3,12 +3,9 @@
 let
   cfg = config.userSettings.notifications;
 
-  # Couleurs/police du thème stylix, réutilisées dans le CSS swaync ci-dessous
-  # pour rester cohérent avec le reste du système.
   c = config.lib.stylix.colors.withHashtag;
   font = config.stylix.fonts.sansSerif.name;
-  # Taille de police des notifs : un peu plus grande que la taille « popups »
-  # de stylix, qui est petite pour les notifs.
+  # Taille "popups" de stylix, un peu petite pour des notifs.
   popupSize = toString (config.stylix.fonts.sizes.popups + 3);
 
   swayncStyle = ''
@@ -32,8 +29,7 @@ let
 
     .notification-content { padding: 12px; border-radius: 12px; }
 
-    /* Espace icône ↔ texte : GTK ignore `gap`, on met une marge sur l'icône.
-       `.image` = icône/avatar principal, `.text-box` = bloc résumé+corps. */
+    /* GTK ignore `gap` : marge sur l'icône à la place. */
     .notification-content .image { margin-right: 18px; }
     .notification-content .text-box { margin-left: 4px; }
 
@@ -97,9 +93,8 @@ let
     .notification-group-headers { color: ${c.base04}; font-weight: bold; }
   '';
 
-  # Alerte de batterie faible : aucune app ne l'envoie, on la génère nous-mêmes.
-  # Lance une notification (urgence critique sous le seuil critique) en évitant le
-  # spam grâce à un fichier d'état, et se réarme une fois rebranché/rechargé.
+  # Aucune app n'envoie d'alerte batterie : générée ici, anti-spam via un
+  # fichier d'état, réarmée une fois rebranché/rechargé.
   batteryAlert = cfg.pkgs.writeShellScript "battery-alert" ''
     set -eu
     notify=${cfg.pkgs.libnotify}/bin/notify-send
@@ -133,8 +128,7 @@ let
       title="Batterie faible"; body="Batterie à $cap%"
     fi
 
-    # Notifie seulement en déchargement et au changement de palier (anti-spam).
-    # -h ...:battery → remplace la notif batterie précédente au lieu d'empiler.
+    # -h ...:battery remplace la notif précédente au lieu d'empiler.
     if [ "$status" = "Discharging" ] && [ "$bucket" != ok ]; then
       if [ "$bucket" != "$last" ]; then
         "$notify" -u "$urgency" -i "$icon" \
@@ -150,10 +144,7 @@ in
 {
   options = {
     userSettings.notifications = {
-      # Défaut : suit sway. Sans ce daemon, aucune notification desktop
-      # n'apparaît (Discord, navigateur, notify-send) et le bloc cloche de
-      # waybar + le bind $mod+n restent inertes. Module sûr pour tout user
-      # (pas de secret, pas de chemin en dur).
+      # Suit sway : sans ce daemon, ni popups desktop ni cloche waybar/$mod+n.
       enable = lib.mkEnableOption "notifications (swaync) + alerte batterie faible" // {
         default = config.userSettings.sway.enable;
       };
@@ -177,8 +168,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Sans cet ordre, battery-alert (cf. plus bas) compare les seuils dans le
-    # mauvais sens et une bascule "critique" peut ne jamais se déclencher.
+    # Sans cet ordre, battery-alert compare les seuils dans le mauvais sens
+    # et une bascule "critique" peut ne jamais se déclencher.
     assertions = [
       {
         assertion =
@@ -188,18 +179,14 @@ in
       }
     ];
 
-    # notify-send disponible sur le PATH (tests manuels, scripts).
     home.packages = [ cfg.pkgs.libnotify ];
 
-    # Daemon de notifications : affiche les popups de toutes les apps (Discord,
-    # navigateur, notify-send…) et fournit un centre de notifications (Mod+n).
     services.swaync.enable = true;
-    # On fournit notre propre CSS (basé sur la palette stylix) → on désactive le
-    # style stylix par défaut pour éviter le conflit sur services.swaync.style.
+    # CSS maison : désactive le style stylix par défaut (sinon conflit sur
+    # services.swaync.style).
     stylix.targets.swaync.enable = false;
     services.swaync.style = swayncStyle;
 
-    # Vérifie le niveau de batterie toutes les minutes.
     systemd.user.services.battery-alert = {
       Unit.Description = "Alerte de batterie faible";
       Service = {

@@ -8,79 +8,51 @@
 let
   cfg = osConfig.systemSettings.window-manager.sway;
 
-  # Edit config template terminal
   templateContent = builtins.readFile ./sway-config/config.template;
 
-  # Commande pour lancer le terminal directement dans tmux.
   # alacritty exige -e ; kitty et foot acceptent le programme directement.
   term = config.userSettings.terminal.default;
-  # TMUX_TMPDIR aligné sur celui des shells (home-manager fixe $XDG_RUNTIME_DIR)
-  # pour viser le même serveur tmux. sway exec passe par sh -c → $XDG_RUNTIME_DIR
-  # est bien expansé, et il est toujours défini dans une session sway/wayland.
+  # $XDG_RUNTIME_DIR (aligné sur les shells) : sway exec passe par sh -c, donc
+  # bien expansé, toujours défini dans une session sway/wayland.
   tmuxCmd = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
   tmuxLaunch = if term == "alacritty" then "${term} -e ${tmuxCmd}" else "${term} ${tmuxCmd}";
 
-  # Bind (ou bloc) émis seulement si le module user `opt` est activé — évite un
-  # bind mort, ou un daemon lancé dans le vide, quand le programme ciblé n'est
-  # pas installé pour ce user. Tous les lanceurs vers d'autres modules passent
-  # par là (rofi/swaync/flameshot suivent sway par défaut, mais on gate quand
-  # même au cas où ils seraient explicitement coupés).
+  # Émis seulement si le module user `opt` est activé : évite un bind mort ou
+  # un daemon lancé dans le vide quand le programme n'est pas installé.
   bindIf = opt: str: lib.optionalString config.userSettings.${opt}.enable str;
 
-  # Ctrl+Return → terminal dans tmux, seulement si tmux est activé.
   tmuxBind = bindIf "tmux" "bindsym Control+Return exec ${tmuxLaunch}";
-
-  # $mod+Shift+f → firefox. Pas de résolution du nom (contrairement à chrome) :
-  # le binaire s'appelle toujours `firefox`, non substituable.
   firefoxBind = bindIf "firefox" "bindsym $mod+Shift+f exec firefox";
 
-  # $mod+Shift+c → chrome. Nom de binaire résolu depuis le paquet (substituable :
-  # google-chrome-stable / chromium / ungoogled) et non un chemin store, pour
-  # que le PATH résolve le wrapper home-manager qui porte les flags Wayland.
+  # Nom de binaire résolu depuis le paquet (substituable : google-chrome-stable
+  # / chromium / ungoogled), pas un chemin store : le PATH doit résoudre le
+  # wrapper home-manager qui porte les flags Wayland.
   chromeBind = lib.optionalString config.userSettings.chrome.enable "bindsym $mod+Shift+c exec ${baseNameOf (lib.getExe config.userSettings.chrome.package)}";
 
-  # $mod+d / XF86Search → lanceur d'apps rofi.
   menuBind = bindIf "rofi" "bindsym $mod+d exec $menu";
   searchBind = bindIf "rofi" "bindsym XF86Search exec $menu";
-
-  # $mod+n → centre de notifications swaync (module notifications).
   swayncBind = bindIf "notifications" "bindsym $mod+n exec swaync-client -t -sw";
 
-  # Capture d'écran flameshot (opt-in) : daemon au démarrage + binds
-  # Print/Shift+Print + règles de fenêtre. grim/slurp/wl-copy sont fournis par
-  # le module flameshot, donc tout le bloc est gaté sur lui.
   flameshotDaemon = bindIf "flameshot" "exec QT_QPA_PLATFORM=wayland flameshot";
   flameshotBinds = bindIf "flameshot" ''
-    # Print : flameshot (capture via grim → éditeur : annoter, sauver, copier).
-    # QT_QPA_PLATFORM=wayland : la copie passe par KSystemClipboard (wlr-data-
-    # control), actif seulement en Wayland natif. QT_QPA_PLATFORMTHEME=
-    # xdgdesktopportal : boîte « Save » via le sélecteur de fichiers GTK.
+    # QT_QPA_PLATFORM=wayland : copie via KSystemClipboard (wlr-data-control),
+    # actif seulement en Wayland natif. QT_QPA_PLATFORMTHEME=xdgdesktopportal :
+    # boîte "Save" via le sélecteur de fichiers GTK.
     bindsym Print exec QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui
-    # Shift+Print : sélection d'une zone → copie directe dans le presse-papier.
     bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
 
-    # L'overlay flameshot doit être flottant/sans bordure (sinon tilé et cassé).
     for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
     for_window [class="flameshot"] floating enable, border none, fullscreen disable
   '';
 
-  # Fond d'écran : l'image résolue par stylix (thème actif, ou surcharge
-  # userSettings.stylix.wallpaper — cf. modules/themes). Avant, un PNG en dur
-  # (~/.config/sway/wallpaper.png) court-circuitait stylix : le fond ne suivait
-  # ni le thème ni la config. Si stylix est coupé pour ce user, pas de ligne bg.
+  # Résolu par stylix (thème actif ou surcharge userSettings.stylix.wallpaper).
+  # Pas de ligne bg si stylix est coupé pour ce user.
   wallpaperBg = lib.optionalString (
     config.userSettings.stylix.enable && config.stylix.image != null
   ) "output * bg ${config.stylix.image} fill";
 
-  # La barre vient du module waybar (systemd user service), qui gère aussi son
-  # propre thème et ses scripts. Sway n'émet donc plus AUCUN bloc `bar {}` :
-  # l'ancienne swaybar maison (sway-bar.sh) est supprimée — elle n'était plus
-  # atteignable dans aucun profil, et dupliquait waybar/scripts/*.sh avec des
-  # divergences (échappement JSON, volume ALSA vs PipeWire, libellés fan_mode).
-
-  # Args swaylock partagés par le bind clavier (config.template, @lockCmd@) et
-  # swayidle ci-dessous : une seule définition, plus de divergence possible
-  # entre les deux si l'effet visuel (blur, couleurs) change un jour.
+  # Args swaylock partagés par le bind clavier (@lockCmd@) et swayidle
+  # ci-dessous : une seule définition, pas de divergence possible.
   lockArgs =
     "--screenshots --clock --indicator"
     + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
@@ -88,10 +60,9 @@ let
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
     + " --grace 2 --fade-in 1";
   swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
-  # Bind clavier : premier plan, sway garde la main sur l'event loop.
   lockCmd = "${swaylockBin} ${lockArgs}";
-  # swayidle : -f (daemonize) requis, sinon le lock bloquerait l'événement
-  # before-sleep (swayidle attend la fin de la commande avant de continuer).
+  # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
+  # (swayidle attend la fin de la commande avant de continuer).
   lockCmdDaemonized = "${swaylockBin} -f ${lockArgs}";
 
   finalConfigContent =
@@ -128,11 +99,7 @@ let
 in
 {
   options.userSettings.sway = {
-    # Gate PROPRE à ce user, indépendant de desktopApps (un window manager n'a
-    # rien à voir avec « des apps desktop »). Défaut : suit le sway SYSTÈME —
-    # tout user d'un host où sway est activé reçoit sa config. Pour la barre
-    # (waybar) et les binds rofi/flameshot, il suffit d'activer ces modules
-    # dans le profil du user. Mettre false pour un user qui ne veut pas de
+    # Suit le sway SYSTÈME par défaut : mettre false pour un user sans
     # session sway (ex. root, cf. son profil).
     enable = lib.mkOption {
       type = lib.types.bool;
@@ -158,10 +125,9 @@ in
       executable = true;
     };
 
-    # Cible de session graphique pour l'intégration systemd. Démarrée au lancement
-    # de sway (cf. config.template), elle active graphical-session.target via BindsTo,
-    # ce qui démarre automatiquement les services Wayland liés (cliphist, etc.) et
-    # les arrête proprement à la sortie de sway.
+    # Démarrée au lancement de sway (config.template), active
+    # graphical-session.target via BindsTo : démarre/arrête les services
+    # Wayland liés (cliphist, etc.) avec la session.
     systemd.user.targets.sway-session = {
       Unit = {
         Description = "sway compositor session";
@@ -172,25 +138,15 @@ in
       };
     };
 
-    # Capture d'écran (flameshot + grim/slurp/wl-clipboard) : module dédié
-    # modules/user/flameshot. Les binds Print/Shift+Print, le daemon et les
-    # règles for_window restent dans sway-config/config.template.
     home.packages = with cfg.pkgs; [
-
-      # Touches média / luminosité du template (XF86Audio*, XF86MonBrightness*)
-      # et sway-config/brightness.sh.
-      brightnessctl # Brightness (remplace `light`, retiré en nixpkgs 26.05)
-      playerctl # Audio player
-
-      # Lock screen
+      brightnessctl # remplace `light`, retiré en nixpkgs 26.05
+      playerctl
       swaylock-effects
     ];
 
-    # Verrouillage automatique : swaylock après 10 min d'inactivité, écrans
-    # éteints après 15 min (rallumés au premier input), et lock systématique
-    # avant une mise en veille (sinon la session revient déverrouillée au
-    # réveil). Le service est lié à graphical-session.target (démarré par
-    # sway-session.target, cf. plus haut).
+    # Lock après 10 min d'inactivité, écrans éteints après 15 min (rallumés au
+    # premier input), et lock systématique avant mise en veille (sinon la
+    # session revient déverrouillée au réveil).
     services.swayidle = {
       enable = true;
       package = cfg.pkgs.swayidle;
@@ -208,9 +164,7 @@ in
       events."before-sleep" = lockCmdDaemonized;
     };
 
-    # NB : pas de stylix.targets.sway ici — ce target ne thémise que
-    # wayland.windowManager.sway (module home-manager), qu'on n'utilise pas :
-    # la config est écrite en dur via home.file. Les couleurs de bordures
-    # vivent dans sway-config/config.template (volontairement fixes).
+    # Pas de stylix.targets.sway : ce target ne thémise que
+    # wayland.windowManager.sway (module HM), qu'on n'utilise pas ici.
   };
 }

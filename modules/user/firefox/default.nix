@@ -2,9 +2,8 @@
 
 let
   cfg = config.userSettings.firefox;
-  # Palette stylix du user (hex sans #), même source que rofi/waybar — plus
-  # d'API parallèle userSettings.stylix.themeconfig. Le CSS n'est émis que si
-  # stylix est activé pour ce user (sinon `colors` n'est pas évaluable).
+  # Même source que rofi/waybar. CSS émis seulement si stylix est activé
+  # (sinon `colors` n'est pas évaluable).
   c = config.lib.stylix.colors;
   themed = config.userSettings.stylix.enable;
 in
@@ -19,26 +18,21 @@ in
     programs.firefox = {
       enable = true;
       package = cfg.pkgs.firefox;
-      # Permissions de notification accordées d'office (policy entreprise), sans
-      # passer par la bannière « ce site souhaite afficher des notifications ».
-      # Les permissions par site vivent normalement dans permissions.sqlite (non
-      # reproductible) ; cette policy les rend déclaratives. Origines = schéma +
-      # host, sans slash final.
+      # Accordées d'office (policy entreprise), sans bannière. Rend déclaratif
+      # ce qui vit normalement dans permissions.sqlite (non reproductible).
       policies.Permissions.Notifications = {
         Allow = [
           "https://discord.com"
           "https://claude.ai"
         ];
-        # false = on continue d'autoriser les autres sites à demander la permission.
-        BlockNewRequests = false;
+        BlockNewRequests = false; # autres sites toujours libres de demander
       };
-      # 26.05 a changé le défaut vers $XDG_CONFIG_HOME/mozilla/firefox. On garde
-      # le chemin historique pour ne pas avoir à déplacer ~/.mozilla.
+      # 26.05 a changé le défaut vers $XDG_CONFIG_HOME/mozilla/firefox : on
+      # garde le chemin historique pour ne pas déplacer ~/.mozilla.
       configPath = ".mozilla/firefox";
       profiles.default = {
-        # Pas de extensions.packages déclarées ici : on ne force donc PAS
-        # extensions.force (ça imposerait un ensemble vide et désinstallerait
-        # au rebuild toute extension installée à la main via about:addons).
+        # Pas de extensions.packages -> pas de extensions.force (sinon
+        # désinstalle au rebuild toute extension installée à la main).
         settings = {
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
         };

@@ -8,10 +8,8 @@
 let
   cfg = config.userSettings.neovim;
 
-  # init.lua vit dans un fichier séparé (coloration syntaxique Lua à l'édition,
-  # comme sway/config.template ou vscode/settings.json) : les seules valeurs
-  # dynamiques (palette Stylix, cf. Telescope) sont injectées via placeholders
-  # @stylix_baseXX@.
+  # init.lua séparé (coloration syntaxique à l'édition) : valeurs dynamiques
+  # injectées via placeholders @stylix_baseXX@.
   stylixColorNames = [
     "base00"
     "base01"
@@ -34,8 +32,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-
-    # Stylix colore Neovim avec la même palette base16 que le shell et VSCode.
     stylix.targets.neovim.enable = true;
 
     programs.neovim = {
@@ -72,7 +68,7 @@ in
           # ui
           lualine-nvim
           nvim-tree-lua
-          image-nvim # rendu d'images (backend kitty) dans Markdown + API
+          image-nvim # rendu d'images (backend kitty)
 
           # git
           vim-fugitive
@@ -87,29 +83,23 @@ in
         ++ lib.optional config.userSettings.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
       extraPackages = with pkgs-stable; [
-        # language servers
         nil # nix
-        # nixfmt et non nixpkgs-fmt : c'est le formateur de `nix fmt` et du hook
-        # pre-commit (cf. formatter.nix). Les deux styles sont incompatibles.
-        nixfmt
+        nixfmt # formateur de `nix fmt` et du hook pre-commit, pas nixpkgs-fmt
         clang-tools # c/cpp
         pyright # python
         gopls # go
         lua-language-server
-        # telescope live grep
-        ripgrep
+        ripgrep # telescope live grep
         fd
-        # image.nvim : traitement d'images, + ghostscript pour rasteriser PDF/EPS,
-        # + poppler-utils (pdftoppm/pdftotext) déclaré ICI — avant, il n'arrivait
-        # que via le module claude : neovim sans claude perdait le rendu PDF.
+        # image.nvim : rendu + rasterisation PDF/EPS (poppler-utils déclaré
+        # ici et pas seulement via claude, sinon perdu sans ce module).
         imagemagick
         ghostscript
         poppler-utils
       ];
 
-      # image.nvim a besoin du rock lua `magick` sur le luapath de Neovim.
-      # extraLuaPackages fournit le set lua qui matche la version de Neovim,
-      # donc pas de conflit luajit (cf. note pkgs-stable plus haut).
+      # Rock lua `magick` : extraLuaPackages matche la version de Neovim,
+      # pas de conflit luajit.
       extraLuaPackages = ps: [ ps.magick ];
 
       initLua = initLuaContent;

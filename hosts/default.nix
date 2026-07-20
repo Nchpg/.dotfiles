@@ -4,9 +4,7 @@ let
   hardwareConfig = ./. + "/${target.host}/hardware-configuration.nix";
 in
 {
-  # Import gardé par pathExists + assertion : sans ça, ajouter un host sans
-  # hardware-configuration.nix échouait avec un « path does not exist »
-  # cryptique (même pattern que profiles/default.nix pour les users).
+  # Gardé par pathExists + assertion : sinon "path does not exist" cryptique.
   imports =
     lib.optional (builtins.pathExists hardwareConfig) hardwareConfig
     ++ (lib.optional (builtins.pathExists (./. + "/${target.host}/configuration.nix")) (

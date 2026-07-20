@@ -7,8 +7,7 @@
 }:
 
 # GPU Intel Arc (Meteor Lake) : driver xe, OpenCL/Level-Zero, VA-API.
-# Spécifique au matériel → activé par le host (hosts/gram/configuration.nix),
-# pas par le profil.
+# Spécifique au matériel -> activé par le host, pas par le profil.
 let
   cfg = config.systemSettings.intelGraphics;
 in
@@ -22,31 +21,27 @@ in
   config = lib.mkIf cfg.enable {
     services.xserver.videoDrivers = [ "modesetting" ];
 
-    # Outils de diagnostic GPU, avec le module qui monte la stack :
-    # nvtop variante intel uniquement (la .full embarque les supports
-    # NVIDIA/AMD, inutiles ici), clinfo pour vérifier l'OpenCL
-    # (dans extraPackages il n'était pas dans le PATH).
+    # nvtop.intel (pas .full, inutile sans NVIDIA/AMD) + clinfo, pas dans le
+    # PATH via extraPackages.
     environment.systemPackages = [
       pkgs-stable.nvtopPackages.intel
       pkgs-stable.clinfo
     ];
 
-    # L'iGPU Meteor Lake (PCI 7d55) est pris par le driver `xe` (moderne) au
-    # lieu de i915. NOTE : xe peut intermittemment geler le compute GPU sur
-    # cette machine (cf. ollama) — repasser sur i915 = inverser ces deux params.
+    # iGPU Meteor Lake (PCI 7d55) sur driver xe. Repasser sur i915 (peut geler
+    # le compute, cf. ollama) = inverser ces deux params.
     boot.kernelParams = [
       "i915.force_probe=!7d55"
       "xe.force_probe=7d55"
     ];
     boot.kernelModules = [ "xe" ];
 
-    # Stack compute/vidéo depuis unstable pour suivre le matériel récent
-    # (aligné avec le devshell xpu, cf. flake.nix).
+    # unstable pour suivre le matériel récent (aligné avec le devshell xpu).
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs-unstable; [
-        intel-compute-runtime # OpenCL driver (libigdrcl.so)
-        intel-compute-runtime.drivers # Level-Zero GPU driver (libze_intel_gpu.so) -> /run/opengl-driver/lib
+        intel-compute-runtime # OpenCL driver
+        intel-compute-runtime.drivers # Level-Zero -> /run/opengl-driver/lib
         intel-media-driver
         vpl-gpu-rt
         level-zero
@@ -54,7 +49,6 @@ in
     };
 
     environment.sessionVariables = {
-      # Décodage vidéo VA-API via intel-media-driver.
       LIBVA_DRIVER_NAME = "iHD";
     };
   };

@@ -1,11 +1,9 @@
 { config, lib, ... }:
 
-# Dock USB DisplayLink (Dell D3100) : la vidéo ne sort pas du GPU, elle est
-# compressée côté PC et décodée par la puce du dock → driver propriétaire
-# `displaylink` + module kernel evdi requis, sinon le HDMI du dock est mort.
-# Le zip du driver (licence Synaptics, requireFile dans nixpkgs) est téléchargé
-# automatiquement via overlays/displaylink.nix — rien à faire sur un nouveau host.
-# Spécifique au matériel → activé par le host, pas par le profil.
+# Dock USB DisplayLink (Dell D3100) : vidéo compressée côté PC, décodée par
+# la puce du dock (driver propriétaire + module kernel evdi). Le zip du
+# driver (licence Synaptics) est téléchargé automatiquement via
+# overlays/displaylink.nix. Spécifique au matériel -> activé par le host.
 let
   cfg = config.systemSettings.displaylink;
 in
@@ -17,11 +15,8 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # S'ajoute au "modesetting" du GPU natif posé par intel-graphics (les listes
-    # videoDrivers fusionnent) ; installe le paquet displaylink, charge evdi et
-    # lance le service dlm. On ne remet PAS "modesetting" ici : la liste ne
-    # déduplique pas, ça ferait un doublon. Un host displaylink sans driver GPU
-    # natif devrait fournir le sien (aucun aujourd'hui).
+    # S'ajoute (fusion de liste) au "modesetting" posé par intel-graphics :
+    # ne PAS le remettre ici, la liste ne déduplique pas.
     services.xserver.videoDrivers = [ "displaylink" ];
   };
 }

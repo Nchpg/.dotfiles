@@ -1,12 +1,9 @@
 { config, lib, ... }:
 
-# Barre de la session sway : blocs, icônes, clics et tray. C'est la SEULE barre
-# du dépôt depuis le retrait de l'ancienne swaybar maison (sway-bar.sh) — sway
-# n'émet plus aucun bloc `bar {}` natif.
-#
-# Les blocs cliquables passent par les launchers ~/.config/sway/launchers/*,
-# fournis par les modules wifi-picker, volume-mixer, bluetooth-picker,
-# lg-control et calendar-tui.
+# Barre de la session sway (SEULE barre du dépôt : sway n'émet plus aucun
+# bloc `bar {}` natif). Blocs cliquables via les launchers
+# ~/.config/sway/launchers/*, fournis par wifi-picker, volume-mixer,
+# bluetooth-picker, lg-control et calendar-tui.
 let
   cfg = config.userSettings.waybar;
   inherit (cfg) pkgs;
@@ -21,17 +18,15 @@ let
   home = config.home.homeDirectory;
   launcher = name: "${home}/.config/sway/launchers/${name}";
 
-  # on-click vers le launcher d'un autre module, câblé UNIQUEMENT si ce module
-  # est activé pour le user. Sinon pas d'attribut on-click du tout : le bloc
-  # reste affiché, le clic est simplement inactif. Rend la barre composable —
-  # un user minimal (guest) peut activer waybar sans être forcé de tirer
-  # calendarTui (secrets sops) ni wifiPicker (nmtui/networkmanager).
+  # Câblé UNIQUEMENT si le module est activé pour le user, sinon pas
+  # d'attribut on-click du tout (bloc affiché, clic inactif) : rend la barre
+  # composable pour un user minimal (guest).
   clickIf =
     module: name: lib.optionalAttrs config.userSettings.${module}.enable { on-click = launcher name; };
 
-  # Glyphe Nerd Font depuis un codepoint hexa, BMP ou plan astral (les icônes
-  # Material Design sont > U+FFFF -> paire de substitution UTF-16). Évite de
-  # taper le glyphe en dur (qui se ferait stripper) ; fromJSON gère le \u.
+  # Codepoint hexa -> glyphe, BMP ou plan astral (icônes Material Design >
+  # U+FFFF -> paire de substitution UTF-16). Évite de taper le glyphe en dur
+  # (qui se ferait stripper).
   mkIcon =
     hex:
     let
@@ -70,28 +65,22 @@ let
   # Icône suivie de l'espacement standard de la barre (3 espaces) avant le texte.
   labeled = hex: text: "${mkIcon hex}   ${text}";
 
-  # Binaires référencés explicitement (clics) pour ne pas dépendre du PATH.
+  # Référencés explicitement (clics) pour ne pas dépendre du PATH.
   playerctl = "${pkgs.playerctl}/bin/playerctl";
   brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
   wpctl = "${pkgs.wireplumber}/bin/wpctl";
   swaync = "${pkgs.swaynotificationcenter}/bin/swaync-client";
   systemctl = "${pkgs.systemd}/bin/systemctl";
-  # Seule dépendance du module qui restait en nom nu : elle ne marchait que
-  # parce que NixOS met procps dans environment.systemPackages par défaut.
   pkill = "${pkgs.procps}/bin/pkill";
 
-  # Terminal de l'utilisateur (même convention que le module sway) : alacritty
-  # exige `-e` pour lancer un programme, kitty/foot l'acceptent directement.
+  # alacritty exige `-e`, kitty/foot acceptent le programme directement.
   term = config.userSettings.terminal.default;
   termExec = prog: if term == "alacritty" then "${term} -e ${prog}" else "${term} ${prog}";
-  # btop configuré par l'utilisateur (programs.btop), donc avec le support GPU
-  # Intel xe (PR #1457) si activé. NE PAS prendre `pkgs.btop` : c'est le btop
-  # amont (driver i915 only), qui n'affiche PAS le GPU xe de cette machine.
+  # programs.btop (pas pkgs.btop, amont driver i915-only) : support GPU xe
+  # (PR #1457) si activé côté user.
   btop = "${config.programs.btop.package}/bin/btop";
-  thunar = "${pkgs.thunar}/bin/thunar"; # gestionnaire de fichiers (GUI)
+  thunar = "${pkgs.thunar}/bin/thunar";
 
-  # Scripts custom installés dans la conf waybar, puis exécutés par chemin
-  # absolu (cf. scriptDir).
   scriptDir = "${home}/.config/waybar/scripts";
   scriptNames = [
     "resources.sh"
@@ -104,13 +93,10 @@ let
     "battery.sh"
   ];
 
-  # Helpers JSON communs (json_escape/emit), inlinés en tête de chaque script.
   libSh = builtins.readFile ./scripts/lib.sh;
 
-  # Dépendances runtime épinglées par script : on préfixe le PATH avec leurs
-  # binaires (store), donc les scripts ne dépendent plus du PATH ambiant pour
-  # leurs outils (robuste si la session change de PATH). Le PATH ambiant reste
-  # ajouté en repli pour le reste. coreutils couvre cat/date/df/numfmt/nproc/...
+  # PATH préfixé par leurs binaires (store) : robuste si la session change de
+  # PATH, celui-ci reste ajouté en repli pour le reste.
   scriptDeps = {
     "resources.sh" = [
       pkgs.coreutils
@@ -153,9 +139,8 @@ let
     ];
   };
 
-  # Script final = shebang vers un bash épinglé + PATH déterministe + lib.sh +
-  # corps du script source. (Le `#!/usr/bin/env bash` du corps devient un simple
-  # commentaire une fois en milieu de fichier.)
+  # Shebang bash épinglé + PATH déterministe + lib.sh + corps du script (son
+  # propre `#!/usr/bin/env bash` devient un simple commentaire en milieu de fichier).
   mkScript =
     name:
     ''
@@ -173,11 +158,8 @@ let
     on-scroll-up = volUp;
     on-scroll-down = volDown;
   };
-  # Presets de volume du menu clic droit (saut direct). Ids GTK = vol<N>,
-  # générés ci-dessous (volumeMenuXml) ; chaque action fixe le volume absolu
-  # via wpctl. Source unique = volumePresets (même pattern que backlightPresets
-  # plus bas) : un menus/volume.xml statique désynchronisait silencieusement
-  # les ids dès que volumePresets était surchargé.
+  # Ids GTK = vol<N>. Source unique = volumePresets : un menus/volume.xml
+  # statique désynchronisait silencieusement les ids si surchargé.
   volPresets = cfg.volumePresets;
   volPresetActions = lib.listToAttrs (
     map (
@@ -231,50 +213,36 @@ let
     </interface>
   '';
 
-  # Menus GTK au clic droit : fichiers XML installés dans menuDir, chaque entrée
-  # reliée à sa commande (menu-actions) par l'id du GtkMenuItem.
   menuDir = "${home}/.config/waybar/menus";
   menuNames = [
     "notifications.xml"
   ];
 
-  # Villes proposées au clic droit du module météo (option userSettings.waybar.
-  # weatherCities). Source unique : le menu XML et les actions sont générés à
-  # partir de cette liste. Le choix courant est lui persisté hors du store
-  # (cf. weather.sh), donc il survit aux reboots et rebuilds.
+  # Choix courant persisté hors du store (weather.sh), survit aux reboots.
   inherit (cfg) weatherCities;
 
-  # Signal temps-réel qui réveille le module météo (relance weather.sh sans
-  # attendre l'intervalle). Source unique : utilisé pour `signal` côté waybar ET
-  # pour le `pkill` des actions de menu -> les deux restent forcément cohérents.
+  # Signal utilisé à la fois pour `signal` côté waybar ET le `pkill` des
+  # actions de menu, pour rester cohérents.
   weatherSignal = 8;
   weatherWake = "${pkill} -RTMIN+${toString weatherSignal} waybar";
 
-  # Action de menu : écrit la ville dans l'état persistant puis réveille le
-  # module pour un switch immédiat.
   # `\''${…}` = ${…} littéral dans le shell ; `$HOME` reste littéral aussi.
   weatherStateDir = "\${XDG_STATE_HOME:-$HOME/.local/state}/waybar";
-  # Écrit la ville, réveille la météo, et relance le night light s'il tourne
-  # (try-restart = no-op si wlsunset est coupé) pour qu'il adopte les coords de
-  # la nouvelle ville. Le wrapper wlsunset-geo.sh géocode lui-même au besoin.
+  # Écrit la ville, réveille la météo, relance le night light s'il tourne
+  # (no-op sinon) pour qu'il adopte les coords de la nouvelle ville.
   mkWeatherAction =
     city:
     "mkdir -p \"${weatherStateDir}\""
     + " && printf '%s' ${lib.escapeShellArg city} > \"${weatherStateDir}/weather-city\""
     + " && ${weatherWake}"
     + " && ${systemctl} --user try-restart wlsunset";
-  # Le menu clic droit ne sert qu'à changer de ville : une action par ville.
-  # (L'actualisation est passée au clic GAUCHE -> on-click = weatherWake.)
   weatherMenuActions = lib.listToAttrs (
     map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities
   );
 
-  # Échappement XML minimal pour les valeurs générées (noms de ville saisis
-  # librement par l'utilisateur dans userSettings.waybar.weatherCities).
+  # Villes saisies librement par l'utilisateur : échappement XML minimal.
   escapeXml = lib.replaceStrings [ "&" "<" ">" "\"" "'" ] [ "&amp;" "&lt;" "&gt;" "&quot;" "&apos;" ];
 
-  # Menu GTK généré : un GtkMenuItem par ville (id = label = nom de la ville,
-  # relié à `weatherMenuActions` par cet id).
   weatherMenuXml = ''
     <?xml version="1.0" encoding="UTF-8"?>
     <!-- Généré depuis `weatherCities` dans modules/user/waybar/default.nix. -->
@@ -293,16 +261,12 @@ let
     </interface>
   '';
 
-  # Le night light (service wlsunset) est piloté depuis le module luminosité
-  # (custom/backlight) : son icône reflète l'état on/off. Ce signal réveille ce
-  # module pour rafraîchir l'icône/le % aussitôt (clic ou molette).
+  # Réveille le module luminosité pour rafraîchir l'icône/le % (clic/molette).
   backlightSignal = 9;
   refreshBacklight = "${pkill} -RTMIN+${toString backlightSignal} waybar";
-  # Clic gauche : bascule le service wlsunset (start/stop) puis rafraîchit
-  # l'icône. Le choix PERSISTE au reboot via un flag : couper pose le fichier,
-  # rallumer le retire, et le service a un ExecCondition dessus — au login il
-  # ne démarre que si le night light n'était pas coupé (sans flag, le
-  # WantedBy graphical-session le relançait systématiquement).
+  # Le choix PERSISTE au reboot via un flag : couper pose le fichier, rallumer
+  # le retire, ExecCondition dessus (sans flag, WantedBy graphical-session
+  # relancerait systématiquement le service).
   nightlightOffFlag = "$HOME/.local/state/wlsunset-off";
   nightlightToggle =
     "if ${systemctl} --user is-active --quiet wlsunset;"
@@ -311,21 +275,16 @@ let
     + " else ${pkgs.coreutils}/bin/rm -f \"${nightlightOffFlag}\"; ${systemctl} --user start wlsunset; fi;"
     + " ${refreshBacklight}";
 
-  # Pas de luminosité ±5 % (molette ET menu). La hausse plafonne d'elle-même à
-  # 100 % (brightnessctl). La BAISSE plancher à 1 % et JAMAIS 0 % : on lit le %
-  # courant (champ 4 du CSV `-m`) et on garde max(1, %−5), comme le bind clavier
-  # sway (brightness.sh : son plus petit palier est 1, pas 0).
+  # Baisse plancher à 1 % et JAMAIS 0 % : lit le % courant et garde
+  # max(1, %-5), comme brightness.sh côté bind clavier sway.
   backlightUp = "${brightnessctl} set 5%+; ${refreshBacklight}";
   backlightDown =
     "p=$(${brightnessctl} -m | ${pkgs.coreutils}/bin/cut -d, -f4 | ${pkgs.coreutils}/bin/tr -d '%');"
     + " n=$(( p - 5 )); n=$(( n < 1 ? 1 : n ));"
     + " ${brightnessctl} set \${n}%; ${refreshBacklight}";
 
-  # Menu clic-droit du module luminosité, dans l'ordre : « Changer de mode »
-  # (bascule night light), séparateur, presets de niveau (saut direct via
-  # brightnessctl), séparateur, et le pas ±5 % (mêmes commandes que la molette,
-  # baisse plancher à 1 %). Source unique = backlightPresets. Id GTK préfixé
-  # "pct" (pas de chiffre en tête) ; "mode"/"inc"/"dec" reliés aux actions.
+  # Source unique = backlightPresets. Id GTK préfixé "pct" (pas de chiffre en
+  # tête) ; "mode"/"inc"/"dec" reliés aux actions.
   inherit (cfg) backlightPresets;
   backlightMenuActions =
     lib.listToAttrs (
@@ -388,10 +347,8 @@ let
 in
 {
   options.userSettings.waybar = {
-    # Défaut : suit sway — un user en session sway veut la barre. ATTENTION :
-    # il n'y a plus de fallback depuis le retrait de la swaybar maison. Mettre
-    # waybar.enable = false donne une session sway SANS AUCUNE barre (choix
-    # légitime pour un user minimal, mais ce n'est pas un repli).
+    # Suit sway par défaut. ATTENTION : pas de fallback, waybar.enable = false
+    # donne une session sway SANS AUCUNE barre (choix légitime pour un user minimal).
     enable = lib.mkEnableOption "waybar (seule barre de la session sway)" // {
       default = config.userSettings.sway.enable;
     };
@@ -437,22 +394,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Les on-click de la barre pointent vers ~/.config/sway/launchers/*, fournis
-    # par cinq autres modules (bluetoothPicker, wifiPicker, volumeMixer,
-    # lgControl, calendarTui). On ne les câble que si le module correspondant
-    # est activé (cf. clickIf), plutôt que d'imposer les cinq : la barre reste
-    # utilisable pour un user qui n'en active qu'une partie.
-
-    # On gère nous-mêmes le style (palette Stylix) pour coller à l'ancienne barre.
+    # Style maison (palette Stylix) pour coller à l'ancienne barre.
     stylix.targets.waybar.enable = false;
 
-    # Night light : wlsunset réchauffe la température de couleur de l'écran le
-    # soir/nuit (gamma wlroots) pour les yeux, automatiquement selon le soleil.
-    # Démarré avec la session graphique ; piloté au clic depuis le module
-    # luminosité (custom/backlight). Le lieu n'est PAS en dur : le wrapper
-    # wlsunset-geo.sh lit la ville/coords du cache météo (cf. lib.sh) -> changer
-    # de ville météo change aussi le lieu du night light. Températures : jour
-    # 6500 K (neutre), nuit 3800 K (chaud). wlsunset rétablit le gamma à l'arrêt.
+    # Lieu PAS en dur : wlsunset-geo.sh lit la ville/coords du cache météo, un
+    # changement de ville météo change aussi le lieu du night light.
     systemd.user.services.wlsunset = {
       Unit = {
         Description = "wlsunset – température de couleur jour/nuit";
@@ -461,19 +407,16 @@ in
       };
       Install.WantedBy = [ "graphical-session.target" ];
       Service = {
-        # Respecte le toggle de la barre (cf. nightlightToggle) : si le night
-        # light a été coupé, le flag existe et la condition échoue → unit
-        # « skipped » (pas failed), le service ne se relance pas au login.
+        # Flag posé par nightlightToggle : condition échoue -> "skipped" (pas
+        # failed), pas de relance au login si le night light a été coupé.
         ExecCondition = "${pkgs.coreutils}/bin/test ! -e %h/.local/state/wlsunset-off";
         ExecStart = "${scriptDir}/wlsunset-geo.sh";
         Restart = "on-failure";
       };
     };
 
-    # Les scripts épinglent eux-mêmes leurs dépendances dans leur PATH (cf.
-    # scriptDeps / mkScript), donc ces paquets ne sont plus requis ICI par
-    # waybar. On les garde uniquement comme CLI pratiques pour l'utilisateur
-    # (playerctl pilote aussi Spotify via les on-click/on-scroll du module).
+    # Les scripts épinglent déjà leurs deps (scriptDeps/mkScript) : gardés ici
+    # seulement comme CLI pratiques (playerctl pilote aussi Spotify).
     home.packages = [
       pkgs.playerctl
       pkgs.curl
@@ -510,8 +453,6 @@ in
 
     programs.waybar = {
       enable = true;
-      # Démarrée par systemd avec la session graphique (graphical-session.target,
-      # activée par sway-session.target — cf. module sway).
       systemd.enable = true;
 
       settings.mainBar = {
@@ -521,7 +462,6 @@ in
 
         modules-left = [ "sway/workspaces" ];
         modules-center = [ ];
-        # Ordre historique (nowplaying ... datetime), tray en bout.
         modules-right = [
           "custom/nowplaying"
           "custom/bluetooth"
@@ -544,8 +484,8 @@ in
 
         "custom/nowplaying" = {
           exec = "${scriptDir}/nowplaying.sh";
-          # Piloté par événements (playerctl --follow) : pas d'interval, on
-          # relance juste le flux continu s'il s'arrête (redémarrage dbus, etc.).
+          # Piloté par événements (playerctl --follow), pas d'interval : relance
+          # juste le flux continu s'il s'arrête.
           restart-interval = 1;
           tooltip = false;
           on-click = "${playerctl} -p spotify play-pause";
@@ -556,7 +496,6 @@ in
         "custom/bluetooth" = {
           exec = "${scriptDir}/bluetooth.sh";
           interval = 5;
-          # Sortie JSON : barre = noms tronqués, tooltip = noms complets.
           return-type = "json";
         }
         // clickIf "bluetoothPicker" "bluetooth";
@@ -572,36 +511,29 @@ in
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
-          interval = 3; # 3 s plutôt que 2 : moins de réveils/forks, gain batterie
-          # Sortie JSON : texte compact (inchangé) dans la barre + détail
-          # RAM/CPU/GPU et charge système en tooltip.
+          interval = 3; # moins de réveils/forks qu'à 2s, gain batterie
           return-type = "json";
-          on-click = termExec btop; # détail des process dans btop
+          on-click = termExec btop;
         };
 
-        # Luminosité (custom : le % vient de brightnessctl, l'icône reflète
-        # l'état du night light). Molette = ±5 % (puis refresh du %), clic =
-        # bascule le night light (wlsunset). Couleur fixe orange (cf. CSS).
         "custom/backlight" = {
           exec = "${scriptDir}/backlight.sh";
           interval = 3; # filet pour capter les touches clavier de luminosité
-          signal = backlightSignal; # refresh immédiat au clic/molette
+          signal = backlightSignal;
           return-type = "json";
           format = "{icon}   {text}";
           format-icons = {
-            on = mkIcon "f0594"; # md-weather-night (lune) : night light actif
-            off = mkIcon "f00e0"; # md-brightness (luminosité) : night light off
+            on = mkIcon "f0594"; # md-weather-night : night light actif
+            off = mkIcon "f00e0"; # md-brightness : night light off
           };
           on-click = nightlightToggle;
           on-scroll-up = backlightUp;
-          on-scroll-down = backlightDown; # plancher à 1 % (cf. backlightDown)
+          on-scroll-down = backlightDown;
           menu = "on-click-right";
           menu-file = "${menuDir}/backlight.xml";
           menu-actions = backlightMenuActions;
         };
 
-        # Volume (module unique -> tooltip stable). Clic gauche = mute, clic
-        # droit = menu (mute / mixer / presets 10-100 % / +5 / -5), molette = volume.
         wireplumber = volScroll // {
           format = "{icon}  {volume}%";
           format-muted = "${mkIcon "f075f"}  {volume}%"; # md-volume-mute
@@ -610,20 +542,16 @@ in
           menu = "on-click-right";
           menu-file = "${menuDir}/volume.xml";
           menu-actions = {
-            mute = volMute; # toggle mute/unmute
+            mute = volMute;
             volup = volUp;
             voldown = volDown;
           }
-          # Entrée « mixer » du menu seulement si volumeMixer est activé (sinon
-          # l'action est juste absente du menu, le reste marche).
           // lib.optionalAttrs config.userSettings.volumeMixer.enable {
             mixer = launcher "volume-mixer";
           }
           // volPresetActions;
         };
 
-        # Notifications (module unique -> tooltip stable) : cloche + nombre.
-        # Clic gauche = toggle « ne pas déranger », clic droit = menu (DND / panneau).
         "custom/swaync" = swayncBase // {
           format = "{icon}  {text}";
           format-icons = {
@@ -637,11 +565,11 @@ in
             "dnd-inhibited-none" = bellOff;
             default = bell;
           };
-          on-click = "${swaync} -t -sw"; # afficher le panneau de notifications
+          on-click = "${swaync} -t -sw";
           menu = "on-click-right";
           menu-file = "${menuDir}/notifications.xml";
           menu-actions = {
-            dnd = "${swaync} -d -sw"; # toggle ne pas déranger
+            dnd = "${swaync} -d -sw";
             panel = "${swaync} -t -sw";
           };
         };
@@ -649,16 +577,12 @@ in
         "custom/disk" = {
           exec = "${scriptDir}/disk.sh";
           interval = 30;
-          # Sortie JSON : texte compact + détail (utilisé / total / libre).
           return-type = "json";
-          on-click = thunar; # ouvre le gestionnaire de fichiers
+          on-click = thunar;
         };
 
-        # Batterie (module custom via battery.sh). On a quitté le module natif
-        # pour pouvoir afficher, en plus de %/temps/santé/cycles, le profil
-        # d'alimentation et le régime des ventilateurs — infos impossibles avec
-        # le tooltip-format figé du module natif. Icône, %, classe (couleur) et
-        # tooltip sont entièrement produits par le script.
+        # Module custom (pas le natif) : ajoute profil d'alimentation et
+        # régime des ventilateurs, impossibles avec le tooltip-format figé natif.
         "custom/battery" = {
           exec = "${scriptDir}/battery.sh";
           interval = 10; # profil/ventilo bougent plus vite que le niveau
@@ -666,22 +590,17 @@ in
         }
         // clickIf "lgControl" "lg-control";
 
-        # Météo (Open-Meteo via weather.sh). Le script émet une catégorie dans
-        # "alt", mappée ici sur l'icône Material Design (jour/nuit inclus).
+        # Le script émet une catégorie dans "alt", mappée ici sur l'icône.
         "custom/weather" = {
           exec = "${scriptDir}/weather.sh";
           interval = 900; # 15 min : la météo bouge lentement, on ménage l'API
-          signal = weatherSignal; # réveillé par le menu (cf. weatherWake) pour un switch immédiat
-          # Sans ça, waybar re-exécute weather.sh après CHAQUE événement souris
-          # (défaut exec-on-event = true) : ouvrir le menu au clic droit relançait
-          # une requête réseau (la date « Maj » bougeait). On ne rafraîchit donc
-          # que sur le signal (clic gauche = weatherWake, ou choix de ville).
+          signal = weatherSignal;
+          # Défaut exec-on-event = true relancerait weather.sh (requête réseau)
+          # après CHAQUE événement souris, dont l'ouverture du menu au clic droit.
           exec-on-event = false;
           return-type = "json";
           format = "{icon}  {text}";
-          # Clic gauche : actualiser (réveille weather.sh -> requête réseau).
           on-click = weatherWake;
-          # Clic droit : choisir la ville (menu généré depuis weatherCities).
           menu = "on-click-right";
           menu-file = "${menuDir}/weather.xml";
           menu-actions = weatherMenuActions;
@@ -715,8 +634,6 @@ in
         };
       };
 
-      # Style : fond Stylix, texte adouci (base04), un accent de couleur par
-      # module, et de l'espacement pour aérer. Tout en base16 (palette Stylix).
       style = ''
         * {
           font-family: "${font}", "${nerdFont}", "${emojiFont}";
@@ -729,9 +646,6 @@ in
           color: ${c.base04};
         }
 
-        /* Workspaces (numéros) à gauche : carrés (min-width ≈ hauteur via le
-           padding vertical). On neutralise le chrome GTK par défaut
-           (bordure/ombre/outline non thémés). */
         #workspaces {
           margin-left: 6px;
         }
@@ -755,11 +669,8 @@ in
           background: ${c.base0D};   /* accent (bleu Stylix) pour l'actif */
           color: ${c.base00};
         }
-        /* États d'ALERTE (urgent, batterie faible/critique) : variantes
-           « vives » base24 plutôt que les couleurs normales — c'est le seul
-           endroit où l'on veut vraiment que ça saute aux yeux. Sur un thème
-           base16, `bright-*` retombe sur la couleur normale (repli mkBase24
-           de base16.nix), donc le rendu est strictement inchangé. */
+        /* bright-* (base24) : sur un thème base16, retombe sur la couleur
+           normale (repli mkBase24), rendu inchangé. */
         #workspaces button.urgent {
           background: ${c.bright-red};
           color: ${c.base00};

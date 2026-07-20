@@ -1,22 +1,13 @@
-# Métadonnées de thème hors spec base16 : fond d'écran par défaut, consommé
-# par stylixSettings (modules/themes/default.nix).
+# Métadonnées hors spec base16 : fond d'écran par défaut, consommé par
+# stylixSettings (modules/themes/default.nix). Polarité pas ici : lue dans le
+# champ `variant:` de chaque yaml (themes.polarity).
 #
-# La polarité (dark/light) n'est PAS ici : elle se lit dans le champ
-# `variant:` de chaque yaml (cf. themes.polarity), ce qui évite d'entretenir
-# une table pour les ~500 thèmes amont.
-#
-# themeWallpaper : nom de thème -> nom d'entrée du registre ci-dessous.
-# Volontairement PARTIEL — seuls ~60 thèmes sur les ~510 y figurent, les
-# autres retombent sur defaultWallpaper. Surchargeable par profil/user via
-# systemSettings.stylix.wallpaper / userSettings.stylix.wallpaper.
+# themeWallpaper : nom de thème -> entrée du registre ci-dessous. Volontairement
+# PARTIEL (~60 thèmes sur ~510), le reste retombe sur defaultWallpaper.
+# Surchargeable via systemSettings/userSettings.stylix.wallpaper.
 {
-  # Fond utilisé quand le thème n'a pas d'entrée dans themeWallpaper — donc
-  # pour la grande majorité du catalogue amont. Par POLARITÉ : un fond sombre
-  # sous un thème clair (ou l'inverse) jure immédiatement.
-  #
-  # Le défaut sombre est un fichier LOCAL : contrairement aux entrées
-  # distantes, il ne peut pas disparaître, ce qui compte pour un repli censé
-  # couvrir 450 thèmes.
+  # Par POLARITÉ (sombre sous thème clair jure). Défaut sombre en fichier
+  # LOCAL, contrairement aux entrées distantes : ne peut pas disparaître.
   defaultWallpaper = {
     dark = "custom-kyoto";
     light = "custom-kyoto";
@@ -87,17 +78,10 @@
     xcode-dusk = "xcode-dusk";
   };
 
-  # Registre central des wallpapers : nom → source fetchurl. Une URL morte se
-  # corrige ICI, une seule fois ; un fond peut être partagé par plusieurs
-  # thèmes (cf. gruvbox-dark) ou n'appartenir à aucun.
-  #
-  # Deux formes d'entrée :
-  #   <nom> = { url = "..."; sha256 = "..."; };   # téléchargé (fetchurl)
-  #   <nom>.path = ./wallpapers/<fichier>;        # fichier local du repo
+  # nom -> { url; sha256; } (fetchurl) ou { path = ./wallpapers/<fichier>; }.
+  # Un fond peut être partagé par plusieurs thèmes ou n'appartenir à aucun.
   registry = {
-    # Fond perso de nchpg (ex-wallpaper.png de la config sway) : pagode du
-    # temple Daigo-ji à Kyoto. Rattaché à aucun thème — sélectionné via
-    # userSettings.stylix.wallpaper = "custom-kyoto".
+    # Rattaché à aucun thème, sélectionné via userSettings.stylix.wallpaper.
     custom-kyoto.path = ./wallpapers/custom-kyoto.png;
 
     alph = {

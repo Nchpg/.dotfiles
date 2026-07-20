@@ -1,11 +1,8 @@
 { config, lib, ... }:
 
-# GitHub CLI (gh) authentifie par token sops. Comme task-tui genere son
-# client_secrets.json, on GENERE ~/.config/gh/hosts.yml a partir du PAT stocke
-# dans secrets/secrets.yaml (jamais en clair dans le repo ni le Nix store).
-# gh lit directement hosts.yml -> auth disponible dans tous les shells (fish/zsh
-# /bash) et pour les outils qui appellent gh (dont Claude Code), sans variable
-# d'environnement a propager.
+# hosts.yml généré depuis le PAT stocké dans secrets/secrets.yaml (jamais en
+# clair dans le repo ni le store) : gh le lit directement, auth disponible
+# dans tous les shells sans variable d'environnement à propager.
 let
   cfg = config.userSettings.gh;
 in
@@ -56,9 +53,6 @@ in
       };
     };
 
-    # Le PAT vit dans secrets.yaml ; sops le dechiffre vers un fichier runtime,
-    # puis l'injecte dans hosts.yml via le placeholder (le token n'apparait que
-    # dans le fichier genere a l'activation, hors store).
     sops.secrets.${cfg.tokenSops} = { };
     sops.templates."gh-hosts" = {
       path = "${config.home.homeDirectory}/.config/gh/hosts.yml";

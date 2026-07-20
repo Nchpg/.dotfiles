@@ -21,12 +21,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # google-chrome est unfree : allowUnfree est déjà activé dans le profil.
     programs.chromium = {
       enable = true;
       inherit (cfg) package;
 
-      # Rendu natif Wayland sous Sway (sinon flou/XWayland et tearing).
+      # Rendu natif Wayland (sinon flou/XWayland et tearing).
       commandLineArgs = [
         "--ozone-platform-hint=auto"
         "--enable-features=WaylandWindowDecorations"

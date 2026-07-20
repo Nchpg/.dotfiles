@@ -29,12 +29,8 @@ let
     + "actbutton=white,black:"
     + "compactbutton=white,black";
 
-  # kitty intercepte la touche AVANT de l'envoyer à l'app : on mappe q vers la
-  # fermeture de la fenêtre flottante pour unifier la sortie de tous les TUIs
-  # (nmtui ne quitte nativement qu'avec Esc, jamais avec q). Conséquence : q est
-  # capturé par kitty et n'atteint plus nmtui — sans impact en usage courant,
-  # mais on ne peut plus taper un « q » littéral (ex. mot de passe wifi).
-  # confirm_os_window_close=0 évite le prompt de confirmation à la fermeture.
+  # nmtui ne quitte nativement qu'avec Esc : q mappé côté kitty pour unifier
+  # la sortie des TUIs. Effet de bord : plus de "q" littéral tapable (mdp wifi).
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
   termCmd = import ../../../lib/mk-terminal-cmd.nix {
     inherit lib term;
@@ -46,8 +42,7 @@ let
 in
 {
   options.userSettings.wifiPicker = {
-    # Défaut : suit waybar (son bloc réseau a un on-click vers ce picker).
-    # Surchargeable : mettre false pour une waybar sans bouton wifi.
+    # Suit waybar : son bloc réseau a un on-click vers ce picker.
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
       default = config.userSettings.waybar.enable;
     };

@@ -20,9 +20,7 @@ in
       shellWrapperName = "yy";
     };
 
-    # Yazi thémé par Stylix : il utilise exactement la même palette base16 que
-    # le shell (et suit le toggle dark/light). On NE met PAS de flavor manuel
-    # ici, sinon il écrirait le même theme.toml → conflit avec Stylix.
+    # Pas de flavor manuel : écrirait le même theme.toml -> conflit avec Stylix.
     stylix.targets.yazi.enable = true;
   };
 }

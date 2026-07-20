@@ -12,14 +12,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-
-    # NB : home-manager (programs.tmux) fixe déjà
-    #   TMUX_TMPDIR = $XDG_RUNTIME_DIR
-    # pour les shells. Le binding sway (Ctrl+Return) s'aligne sur cette même
-    # valeur pour viser le même serveur tmux — sinon sway utiliserait /tmp et
-    # les sessions seraient invisibles entre elles.
-
-    # Stylix colore tmux avec la même palette base16 que le reste du système.
+    # home-manager fixe TMUX_TMPDIR = $XDG_RUNTIME_DIR : le binding sway
+    # (Ctrl+Return) s'aligne dessus, sinon sway viserait /tmp et les
+    # sessions seraient invisibles entre elles.
     stylix.targets.tmux.enable = true;
 
     programs.tmux = {
@@ -86,8 +81,7 @@ in
         # Couleurs true color
         set -ga terminal-overrides ",*256col*:Tc"
 
-        # Laisse passer les séquences graphiques (Kitty graphics protocol) à
-        # travers tmux : requis par image.nvim pour afficher les images.
+        # Requis par image.nvim (Kitty graphics protocol) pour afficher les images.
         set -gq allow-passthrough on
 
         # Renumérote les fenêtres quand on en ferme une

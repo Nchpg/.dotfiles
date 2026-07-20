@@ -13,14 +13,12 @@ let
 in
 {
   options.userSettings.rofi = {
-    # Défaut : suit sway. rofi sert le lanceur d'apps $mod+d (et $mod+v de
-    # cliphist) : un bureau sway sans rofi n'a pas de lanceur clavier.
+    # Suit sway : sert le lanceur $mod+d et $mod+v de cliphist.
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)" // {
       default = config.userSettings.sway.enable;
     };
 
-    # Défaut sur unstable : rofi-wayland pas encore dans stable 26.05.
-    # Surchargeable comme les autres modules (cf. mk-pkgs-option.nix).
+    # rofi-wayland pas encore dans stable 26.05.
     pkgs = import ../../../lib/mk-pkgs-option.nix {
       inherit lib config;
       default = pkgs-unstable;
@@ -28,7 +26,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # rofi-wayland : fork Wayland-natif de rofi.
     programs.rofi = {
       enable = true;
       package = cfg.pkgs.rofi;
@@ -133,9 +130,8 @@ in
         };
     };
 
-    # Icônes SVG maison, colorées avec la couleur de texte du thème (base05).
-    # Adwaita ne fournit que des variantes -symbolic en #2e3436, invisibles sur
-    # le fond foncé de rofi : on génère donc nos propres glyphes visibles.
+    # Adwaita ne fournit que des -symbolic en #2e3436, invisibles sur le fond
+    # foncé de rofi : glyphes maison colorés avec base05.
     xdg.dataFile."icons/rofi-shutdown.svg".text = ''
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
         <path fill="none" stroke="${c.base05}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -149,9 +145,8 @@ in
       </svg>
     '';
 
-    # Entrée "Shutdown" visible dans rofi drun ($mod+d).
-    # systemctl poweroff : pas besoin de sudo, autorisé par polkit pour la
-    # session graphique active (contrairement à `shutdown now` qui exige root).
+    # systemctl poweroff : pas besoin de sudo (polkit, session graphique
+    # active), contrairement à `shutdown now`.
     xdg.dataFile."applications/shutdown.desktop".text = ''
       [Desktop Entry]
       Type=Application
@@ -162,7 +157,6 @@ in
       Terminal=false
     '';
 
-    # Entrée "Reboot" visible dans rofi drun ($mod+d).
     xdg.dataFile."applications/reboot.desktop".text = ''
       [Desktop Entry]
       Type=Application
@@ -173,7 +167,6 @@ in
       Terminal=false
     '';
 
-    # Fenêtre rofi flottante dans sway.
     home.file.".config/sway/conf.d/rofi.conf".text = ''
       for_window [app_id="rofi"] floating enable, border none
     '';

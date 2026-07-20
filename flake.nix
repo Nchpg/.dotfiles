@@ -21,14 +21,11 @@
     };
 
     claude-code = {
-      # `git+https` (clone git anonyme) et PAS `github:` : ce dernier récupère
-      # la source via l'API GitHub (api.github.com/tarball), qui exige un token
-      # en CI et échoue en 401 « Bad credentials » sur le runner. Le clone git
-      # HTTPS est anonyme sur un repo public, aucune auth requise.
+      # `git+https` et pas `github:` : ce dernier récupère la source via
+      # l'API GitHub (tarball), qui exige un token et échoue en 401 en CI.
       url = "git+https://github.com/sadjow/claude-code-nix";
-      # Pas de `inputs.nixpkgs.follows` : volontaire. L'input garde le nixpkgs
-      # pinné par l'upstream → cache binaire garanti et toujours la dernière
-      # version de claude-code buildable (bump via `rebuild -u`).
+      # Pas de `inputs.nixpkgs.follows`, volontaire : garde le nixpkgs pinné
+      # par l'upstream -> cache binaire garanti, bump via `rebuild -u`.
     };
 
     spicetify-nix = {
@@ -36,28 +33,19 @@
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
 
-    # Base nix-index pré-construite (hebdomadaire) : nix-locate, comma et les
-    # suggestions command-not-found — la générer localement prend ~15 min.
-    # Consommé par modules/user/nix-index (module HM importé dans profiles/).
+    # Base pré-construite : la générer localement prend ~15 min.
     nix-index-database = {
       url = "github:nix-community/nix-index-database";
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
 
-    # Registre base16/base24 upstream (tinted-theming/schemes, ~496 schemes) :
-    # déjà tiré transitivement par stylix, ici en input EXPLICITE et de
-    # premier niveau parce qu'on le CONSOMME directement (modules/themes lit
-    # ses .yaml pour peupler l'enum des thèmes) — un input qu'on utilise ne
-    # doit pas être atteint en creusant dans les inputs d'un autre.
-    #
-    # Rien n'est recopié dans le dépôt : seuls nos schemes PROPRES vivent
-    # dans modules/themes/schemes/. Un `nix flake update` suffit donc à
-    # récupérer les nouveaux thèmes amont, sans resynchronisation manuelle.
-    #
-    # `follows = "stylix/tinted-schemes"` (et non un `url` séparé) : une
-    # seule résolution dans le lock, garantie identique à celle que stylix
-    # utilise déjà en interne pour ses propres targets — sinon deux copies
-    # du registre pourraient diverger.
+    # Registre base16/base24 upstream (~496 schemes), déjà tiré
+    # transitivement par stylix mais posé ici en input EXPLICITE : on le
+    # CONSOMME directement (modules/themes lit ses .yaml), un input qu'on
+    # utilise ne doit pas être atteint en creusant dans ceux d'un autre.
+    # `follows` (pas un `url` séparé) : une seule résolution dans le lock,
+    # garantie identique à celle que stylix utilise déjà en interne — sinon
+    # deux copies du registre pourraient diverger.
     tinted-schemes.follows = "stylix/tinted-schemes";
   };
 
@@ -75,38 +63,30 @@
           config.allowUnfree = true;
         };
 
-      # pkgs-stable porte l'overlay DisplayLink : téléchargement automatique du
-      # driver (dock Dell D3100), sinon nix-prefetch-url manuel sur chaque host.
+      # Overlay DisplayLink : téléchargement automatique du driver (dock Dell
+      # D3100), sinon nix-prefetch-url manuel sur chaque host.
       pkgs-stable = mkPkgs inputs.nixpkgs-stable [ (import ./overlays/displaylink.nix) ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
 
-      # Arguments injectés dans TOUS les modules : système (via specialArgs) et
-      # home-manager (via extraSpecialArgs). Chacun y ajoute ensuite ses args
-      # propres (target côté système, devShellNames côté HM).
+      # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
+      # HM). Chacun ajoute ensuite ses args propres.
       commonArgs = {
         inherit pkgs-stable pkgs-unstable inputs;
       };
 
-      # Auto-découverte du contenu d'un dossier : sous-dossiers (profils, hosts)
-      # ou fichiers .nix (devshells). Cf. lib/discover.nix.
       inherit (import ./lib/discover.nix lib) dirNames nixFileNames;
 
       profiles = dirNames ./profiles;
       hosts = dirNames ./hosts;
 
-      # Variantes de thème : chaque couple profil×host produit une cible par
-      # variante — `personal-gram` (dark, nom historique) et
-      # `personal-gram-light`. La variante ne vit PAS dans la config (aucun
-      # fichier à modifier pour toggler) : elle est portée par la cible, et
-      # « l'état courant » est simplement la génération système active.
-      # Bascule via la commande `theme` (cf. modules/system/stylix).
+      # `personal-gram` (dark, nom historique) et `personal-gram-light`. La
+      # variante ne vit pas dans la config : portée par la cible, "l'état
+      # courant" est la génération système active (bascule via `theme`).
       variants = [
         "dark"
         "light"
       ];
 
-      # Produit cartésien profils × hosts × variantes : une cible par combo,
-      # sous forme { profile; host; variant; } (cf. targetName).
       targets = lib.cartesianProduct {
         profile = profiles;
         host = hosts;
@@ -118,11 +98,10 @@
         "${target.profile}-${target.host}"
         + lib.optionalString (target.variant != "dark") "-${target.variant}";
 
-      # Un host se terminant par "-light"/"-dark" produit une collision
-      # textuelle avec une autre cible (host "x-light" en dark ≡ host "x" en
-      # light). `listToAttrs` garderait silencieusement la PREMIÈRE entrée :
-      # une des deux machines deviendrait inatteignable, et `rebuild -H` en
-      # construirait une autre sans rien signaler. On échoue à l'éval.
+      # Un host se terminant par "-light"/"-dark" collisionne avec une autre
+      # cible (host "x-light" en dark == host "x" en light) : listToAttrs
+      # garderait silencieusement la première entrée, l'autre machine
+      # deviendrait inatteignable. On échoue à l'éval à la place.
       targetNames =
         let
           names = map targetName targets;
@@ -132,58 +111,41 @@
           "flake.nix : collision de noms de cibles (${lib.concatStringsSep ", " dupes}) — un nom de host ne doit pas se terminer par -dark ou -light."
           names;
 
-      # Un devshell = un fichier devshells/<name>.nix ; auto-découvert comme
-      # profiles/hosts ci-dessus. `dev-<name>` est généré à partir de la même
-      # liste (cf. modules/user/shell) : un nouveau fichier = un nouveau
-      # devShell + un nouvel alias, sans rien déclarer à la main.
+      # Un fichier devshells/<name>.nix = un devShell + un alias `dev-<name>`
+      # (modules/user/shell), sans rien déclarer à la main.
       devShellNames = nixFileNames ./devshells;
 
-      # Devshells qui doivent matcher la stack système (drivers unstable) au
-      # lieu du pkgs-stable par défaut.
       unstableDevShells = [ "xpu" ];
     in
     {
       # zipListsWith plutôt que `map` : consommer `targetNames` force le
-      # contrôle de collision ci-dessus (sinon il ne serait jamais évalué).
+      # contrôle de collision ci-dessus (sinon jamais évalué).
       nixosConfigurations = builtins.listToAttrs (
         lib.zipListsWith (name: target: {
           inherit name;
           value = lib.nixosSystem {
             inherit system;
             modules = [
-              # build host
               ./hosts
-              # build profile
               ./profiles
-              # system modules
               ./modules/system
 
-              # Variante de thème portée par la cible (cf. `variants` plus haut).
               { systemSettings.stylix.variant = target.variant; }
 
               inputs.home-manager.nixosModules.home-manager
               {
-                # Chaque user HM réutilise le `pkgs` du système au lieu
-                # d'instancier son propre nixpkgs (~1 instanciation économisée
-                # par user à l'éval). Corollaire : plus de `nixpkgs.*` dans les
-                # configs home (ça devient une erreur d'éval).
+                # Réutilise le `pkgs` du système (~1 instanciation économisée
+                # par user) : plus de `nixpkgs.*` dans les configs home,
+                # deviendrait une erreur d'éval.
                 home-manager.useGlobalPkgs = true;
-                # Paquets HM installés dans le profil système (/etc/profiles)
-                # plutôt que dans ~/.nix-profile mutable de chaque user.
+                # Paquets HM dans le profil système (/etc/profiles), pas dans
+                # ~/.nix-profile mutable de chaque user.
                 home-manager.useUserPackages = true;
-                # La config système est accessible dans les modules HM via
-                # l'argument natif `osConfig` (ex. osConfig.systemSettings.*).
                 home-manager.extraSpecialArgs = commonArgs // {
                   inherit devShellNames;
                 };
-                # Manpages de la référence home-manager (`man
-                # home-configuration.nix`) : générées PAR USER, donc 3 fois par
-                # configuration ici, à chaque rebuild. Même raisonnement que
-                # `documentation.nixos.enable = false` dans modules/system :
-                # jamais consultées, et la doc est de toute façon en ligne.
-                # Effet de bord attendu : fait taire les warnings
-                # « options.json […] without a proper context » émis par la
-                # génération de doc en amont.
+                # Manpages générées PAR USER (3x ici) à chaque rebuild,
+                # jamais consultées (doc en ligne).
                 home-manager.sharedModules = [ { manual.manpages.enable = false; } ];
               }
             ];
@@ -201,11 +163,9 @@
         }
       );
 
-      # Validation des fonds d'écran : `nix build .#wallpapers-all` réalise
-      # TOUTES les fetchurl du registre (modules/themes/wallpapers.nix). Les
-      # URLs wallhaven/wallpaperflare sont éphémères, et seuls les fonds des
-      # thèmes actifs sont téléchargés en temps normal : une URL morte ne se
-      # découvrirait qu'au moment de sélectionner le thème concerné.
+      # `nix build .#wallpapers-all` réalise TOUTES les fetchurl du registre :
+      # les URLs wallhaven/wallpaperflare sont éphémères, une URL morte ne se
+      # découvrirait sinon qu'à la sélection du thème concerné.
       packages.${system}.wallpapers-all =
         let
           themes = import ./modules/themes lib inputs;

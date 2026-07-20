@@ -1,23 +1,14 @@
-# Source unique des polices : la liste installée côté système (fonts.packages)
-# et le bloc `stylix.fonts`, consommés par modules/system/fonts,
-# modules/system/stylix et modules/user/stylix. Changer de police = éditer ce
-# fichier uniquement.
-#
-# Hors de schemes/ : il est donc invisible pour l'énumération des thèmes
-# (qui ne lit que modules/themes/schemes, cf. default.nix) et n'est pas
-# auto-importé (lib/import-all.nix ne parcourt que modules/system et
-# modules/user).
+# Source unique des polices, consommée par modules/system/fonts,
+# modules/system/stylix et modules/user/stylix.
 pkgs: rec {
-  # À installer dans fonts.packages — /!\ stylix (ci-dessous) référence ces
-  # familles par leur nom : le rendu GDM/session casse si elles manquent.
+  # /!\ stylix (ci-dessous) référence ces familles par leur nom : le rendu
+  # GDM/session casse si elles manquent d'ici.
   packages = [
     pkgs.nerd-fonts.fira-code
     pkgs.twitter-color-emoji
     pkgs.fira-sans
   ];
 
-  # Bloc prêt à l'emploi pour `stylix.fonts` (système ET user : même rendu
-  # sur GDM et dans la session).
   stylix = {
     monospace = {
       name = "FiraCode Nerd Font";
