@@ -33,8 +33,4 @@ alias fanauto="sudo ec_probe write 0xCF 0x00"
 alias fansilent="sudo ec_probe write 0xCF 0x11"
 alias fanperf="sudo ec_probe write 0xCF 0x22"
 
-alias gemini="NIXPKGS_ALLOW_UNFREE=1 nix run --impure github:nixos/nixpkgs/nixpkgs-unstable#antigravity-cli"
-alias opencode="nix run github:nixos/nixpkgs/nixpkgs-unstable#opencode"
-alias codex="nix run github:nixos/nixpkgs/nixpkgs-unstable#codex"
-
 

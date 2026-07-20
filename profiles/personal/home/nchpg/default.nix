@@ -60,16 +60,21 @@
         userEmailSops = "git/email";
       };
 
-      claude = {
-        enable = true;
-        # Barre de statut : modèle, coût, contexte, rate limits.
-        statusline.enable = true;
-        # Coupe les notifs desktop de Claude Code (popups « kitty »).
-        settings.preferredNotifChannel = "notifications_disabled";
-      };
+      agents = {
+        claude = {
+          enable = true;
+          # Barre de statut : modèle, coût, contexte, rate limits.
+          statusline.enable = true;
+          # Coupe les notifs desktop de Claude Code (popups « kitty »).
+          settings.preferredNotifChannel = "notifications_disabled";
+        };
 
-      kimiCode = {
-        enable = true;
+        kimiCode.enable = true;
+        mammouthCode.enable = true;
+        gemini.enable = true;
+        opencode.enable = true;
+        codex.enable = true;
+        mistral.enable = true;
       };
 
       gh = {

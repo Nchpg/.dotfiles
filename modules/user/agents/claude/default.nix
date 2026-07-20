@@ -14,17 +14,17 @@
 # tout le reste que Claude gère au runtime est préservé.
 let
   inherit (config.home) homeDirectory;
-  cfg = config.userSettings.claude;
+  cfg = config.userSettings.agents.claude;
   jsonFormat = cfg.pkgs.formats.json { };
   settingsFile = jsonFormat.generate "claude-settings.json" cfg.settings;
 in
 {
-  options.userSettings.claude = {
+  options.userSettings.agents.claude = {
     enable = lib.mkEnableOption "réglages Claude Code déclaratifs (~/.claude/settings.json)";
 
     statusline.enable = lib.mkEnableOption "statusline maison (modèle, coût, contexte, rate limits)";
 
-    pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+    pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
 
     settings = lib.mkOption {
       inherit (jsonFormat) type;
@@ -56,13 +56,9 @@ in
           cfg.pkgs.poppler-utils
         ];
 
-        # Skills Claude Code déclaratifs : chaque dossier de ./skills devient
-        # ~/.claude/skills/<nom> (symlink du store — Claude ne fait que les
-        # lire, contrairement à settings.json). Les skills ajoutés à la main
-        # dans ~/.claude/skills/ cohabitent sans conflit.
-        home.file = lib.mapAttrs' (
-          name: _type: lib.nameValuePair ".claude/skills/${name}" { source = ./skills + "/${name}"; }
-        ) (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./skills));
+        # Skills partagées entre agents : cf. modules/user/agents/skills.nix
+        # (écrit ~/.claude/skills/, ~/.agents/skills/, ~/.vibe/skills/ depuis
+        # une seule source, pas seulement pour Claude).
       }
 
       # Statusline : barre du bas de Claude Code (modèle · coût · jauge de
@@ -72,7 +68,7 @@ in
       # déjà dans le profil, donc aucun poids ajouté). La clé statusLine passe
       # par le deep-merge de `settings` ci-dessous.
       (lib.mkIf cfg.statusline.enable {
-        userSettings.claude.settings.statusLine = {
+        userSettings.agents.claude.settings.statusLine = {
           type = "command";
           command = "${homeDirectory}/.claude/statusline.sh";
         };
@@ -83,7 +79,7 @@ in
 
       (lib.mkIf (cfg.settings != { }) {
         home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
-          import ../../../lib/deep-merge-json-activation.nix {
+          import ../../../../lib/deep-merge-json-activation.nix {
             inherit lib;
             pkgs = cfg.pkgs;
             targetPath = "${homeDirectory}/.claude/settings.json";
