@@ -1,7 +1,9 @@
 name: weekly-update
 
-# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus) + des
-# extensions VS Code (extensions.json), puis ouverture d'une PR listant, par
+# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus) + de tout
+# module ayant un `update.sh` (auto-découvert, cf. rebuild.sh — même
+# mécanisme : kimi-code, vscode, et tout futur module du même moule sans
+# qu'il faille toucher ce fichier), puis ouverture d'une PR listant, par
 # input, les dates avant/après, le nombre de commits et un lien de
 # comparaison GitHub, avec alerte si la version du noyau change. Rendu 100%
 # déterministe (pas de LLM) : aucun contenu de commit n'est résumé ni
@@ -61,11 +63,6 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-      - name: snapshot avant bump
-        run: |
-          cp flake.lock "${RUNNER_TEMP}"/flake.lock.before
-          cp modules/user/vscode/extensions.json "${RUNNER_TEMP}"/extensions.json.before
-
       # `nix flake update` traite un échec de résolution d'input en WARNING :
       # il retombe sur « using cached version », n'écrit rien, et sort en 0.
       # Le job passe donc au vert en n'ayant rien bumpé (vécu : 9 jours de MAJ
@@ -81,23 +78,30 @@ jobs:
             exit 1
           fi
 
-      # VSCODE_SKIPPED_FILE : liste des extensions qu'on n'a pas pu vérifier
-      # (API Marketplace en erreur, téléchargement échoué). Reprise plus bas
-      # dans les faits, pour apparaître dans le corps de la PR.
-      - name: bump des extensions vscode
-        run: MY_FLAKE="$PWD" VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json bash modules/user/vscode/update-extensions.sh
+      # Auto-discovery : tout module avec un `update.sh` à sa racine (kimi-code,
+      # vscode, ...) est lancé ici — même mécanisme que `rebuild -u`, cf.
+      # rebuild.sh. Un échec reste local au module (API tierce down, offline,
+      # ...) et n'interrompt jamais les autres ni la création de la PR.
+      # VSCODE_SKIPPED_FILE : liste des extensions que vscode/update.sh n'a
+      # pas pu vérifier (API Marketplace en erreur, téléchargement échoué).
+      # Reprise plus bas dans les faits, pour apparaître dans le corps de la PR.
+      - name: bump des modules (update.sh auto-découverts)
+        run: |
+          export MY_FLAKE="$PWD"
+          export VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json
+          while IFS= read -r -d '' script; do
+            echo "⬆️  Running $script..."
+            "$script" || echo "::warning::$script en échec — état précédent conservé."
+          done < <(find modules -maxdepth 3 -name update.sh -print0 | sort -z)
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          .github/scripts/gather-update-facts.sh \
-            "${RUNNER_TEMP}"/flake.lock.before flake.lock \
-            "${RUNNER_TEMP}"/extensions.json.before modules/user/vscode/extensions.json \
-            "${RUNNER_TEMP}"/extensions-skipped.json \
+          .github/scripts/gather-update-facts.sh "${RUNNER_TEMP}"/extensions-skipped.json \
             > "${RUNNER_TEMP}"/facts.json
-          changed=$(jq '(.flakeInputs | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
+          changed=$(jq '(.flakeInputs | length) > 0 or (.pinnedUpdates | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: générer le corps de la PR
@@ -109,10 +113,10 @@ jobs:
         if: steps.facts.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
-          commit-message: "chore: weekly flake + vscode extensions update"
+          commit-message: "chore: weekly flake + pinned modules update"
           branch: weekly-update
           delete-branch: true
-          title: "chore: weekly flake + vscode extensions update"
+          title: "chore: weekly flake + pinned modules update"
           body-path: ${{ runner.temp }}/pr-body.md
 
       - name: notifier Discord

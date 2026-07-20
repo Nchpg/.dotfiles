@@ -3,10 +3,11 @@
 # extensions.json (API du VS Code Marketplace), et bump version + sha256 (via
 # `nix store prefetch-file`) pour celles qui ont bougé.
 #
-# Commande manuelle, comme `rebuild -u` pour l'input claude-code : jamais en
-# CI ni au rebuild, l'API Marketplace n'étant ni officielle ni garantie
-# stable, et une extension cassée par une MAJ non testée serait pire que
-# l'inertie actuelle. Lancer, relire le diff, puis committer + rebuild.
+# Ramassé automatiquement par `rebuild -u` et par la CI hebdo (cf. boucle
+# `find modules -name update.sh` dans rebuild.sh / update.yml) : ce nom est
+# une convention, pas un hasard. L'API Marketplace n'étant ni officielle ni
+# garantie stable, un échec ici est TOUJOURS non bloquant (cf. note_skip
+# plus bas) — le coût accepté est un rebuild local parfois plus lent/flaky.
 set -euo pipefail
 
 flake="${MY_FLAKE:-$HOME/.dotfiles}"

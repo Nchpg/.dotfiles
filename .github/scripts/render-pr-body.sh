@@ -12,6 +12,7 @@ set -euo pipefail
 facts_file="$1"
 
 flake_count=$(jq '.flakeInputs | length' "$facts_file")
+pinned_count=$(jq '.pinnedUpdates | length' "$facts_file")
 ext_count=$(jq '.vscodeExtensions | length' "$facts_file")
 
 kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$facts_file")
@@ -32,6 +33,15 @@ if [ "$flake_count" -gt 0 ]; then
       (if .oldDate != "" and .newDate != "" then "\(.oldDate) → \(.newDate)" else "date inconnue" end) +
       ", " +
       (if .commitCount != null then "\(.commitCount) commit(s)" else "révision changée" end)
+    ' "$facts_file"
+    echo
+fi
+
+if [ "$pinned_count" -gt 0 ]; then
+    echo "## Modules épinglés"
+    echo
+    jq -r '.pinnedUpdates[] |
+      "- **\(.module)** : \(.oldVersion) → \(.newVersion)"
     ' "$facts_file"
     echo
 fi

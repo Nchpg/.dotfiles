@@ -12,7 +12,7 @@ let
 
   # Extensions marketplace (hors nixpkgs) : données dans extensions.json plutôt
   # qu'en dur ici, pour être lisibles ET réinscriptibles par un script (cf.
-  # update-extensions.sh / commande vscode-update-extensions plus bas).
+  # update.sh / commande vscode-update-extensions plus bas).
   marketplaceExtensions = cfg.pkgs.vscode-utils.extensionsFromVscodeMarketplace (
     builtins.attrValues (builtins.fromJSON (builtins.readFile ./extensions.json))
   );
@@ -135,8 +135,9 @@ let
 
   # Commande `vscode-update-extensions` : interroge l'API du VS Code Marketplace
   # pour chaque extension d'extensions.json et bump version+sha256 (via `nix
-  # store prefetch-file`) pour celles qui ont bougé. Manuelle, comme `rebuild -u`
-  # pour claude-code — jamais en CI ni au rebuild (cf. update-extensions.sh).
+  # store prefetch-file`) pour celles qui ont bougé. Ramassée automatiquement
+  # par `rebuild -u` et la CI hebdo (cf. update.sh), en plus d'être invocable
+  # à la main sous ce nom.
   updateExtensionsCmd = cfg.pkgs.writeShellApplication {
     name = "vscode-update-extensions";
     runtimeInputs = with cfg.pkgs; [
@@ -147,7 +148,7 @@ let
     # readFile inclut son propre shebang, redondant avec celui posé par
     # writeShellApplication : il devient un simple commentaire une fois en
     # 2e ligne (même pattern que mkScript dans modules/user/waybar).
-    text = builtins.readFile ./update-extensions.sh;
+    text = builtins.readFile ./update.sh;
   };
 
 in
