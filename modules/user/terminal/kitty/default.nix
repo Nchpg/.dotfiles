@@ -1,7 +1,8 @@
 {
   config,
   lib,
-  inputs,
+  myLib,
+  themes,
   ...
 }:
 
@@ -12,7 +13,6 @@ let
   # base24, color9-14 restent mappés sur base08-0E ("rouge vif" = "rouge").
   # Rétabli plus bas. `? base12` (pas le repli mkBase24 de base16.nix) :
   # parseScheme n'invente pas les slots absents.
-  themes = import ../../../themes lib inputs;
   scheme = themes.parseScheme config.userSettings.stylix.theme;
   isBase24 = config.userSettings.stylix.enable && scheme ? base12;
 in
@@ -20,8 +20,8 @@ in
   options = {
     userSettings.terminal.kitty = {
       enable = lib.mkEnableOption "Enable kitty terminal";
-      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
-      shell = import ../../../../lib/mk-terminal-shell-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
+      shell = myLib.mkTerminalShellOption { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable (
@@ -33,7 +33,7 @@ in
           package = cfg.pkgs.kitty;
 
           settings = {
-            shell = import ../../../../lib/mk-terminal-shell-bin.nix { inherit (cfg) pkgs shell; };
+            shell = myLib.mkTerminalShellBin { inherit (cfg) pkgs shell; };
             confirm_os_window_close = 0;
             window_padding_width = 4;
             term = "xterm-256color";

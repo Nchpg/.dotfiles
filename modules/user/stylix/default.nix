@@ -2,15 +2,14 @@
   lib,
   config,
   osConfig,
-  inputs,
+  myLib,
+  themes,
   ...
 }:
 
 let
   cfg = config.userSettings.stylix;
 
-  # Partagée avec modules/system/stylix, cf. modules/themes/default.nix.
-  themes = import ../../themes lib inputs;
 in
 {
   options = {
@@ -21,17 +20,17 @@ in
         # la session (root/guest surchargent le leur).
         default = osConfig.systemSettings.stylix.theme;
         type = lib.types.enum themes.names;
-        description = "Theme for stylix to use system wide. A list of themes can be found in the `modules/themes/schemes` directory.";
+        description = "Theme for stylix to use system wide. A list of themes can be found in the `themes/schemes` directory.";
       };
       wallpaper = lib.mkOption {
         type = lib.types.nullOr (lib.types.enum themes.wallpaperNames);
         default = null;
         description = ''
           Fond d'écran de session à la place de celui du thème — un nom de
-          modules/themes/wallpapers.nix. null = le fond par défaut du thème.
+          themes/wallpapers.nix. null = le fond par défaut du thème.
         '';
       };
-      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
     };
   };
 
@@ -45,8 +44,8 @@ in
         gnome.enable = true;
       };
 
-      # Source unique : modules/themes/fonts.nix.
-      fonts = (import ../../themes/fonts.nix cfg.pkgs).stylix;
+      # Source unique : themes/fonts.nix.
+      fonts = (themes.fontsFor cfg.pkgs).stylix;
     }
     // themes.stylixSettings {
       inherit (cfg) pkgs theme wallpaper;

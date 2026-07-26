@@ -85,6 +85,11 @@ jobs:
       # VSCODE_SKIPPED_FILE : liste des extensions que vscode/update.sh n'a
       # pas pu vérifier (API Marketplace en erreur, téléchargement échoué).
       # Reprise plus bas dans les faits, pour apparaître dans le corps de la PR.
+      # Pas de -maxdepth : il valait 4 et sautait silencieusement
+      # dev/vercel-cli/claude-plugin/update.sh (un cran plus profond), dont
+      # l'épingle n'a donc jamais été bumpée. Borner la profondeur couple ce
+      # workflow à l'arborescence des modules — un déplacement de dossier
+      # désactive une mise à jour sans le moindre message.
       - name: bump des modules (update.sh auto-découverts)
         run: |
           export MY_FLAKE="$PWD"
@@ -92,7 +97,7 @@ jobs:
           while IFS= read -r -d '' script; do
             echo "⬆️  Running $script..."
             "$script" || echo "::warning::$script en échec — état précédent conservé."
-          done < <(find modules -maxdepth 4 -name update.sh -print0 | sort -z)
+          done < <(find modules -name update.sh -print0 | sort -z)
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts

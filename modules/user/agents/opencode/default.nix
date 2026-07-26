@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs-unstable,
+  myLib,
   ...
 }:
 
@@ -11,7 +12,7 @@ in
 {
   options.userSettings.agents.opencode = {
     enable = lib.mkEnableOption "OpenCode CLI";
-    pkgs = import ../../../../lib/mk-pkgs-option.nix {
+    pkgs = myLib.mkPkgsOption {
       inherit lib config;
       default = pkgs-unstable;
     };

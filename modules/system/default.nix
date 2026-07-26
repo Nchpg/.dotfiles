@@ -1,5 +1,5 @@
-{ lib, ... }:
+{ myLib, ... }:
 
 {
-  imports = import ../../lib/import-all.nix lib ./.;
+  imports = myLib.importAll ./.;
 }

@@ -2,7 +2,8 @@
   config,
   lib,
   pkgs-unstable,
-  inputs,
+  myLib,
+  themes,
   ...
 }:
 
@@ -14,7 +15,6 @@ let
   # prend son thème par défaut (Monokai) au lieu de retomber sur theme-dark.
   # Résolu au build depuis la polarité stylix, uniquement dans les previews
   # (un `set -gx BAT_THEME` global figerait la polarité partout ailleurs).
-  themes = import ../../../themes lib inputs;
   batPreviewTheme =
     {
       dark = "gruvbox-dark";
@@ -26,7 +26,7 @@ in
   options = {
     userSettings.shell.fish = {
       enable = lib.mkEnableOption "Enable  fish";
-      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {
