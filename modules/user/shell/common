@@ -17,7 +17,7 @@ alias cat="bat --paging=never --style=plain"
 # 'base16' (thème intégré à bat/delta) : colore avec les 16 couleurs ANSI du
 # terminal, donc suit le thème stylix actif, dark comme light. L'ancien
 # 'base16-stylix' était le tmTheme généré par le target stylix de bat,
-# supprimé depuis que bat gère sa polarité lui-même (cf. modules/user/bat).
+# supprimé depuis que bat gère sa polarité lui-même (cf. modules/user/cli/bat).
 alias diff="delta \
           --side-by-side \
           --line-numbers \

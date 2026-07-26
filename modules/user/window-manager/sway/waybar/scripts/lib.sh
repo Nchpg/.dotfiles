@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Helpers JSON partagés par les modules custom waybar. Ce fichier n'a pas de
 # shebang : il est inliné EN TÊTE de chaque script au build (cf. mkScript dans
-# modules/user/waybar/default.nix), avant le corps du script. Centralise
+# modules/user/window-manager/sway/waybar/default.nix), avant le corps du script. Centralise
 # l'échappement JSON, qui n'était auparavant fait que dans bluetooth.sh.
 #
 # json_escape : échappe une valeur pour l'insérer dans un champ JSON (backslash,
@@ -23,7 +23,7 @@ emit() {
 
 # Icônes batterie Nerd Font (Material Design), 11 niveaux (0-100% par pas de
 # 10) : partagées par battery.sh et bluetooth.sh (mêmes glyphes que le
-# format-icons natif dans modules/user/waybar/default.nix -> garder les DEUX
+# format-icons natif dans modules/user/window-manager/sway/waybar/default.nix -> garder les DEUX
 # synchronisés si un jour ils changent). Glyphes littéraux (et non printf
 # '\U…') : insensibles à LC_ALL=C, qui en locale ASCII ne sait pas encoder ces
 # codepoints du plan astral.

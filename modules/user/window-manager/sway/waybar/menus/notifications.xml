@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Menu clic droit du module notifications (swaync). Chaque id correspond à
-     une clé de `menu-actions` dans modules/user/waybar/default.nix. -->
+     une clé de `menu-actions` dans modules/user/window-manager/sway/waybar/default.nix. -->
 <interface>
   <object class="GtkMenu" id="menu">
     <child>
