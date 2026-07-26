@@ -85,6 +85,39 @@ jobs:
           git ls-files -z '*.sh' '.githooks/*' \
             | xargs -r0 nix run nixpkgs#shellcheck --
 
+      # Les scripts shell référencent des fichiers du dépôt par chemin EN DUR
+      # (`$flake/modules/user/.../pinned.json`, `modules/.../extensions.json`).
+      # Ces chaînes sont invisibles pour Nix, statix, deadnix ET shellcheck :
+      # un déplacement de dossier les laisse derrière lui sans le moindre
+      # message — exactement le problème décrit dans lib/option-enabled.nix,
+      # mais côté shell. Vécu : la réorg des modules a laissé
+      # `modules/user/vscode/extensions.json` dans vscode/update.sh (script
+      # mort en silence, extensions jamais bumpées) et dans
+      # gather-update-facts.sh (jq sortant en 2 sous `set -e`, donc workflow
+      # hebdomadaire entier en échec).
+      #
+      # On extrait tout littéral ressemblant à un chemin sous modules/ et on
+      # vérifie qu'il existe. Le grep tourne depuis la racine du dépôt, donc le
+      # préfixe `$flake/` des scripts tombe tout seul hors de la capture.
+      #
+      # Les lignes de COMMENTAIRE sont écartées (`^\s*#`, même ancrage que
+      # expiring-workarounds.sh) : la prose cite des chemins à titre d'exemple,
+      # parfois volontairement périmés — dont ceux du commentaire ci-dessus.
+      # Seul un chemin réellement CONSOMMÉ par du code doit être vérifié.
+      - name: chemins de modules en dur
+        run: |
+          rc=0
+          while read -r p; do
+            [ -e "$p" ] || { echo "::error::chemin mort dans un script : $p"; rc=1; }
+          done < <(
+            git grep -hE 'modules/[A-Za-z0-9._/-]+\.(json|sh|nix|js|py)' \
+              -- '*.sh' '*.yml' '.githooks/*' \
+              | grep -vE '^[[:space:]]*#' \
+              | grep -ohE 'modules/[A-Za-z0-9._/-]+\.(json|sh|nix|js|py)' \
+              | sort -u
+          )
+          exit $rc
+
   security:
     runs-on: self-hosted
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
