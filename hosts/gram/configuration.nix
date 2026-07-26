@@ -1,4 +1,4 @@
-{ ... }:
+{ lib, ... }:
 
 # Réglages matériel de gram (LG Gram 2024, Meteor Lake), importés par
 # hosts/default.nix. hardware-configuration.nix est généré à part.
@@ -28,4 +28,6 @@
   # Release de la première installation de CE host : ne suit PAS les
   # upgrades, valeur par machine comme hardware-configuration.nix.
   system.stateVersion = "25.05";
+
+  home-manager.sharedModules = [ { home.stateVersion = lib.mkDefault "25.05"; } ];
 }
