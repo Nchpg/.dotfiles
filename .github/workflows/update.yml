@@ -49,7 +49,13 @@ env:
   # `nix flake update` retombe en silence sur « using cached version ».
   # Symptôme observé : job vert, PR créée, et zéro input réellement bumpé
   # pendant plus d'une semaine. NIX_CONFIG a priorité sur les fichiers de conf.
-  NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
+  #
+  # Caches binaires ajoutés ici pour la même raison que dans check.yml (ce
+  # runner ne les a pas dans son nix.conf) — voir le commentaire là-bas.
+  NIX_CONFIG: |
+    access-tokens = github.com=${{ github.token }}
+    extra-substituters = https://claude-code.cachix.org https://ros.cachix.org
+    extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo=
 
 permissions:
   contents: write

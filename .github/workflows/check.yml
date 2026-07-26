@@ -29,7 +29,19 @@ env:
   # expire en une heure. Sans ce reset, les résolutions d'inputs `github:`
   # partent avec un token mort (401 « Bad credentials »). NIX_CONFIG a
   # priorité sur les fichiers de conf.
-  NIX_CONFIG: "access-tokens = github.com=${{ github.token }}"
+  #
+  # Les caches binaires sont posés ICI, et pas en `nixConfig` dans flake.nix :
+  # ce runner est la SEULE machine qui en manque. Sur une machine switchée ils
+  # viennent déjà de nix.settings (modules/system/configuration.nix), où ils
+  # restent la source de vérité — garder les deux listes alignées. Un
+  # `nixConfig` côté flake serait de toute façon ignoré hors trusted-users, et
+  # imposerait d'élargir trusted-users pour un gain nul sur la machine.
+  #
+  # Format nix.conf : une ligne par réglage, valeurs séparées par des espaces.
+  NIX_CONFIG: |
+    access-tokens = github.com=${{ github.token }}
+    extra-substituters = https://claude-code.cachix.org https://ros.cachix.org
+    extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo=
 
 # Runner SELF-HOSTED sur un dépôt PUBLIC : le `if:` présent sur chaque job
 # est un garde de sécurité, pas une optimisation. Sans lui, n'importe qui peut
