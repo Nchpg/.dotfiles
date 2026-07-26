@@ -24,6 +24,7 @@ lib:
   mkFlakeGuard = import ./mk-flake-guard.nix;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
   mkIcon = import ./mk-icon.nix lib;
+  optionEnabled = import ./option-enabled.nix lib;
   mkPkgsOption = import ./mk-pkgs-option.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;

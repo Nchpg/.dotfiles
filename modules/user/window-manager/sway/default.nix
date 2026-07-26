@@ -2,6 +2,7 @@
   config,
   lib,
   osConfig,
+  myLib,
   ...
 }:
 
@@ -17,13 +18,11 @@ let
   tmuxCmd = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
   tmuxLaunch = if term == "alacritty" then "${term} -e ${tmuxCmd}" else "${term} ${tmuxCmd}";
 
-  # Émis seulement si le module user `opt` est activé : évite un bind mort ou
-  # un daemon lancé dans le vide quand le programme n'est pas installé.
-  bindIf =
-    optPath: str:
-    lib.optionalString (lib.attrByPath (
-      lib.splitString "." optPath ++ [ "enable" ]
-    ) false config.userSettings) str;
+  # Émis seulement si le module user `optPath` est activé : évite un bind mort
+  # ou un daemon lancé dans le vide quand le programme n'est pas installé.
+  # Chemin inexistant = ERREUR d'éval, pas un `false` silencieux, cf.
+  # lib/option-enabled.nix.
+  bindIf = optPath: str: lib.optionalString (myLib.optionEnabled config.userSettings optPath) str;
 
   tmuxBind = bindIf "tmux" "bindsym Control+Return exec ${tmuxLaunch}";
   firefoxBind = bindIf "browsers.firefox" "bindsym $mod+Shift+f exec firefox";

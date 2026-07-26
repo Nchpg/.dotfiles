@@ -26,11 +26,13 @@ let
   # Câblé UNIQUEMENT si le module est activé pour le user, sinon pas
   # d'attribut on-click du tout (bloc affiché, clic inactif) : rend la barre
   # composable pour un user minimal (guest).
+  # Chemin inexistant = ERREUR d'éval, pas un `false` silencieux, cf.
+  # lib/option-enabled.nix.
   clickIf =
     modulePath: name:
-    lib.optionalAttrs (lib.attrByPath (
-      lib.splitString "." modulePath ++ [ "enable" ]
-    ) false config.userSettings) { on-click = launcher name; };
+    lib.optionalAttrs (myLib.optionEnabled config.userSettings modulePath) {
+      on-click = launcher name;
+    };
 
   inherit (myLib) mkIcon;
 
@@ -397,7 +399,7 @@ in
           interval = 5;
           return-type = "json";
         }
-        // clickIf "pickers.bluetooth" "bluetooth";
+        // clickIf "windowManager.sway.pickers.bluetooth" "bluetooth";
 
         network = {
           interval = 5;
@@ -406,7 +408,7 @@ in
           format-disconnected = labeled "f05a9" "Off";
           tooltip-format = "{ifname} {ipaddr}";
         }
-        // clickIf "pickers.wifi" "wifi";
+        // clickIf "windowManager.sway.pickers.wifi" "wifi";
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
