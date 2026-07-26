@@ -13,10 +13,18 @@ let
   # sops-nix (re-déchiffré à chaque activation) l'est.
   supabaseTokenPath = config.sops.secrets.${cfg.tokenSops}.path;
 
-  supabase-wrapper = cfg.pkgs.writeShellScriptBin "supabase" ''
-    export SUPABASE_ACCESS_TOKEN="$(cat ${supabaseTokenPath})"
-    exec ${cfg.pkgs.supabase-cli}/bin/supabase "$@"
-  '';
+  # writeShellApplication : `set -euo pipefail` obligatoire ici, cf. le même
+  # commentaire dans dev/cloudflare-cli — sans lui, un secret non déchiffré
+  # donne un token vide et un CLI qui part non authentifié en silence.
+  supabase-wrapper = cfg.pkgs.writeShellApplication {
+    name = "supabase";
+    runtimeInputs = [ cfg.pkgs.coreutils ];
+    text = ''
+      SUPABASE_ACCESS_TOKEN="$(cat ${supabaseTokenPath})"
+      export SUPABASE_ACCESS_TOKEN
+      exec ${cfg.pkgs.supabase-cli}/bin/supabase "$@"
+    '';
+  };
 in
 {
   options.userSettings.dev.supabaseCli = {
