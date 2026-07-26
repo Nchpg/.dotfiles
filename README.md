@@ -14,8 +14,8 @@ profiles/          Un dossier par usage (personal, work, …) : quels modules
 modules/
   system/          Modules NixOS, gatés par des options systemSettings.*
   user/            Modules home-manager, gatés par des options userSettings.*
-  themes/          Thèmes base16 (schemes/*.nix) + registre des wallpapers + fonts
-lib/               Helpers (import-all, deep-merge-json-activation)
+themes/            Thèmes base16 (schemes/*.yaml) + wallpapers + fonts + galerie
+lib/               Helpers injectés en `myLib` (import-all, discover, mk-*, checks)
 overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
 secrets/           Secrets chiffrés sops-nix (voir secrets/README.md)
 devshells/         `nix develop .#python|c|xpu`
@@ -59,7 +59,7 @@ pas le hostname).
 | Commande | Effet |
 |---|---|
 | `rebuild` | Rebuild de la cible de ce système (check git, diff nvd, reload sway/waybar) |
-| `rebuild -u` | Idem + bump de l'input claude-code |
+| `rebuild -u` | Idem + bump de l'input claude-code et de chaque module à `update.sh` (confirmation par module) |
 | `rebuild -y` | Idem sans confirmation si le working tree est sale |
 | `theme dark\|light\|toggle` | Bascule le thème (persistant) puis rebuild |
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |
