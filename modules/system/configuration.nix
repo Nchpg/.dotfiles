@@ -42,8 +42,7 @@
 
   # Défaut NixOS = 10 % du fs (~19 Go ici, jamais atteint mais illimité de
   # fait). 500 Mo couvrent largement plusieurs semaines.
-  # services.journald.settings n'existe pas encore en nixpkgs-stable 26.05 :
-  # migrer depuis extraConfig une fois stable rattrapé.
+  # EXPIRE(option:services.journald.settings): migrer extraConfig vers cette option
   services.journald.extraConfig = "SystemMaxUse=500M";
 
   # nixos-help jamais utilisé, coûte à chaque rebuild. Man pages classiques

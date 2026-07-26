@@ -11,10 +11,11 @@ let
 
   # btop amont (<= 1.4.7) hardcode `device = "i915"` (issue btop#1407) : sur
   # driver `xe` (Lunar Lake, Battlemage, Arc récents), le GPU n'apparaît pas.
-  # Source overridée avec la PR #1457 (deveworld:feature/xe-gpu-support, non
-  # mergée -> à retirer une fois mergée, repasser xeGpuSupport = false), qui
-  # ajoute le support xe via sysfs/gtidle + fdinfo. Doit souvent tourner en
-  # root (`sudo btop`) pour voir le GPU.
+  # Source overridée avec la PR #1457 (deveworld:feature/xe-gpu-support), qui
+  # ajoute le support xe via sysfs/gtidle + fdinfo.
+  # Doit souvent tourner en root (`sudo btop`) pour voir le GPU.
+  # Une fois la PR mergée : retirer btopXe et repasser xeGpuSupport = false.
+  # EXPIRE: override btop, cf. https://github.com/aristocratos/btop/pull/1457
   # Base = btop unstable 1.4.6, celle sur laquelle la PR est basée (évite un
   # mismatch packaging/source en greffant sur la stable 1.4.4).
   btopXe = pkgs-unstable.btop.overrideAttrs (_old: {

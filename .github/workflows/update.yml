@@ -109,9 +109,19 @@ jobs:
           changed=$(jq '(.flakeInputs | length) > 0 or (.pinnedUpdates | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
+      # Les contournements marqués `EXPIRE:` sont ajoutés en fin de corps : le
+      # rendez-vous hebdomadaire est le seul moment où on les relit, et le
+      # script dit quand une PR amont a été mergée (donc quand le
+      # contournement peut sauter). Non bloquant : `gh` peut échouer, ça ne
+      # doit pas empêcher la PR de bump d'exister.
       - name: générer le corps de la PR
         if: steps.facts.outputs.changed == 'true'
-        run: .github/scripts/render-pr-body.sh "${RUNNER_TEMP}"/facts.json > "${RUNNER_TEMP}"/pr-body.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          .github/scripts/render-pr-body.sh "${RUNNER_TEMP}"/facts.json > "${RUNNER_TEMP}"/pr-body.md
+          .github/scripts/expiring-workarounds.sh >> "${RUNNER_TEMP}"/pr-body.md \
+            || echo "::warning::expiring-workarounds.sh en échec — section omise."
 
       - name: créer la PR
         id: create-pr
