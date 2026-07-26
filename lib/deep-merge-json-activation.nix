@@ -4,7 +4,7 @@
 # préservé (un symlink read-only du store casserait ces écritures runtime).
 # Si le fichier existant n'est pas du JSON strict (édition manuelle avec
 # commentaires, JSONC...), on n'impose rien et on prévient plutôt que de
-# l'écraser. Utilisé par modules/user/claude et modules/user/vscode.
+# l'écraser. Utilisé par modules/user/agents/claude et modules/user/editors/vscode.
 #
 # Limite assumée du merge one-way : une clé RETIRÉE du JSON déclaratif n'est
 # jamais retirée du fichier cible (elle y reste avec sa dernière valeur).
