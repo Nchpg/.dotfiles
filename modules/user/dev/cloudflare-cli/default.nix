@@ -13,13 +13,23 @@ let
   # sops-nix (re-déchiffré à chaque activation) l'est.
   cloudflareTokenPath = config.sops.secrets.${cfg.tokenSops}.path;
 
-  wrangler-wrapper = cfg.pkgs.writeShellScriptBin "wrangler" ''
-    export CLOUDFLARE_API_TOKEN="$(cat ${cloudflareTokenPath})"
-    ${lib.optionalString (
-      cfg.accountId != null
-    ) "export CLOUDFLARE_ACCOUNT_ID=${lib.escapeShellArg cfg.accountId}"}
-    exec ${cfg.pkgs.wrangler}/bin/wrangler "$@"
-  '';
+  # writeShellApplication et pas writeShellScriptBin : il pose
+  # `set -euo pipefail`, sans quoi un `cat` en échec (secret non déchiffré —
+  # sops pas encore activé, user sans clé) laisse le token VIDE et wrangler
+  # part NON AUTHENTIFIÉ, avec une erreur d'API trompeuse à l'arrivée. Bonus :
+  # shellcheck passe dessus au build, ce que la CI ne fait que sur les *.sh.
+  wrangler-wrapper = cfg.pkgs.writeShellApplication {
+    name = "wrangler";
+    runtimeInputs = [ cfg.pkgs.coreutils ];
+    text = ''
+      CLOUDFLARE_API_TOKEN="$(cat ${cloudflareTokenPath})"
+      export CLOUDFLARE_API_TOKEN
+      ${lib.optionalString (
+        cfg.accountId != null
+      ) "export CLOUDFLARE_ACCOUNT_ID=${lib.escapeShellArg cfg.accountId}"}
+      exec ${cfg.pkgs.wrangler}/bin/wrangler "$@"
+    '';
+  };
 in
 {
   options.userSettings.dev.cloudflareCli = {

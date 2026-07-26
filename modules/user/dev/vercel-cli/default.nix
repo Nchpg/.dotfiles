@@ -26,10 +26,18 @@ let
 
   # npx + Node.js nixpkgs, même technique que kimi-code : file:// requis, un
   # chemin nu fait échouer npx (tente de l'exécuter direct).
-  vercel-wrapper = cfg.pkgs.writeShellScriptBin "vercel" ''
-    export VERCEL_TOKEN="$(cat ${vercelTokenPath})"
-    exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${vercelTarball} "$@"
-  '';
+  # writeShellApplication : `set -euo pipefail` obligatoire ici, cf. le même
+  # commentaire dans dev/cloudflare-cli — sans lui, un secret non déchiffré
+  # donne un token vide et un CLI qui part non authentifié en silence.
+  vercel-wrapper = cfg.pkgs.writeShellApplication {
+    name = "vercel";
+    runtimeInputs = [ cfg.pkgs.coreutils ];
+    text = ''
+      VERCEL_TOKEN="$(cat ${vercelTokenPath})"
+      export VERCEL_TOKEN
+      exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${vercelTarball} "$@"
+    '';
+  };
 
   # Plugin Claude Code officiel (slash commands + subagents Vercel), épinglé
   # séparément (repo git distinct de la tarball npm ci-dessus) dans son propre
