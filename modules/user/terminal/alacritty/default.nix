@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  myLib,
+  ...
+}:
 
 let
   cfg = config.userSettings.terminal.alacritty;
@@ -7,8 +12,8 @@ in
   options = {
     userSettings.terminal.alacritty = {
       enable = lib.mkEnableOption "Enable alacritty terminal";
-      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
-      shell = import ../../../../lib/mk-terminal-shell-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
+      shell = myLib.mkTerminalShellOption { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {
@@ -17,7 +22,7 @@ in
       package = cfg.pkgs.alacritty;
 
       settings = {
-        terminal.shell.program = import ../../../../lib/mk-terminal-shell-bin.nix {
+        terminal.shell.program = myLib.mkTerminalShellBin {
           inherit (cfg) pkgs shell;
         };
       };

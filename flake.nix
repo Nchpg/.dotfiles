@@ -41,7 +41,7 @@
 
     # Registre base16/base24 upstream (~496 schemes), déjà tiré
     # transitivement par stylix mais posé ici en input EXPLICITE : on le
-    # CONSOMME directement (modules/themes lit ses .yaml), un input qu'on
+    # CONSOMME directement (themes/ lit ses .yaml), un input qu'on
     # utilise ne doit pas être atteint en creusant dans ceux d'un autre.
     # `follows` (pas un `url` séparé) : une seule résolution dans le lock,
     # garantie identique à celle que stylix utilise déjà en interne — sinon
@@ -68,13 +68,29 @@
       pkgs-stable = mkPkgs inputs.nixpkgs-stable [ (import ./overlays/displaylink.nix) ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
 
+      # Helpers du dépôt, agrégés une fois (cf. lib/default.nix) : les modules
+      # les reçoivent en argument `myLib` au lieu de remonter jusqu'à lib/ par
+      # des `../../../..` que le moindre déplacement de dossier casse.
+      myLib = import ./lib lib;
+
+      # API des thèmes (cf. themes/default.nix), injectée pour la même raison
+      # que myLib : elle était atteinte par `../../themes` depuis six modules
+      # à trois profondeurs différentes.
+      themes = import ./themes lib inputs;
+
       # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
       # HM). Chacun ajoute ensuite ses args propres.
       commonArgs = {
-        inherit pkgs-stable pkgs-unstable inputs;
+        inherit
+          pkgs-stable
+          pkgs-unstable
+          inputs
+          myLib
+          themes
+          ;
       };
 
-      inherit (import ./lib/discover.nix lib) dirNames nixFileNames;
+      inherit (myLib) dirNames nixFileNames;
 
       profiles = dirNames ./profiles;
       hosts = dirNames ./hosts;
@@ -116,8 +132,7 @@
       devShellNames = nixFileNames ./devshells;
 
       unstableDevShells = [ "xpu" ];
-    in
-    {
+
       # zipListsWith plutôt que `map` : consommer `targetNames` force le
       # contrôle de collision ci-dessus (sinon jamais évalué).
       nixosConfigurations = builtins.listToAttrs (
@@ -155,6 +170,9 @@
           };
         }) targetNames targets
       );
+    in
+    {
+      inherit nixosConfigurations;
 
       devShells.${system} = lib.genAttrs devShellNames (
         name:
@@ -166,15 +184,52 @@
       # `nix build .#wallpapers-all` réalise TOUTES les fetchurl du registre :
       # les URLs wallhaven/wallpaperflare sont éphémères, une URL morte ne se
       # découvrirait sinon qu'à la sélection du thème concerné.
-      packages.${system}.wallpapers-all =
+      packages.${system}.wallpapers-all = pkgs-stable.linkFarm "wallpapers-all" (
+        map (name: {
+          inherit name;
+          path = themes.wallpaperPath pkgs-stable name;
+        }) themes.wallpaperNames
+      );
+
+      # Miroir dossier <-> chemin d'option (cf. lib/check-option-paths.nix).
+      # Échoue à l'ÉVAL et pas au build : `nix flake check --no-build` en CI
+      # l'attrape sans rien construire.
+      #
+      # N'importe quelle cible / n'importe quel user fait l'affaire : les
+      # `options` sont déclarées HORS des `mkIf`, elles existent donc même
+      # pour un module désactivé. On prend les premières pour ne réintroduire
+      # aucune liste en dur.
+      checks.${system}.option-paths =
         let
-          themes = import ./modules/themes lib inputs;
+          any = builtins.head (lib.attrValues nixosConfigurations);
+          anyUser = builtins.head (lib.attrValues any.config.home-manager.users);
+
+          # Côté NixOS, `options` est exposé : on part des options déclarées
+          # et on remonte au fichier déclarant. Aucune exception nécessaire.
+          sys = myLib.checkOptionPaths.byDeclarations {
+            options = any.options.systemSettings;
+            namespace = "systemSettings";
+            tree = "system";
+          };
+
+          # Côté home-manager, les options par user ne sont pas introspectables
+          # (elles viennent d'un `imports` du sous-module) : on part des
+          # dossiers. Cf. lib/check-option-paths.nix.
+          usr = myLib.checkOptionPaths.byDirectory {
+            inherit (anyUser) userSettings;
+            root = ./modules/user;
+            # Module de base : porte userSettings.user et defaultPkgs, il n'a
+            # volontairement pas de namespace à lui.
+            exceptions = [ "home-manager" ];
+          };
+
+          report = "${sys.report}\n${usr.report}";
         in
-        pkgs-stable.linkFarm "wallpapers-all" (
-          map (name: {
-            inherit name;
-            path = themes.wallpaperPath pkgs-stable name;
-          }) themes.wallpaperNames
+        lib.throwIf (!(sys.ok && usr.ok)) report (
+          pkgs-stable.runCommand "check-option-paths" { } ''
+            echo ${lib.escapeShellArg report}
+            touch $out
+          ''
         );
 
       # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.

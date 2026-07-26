@@ -30,23 +30,15 @@
         }
       ];
 
-      window-manager = {
+      windowManager = {
         sway.enable = true;
         gnome.enable = true;
-      };
-
-      swap = {
-        # Pas de swap disque sur gram : zram + earlyoom.
-        zram.enable = true;
-        earlyoom.enable = true;
       };
 
       virtualisation = {
         docker.enable = true;
         libvirt.enable = true;
       };
-
-      ollama.enable = true;
     };
   };
 }

@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  myLib,
+  ...
+}:
 
 let
   cfg = config.userSettings.tmux;
@@ -7,7 +12,7 @@ in
   options = {
     userSettings.tmux = {
       enable = lib.mkEnableOption "Enable tmux";
-      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
     };
   };
 

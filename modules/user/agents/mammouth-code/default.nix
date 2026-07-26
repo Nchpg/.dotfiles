@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs-unstable,
+  myLib,
   ...
 }:
 
@@ -47,7 +48,7 @@ in
 {
   options.userSettings.agents.mammouthCode = {
     enable = lib.mkEnableOption "Mammouth Code CLI";
-    pkgs = import ../../../../lib/mk-pkgs-option.nix {
+    pkgs = myLib.mkPkgsOption {
       inherit lib config;
       default = pkgs-unstable;
     };

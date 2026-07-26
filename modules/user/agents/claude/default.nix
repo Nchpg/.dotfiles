@@ -2,6 +2,7 @@
   config,
   lib,
   inputs,
+  myLib,
   ...
 }:
 
@@ -20,7 +21,7 @@ in
 
     statusline.enable = lib.mkEnableOption "statusline maison (modèle, coût, contexte, rate limits)";
 
-    pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
+    pkgs = myLib.mkPkgsOption { inherit lib config; };
 
     settings = lib.mkOption {
       inherit (jsonFormat) type;
@@ -60,7 +61,7 @@ in
 
       (lib.mkIf (cfg.settings != { }) {
         home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
-          import ../../../../lib/deep-merge-json-activation.nix {
+          myLib.deepMergeJsonActivation {
             inherit lib;
             pkgs = cfg.pkgs;
             targetPath = "${homeDirectory}/.claude/settings.json";

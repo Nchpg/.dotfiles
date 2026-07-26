@@ -5,52 +5,34 @@
 }:
 
 {
-  # Priorité normale (pas de mkDefault) : cf. profiles/personal/home/nchpg.
   config = {
 
     userSettings = {
       defaultPkgs = pkgs-stable;
 
-      stylix = {
-        enable = true;
-        # Pas de `theme` : suit le thème système (systemSettings.stylix.theme),
-        # donc bascule avec `theme dark|light`.
+      stylix.enable = true;
+
+      editors = {
+        vim.enable = true;
+        vscode = {
+          enable = true;
+          pkgs = pkgs-unstable;
+        };
       };
 
-      vim = {
-        enable = true;
-      };
+      git.enable = true;
 
-      git = {
-        enable = true;
-      };
-
-      firefox = {
-        enable = true;
-      };
-
-      vscode = {
-        enable = true;
-        pkgs = pkgs-unstable;
-      };
+      browsers.firefox.enable = true;
 
       shell = {
-        zsh = {
-          enable = true;
-        };
-        bash = {
-          enable = true;
-        };
+        zsh.enable = true;
+        bash.enable = true;
         default = "zsh";
       };
 
       terminal = {
-        kitty = {
-          enable = true;
-        };
-        foot = {
-          enable = false;
-        };
+        kitty.enable = true;
+        foot.enable = false;
         alacritty = {
           enable = true;
           shell = "bash";

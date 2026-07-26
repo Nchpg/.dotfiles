@@ -6,7 +6,7 @@
 }:
 
 # Config globale sops-nix ; secrets/templates individuels déclarés dans les
-# modules qui les consomment (calendar-tui, task-tui).
+# modules qui les consomment (tui/calendar, tui/task).
 # Clé de déchiffrement : ~/.config/sops/age/keys.txt, dérivée une fois de la
 # clé SSH via `ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ...`.
 # Éditer les secrets : sops secrets/secrets.yaml (depuis la racine du repo).
@@ -22,7 +22,7 @@ in
     readOnly = true;
     description = ''
       Vrai si ce user a accès aux secrets sops (keyOwner ou root). Les modules
-      qui déclarent des secrets (calendar-tui, task-tui, gh, wakatime,
+      qui déclarent des secrets (tui/calendar, tui/task, git/gh, editors/wakatime,
       git-email) peuvent asserter dessus pour échouer avec un message clair au
       lieu d'une erreur sops-nix cryptique quand ils sont activés pour un user
       sans clé. NB : ne vérifie QUE le droit d'accès (eval pur) — que la clé

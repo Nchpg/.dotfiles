@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs-unstable,
+  myLib,
   ...
 }:
 
@@ -12,7 +13,7 @@ in
   options.userSettings.agents.mistral = {
     # Paquet nixpkgs mistral-vibe, binaire réel `vibe` (+ `vibe-acp`).
     enable = lib.mkEnableOption "Mistral Vibe CLI";
-    pkgs = import ../../../../lib/mk-pkgs-option.nix {
+    pkgs = myLib.mkPkgsOption {
       inherit lib config;
       default = pkgs-unstable;
     };

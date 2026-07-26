@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  myLib,
+  ...
+}:
 
 let
   cfg = config.userSettings.git;
@@ -8,7 +13,7 @@ in
     userSettings.git = {
       enable = lib.mkEnableOption "Enable git";
 
-      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
       userName = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
         default = null;
@@ -87,7 +92,7 @@ in
       # Fragment gitconfig généré via sops : l'email n'apparaît ni dans le
       # repo ni dans le store.
       (lib.mkIf (cfg.userEmailSops != null) {
-        assertions = import ../../../lib/assert-sops-available.nix {
+        assertions = myLib.assertSopsAvailable {
           inherit config;
           optionName = "userSettings.git.userEmailSops";
         };

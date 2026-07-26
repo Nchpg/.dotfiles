@@ -5,8 +5,6 @@
 }:
 
 {
-  # Priorité normale (pas de mkDefault) : le profil est la couche d'intention
-  # finale. Référence pour guest/default.nix et root/default.nix.
   config = {
 
     userSettings = {
@@ -14,48 +12,50 @@
 
       stylix = {
         enable = true;
-        # Fixe quel que soit le thème. Commenter pour suivre le fond actif.
         wallpaper = "custom-kyoto";
       };
 
-      desktopApps = {
-        enable = true;
+      windowManager.sway = {
+        waybar.enable = true;
+        notifications.enable = true;
+        rofi.enable = true;
+
+        pickers = {
+          cliphist.enable = true;
+          wifi.enable = true;
+          bluetooth.enable = true;
+          volume.enable = true;
+        };
       };
 
-      waybar = {
-        enable = true;
-      };
+      editors = {
+        vim.enable = true;
 
-      vim = {
-        enable = true;
-      };
+        neovim.enable = true;
 
-      neovim = {
-        enable = true;
-        # Aligné sur pkgs-stable : sinon le wrapper (stable) et les plugins
-        # (unstable) tirent deux luajit différents -> conflit de buildEnv.
-      };
+        wakatime.enable = true;
 
-      tmux = {
-        enable = true;
-      };
-
-      btop = {
-        enable = true;
-        xeGpuSupport = true; # driver xe, non supporté par btop amont
+        vscode = {
+          enable = true;
+          pkgs = pkgs-unstable;
+        };
       };
 
       git = {
         enable = true;
         userName = "nathan.champagne";
         userEmailSops = "git/email";
+
+        gh.enable = true;
+
+        tig.enable = true;
       };
 
       agents = {
         claude = {
           enable = true;
           statusline.enable = true;
-          settings.preferredNotifChannel = "notifications_disabled"; # coupe les popups desktop
+          settings.preferredNotifChannel = "notifications_disabled";
         };
 
         kimiCode.enable = true;
@@ -66,135 +66,84 @@
         mistral.enable = true;
       };
 
-      gh = {
-        enable = true;
-        # user = "nchpg"; # affiché dans hosts.yml si renseigné
+      nixIndex.enable = true;
+
+      dev = {
+        python.enable = true;
+        direnv.enable = true;
+        vercelCli = {
+          enable = true;
+          claudePlugin.enable = true;
+        };
+        supabaseCli.enable = true;
+        cloudflareCli = {
+          enable = true;
+          accountId = "32f7902412a9edeeb7fdce0691d2c653";
+        };
       };
 
-      wakatime = {
-        enable = true;
+      browsers = {
+        firefox.enable = true;
+        chrome.enable = true;
       };
 
-      nixIndex = {
-        enable = true;
+      apps = {
+        discord.enable = true;
+
+        teams = {
+          enable = true;
+          profiles.bouygues.tenantId = "bf2ec9bc-d21e-420c-8acf-29441b9f4d45";
+        };
+
+        spotify = {
+          enable = true;
+          theme = "default";
+          tray.enable = true;
+        };
       };
 
-      python = {
-        enable = true;
+      gui = {
+        displays.enable = true;
+        pavucontrol.enable = true;
+        mpv.enable = true;
+        flameshot.enable = true;
+        feh.enable = true;
       };
 
-      firefox = {
-        enable = true;
-      };
+      tui = {
+        btop = {
+          enable = true;
+          xeGpuSupport = true;
+        };
+        systemdManager.enable = true;
+        task.enable = true;
+        calendar.enable = true;
+        yazi.enable = true;
+        posting.enable = true;
+        lgControl.enable = true;
 
-      chrome = {
-        enable = true;
-      };
-
-      teams = {
-        enable = true;
-        # Deep-link tenant Bouygues (accès invité, switcher d'orga cassé sous
-        # Electron) : GUID issu du lien d'invitation.
-        profiles.bouygues.tenantId = "bf2ec9bc-d21e-420c-8acf-29441b9f4d45";
-      };
-
-      flameshot = {
-        enable = true;
-      };
-
-      displays = {
-        enable = true;
-      };
-
-      notifications = {
-        enable = true;
-      };
-
-      cliphist = {
-        enable = true;
-      };
-
-      wifiPicker = {
-        enable = true;
-      };
-
-      bluetoothPicker = {
-        enable = true;
-      };
-
-      volumeMixer = {
-        enable = true;
-      };
-
-      lgControl = {
-        enable = true;
-      };
-
-      rofi = {
-        enable = true;
-      };
-
-      vscode = {
-        enable = true;
-        pkgs = pkgs-unstable;
-      };
-
-      spotify = {
-        enable = true;
-        theme = "default";
-        tray.enable = true;
-      };
-
-      tig = {
-        enable = true;
-      };
-
-      yazi = {
-        enable = true;
-      };
-
-      posting = {
-        enable = true;
-      };
-
-      taskTui = {
-        enable = true;
-      };
-
-      calendarTui = {
-        enable = true;
-      };
-
-      systemdManagerTui = {
-        enable = true;
+        lazygit.enable = true;
+        lazydocker.enable = true;
+        lazysql.enable = true;
+        ncdu.enable = true;
+        broot.enable = true;
       };
 
       shell = {
-        zsh = {
-          enable = true;
-        };
-        fish = {
-          enable = true;
-        };
-        bash = {
-          enable = true;
-        };
+        zsh.enable = true;
+        fish.enable = true;
+        bash.enable = true;
         default = "fish";
-        devTools.enable = true;
       };
 
       terminal = {
-        kitty = {
-          enable = true;
-        };
-        foot = {
-          enable = true;
-        };
-        alacritty = {
-          enable = true;
-        };
+        kitty.enable = true;
+        foot.enable = true;
+        alacritty.enable = true;
         default = "kitty";
       };
+
+      tmux.enable = true;
     };
   };
 }

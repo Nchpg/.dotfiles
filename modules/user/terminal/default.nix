@@ -3,6 +3,10 @@
 let
   cfg = config.userSettings;
 
+  # Un sous-dossier ici = un émulateur de terminal, sans exception : le
+  # listing EST la liste des valeurs valides de `terminal.default`. Ne ranger
+  # sous terminal/ que de vrais terminaux — tmux, longtemps `_tmux` pour être
+  # écarté de cette enum, vit maintenant dans modules/user/tmux.
   terminals = lib.attrNames (
     lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./.)
   );

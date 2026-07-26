@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  myLib,
+  ...
+}:
 
 let
   cfg = config.userSettings.shell.zsh;
@@ -7,7 +12,7 @@ in
   options = {
     userSettings.shell.zsh = {
       enable = lib.mkEnableOption "Enable zsh";
-      pkgs = import ../../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable {

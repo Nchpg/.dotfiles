@@ -148,7 +148,7 @@ jobs:
           done
 
       # Réalise TOUTES les fetchurl du registre de fonds d'écran
-      # (modules/themes/wallpapers.nix). Les builds ci-dessus ne téléchargent
+      # (themes/wallpapers.nix). Les builds ci-dessus ne téléchargent
       # que les fonds des thèmes ACTIFS : une URL morte, ou un contenu
       # republié sous la même URL, ne se découvrirait qu'en sélectionnant le
       # thème concerné. `--keep-going` pour lister TOUS les fonds cassés d'un

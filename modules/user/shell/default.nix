@@ -3,12 +3,18 @@
   lib,
   pkgs-unstable,
   devShellNames ? [ ],
+  myLib,
   ...
 }:
 
 let
   cfg = config.userSettings.shell;
 
+  # Un sous-dossier ici = un shell, sans exception : le listing EST la liste
+  # des valeurs valides de `shell.default`. Ne ranger sous shell/ que de vrais
+  # shells — un simple outil CLI y deviendrait une valeur acceptée de
+  # `default` et ferait planter les assertions ci-dessous (bat, longtemps
+  # `_bat` pour être écarté, vit maintenant dans modules/user/cli).
   shells = lib.attrNames (lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./.));
 
   # `VIRTUAL_ENV=""` évite qu'un venv actif fuite dans le nouveau `nix develop`.
@@ -24,43 +30,31 @@ in
         default = builtins.head shells;
         description = "Shell by default";
       };
-      # Opt-in explicite par user, découplé de desktopApps : root/guest
-      # gardent le strict minimum (common.nix).
-      devTools = {
-        enable = lib.mkEnableOption "outils CLI de confort dev (lazydocker, lazysql, broot, ncdu, feh)";
-      };
       devShellAliases = lib.mkOption {
         type = lib.types.str;
         readOnly = true;
         description = "Generated `dev-<name>` aliases, one per devshells/*.nix";
       };
-      pkgs = import ../../../lib/mk-pkgs-option.nix { inherit lib config; };
+      pkgs = myLib.mkPkgsOption { inherit lib config; };
     };
   };
 
   config = {
     userSettings.shell.devShellAliases = devShellAliases;
 
-    home.packages =
-      with cfg.pkgs;
-      [
-        # Socle requis par les rc/alias communs (shell/common), tous users.
-        delta
-        file
-        eza
-        duf
-        ripgrep
-        fd
-        curl
-        wget
-        gnugrep
-      ]
-      ++ lib.optionals cfg.devTools.enable [
-        ncdu
-        broot
-        lazydocker
-        lazysql
-      ];
+    # Socle requis par les rc/alias communs (shell/common), tous users. Les
+    # outils de confort dev ont chacun leur module (cf. dev-tools.nix).
+    home.packages = with cfg.pkgs; [
+      delta
+      file
+      eza
+      duf
+      ripgrep
+      fd
+      curl
+      wget
+      gnugrep
+    ];
 
     home.sessionVariables = {
       # Extrait la chaîne entre quotes de `dircolors -b` (--print-database
@@ -68,16 +62,9 @@ in
       LS_COLORS = ''$(dircolors -b | sed -n "s/^LS_COLORS='\(.*\)';$/\1/p")'';
     };
 
+    # Ergonomie du shell lui-même (Ctrl-R, z/zi), donc toujours actifs : ce
+    # sont des réglages de shell, pas des programmes qu'on choisit d'installer.
     programs = {
-      feh = {
-        enable = cfg.devTools.enable;
-        package = cfg.pkgs.feh;
-      };
-      lazygit = {
-        enable = cfg.devTools.enable;
-        package = cfg.pkgs.lazygit;
-      };
-      # Ergonomie du shell (Ctrl-R, z/zi), pas des "outils" : pas gatés sur devTools.
       fzf = {
         enable = true;
         package = pkgs-unstable.fzf;
@@ -86,13 +73,6 @@ in
         enable = true;
         package = cfg.pkgs.zoxide;
       };
-    };
-
-    # Pas de bat ici : thémage géré par modules/user/bat (target stylix
-    # explicitement coupé là-bas).
-    stylix.targets = {
-      feh.enable = cfg.devTools.enable;
-      lazygit.enable = cfg.devTools.enable;
     };
 
     # ERROR HANDLING

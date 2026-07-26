@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs-unstable,
+  myLib,
   ...
 }:
 
@@ -31,7 +32,7 @@ in
 {
   options.userSettings.agents.kimiCode = {
     enable = lib.mkEnableOption "Kimi Code CLI";
-    pkgs = import ../../../../lib/mk-pkgs-option.nix {
+    pkgs = myLib.mkPkgsOption {
       inherit lib config;
       default = pkgs-unstable;
     };
