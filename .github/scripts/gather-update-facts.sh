@@ -142,11 +142,15 @@ while IFS= read -r -d '' pinned_file; do
         old_pinned_map=$(jq --arg m "$module" --argjson e "$old_entry" '.[$m] = $e' <<<"$old_pinned_map")
     fi
     new_pinned_map=$(jq --arg m "$module" --argjson e "$new_entry" '.[$m] = $e' <<<"$new_pinned_map")
-done < <(find modules -maxdepth 4 -name 'pinned.json' -print0 | sort -z)
+# Pas de -maxdepth : il valait 4 et sautait dev/vercel-cli/claude-plugin/pinned.json
+# (un cran plus profond), dont le bump était donc APPLIQUÉ par update.yml mais
+# jamais décrit dans le corps de la PR. Borner la profondeur couple ce script à
+# l'arborescence des modules — cf. la même correction dans update.yml/rebuild.sh.
+done < <(find modules -name 'pinned.json' -print0 | sort -z)
 
 pinned_facts=$(diff_version_map "$old_pinned_map" "$new_pinned_map" | jq 'map({module: .key, oldVersion, newVersion})')
 
-ext_file="modules/user/vscode/extensions.json"
+ext_file="modules/user/editors/vscode/extensions.json"
 old_ext_map=$(at_head "$ext_file" | jq -c '. // {}')
 new_ext_map=$(jq -c '.' "$ext_file")
 vscode_facts=$(diff_version_map "$old_ext_map" "$new_ext_map")

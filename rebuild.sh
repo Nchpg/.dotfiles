@@ -73,7 +73,11 @@ if [[ "$UPDATE" -eq 1 ]]; then
     # Chargé dans un tableau (pas de `while read < <(find ...)`) : sinon le
     # `read -p` de confirmation ci-dessous lirait le flux de `find` au lieu du
     # terminal, et sauterait silencieusement toutes les mises à jour.
-    mapfile -d '' -t update_scripts < <(find modules -maxdepth 4 -name update.sh -print0 | sort -z)
+    # Pas de -maxdepth : il valait 4 et sautait silencieusement
+    # dev/vercel-cli/claude-plugin/update.sh (un cran plus profond). Borner la
+    # profondeur couple ce script à l'arborescence des modules — un déplacement
+    # de dossier désactive une mise à jour sans le moindre message.
+    mapfile -d '' -t update_scripts < <(find modules -name update.sh -print0 | sort -z)
     for script in "${update_scripts[@]}"; do
         module_dir="$(dirname "$script")"
 

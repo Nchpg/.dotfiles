@@ -11,7 +11,7 @@
 set -euo pipefail
 
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
-file="$flake/modules/user/vscode/extensions.json"
+file="$flake/modules/user/editors/vscode/extensions.json"
 
 if [ ! -f "$file" ]; then
     echo "Fichier introuvable : $file" >&2
