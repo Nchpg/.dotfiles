@@ -12,7 +12,10 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
 alias cls="clear"
-alias su='sudo su -s "$0"'
+# `$SHELL` et pas `$0` : `su -s` attend un CHEMIN de shell, alors que `$0` vaut
+# un simple nom ("fish", "bash" — fish le pose lui-même via `export 0=fish`),
+# que su ne sait pas résoudre. $SHELL porte le chemin absolu du shell de login.
+alias su='sudo su -s "$SHELL"'
 alias cat="bat --paging=never --style=plain"
 # 'base16' (thème intégré à bat/delta) : colore avec les 16 couleurs ANSI du
 # terminal, donc suit le thème stylix actif, dark comme light. L'ancien
