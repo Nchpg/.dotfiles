@@ -34,21 +34,37 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    stylix = {
-      enable = true;
-      autoEnable = false;
-      targets = {
-        gtk.enable = true;
-        qt.enable = true;
-        gnome.enable = true;
-      };
-
-      # Source unique : themes/fonts.nix.
-      fonts = (themes.fontsFor cfg.pkgs).stylix;
+  config = lib.mkMerge [
+    {
+      # Hors du mkIf, sinon un profil SANS stylix (server) laisse le module
+      # upstream à son autoEnable = true : il active alors tous ses targets,
+      # dont `overlays`, qui écrit dans nixpkgs.overlays — interdit sous
+      # home-manager.useGlobalPkgs (warning de dépréciation, et bientôt une
+      # assertion). On n'active jamais de target implicitement, ici comme
+      # dans le module système.
+      stylix.autoEnable = false;
     }
-    // themes.stylixSettings {
-      inherit (cfg) pkgs theme wallpaper;
-    };
-  };
+
+    (lib.mkIf cfg.enable {
+      stylix = {
+        enable = true;
+
+        # Seuls targets réservés aux postes graphiques : sur un host headless
+        # (profil server) ils ne thémiseraient rien mais tireraient GTK/Qt/
+        # GNOME dans le store. Les targets qui comptent en SSH — vim, tmux,
+        # bat — sont activés par leur propre module et restent actifs ici.
+        targets = lib.optionalAttrs osConfig.systemSettings.desktop.enable {
+          gtk.enable = true;
+          qt.enable = true;
+          gnome.enable = true;
+        };
+
+        # Source unique : themes/fonts.nix.
+        fonts = (themes.fontsFor cfg.pkgs).stylix;
+      }
+      // themes.stylixSettings {
+        inherit (cfg) pkgs theme wallpaper;
+      };
+    })
+  ];
 }
