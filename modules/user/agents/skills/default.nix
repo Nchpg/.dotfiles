@@ -13,10 +13,21 @@ let
     lib.filterAttrs (_name: type: type == "directory") (builtins.readDir ./.)
   );
 
+  # recursive : de VRAIS dossiers contenant un symlink par fichier, plutôt
+  # qu'un symlink vers un dossier du store. Claude Code n'a pas listé les
+  # skills tant qu'elles étaient des symlinks de dossier — un scan qui filtre
+  # sur isDirectory() les rate, l'entrée étant un lien (elles restaient
+  # invocables par leur nom, mais absentes du listing).
   mkSkillFiles =
     base:
     lib.listToAttrs (
-      map (name: lib.nameValuePair "${base}/${name}" { source = ./. + "/${name}"; }) skillNames
+      map (
+        name:
+        lib.nameValuePair "${base}/${name}" {
+          source = ./. + "/${name}";
+          recursive = true;
+        }
+      ) skillNames
     );
 in
 {
