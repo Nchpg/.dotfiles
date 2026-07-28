@@ -1,13 +1,21 @@
 # Depuis fish 4.x, le thème "default" livré en boîte met fish_color_command
 # à --reset (couleur du terminal, pas de vert) si aucun thème n'a jamais été
-# choisi explicitement sur la machine. Fixé en dur ici pour que toutes les
-# machines aient le même rendu, sans dépendre de fish_variables (état local
-# non versionné) — valeurs reprises telles quelles depuis `fish_config theme
-# dump` sur gram.
-set -g fish_color_autosuggestion 6c7086
+# choisi explicitement sur la machine. Fixé ici pour que toutes les machines
+# aient le même rendu, sans dépendre de fish_variables (état local non
+# versionné).
+#
+# Deux registres, volontairement :
+#   - noms ANSI (green, cyan…) : suivent la palette du terminal, donc le thème
+#     stylix actif — et en SSH, celle du terminal client ;
+#   - @stylix_baseXX@ : injectés au build par default.nix, pour les rôles que
+#     les 16 couleurs ANSI ne portent pas (gris de commentaire, fond de
+#     sélection). Ces slots étaient des hex Catppuccin arrivés là par un
+#     `fish_config theme dump` sur gram : ils ne bougeaient plus avec le
+#     thème, et restaient illisibles sur la variante claire.
+set -g fish_color_autosuggestion @stylix_base03@
 set -g fish_color_cancel -r
 set -g fish_color_command green
-set -g fish_color_comment 6c7086
+set -g fish_color_comment @stylix_base03@
 set -g fish_color_cwd green
 set -g fish_color_cwd_root red
 set -g fish_color_end brblack
@@ -22,8 +30,8 @@ set -g fish_color_operator blue
 set -g fish_color_param cyan
 set -g fish_color_quote yellow
 set -g fish_color_redirection cyan
-set -g fish_color_search_match white --background=585b70
-set -g fish_color_selection white --bold --background=585b70
+set -g fish_color_search_match white --background=@stylix_base02@
+set -g fish_color_selection white --bold --background=@stylix_base02@
 set -g fish_color_status red
 set -g fish_color_user brgreen
 set -g fish_color_valid_path --underline

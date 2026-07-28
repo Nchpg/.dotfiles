@@ -21,6 +21,20 @@ let
       light = "gruvbox-light";
     }
     .${themes.polarity config.userSettings.stylix.theme};
+
+  # Slots du scheme injectés dans colors.fish (@stylix_baseXX@), même procédé
+  # que modules/user/editors/neovim. Lus via parseScheme et pas
+  # `config.lib.stylix.colors` : ces couleurs doivent exister même pour un
+  # user sans stylix (root en console), et userSettings.stylix.theme a une
+  # valeur dans tous les cas.
+  schemeColors = [
+    "base02" # fond de sélection / de correspondance
+    "base03" # gris des commentaires et des suggestions
+  ];
+  scheme = themes.parseScheme config.userSettings.stylix.theme;
+  colorsFish = lib.replaceStrings (map (name: "@stylix_${name}@") schemeColors) (map (
+    name: scheme.${name}
+  ) schemeColors) (builtins.readFile ./colors.fish);
 in
 {
   options = {
@@ -38,7 +52,7 @@ in
         (builtins.readFile ../common)
         config.userSettings.shell.devShellAliases
         "set -g __bat_preview_theme ${batPreviewTheme}"
-        (builtins.readFile ./colors.fish)
+        colorsFish
         (builtins.readFile ./fzf_wrapper.fish)
         (builtins.readFile ./.fish)
       ];
