@@ -6,6 +6,13 @@
 {
   config = {
     systemSettings = {
+      # Thémise les TTY, seul rendu local d'un host sans session graphique :
+      # sans ça la console garde la palette Linux par défaut et la même
+      # commande n'a pas les mêmes couleurs sur l'écran de la machine et en
+      # SSH depuis gram. Les targets GUI (GDM, overlay gnome-shell, et sa
+      # recompilation) suivent systemSettings.desktop.enable, faux ici.
+      stylix.enable = true;
+
       # nchpg détient la clé age qui déchiffre secrets/secrets.yaml.
       sops.keyOwner = "nchpg";
 

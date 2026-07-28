@@ -105,10 +105,15 @@ in
         # browser-connector, ~190 Mio de deps de build). dark/light produisent
         # deux gnome-shell différents : la première bascule après un
         # `rebuild -u` ou un changement de thème repaye la compilation.
-        overlays.enable = true;
+        # D'où le suivi de desktop.enable : sur un host headless, cet overlay
+        # ne thémiserait aucun écran de login et ferait payer la compilation
+        # pour rien.
+        overlays.enable = config.systemSettings.desktop.enable;
 
         targets = {
-          gnome.enable = true; # ⇒ thémise GDM (login screen)
+          gnome.enable = config.systemSettings.desktop.enable; # ⇒ thémise GDM (login screen)
+          # Jamais conditionnée : sur un host headless, les TTY sont le seul
+          # rendu local, donc le seul endroit où le thème se voit encore.
           console.enable = true; # ⇒ thémise les TTY
         };
 
