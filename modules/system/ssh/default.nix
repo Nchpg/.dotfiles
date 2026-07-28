@@ -63,6 +63,15 @@ in
         # On se connecte en nchpg (wheel) puis sudo : une session root
         # directe ne laisse aucune trace de QUI a agi.
         PermitRootLogin = "no";
+        # COLORTERM ne traverse pas SSH : elle n'est ni dans le SendEnv par
+        # défaut du client, ni dans AcceptEnv ici. Sans elle, les TUI qui
+        # détectent la 24 bits par cette variable (Claude Code, bat, delta)
+        # retombent en 256 couleurs et arrondissent chaque teinte du thème —
+        # la même commande n'a pas les mêmes couleurs en local et en SSH. On
+        # la pose côté serveur plutôt que d'exiger un SendEnv sur chaque
+        # client ; le TTY local, qui n'est pas une session SSH, n'y touche
+        # pas et garde ses 16 couleurs.
+        SetEnv = "COLORTERM=truecolor";
       };
     };
   };
