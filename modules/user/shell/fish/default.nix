@@ -38,6 +38,7 @@ in
         (builtins.readFile ../common)
         config.userSettings.shell.devShellAliases
         "set -g __bat_preview_theme ${batPreviewTheme}"
+        (builtins.readFile ./colors.fish)
         (builtins.readFile ./fzf_wrapper.fish)
         (builtins.readFile ./.fish)
       ];
