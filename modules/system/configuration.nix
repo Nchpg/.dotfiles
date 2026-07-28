@@ -1,5 +1,8 @@
-{ pkgs-stable, ... }:
+{ config, pkgs-stable, ... }:
 
+let
+  desktop = config.systemSettings.desktop.enable;
+in
 # Core du système : le reliquat sans module dédié. Le reste vit dans
 # modules/system/<sujet>/.
 {
@@ -56,21 +59,23 @@
   # Défaut NixOS, explicite pour rester auditable.
   networking.firewall.enable = true;
 
-  services.printing.enable = true;
+  # Les quatre services ci-dessous suivent systemSettings.desktop.enable :
+  # ils servent un poste de travail, pas une machine administrée en SSH.
+  services.printing.enable = desktop;
 
   # mDNS / IPP Everywhere : sans ça CUPS ne voit que les imprimantes ajoutées
-  # à la main.
+  # à la main. Seul de ces quatre à ouvrir un port (5353/udp).
   services.avahi = {
-    enable = true;
-    nssmdns4 = true;
+    enable = desktop;
+    nssmdns4 = desktop;
   };
 
   # Utilisé par lg-control et le module batterie de waybar. Explicite : sinon
   # fourni seulement en dépendance cachée du module GNOME.
-  services.power-profiles-daemon.enable = true;
+  services.power-profiles-daemon.enable = desktop;
 
   # LVFS, passif (rien ne se flashe sans fwupdmgr update manuel).
-  services.fwupd.enable = true;
+  services.fwupd.enable = desktop;
 
   # Binaires non-Nix (prebuilds npm, installeurs curl|sh...) cherchent leur
   # loader en dur à /lib64/ld-linux-x86-64.so.2, absent sur NixOS. nix-ld pose

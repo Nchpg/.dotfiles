@@ -1,6 +1,13 @@
-{ pkgs-stable, ... }:
-
 {
+  config,
+  lib,
+  pkgs-stable,
+  ...
+}:
+
+# Suit systemSettings.desktop.enable : sans écran ni haut-parleur, pipewire et
+# le firmware de la carte son n'ont personne à servir.
+lib.mkIf config.systemSettings.desktop.enable {
   security.rtkit.enable = true;
   services.pipewire = {
     enable = true;
