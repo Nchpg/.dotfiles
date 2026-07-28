@@ -1,7 +1,19 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  osConfig,
+  ...
+}:
 
 let
   cfg = config.userSettings;
+
+  # Un émulateur de terminal n'a de sens que dans une session graphique.
+  # Sur un profil headless (server), exiger qu'un user en ait un installerait
+  # toute la pile GUI sur une machine sans écran.
+  graphical =
+    osConfig.systemSettings.windowManager.sway.enable
+    || osConfig.systemSettings.windowManager.gnome.enable;
 
   # Un sous-dossier ici = un émulateur de terminal, sans exception : le
   # listing EST la liste des valeurs valides de `terminal.default`. Ne ranger
@@ -22,7 +34,7 @@ in
     };
   };
   config = {
-    assertions = lib.mkIf (cfg.user != "root") (
+    assertions = lib.mkIf (cfg.user != "root" && graphical) (
       [
         {
           assertion = lib.any (terminalName: cfg.terminal.${terminalName}.enable) terminals;
