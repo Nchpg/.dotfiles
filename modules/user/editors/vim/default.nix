@@ -40,14 +40,27 @@ in
       extraConfig = ''
         ${builtins.readFile ./vim-config/.vimrc}
         execute 'set runtimepath+=' . expand('~/.vim/airline')
-        colorscheme base16-stylix
-        let g:airline_theme='base16_${
-          lib.strings.replaceStrings [ "-" ] [ "_" ] config.userSettings.stylix.theme
-        }'
 
-        ${lib.optionalString (config.userSettings.stylix.theme == "gruvbox-dark-custom") ''
-          let g:airline_theme='powerline'
-        ''}
+        ${
+          # base16-stylix est ÉCRIT par le target stylix : sans stylix dans
+          # cette session, le fichier n'existe pas et vim s'ouvre sur un E185
+          # à chaque lancement. Repli sur le plugin gruvbox, déjà installé.
+          if config.userSettings.stylix.enable then
+            ''
+              colorscheme base16-stylix
+              let g:airline_theme='base16_${
+                lib.strings.replaceStrings [ "-" ] [ "_" ] config.userSettings.stylix.theme
+              }'
+            ''
+            + lib.optionalString (config.userSettings.stylix.theme == "gruvbox-dark-custom") ''
+              let g:airline_theme='powerline'
+            ''
+          else
+            ''
+              colorscheme gruvbox
+              let g:airline_theme='powerline'
+            ''
+        }
       '';
 
     };
