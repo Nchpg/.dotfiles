@@ -24,6 +24,14 @@
         userEmailSops = "git/email";
       };
 
+      agents = {
+        claude = {
+          enable = true;
+          statusline.enable = true;
+          settings.preferredNotifChannel = "notifications_disabled";
+        };
+      };
+
       shell = {
         fish.enable = true;
         bash.enable = true;
