@@ -9,14 +9,17 @@
     userSettings = {
       defaultPkgs = pkgs-stable;
 
-      # Thémise vim/tmux/bat, dont les couleurs sont écrites en dur dans leur
-      # config côté serveur — la palette ANSI, elle, vient du terminal client.
-      # Sans ça, le `colorscheme base16-stylix` du module vim n'existe pas et
-      # vim s'ouvre sur un E185. Les targets GTK/Qt/GNOME restent hors du
-      # store : ils suivent systemSettings.desktop.enable, faux ici.
+      # Thémise neovim/tmux/bat, dont les couleurs sont écrites en dur dans
+      # leur config côté serveur — la palette ANSI, elle, vient du terminal
+      # client. Sans ça, le `colorscheme base16-stylix` du module vim n'existe
+      # pas et vim s'ouvre sur un E185. Les targets GTK/Qt/GNOME restent hors
+      # du store : ils suivent systemSettings.desktop.enable, faux ici.
       stylix.enable = true;
 
-      editors.vim.enable = true;
+      # neovim et pas vim : c'est le même éditeur que sur gram (mêmes
+      # raccourcis, mêmes LSP), et `vimAlias` garde `vim` fonctionnel — donc
+      # le EDITOR=vim de modules/user/home-manager ouvre bien nvim.
+      editors.neovim.enable = true;
 
       git = {
         enable = true;
