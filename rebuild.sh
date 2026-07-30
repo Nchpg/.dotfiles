@@ -52,12 +52,6 @@ NC='\033[0m' # No Color
 
 cd "$(dirname "$0")"
 
-# git ne suit pas les permissions (hors bit exécutable) : un chmod fait à la
-# main est perdu au prochain checkout/clone. secrets.yaml est chiffré (sops),
-# donc la valeur réelle de ce durcissement est faible, mais autant le
-# réappliquer ici à chaque rebuild, sans rien devoir se rappeler de faire.
-[[ -f secrets/secrets.yaml ]] && chmod 600 secrets/secrets.yaml || true
-
 # Bump claude-code seulement sur demande (--update / rebuild -u) : le faire à
 # chaque rebuild salissait flake.lock (→ warning git systématique) et
 # re-téléchargeait claude-code inutilement.
@@ -131,6 +125,54 @@ else
     echo -e "${GREEN}✅ Git status is clean.${NC}"
 fi
 
+# ── Cohérence du dépôt de secrets ────────────────────────────────────────────
+#
+# Le lock épingle l'entrée `secrets`, donc une valeur modifiée là-bas n'est PAS
+# déployée tant qu'un `nix flake update secrets` n'a pas bougé le lock ici. C'est
+# voulu — sans ça, éditer le dépôt privé suffirait à changer ce que les machines
+# déploient. Mais la contrepartie est un rebuild qui réussit en installant
+# l'ANCIENNE valeur, sans un message.
+#
+# Ça a coûté une base Authelia illisible, un tunnel Cloudflare hors service et
+# deux clés WireGuard désynchronisées en une soirée. On compare donc, ici, au
+# moment qui compte.
+#
+# Comparaison au HEAD LOCAL, sans réseau : toute opération sur le dépôt privé
+# passe par SSH et redemanderait la phrase de passe à chaque rebuild. Le cas
+# « une autre machine a poussé » est couvert ailleurs, par le pull que la
+# commande `secrets` fait avant chaque édition.
+SECRETS_STORE="${MY_SECRETS:-$HOME/.secrets}"
+if [ -d "$SECRETS_STORE/.git" ] && [ -f flake.lock ]; then
+    SECRETS_HEAD="$(git -C "$SECRETS_STORE" rev-parse HEAD 2> /dev/null || true)"
+    SECRETS_LOCKED="$(grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
+
+    if [ -n "$SECRETS_HEAD" ] && [ -n "$SECRETS_LOCKED" ] && [ "$SECRETS_HEAD" != "$SECRETS_LOCKED" ]; then
+        echo -e "${YELLOW}Le lock ne pointe pas sur ton dernier commit de secrets.${NC}"
+        echo "  dépôt : $SECRETS_HEAD"
+        echo "  lock  : $SECRETS_LOCKED"
+        echo -e "  Rebuild en l'état = ${RED}déploiement de l'ANCIENNE valeur${NC}."
+        echo
+        if [[ "$YES" -eq 1 ]]; then
+            echo "(--yes) Mise à jour du lock."
+            REPLY=y
+        else
+            read -p "Mettre le lock à jour maintenant ? [Y/n] " -n 1 -r
+            echo
+        fi
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            # sudo : le jeton de lecture du dépôt privé est en 0600 root, et la
+            # récupération d'une entrée se fait dans l'évaluateur.
+            # --refresh : sans lui Nix resert une résolution vieille d'une heure.
+            sudo nix flake update secrets --refresh || {
+                echo -e "${RED}Mise à jour du lock échouée.${NC}" >&2
+                exit 1
+            }
+        else
+            echo -e "${YELLOW}Poursuite avec la révision épinglée.${NC}"
+        fi
+    fi
+fi
+
 echo "🚀 Starting NixOS system rebuild..."
 
 # Génération courante avant le switch, pour afficher le diff des paquets après.
@@ -143,7 +185,26 @@ PREV_SYSTEM="$(readlink -f /run/current-system)"
 # Split volontaire de REBUILD_EXTRA_ARGS en mots, via un tableau (et pas une
 # expansion non quotée, qui subirait aussi l'expansion des globs).
 read -ra EXTRA_ARGS <<< "${REBUILD_EXTRA_ARGS:-}"
-if sudo nixos-rebuild switch --flake .#"$ATTR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}; then
+
+# NIX_CONFIG posé ici plutôt que d'exiger une invocation particulière le jour où
+# l'on enrôle une machine.
+#
+# L'entrée `secrets` vit dans un dépôt privé, donc sa récupération demande le
+# jeton rangé dans ce fichier. C'est ce que fait `nix.extraOptions` (cf.
+# modules/system/configuration.nix), sauf que cette configuration n'atterrit dans
+# /etc/nix/nix.conf qu'à l'ACTIVATION — laquelle a besoin de l'entrée, qui a
+# besoin du jeton. Sur une machine neuve, le premier rebuild échouait donc en 404
+# et il fallait retaper l'include à la main.
+#
+# Sans effet une fois la machine à jour : inclure deux fois le même fichier pose
+# deux fois le même réglage. Et un include absent est toléré par nix, donc une
+# machine sans jeton (aucun dépôt privé à récupérer) n'y voit rien.
+#
+# ATTENTION au répertoire : s'il n'est pas traversable, nix n'ignore pas
+# l'include, il jette la TOTALITÉ de /etc/nix/nix.conf. Cf. le commentaire de la
+# règle tmpfiles.
+if sudo NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
+    nixos-rebuild switch --flake .#"$ATTR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}; then
     echo "✅ System rebuild successful."
 
     # Diff des paquets ancien système → nouveau (versions bump, ajouts, retraits).

@@ -272,7 +272,7 @@ in
 
         # Setup OAuth (config vdirsyncer générée automatiquement par sops) :
         # Google Cloud Console -> activer l'API CalDAV + créer un OAuth Client
-        # ID "Desktop application", puis `sops secrets/secrets.yaml` pour
+        # ID "Desktop application", puis `secrets user` pour
         # renseigner google.client_id/client_secret/project_id et
         # calendars.perso/epita/feries. Après switch : vdirsyncer discover
         # && vdirsyncer sync une fois, puis Mod+c ouvre ikhal.

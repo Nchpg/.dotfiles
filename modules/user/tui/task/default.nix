@@ -109,7 +109,7 @@ in
         # L'app écrit ~/.gtask/token.json au 1er lancement (flux navigateur),
         # token runtime mutable, hors sops. Setup : mêmes identifiants OAuth
         # que calendar-tui, projet Google Cloud avec l'API "Google Tasks"
-        # activée, via `sops secrets/secrets.yaml`.
+        # activée, via `secrets user`.
       }
     ]
   );

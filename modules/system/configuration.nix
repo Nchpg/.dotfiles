@@ -32,7 +32,68 @@ in
     };
     # 100 % flake : plus de channels ni de NIX_PATH.
     channel.enable = false;
+
+    # Jeton de lecture pour l'entrée `secrets`, qui vit dans un dépôt PRIVÉ
+    # (cf. flake.nix). Sans lui, l'évaluation du flake échoue en 404.
+    #
+    # Par `!include` et non par `nix.settings.access-tokens` : cette dernière
+    # écrit la valeur dans /etc/nix/nix.conf, lisible par tous les utilisateurs
+    # de la machine. Le fichier inclus, lui, est en 0600 root.
+    #
+    # Et pas non plus dans /root/.config/nix/nix.conf, qui serait plus simple et
+    # supprimerait la boucle d'amorçage décrite plus bas. Vérifié dans
+    # systemd.exec(5) : `$HOME` n'est posé que pour les unités qui déclarent un
+    # `User=`. `nixos-upgrade.service` tourne en root sans en déclarer, donc
+    # cette unité ne lirait PAS ce fichier. Ça marcherait sous sudo et
+    # échouerait la nuit, en silence, sur la seule chose qui doit tourner sans
+    # nous. /etc/nix/nix.conf est lu quoi qu'il arrive.
+    #
+    # POSÉ À LA MAIN, une fois par machine, et il ne peut pas en être autrement :
+    # c'est le jeton qui donne accès aux secrets, il ne peut donc pas venir des
+    # secrets. Même catégorie que /var/lib/sops-nix/key.txt, un identifiant
+    # d'amorçage.
+    #
+    #   sudo install -d -m 700 /var/lib/nix
+    #   sudo sh -c 'umask 077; echo "access-tokens = github.com=github_pat_..." \
+    #     > /var/lib/nix/access-tokens.conf'
+    extraOptions = ''
+      !include /var/lib/nix/access-tokens.conf
+    '';
   };
+
+  # Fichier créé vide s'il manque, pour que le `!include` ci-dessus ait toujours
+  # une cible. Vérifié : nix ignore en silence un include absent ou illisible,
+  # donc ce n'est pas indispensable, mais un fichier présent et vide donne un
+  # échec plus lisible — « 404 sur l'entrée secrets » plutôt qu'un jeton
+  # fantôme.
+  #
+  # 0600 root, sans concession à la commodité. La récupération d'une entrée de
+  # flake se fait dans l'ÉVALUATEUR, donc dans le processus qui lance la
+  # commande, pas dans le démon : ouvrir ce fichier au groupe `wheel` aurait
+  # permis à un processus tournant sous ton compte de cloner le dépôt privé,
+  # donc d'ARCHIVER les fichiers chiffrés. Il ne pourrait pas les déchiffrer, la
+  # clé système restant en 0600 root, mais il rouvrirait le « récolter
+  # maintenant, déchiffrer plus tard » qui est la raison même d'avoir sorti ces
+  # valeurs du dépôt public.
+  #
+  # Ce que ça coûte : une commande nix lancée sous ton compte qui doit ALLER
+  # CHERCHER l'entrée échoue en 404. `rebuild` n'est pas concerné, il passe par
+  # sudo, et une fois l'entrée récupérée par root elle est dans le store
+  # partagé, donc les évaluations suivantes fonctionnent sans jeton. La gêne se
+  # limite au moment qui suit un changement de lock — que la commande `secrets`
+  # fait justement passer par sudo.
+  # Le RÉPERTOIRE doit rester traversable par tout le monde, et c'est le piège
+  # de tout ce montage. Si un utilisateur ne peut pas traverser jusqu'au fichier
+  # inclus, nix n'ignore pas l'include : il abandonne la TOTALITÉ de
+  # /etc/nix/nix.conf. Plus de flakes, plus de substituters, `max-jobs = 1`, et
+  # aucun message pour le dire. Vérifié en A/B sur le fichier réel.
+  #
+  # Un fichier illisible dans un répertoire traversable, lui, est bien toléré :
+  # c'est ce qui permet de garder le jeton en 0600 root.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/nix 0755 root root -"
+    "f /var/lib/nix/access-tokens.conf 0600 root root"
+  ];
 
   # Orphelins seulement, jamais les générations (pas de --delete-older-than) :
   # leur rétention est pilotée par genclean.

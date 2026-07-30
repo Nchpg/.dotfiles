@@ -1,0 +1,736 @@
+{
+  config,
+  lib,
+  myLib,
+  pkgs-stable,
+  ...
+}:
+
+# Nextcloud servi par DEUX chemins, chacun protégé par le mécanisme qui lui
+# convient :
+#
+#   navigateur    -> tunnel Cloudflare + Authelia (authentification interactive)
+#   clients sync  -> WireGuard, puis nginx sur le nom interne (clés WireGuard)
+#
+# Pourquoi ce découpage : Authelia authentifie par redirection navigateur, ce que
+# les clients de synchronisation ne savent pas suivre. Les faire passer par le
+# tunnel obligerait à exempter `/remote.php/*` de la politique, c'est-à-dire à
+# exposer WebDAV — précisément la surface qu'on cherche à protéger. En les
+# routant par le VPN, aucune exemption n'est nécessaire nulle part.
+let
+  cfg = config.systemSettings.nextcloud;
+  authelia = config.systemSettings.authelia;
+  mail = config.systemSettings.mail;
+
+  # Réglages communs aux unités qui appellent `occ`.
+  #
+  # Le `LoadCredential` n'est pas facultatif dès qu'un `secretFile` existe : le
+  # wrapper nextcloud-occ vérifie `CREDENTIALS_DIRECTORY` et, s'il ne le trouve
+  # pas, se relance par `systemd-run` — ce que l'utilisateur `nextcloud` n'a pas
+  # le droit de faire. La commande échoue alors sur un « Access denied » sans
+  # rapport apparent avec Nextcloud.
+  occServiceConfig = {
+    Type = "oneshot";
+    User = "nextcloud";
+    LoadCredential = lib.optional (
+      config.services.nextcloud.secretFile != null
+    ) "secret_file:${config.services.nextcloud.secretFile}";
+  };
+in
+{
+  options.systemSettings.nextcloud = {
+    enable = lib.mkEnableOption "Nextcloud (PostgreSQL et Redis locaux)";
+
+    hostName = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "cloud.exemple.fr";
+      description = ''
+        Nom PUBLIC, celui que sert le tunnel. C'est aussi celui que Nextcloud
+        emploie pour fabriquer ses URL (liens de partage, redirections), d'où le
+        choix d'y mettre le nom public : un lien généré doit rester valable pour
+        un destinataire extérieur.
+      '';
+    };
+
+    extraHostNames = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "cloud.vpn.exemple.fr" ];
+      description = ''
+        Noms SUPPLÉMENTAIRES sous lesquels servir la même instance. Ajoutés en
+        alias du vhost — donc couverts par le certificat, `enableACME` reprenant
+        les `serverAliases` — et déclarés en domaines de confiance, faute de quoi
+        Nextcloud rejette la requête par un « untrusted domain » peu explicite.
+
+        L'usage prévu est un nom joignable par un chemin RÉSERVÉ, typiquement
+        l'adresse du serveur dans un tunnel VPN, pour les clients de
+        synchronisation : ils ne savent pas suivre une redirection
+        d'authentification, il leur faut donc un nom qu'une règle laisse passer.
+
+        `hostName` reste le nom que Nextcloud emploie pour fabriquer ses URL :
+        un lien de partage doit rester valable pour un destinataire extérieur,
+        qui n'a pas accès à ces chemins-là.
+      '';
+    };
+
+    adminUser = lib.mkOption {
+      type = lib.types.str;
+      default = "admin";
+      description = "Compte administrateur créé à la première initialisation.";
+    };
+
+    previews = {
+      pregenerate = lib.mkEnableOption ''
+        la fabrication des miniatures À L'AVANCE, par l'application
+        previewgenerator et une tâche périodique.
+
+        Sans elle, Nextcloud fabrique chaque miniature au moment où on la
+        regarde. Redimensionner une photo de 12 mégapixels coûte bien plus qu'une
+        requête ordinaire, et c'est ce qui décide qu'une galerie défile ou rame
+      '';
+
+      interval = lib.mkOption {
+        type = lib.types.str;
+        default = "*:0/30";
+        description = "Fréquence de la pré-génération, au format `OnCalendar` de systemd.";
+      };
+    };
+
+    enforceTwoFactor = lib.mkEnableOption ''
+      l'obligation d'un second facteur pour TOUS les comptes Nextcloud.
+
+      Distinct de celui d'Authelia, qui ne garde que le chemin public : le chemin
+      interne, emprunté par le VPN et les applications de synchronisation, ne
+      passe pas par le portail. Sans ce réglage, un compte n'y est donc protégé
+      que par son mot de passe.
+
+      Les applications mobiles et de bureau ne sont PAS concernées, elles
+      utilisent des mots de passe d'application qui contournent le second facteur
+      par conception. Chaque utilisateur devra en revanche enrôler un facteur à
+      sa prochaine connexion par navigateur.
+
+      Porte de secours si quelqu'un se bloque :
+        sudo -u nextcloud nextcloud-occ twofactorauth:disable <utilisateur>
+    '';
+
+    language = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "fr";
+      description = ''
+        Langue de l'interface, code ISO à deux lettres. S'applique aux NOUVEAUX
+        comptes et à la page de connexion ; les comptes existants gardent la
+        leur, sauf si `forceLanguage` est activé.
+      '';
+    };
+
+    locale = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "fr_FR";
+      description = ''
+        Format des dates, des nombres et du premier jour de la semaine. Distinct
+        de la langue : on peut vouloir une interface en anglais avec des dates au
+        format français.
+      '';
+    };
+
+    forceLanguage = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Impose la langue et le format à TOUS les comptes, sans possibilité de les
+        changer. Uniformise, au prix du choix individuel.
+      '';
+    };
+
+    theming = {
+      enable = lib.mkEnableOption ''
+        un thème en aplats de couleur, sans image de fond, dérivé du schéma
+        stylix actif du host.
+
+        À PESER avant d'activer : une palette de terminal n'est pas une palette
+        d'interface web. Les couleurs d'un schéma sombre sont désaturées pour
+        ressortir sur du noir ; posées sur l'interface CLAIRE de Nextcloud, elles
+        donnent des accents délavés et sans contraste. Le thème natif, lui, a été
+        éprouvé sur cette interface-là.
+
+        N'affecte QUE les couleurs et le nom affiché : `customCss` s'applique
+        indépendamment, un masquage d'élément n'ayant rien à voir avec une
+        palette
+      '';
+
+      primaryColor = lib.mkOption {
+        type = lib.types.str;
+        default = "#${config.lib.stylix.colors.base0D}";
+        defaultText = lib.literalExpression "la couleur d'accent du schéma stylix";
+        description = ''
+          Couleur des boutons, liens et éléments actifs.
+
+          Le défaut suit stylix par cohérence avec le reste du système, mais
+          c'est rarement le bon choix ici — cf. la réserve sur `enable`. Une
+          teinte choisie pour cette interface, ou le bleu natif `#0082C9`,
+          donnent un meilleur résultat.
+        '';
+      };
+
+      backgroundColor = lib.mkOption {
+        type = lib.types.str;
+        default = "#${config.lib.stylix.colors.base00}";
+        defaultText = lib.literalExpression "la couleur de fond du schéma stylix";
+        description = ''
+          Fond de l'interface. Remplace l'image livrée par Nextcloud, ce qui
+          allège aussi le chargement des pages.
+        '';
+      };
+
+      name = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "Cloud familial";
+        description = "Nom affiché à la place de « Nextcloud ». `null` conserve le défaut.";
+      };
+
+      customCss = lib.mkOption {
+        type = lib.types.lines;
+        default = "";
+        example = "#contactsmenu { display: none !important; }";
+        description = ''
+          Feuille de style injectée dans toutes les pages, par l'application
+          `theming_customcss` qui s'installe alors automatiquement.
+
+          C'est le SEUL levier pour ce que le thème ne couvre pas : les icônes de
+          la barre supérieure, ou le menu contacts qui appartient au cœur de
+          Nextcloud et qu'aucune désactivation d'application ne retire.
+
+          Les sélecteurs dépendent de la version de Nextcloud et ne sont pas un
+          contrat : une mise à jour majeure peut les invalider, auquel cas la
+          règle cesse de s'appliquer sans rien casser.
+        '';
+      };
+
+      lockUserTheming = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Empêche chaque compte de choisir ses propres couleurs. Sans ça le thème
+          posé ici n'est qu'un défaut, que le premier utilisateur venu remplace
+          pour lui-même.
+        '';
+      };
+    };
+
+    enabledApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "sharebymail" ];
+      description = ''
+        Applications à réactiver explicitement.
+
+        Indispensable parce que le mécanisme est à SENS UNIQUE : `occ
+        app:disable` ne sait que désactiver, donc retirer une entrée de
+        `disabledApps` ne la rallume pas. Sans cette liste, la configuration
+        prétendrait qu'une application est active alors qu'elle resterait
+        éteinte, et l'écart ne se verrait qu'en interrogeant `occ app:list`.
+      '';
+    };
+
+    disabledApps = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "dashboard" ];
+      description = ''
+        Applications livrées avec Nextcloud à désactiver.
+
+        Ça compte pour les performances : une application activée enregistre ses
+        routes et ses écouteurs d'événements à CHAQUE requête, y compris celles
+        des clients de synchronisation qui ne s'en serviront jamais. Sur un
+        processeur modeste, c'est le principal gisement une fois l'opcache réglé.
+
+        Le module amont ne sait qu'activer (`extraApps`), d'où l'unité qui passe
+        par `occ` après l'installation.
+      '';
+    };
+
+    chunkSizeMiB = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 50;
+      description = ''
+        Taille maximale d'un morceau de téléversement, en Mio. C'est ce réglage
+        qui neutralise le plafond de Cloudflare : leur plan gratuit refuse toute
+        requête dont le corps dépasse 100 Mo.
+
+        Les clients découpent bien leurs envois, mais le client desktop
+        dimensionne ses morceaux tout seul, en visant une minute par morceau avec
+        un maximum par défaut de 100 Mo : sur une bonne connexion montante il
+        atterrit pile sur la limite et échoue par intermittence.
+
+        50 Mio laisse une marge franche. Ne pas monter au-delà de 90, ni
+        descendre trop bas — plus les morceaux sont petits, plus il y a
+        d'allers-retours.
+      '';
+    };
+
+    maxUploadSize = lib.mkOption {
+      type = lib.types.str;
+      default = "16G";
+      description = ''
+        Plafond appliqué de NOTRE côté (`upload_max_filesize`, `post_max_size` et
+        `client_max_body_size`). À ne pas confondre avec la limite de 100 Mo par
+        requête de Cloudflare, qui ne concerne que le chemin du tunnel et que le
+        découpage en morceaux contourne (cf. `chunkSizeMiB`).
+      '';
+    };
+  };
+
+  config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.hostName != null;
+        message = "systemSettings.nextcloud.hostName est requis : c'est le nom servi, et celui d'après lequel Nextcloud fabrique ses URL.";
+      }
+      {
+        # Le vhost et le certificat viennent de modules/system/server/proxy.
+        assertion = config.systemSettings.proxy.enable;
+        message = "systemSettings.nextcloud exige systemSettings.proxy.enable : c'est lui qui porte nginx et l'obtention des certificats.";
+      }
+      {
+        # Une application dans les deux listes serait appliquée deux fois, dans
+        # un ordre qui ne dit rien de l'intention.
+        assertion = lib.intersectLists cfg.enabledApps cfg.disabledApps == [ ];
+        message = "systemSettings.nextcloud : ${lib.concatStringsSep ", " (lib.intersectLists cfg.enabledApps cfg.disabledApps)} figure à la fois dans enabledApps et disabledApps.";
+      }
+      {
+        # Tous ces noms traversent le contrôle d'Authelia, y compris ceux que ses
+        # règles laissent passer. Or Authelia REFUSE (400) toute URL hors des
+        # domaines de session qu'il connaît, et nginx traduit ce code inattendu
+        # en 500 : un nom placé hors du domaine du cookie casserait le chemin
+        # sans que rien ne le signale avant la première requête réelle.
+        #
+        # Les gardes sur null ne sont pas décoratives : toutes les assertions
+        # s'évaluent, y compris quand une précédente échoue.
+        assertion =
+          !authelia.enable
+          || authelia.domain == null
+          || lib.all (
+            host: host == authelia.domain || lib.hasSuffix ".${authelia.domain}" host
+          ) cfg.extraHostNames;
+        message = "systemSettings.nextcloud.extraHostNames : tous doivent être sous systemSettings.authelia.domain (${toString authelia.domain}) — Authelia rejette les URL hors de ses domaines de session, et nginx renvoie alors 500.";
+      }
+    ];
+
+    sops.secrets."nextcloud/admin_pass" = {
+      owner = "nextcloud";
+    };
+
+    services.nextcloud = {
+      enable = true;
+      # Version majeure épinglée : les migrations de schéma sont irréversibles,
+      # un saut de majeure au hasard d'un bump de nixpkgs se découvrirait après
+      # coup et sans retour possible.
+      package = pkgs-stable.nextcloud33;
+
+      hostName = cfg.hostName;
+      https = true;
+      inherit (cfg) maxUploadSize;
+
+      # Verrouillage de fichiers et cache mémoire. Sans lui, Nextcloud se plaint
+      # dans sa page d'état et les synchronisations concurrentes se marchent
+      # dessus.
+      configureRedis = true;
+
+      database.createLocally = true;
+
+      # Réglages d'opcache, en mkDefault pour rester surchargeables. Les deux
+      # premiers sont ceux que Nextcloud réclame dans sa page d'état, les défauts
+      # de PHP étant taillés pour une application autrement plus petite.
+      phpOptions = {
+        # 8 par défaut, saturé par le nombre de chaînes qu'embarque Nextcloud :
+        # au-delà, elles cessent d'être partagées entre processus et chacun refait
+        # le travail. 32 ne suffisait pas non plus.
+        "opcache.interned_strings_buffer" = lib.mkDefault "64";
+        "opcache.memory_consumption" = lib.mkDefault "256";
+
+        # Spécifique à NixOS et sans risque : opcache vérifie sinon la date de
+        # chaque fichier à chaque requête, soit des milliers d'appels système
+        # pour rien. Le store est immuable, et une mise à jour produit un nouveau
+        # chemin donc un nouveau cache, plus un redémarrage de php-fpm puisque
+        # son unité change — le cache ne peut pas rester périmé.
+        "opcache.validate_timestamps" = lib.mkDefault "0";
+      };
+
+      config = {
+        dbtype = "pgsql";
+        adminuser = cfg.adminUser;
+        # Mot de passe d'AMORÇAGE uniquement : le module amont ne s'en sert que
+        # dans le `occ maintenance:install` initial. Le changer depuis l'interface
+        # fonctionne normalement et aucun rebuild ne le réécrit.
+        #
+        # Si l'accès est perdu, la reprise se fait en SSH et sans courriel :
+        #   sudo -u nextcloud nextcloud-occ user:resetpassword admin
+        adminpassFile = config.sops.secrets."nextcloud/admin_pass".path;
+      };
+
+      settings = {
+        # `hostName` y est déjà ajouté par le module amont ; on complète avec les
+        # noms supplémentaires, sinon Nextcloud rejette toute requête qui les
+        # emprunte par un « untrusted domain » peu explicite.
+        trusted_domains = cfg.extraHostNames;
+        trusted_proxies = [
+          "127.0.0.1"
+          "::1"
+        ];
+
+        # Le tunnel termine le TLS chez Cloudflare et parle ensuite à nginx en
+        # local : sans cette réécriture, Nextcloud fabriquerait des URL en http://
+        # et les redirections casseraient.
+        overwriteprotocol = "https";
+
+        # LE point délicat des deux chemins : la réécriture ci-dessus n'est
+        # correcte que pour le trafic venant du tunnel, et serait fausse pour
+        # celui du VPN, qui arrive directement sur nginx. On la restreint aux
+        # requêtes issues de la boucle locale, c'est-à-dire à cloudflared.
+        overwritecondaddr = "^127\\.0\\.0\\.1$";
+
+        # Cf. l'option chunkSizeMiB.
+        max_chunk_size = cfg.chunkSizeMiB * 1024 * 1024;
+
+        # Sans région par défaut, Nextcloud refuse les numéros de téléphone non
+        # préfixés et le signale dans sa page d'état.
+        default_phone_region = "FR";
+
+        # Heure (UTC) à laquelle Nextcloud groupe ses tâches de fond lourdes.
+        # Sans ce réglage il les lance n'importe quand, y compris pendant que
+        # quelqu'un consulte ses photos.
+        maintenance_window_start = 2;
+
+        # Valeur SYSTÈME et non réglage d'application, contrairement à ce que
+        # laisse croire le nom : `MandatoryTwoFactor` fait
+        # `getSystemValue('twofactor_enforced', 'false') === 'true'`. Un `occ
+        # config:app:set` écrirait un paramètre que personne ne lit. Et c'est la
+        # CHAÎNE "true" : la comparaison est stricte.
+        twofactor_enforced = if cfg.enforceTwoFactor then "true" else "false";
+
+        # Le lecteur de journal intégré ne sait lire qu'un fichier, alors que le
+        # module amont envoie tout au syslog : l'application `logreader` restait
+        # activée mais inutilisable. Le journal systemd reste alimenté par les
+        # erreurs de php-fpm et de nginx.
+        log_type = "file";
+
+        # Liste reprise du défaut amont, PLUS `Movie` : sans lui une vidéo n'a
+        # aucune vignette, le défaut supposant ffmpeg absent. On le fournit juste
+        # en dessous.
+        enabledPreviewProviders = [
+          "OC\\Preview\\PNG"
+          "OC\\Preview\\JPEG"
+          "OC\\Preview\\GIF"
+          "OC\\Preview\\BMP"
+          "OC\\Preview\\XBitmap"
+          "OC\\Preview\\Krita"
+          "OC\\Preview\\WebP"
+          "OC\\Preview\\MarkDown"
+          "OC\\Preview\\TXT"
+          "OC\\Preview\\OpenDocument"
+          "OC\\Preview\\Movie"
+        ];
+      }
+      # `force_*` écrase le choix de chacun, `default_*` ne sert que de valeur
+      # initiale : ce ne sont pas les mêmes clés, d'où l'aiguillage.
+      // lib.optionalAttrs (cfg.language != null) (
+        if cfg.forceLanguage then
+          { force_language = cfg.language; }
+        else
+          { default_language = cfg.language; }
+      )
+      // lib.optionalAttrs (cfg.locale != null) (
+        if cfg.forceLanguage then { force_locale = cfg.locale; } else { default_locale = cfg.locale; }
+      )
+      # Le mot de passe n'est PAS ici : `settings` finit dans le store. Il arrive
+      # par `secretFile`, un JSON fusionné dans config.php à l'activation.
+      // lib.optionalAttrs mail.enable {
+        mail_smtpmode = "smtp";
+        mail_smtphost = mail.host;
+        mail_smtpport = mail.port;
+        # Nextcloud attend "ssl" pour du TLS implicite, "tls" pour du STARTTLS.
+        mail_smtpsecure = if mail.port == 465 then "ssl" else "tls";
+        mail_smtpauth = true;
+        mail_smtpname = mail.user;
+        # Nextcloud veut l'expéditeur en DEUX morceaux, partie locale et domaine.
+        mail_from_address = lib.head (lib.splitString "@" mail.from);
+        mail_domain = lib.last (lib.splitString "@" mail.from);
+      };
+
+      extraApps =
+        lib.optionalAttrs cfg.previews.pregenerate {
+          inherit (pkgs-stable.nextcloud33Packages.apps) previewgenerator;
+        }
+        // lib.optionalAttrs (cfg.theming.customCss != "") {
+          inherit (pkgs-stable.nextcloud33Packages.apps) theming_customcss;
+        };
+
+      secretFile = lib.mkIf mail.enable config.sops.templates."nextcloud-secrets.json".path;
+    };
+
+    # Le gabarit substitue le mot de passe à l'activation, sans jamais l'écrire
+    # dans le store. Appartient à nextcloud, seul à devoir le lire — d'où
+    # l'absence de ce service dans le groupe `smtp`.
+    sops.templates."nextcloud-secrets.json" = lib.mkIf mail.enable {
+      owner = "nextcloud";
+      content = builtins.toJSON {
+        mail_smtppassword = config.sops.placeholder.${mail.passwordKey};
+      };
+    };
+
+    # ffmpeg pour le fournisseur d'aperçus `Movie`, qui ne fait qu'appeler le
+    # binaire et le cherche dans le PATH. Absent, il échoue en SILENCE.
+    #
+    # Par `env[PATH]` du pool et non par le PATH de l'unité systemd : PHP-FPM
+    # efface l'environnement de ses processus de travail (`clear_env = yes`), si
+    # bien qu'un PATH posé sur l'unité reste sur le processus maître. C'est ce
+    # qui faisait que les photos avaient leur vignette et pas les vidéos, les
+    # images étant traitées par PHP lui-même.
+    services.phpfpm.pools.nextcloud.settings."env[PATH]" = lib.makeBinPath [
+      pkgs-stable.ffmpeg-headless
+    ];
+
+    # La tâche de fond fabrique aussi des aperçus. Elle tourne en PHP CLI et non
+    # derrière fpm, donc le PATH de l'unité lui suffit.
+    systemd.services.nextcloud-cron.path = [ pkgs-stable.ffmpeg-headless ];
+
+    # `preview:pre-generate` ne traite que ce qui a été ajouté depuis le dernier
+    # passage, il est donc rapide en régime établi. Le RATTRAPAGE initial se
+    # lance à la main, une seule fois :
+    #
+    #   sudo -u nextcloud nextcloud-occ preview:generate-all
+    #
+    # Sur une bibliothèque déjà remplie, comptez des heures : à lancer dans un
+    # tmux, pas dans une session SSH qu'une coupure interromprait.
+    systemd.services.nextcloud-preview-pregenerate = lib.mkIf cfg.previews.pregenerate {
+      description = "Fabrique à l'avance les miniatures Nextcloud";
+      after = [ "nextcloud-setup.service" ];
+      requires = [ "nextcloud-setup.service" ];
+      path = [ pkgs-stable.ffmpeg-headless ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "nextcloud";
+        # Longue et sans urgence : elle ne doit pas disputer le processeur aux
+        # requêtes des utilisateurs.
+        Nice = 19;
+        IOSchedulingClass = "idle";
+      };
+      script = "${lib.getExe config.services.nextcloud.occ} preview:pre-generate";
+    };
+
+    systemd.timers.nextcloud-preview-pregenerate = lib.mkIf cfg.previews.pregenerate {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = cfg.previews.interval;
+        Persistent = true;
+      };
+    };
+
+    # Un seul appel à occ pour toute la liste, et non un par application : chacun
+    # démarre un interpréteur PHP complet et charge Nextcloud, ce qui se
+    # compterait en dizaines de secondes à chaque activation.
+    #
+    # `|| true` volontaire : une application déjà désactivée, ou protégée par la
+    # liste `alwaysEnabled` de Nextcloud, fait sortir occ en erreur, et ce n'est
+    # pas une raison d'interrompre l'activation du système. Il ne masque plus
+    # l'échec du wrapper lui-même, réglé par le LoadCredential.
+    systemd.services.nextcloud-apps = lib.mkIf (cfg.disabledApps != [ ] || cfg.enabledApps != [ ]) {
+      description = "Applique l'état des applications Nextcloud";
+      after = [ "nextcloud-setup.service" ];
+      requires = [ "nextcloud-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = occServiceConfig;
+      script =
+        let
+          occ = lib.getExe config.services.nextcloud.occ;
+        in
+        lib.optionalString (cfg.enabledApps != [ ]) ''
+          ${occ} app:enable ${lib.concatStringsSep " " cfg.enabledApps} || true
+        ''
+        + lib.optionalString (cfg.disabledApps != [ ]) ''
+          ${occ} app:disable ${lib.concatStringsSep " " cfg.disabledApps} || true
+        '';
+    };
+
+    # Le thème passe par `occ` et non par `settings` : ce sont des réglages
+    # d'APPLICATION, contrairement à `twofactor_enforced` qui, malgré son nom,
+    # était une valeur système. Vérifier la source plutôt que le nom, à chaque
+    # fois.
+    #
+    # La feuille de style est appliquée INDÉPENDAMMENT des couleurs. Masquer des
+    # éléments d'interface et choisir une palette sont deux sujets sans rapport,
+    # et les avoir couplés obligeait à subir un thème pour garder des masquages —
+    # ou l'inverse.
+    systemd.services.nextcloud-theming = lib.mkIf (cfg.theming.enable || cfg.theming.customCss != "") {
+      description = "Applique le thème Nextcloud";
+      after = [ "nextcloud-setup.service" ];
+      requires = [ "nextcloud-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = occServiceConfig;
+      script =
+        let
+          occ = lib.getExe config.services.nextcloud.occ;
+          set = key: value: "${occ} theming:config ${key} ${lib.escapeShellArg value}";
+
+          # Les valeurs de thème vivent dans la BASE de Nextcloud, pas dans la
+          # configuration : cesser de les écrire ne les efface pas. Sans cette
+          # remise à zéro, désactiver `theming.enable` laissait l'ancienne
+          # palette en place indéfiniment — mécanisme à SENS UNIQUE, exactement
+          # comme `disabledApps`, et pour la même raison.
+          reset = key: "${occ} theming:config ${key} --reset";
+          themedKeys = [
+            "primary_color"
+            "background_color"
+            "background"
+            "disable-user-theming"
+            "name"
+          ];
+        in
+        lib.concatStringsSep "\n" (
+          lib.optionals (!cfg.theming.enable) (map reset themedKeys)
+          ++ lib.optionals cfg.theming.enable (
+            [
+              (set "primary_color" cfg.theming.primaryColor)
+              (set "background_color" cfg.theming.backgroundColor)
+              # `backgroundColor` est la valeur MAGIQUE que la commande
+              # reconnaît pour effacer l'image de fond et laisser l'aplat. À
+              # ne pas confondre avec la constante interne
+              # `BACKGROUND_COLOR = 'color'`, qui gouverne le choix par
+              # utilisateur : passer `color` ici fait échouer la commande sur
+              # « The image file needs to be provided as an absolute path ».
+              (set "background" "backgroundColor")
+              (set "disable-user-theming" (if cfg.theming.lockUserTheming then "yes" else "no"))
+            ]
+            ++ lib.optional (cfg.theming.name != null) (set "name" cfg.theming.name)
+          )
+          ++ lib.optionals (cfg.theming.customCss != "") [
+            "${occ} config:app:set theming_customcss customcss --value ${lib.escapeShellArg cfg.theming.customCss}"
+            # Le cachebuster VERSIONNE l'URL de la feuille : sans lui, les
+            # navigateurs resservent celle qu'ils ont en cache. Dérivé du
+            # contenu, il ne bouge que quand la feuille change.
+            "${occ} config:app:set theming_customcss cachebuster --value ${
+              builtins.substring 0 8 (builtins.hashString "sha256" cfg.theming.customCss)
+            }"
+          ]
+        );
+    };
+
+    # PostgreSQL sort de ses valeurs d'usine, taillées pour tenir sur une machine
+    # minuscule. En mkDefault, et légitime ici parce que `database.createLocally`
+    # implique une instance dédiée à Nextcloud.
+    #
+    # Le gain reste modeste, la base étant petite et déjà en cache noyau. C'est
+    # `random_page_cost` qui compte le plus : sa valeur d'origine (4) décrit un
+    # disque à plateaux et pousse le planificateur à éviter les index sur un SSD.
+    services.postgresql.settings = {
+      shared_buffers = lib.mkDefault "2GB";
+      effective_cache_size = lib.mkDefault "8GB";
+      work_mem = lib.mkDefault "16MB";
+      maintenance_work_mem = lib.mkDefault "512MB";
+      random_page_cost = lib.mkDefault 1.1;
+    };
+
+    # Le module Nextcloud crée déjà ce vhost ; on n'y ajoute que le TLS et les
+    # noms supplémentaires. enableACME couvre automatiquement les serverAliases,
+    # donc un seul certificat porte l'ensemble.
+    services.nginx.virtualHosts.${cfg.hostName} = lib.mkMerge [
+      (myLib.mkTlsVhost { serverAliases = cfg.extraHostNames; })
+
+      # L'en-tête que Nextcloud lit pour connaître l'adresse du client, ÉCRASÉ
+      # avec une valeur que l'appelant ne choisit pas (cf. les `map` de
+      # modules/system/server/proxy).
+      #
+      # Sans ça, `trusted_proxies` en dessous se retourne contre nous : sur le
+      # chemin du tunnel, la connexion vient de cloudflared en 127.0.0.1, donc
+      # d'un proxy déclaré de confiance, et Nextcloud prend alors l'adresse dans
+      # `X-Forwarded-For`. Or nginx passe à php-fpm tous les en-têtes du client
+      # tels quels, et Cloudflare AJOUTE l'adresse réelle derrière celle qu'on
+      # lui envoie au lieu de la remplacer. Résultat : l'appelant choisissait son
+      # adresse, donc les journaux, et surtout le compteur anti-force-brute de
+      # Nextcloud, qui compte par IP et se remettait à zéro à chaque requête.
+      #
+      # Un `fastcgi_param` explicite l'emporte sur l'en-tête du client : nginx
+      # écarte de la liste qu'il transmet les noms déjà définis ici. C'est le
+      # même mécanisme que la parade classique à httpoxy.
+      #
+      # Dans CETTE location et pas au niveau du serveur : une location qui
+      # déclare ses propres `fastcgi_param` n'hérite pas de ceux du parent, et
+      # celle-ci en déclare (module Nextcloud amont).
+      {
+        locations."~ \\.php(?:$|/)".extraConfig = ''
+          fastcgi_param HTTP_X_FORWARDED_FOR $real_client_ip;
+        '';
+      }
+
+      # Portail d'authentification devant le vhost, quand il est activé.
+      #
+      # UN seul nom, deux chemins, et c'est Authelia qui les distingue — sur
+      # l'adresse source, par ses règles `networks` (cf. le profil). Depuis le
+      # LAN ou le VPN il contourne, ce qui permet aux clients de synchronisation
+      # de fonctionner sans qu'on exempte `/remote.php/*` ; depuis le tunnel il
+      # exige deux facteurs. La discrimination se fait donc sur des règles qu'il
+      # sait évaluer, et pas dans du nginx écrit à la main.
+      #
+      # Le socle (directive auth_request et point de contrôle) vient du module
+      # authelia ; seul le traitement du 401 est propre à Nextcloud.
+      (lib.mkIf authelia.enable authelia.nginxAuthRequest)
+
+      (lib.mkIf authelia.enable {
+        extraConfig = ''
+          # Le 401 ne peut PAS être réécrit en 302 sans discernement, comme le
+          # fait l'extrait générique d'Authelia. Deux sources en produisent ici :
+          #
+          #   - Authelia quand il refuse : il joint un en-tête Location vers le
+          #     portail, et il FAUT rediriger.
+          #   - Nextcloud lui-même, quand un client WebDAV non authentifié
+          #     interroge /remote.php/dav : 401 + WWW-Authenticate, le protocole
+          #     normal, qu'il ne faut PAS toucher.
+          #
+          # Sur le chemin interne Authelia contourne, donc $redirection_url est
+          # vide : sans cette distinction, le 401 de Nextcloud devenait un 302
+          # avec un Location VIDE et toutes les applications de synchronisation
+          # échouaient sur une « erreur HTTP inconnue ».
+          error_page 401 = @authelia_or_app;
+        '';
+
+        locations."@authelia_or_app".extraConfig = ''
+          internal;
+
+          # Un Location renseigné ne peut venir que d'Authelia : on redirige.
+          if ($redirection_url != "") {
+            return 302 $redirection_url;
+          }
+
+          # Sinon le 401 appartient à l'application, et on le laisse repartir.
+          # Son en-tête WWW-Authenticate n'est PAS réémis ici : celui de
+          # Nextcloud survit à l'interception, et l'ajouter le faisait partir en
+          # double.
+          #
+          # Les en-têtes de sécurité qui suivent, eux, sont bien RECOPIÉS de ceux
+          # que le module Nextcloud pose sur le vhost : un `add_header` dans une
+          # location REMPLACE toute la liste du parent au lieu de s'y ajouter, et
+          # sans eux la réponse 401 partirait sans X-Frame-Options ni
+          # X-Content-Type-Options (attrapé par gixy, l'analyseur que NixOS passe
+          # sur la config). Couplage assumé : si l'amont change sa liste, celle-ci
+          # devra suivre.
+          #
+          # HSTS comprise, et c'est celle qui compte : un client de synchro non
+          # authentifié reçoit un 401 à chaque requête, donc la quasi-totalité du
+          # trafic WebDAV passe par ici. L'oublier revenait à ne poser l'en-tête
+          # que sur les réponses des sessions déjà ouvertes.
+          add_header X-Content-Type-Options nosniff always;
+          add_header X-Robots-Tag "noindex, nofollow" always;
+          add_header X-Permitted-Cross-Domain-Policies none always;
+          add_header X-Frame-Options sameorigin always;
+          add_header Referrer-Policy no-referrer always;
+          add_header Strict-Transport-Security "max-age=${toString config.services.nextcloud.nginx.hstsMaxAge}; includeSubDomains" always;
+          return 401;
+        '';
+      })
+    ];
+  };
+}

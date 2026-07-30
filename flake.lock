@@ -296,6 +296,7 @@
         "nix-index-database": "nix-index-database",
         "nixpkgs-stable": "nixpkgs-stable",
         "nixpkgs-unstable": "nixpkgs-unstable",
+        "secrets": "secrets",
         "sops-nix": "sops-nix",
         "spicetify-nix": "spicetify-nix",
         "stylix": "stylix",
@@ -303,6 +304,22 @@
           "stylix",
           "tinted-schemes"
         ]
+      }
+    },
+    "secrets": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1785501743,
+        "narHash": "sha256-V4f2KS+fWvXZMk3nA4+351p6FKPnpl0HFov4zy5gRKw=",
+        "owner": "Nchpg",
+        "repo": "secrets",
+        "rev": "a71d52bedde70de76bc478033e9276079aefa8ec",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Nchpg",
+        "repo": "secrets",
+        "type": "github"
       }
     },
     "sops-nix": {

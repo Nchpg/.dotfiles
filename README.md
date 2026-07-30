@@ -17,8 +17,9 @@ modules/
 themes/            Thèmes base16 (schemes/*.yaml) + wallpapers + fonts + galerie
 lib/               Helpers injectés en `myLib` (import-all, discover, mk-*, checks)
 overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
-secrets/           Secrets chiffrés sops-nix (voir secrets/README.md)
+docs/              Documentation longue (docs/secrets.md : sops, clés, enrôlement)
 devshells/         `nix develop .#python|c|xpu`
+init.sh            Enrôlement d'une machine neuve : jeton, clés age, clone des secrets
 rebuild.sh         Script de rebuild (enrobé par la commande `rebuild`)
 genclean.sh        Nettoyage interactif des générations (commande `genclean`)
 formatter.nix      `nix fmt` (nixfmt sur les fichiers trackés)
@@ -65,9 +66,15 @@ pas le hostname).
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |
 | `git config core.hooksPath .githooks` | Active le hook pre-commit (une fois par clone) : formate les `.nix` stagés |
 | `nix flake check` | Vérifie l'évaluation du flake |
-| `sops secrets/secrets.yaml` | Édite les secrets (voir secrets/README.md) |
+| `secrets` / `secrets user` | Édite les secrets système / les tiens (voir `docs/secrets.md`) |
 
 ## Secrets
 
-Gérés par sops-nix, chiffrés dans le repo, déchiffrés à l'activation avec la
-clé age du `keyOwner` (dérivée de sa clé SSH). Détails : `secrets/README.md`.
+Gérés par sops-nix, mais **pas dans ce dépôt** : les valeurs chiffrées vivent
+dans un dépôt privé, tiré comme entrée `secrets` du flake. Publier des valeurs
+emballées en X25519 revenait à en offrir une copie permanente à qui saura casser
+la courbe elliptique, et l'historique git rend ça irréversible.
+
+Deux fichiers, deux classes de destinataires : `system.yaml` n'est déchiffrable
+que par root sur les machines, `secrets.yaml` par ta clé utilisateur. Détails et
+procédures : `docs/secrets.md`.

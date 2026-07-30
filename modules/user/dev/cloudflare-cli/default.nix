@@ -41,7 +41,7 @@ in
       default = "cloudflare/api_token";
       description = ''
         Nom du secret sops contenant le token API Cloudflare.
-        A renseigner via `sops secrets/secrets.yaml` sous la cle correspondante.
+        A renseigner via `secrets user` sous la cle correspondante.
       '';
     };
 

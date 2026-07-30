@@ -70,6 +70,15 @@ in
 
             init.defaultBranch = "main";
             push.autoSetupRemote = true;
+
+            # `git pull` rebase au lieu de fusionner. Évite les commits de fusion
+            # parasites quand la branche distante a bougé pendant qu'on
+            # travaillait — cas courant avec la PR hebdomadaire de weekly-update,
+            # qui pousse sur une branche qu'on peut avoir en local.
+            #
+            # Corollaire : un `pull` sur un travail non commité s'interrompt au
+            # lieu de fusionner. C'est voulu, mais ça surprend la première fois.
+            pull.rebase = true;
             core.pager = "delta";
             interactive.diffFilter = "delta --color-only";
 

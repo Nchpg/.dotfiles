@@ -56,6 +56,12 @@ let
       pkgs.coreutils
       pkgs.power-profiles-daemon
     ];
+    # `timeout` vient de coreutils, la connexion TCP de test est un builtin bash.
+    "vpn.sh" = [
+      pkgs.coreutils
+      pkgs.iproute2
+      pkgs.gawk
+    ];
   };
 
   # Shebang bash épinglé + PATH déterministe + lib.sh + corps du script (son

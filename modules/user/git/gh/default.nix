@@ -5,7 +5,7 @@
   ...
 }:
 
-# hosts.yml généré depuis le PAT stocké dans secrets/secrets.yaml (jamais en
+# hosts.yml généré depuis le PAT stocké dans le dépôt de secrets (jamais en
 # clair dans le repo ni le store) : gh le lit directement, auth disponible
 # dans tous les shells sans variable d'environnement à propager.
 let
@@ -22,7 +22,7 @@ in
       default = "gh/token";
       description = ''
         Nom du secret sops contenant le PAT GitHub (Personal Access Token).
-        A renseigner via `sops secrets/secrets.yaml` sous la cle correspondante.
+        A renseigner via `secrets user` sous la cle correspondante.
       '';
     };
 

@@ -51,6 +51,43 @@
         tig.enable = true;
       };
 
+      # `ssh think` plutôt que le port et l'adresse à retaper.
+      #
+      # DES ADRESSES et non `think.lan.nathanchampagne.com`, à dessein : ces
+      # alias servent surtout les jours où quelque chose est cassé sur le
+      # serveur, et dnsmasq en fait partie. Un nom y ajouterait précisément la
+      # dépendance qu'on veut éviter, alors que les adresses sont statiques par
+      # construction.
+      #
+      # DEUX ENTRÉES, parce qu'aucune adresse ne marche partout depuis que le
+      # tunnel ne route plus que `10.8.0.0/24` (cf. systemSettings.vpn.client) :
+      #
+      #   10.8.0.1     l'adresse de think DANS le tunnel. Joignable de partout,
+      #                y compris à la maison — le tunnel est monté en permanence
+      #                et la box fait le retour en épingle sur son IP publique.
+      #                Elle cesse de répondre si WireGuard est à terre.
+      #   192.168.1.32 l'adresse sur le LAN. Ne répond qu'à la maison, puisque
+      #                le tunnel ne la route pas, mais elle ne dépend de rien
+      #                d'autre que du commutateur.
+      #
+      # `think` porte la première : c'est celle qui marche le plus souvent, et
+      # c'est le nom qu'on tape sans réfléchir. `think-lan` est le repli du cas
+      # précis où c'est le tunnel lui-même qu'il faut aller réparer, cas où
+      # l'autre alias serait par définition inutilisable.
+      ssh.hosts = {
+        think = {
+          HostName = "10.8.0.1";
+          Port = 3249;
+          User = "nchpg";
+        };
+
+        think-lan = {
+          HostName = "192.168.1.32";
+          Port = 3249;
+          User = "nchpg";
+        };
+      };
+
       agents = {
         claude = {
           enable = true;
@@ -100,6 +137,11 @@
           theme = "default";
           tray.enable = true;
         };
+
+        # Synchronisation avec think. À configurer une fois sur
+        # `https://cloud.nathanchampagne.com` — le nom résout vers le LAN à la
+        # maison, donc la synchro passe en direct sans tunnel ni portail.
+        nextcloud.enable = true;
       };
 
       gui = {

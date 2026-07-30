@@ -2,6 +2,7 @@
   config,
   lib,
   osConfig,
+  inputs,
   ...
 }:
 
@@ -9,7 +10,7 @@
 # modules qui les consomment (tui/calendar, tui/task).
 # Clé de déchiffrement : ~/.config/sops/age/keys.txt, dérivée une fois de la
 # clé SSH via `ssh-to-age -private-key -i ~/.ssh/id_ed25519 -o ...`.
-# Éditer les secrets : sops secrets/secrets.yaml (depuis la racine du repo).
+# Éditer les secrets : `secrets user`. Cf. docs/secrets.md.
 let
   keyOwner = osConfig.systemSettings.sops.keyOwner;
 
@@ -46,7 +47,10 @@ in
     # Autres users (guest) : pas de config sops du tout, sinon erreur obscure
     # à l'activation plutôt qu'un "no keyFile" explicite.
     sops = lib.mkIf hasSopsAccess {
-      defaultSopsFile = ../../../secrets/secrets.yaml;
+      # Dépôt PRIVÉ, séparé de celui-ci qui est public (cf. flake.nix). Le
+      # pendant système lit `system.yaml` du même dépôt, chiffré pour d'autres
+      # destinataires.
+      defaultSopsFile = "${inputs.secrets}/secrets.yaml";
       defaultSopsFormat = "yaml";
 
       age = {

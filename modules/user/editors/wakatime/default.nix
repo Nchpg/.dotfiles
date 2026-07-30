@@ -5,7 +5,7 @@
   ...
 }:
 
-# API key dans secrets/secrets.yaml, ~/.wakatime.cfg généré via sops (jamais
+# API key dans le dépôt de secrets, ~/.wakatime.cfg généré via sops (jamais
 # en clair) : tous les plugins (vim, neovim, vscode) lisent ce même fichier.
 let
   cfg = config.userSettings.editors.wakatime;
@@ -21,7 +21,7 @@ in
       default = "wakatime/api_key";
       description = ''
         Nom du secret sops contenant l'API key WakaTime.
-        A renseigner via `sops secrets/secrets.yaml`.
+        A renseigner via `secrets user`.
       '';
     };
 

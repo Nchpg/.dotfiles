@@ -24,9 +24,11 @@ lib:
   mkFlakeGuard = import ./mk-flake-guard.nix;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
   mkIcon = import ./mk-icon.nix lib;
+  mkInternalPorts = import ./mk-internal-ports.nix lib;
   optionEnabled = import ./option-enabled.nix lib;
   mkPkgsOption = import ./mk-pkgs-option.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
+  mkTlsVhost = import ./mk-tls-vhost.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
 }

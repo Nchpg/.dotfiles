@@ -11,7 +11,7 @@
         lightTheme = "gruvbox-light";
       };
 
-      # nchpg détient la clé age qui déchiffre secrets/secrets.yaml.
+      # nchpg détient la clé age qui déchiffre le dépôt de secrets.
       sops.keyOwner = "nchpg";
 
       users = [

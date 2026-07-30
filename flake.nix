@@ -20,6 +20,31 @@
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
 
+    # Valeurs chiffrées, dans un dépôt PRIVÉ à part. Ce dépôt-ci reste public.
+    #
+    # Pourquoi les avoir sorties : sops emballe sa clé de données en X25519, que
+    # l'algorithme de Shor casse. Les publier revenait à offrir à qui veut une
+    # copie permanente, déchiffrable le jour où les machines quantiques
+    # arrivent, et l'historique git rend ça irréversible. Ça vidait de son sens
+    # la clé pré-partagée WireGuard, dont le seul rôle est justement de protéger
+    # du trafic enregistré aujourd'hui.
+    #
+    # `flake = false` : c'est de la donnée, pas un flake. On en tire un chemin
+    # du store, consommé par modules/system/sops et modules/user/sops.
+    #
+    # ÉPINGLÉ par flake.lock, comme toute entrée, et c'est voulu : modifier le
+    # dépôt de secrets ne change rien à ce que think déploie tant qu'un commit
+    # explicite n'a pas bougé le lock ici. Le changement se voit dans un diff au
+    # lieu d'arriver en douce la nuit suivante. La commande `secrets` enchaîne
+    # les deux pour qu'on ne l'oublie pas.
+    #
+    # Dépôt privé, donc Nix a besoin d'un jeton de lecture pour le récupérer :
+    # il est posé à la main sur chaque machine, cf. modules/system/nix.
+    secrets = {
+      url = "github:Nchpg/secrets";
+      flake = false;
+    };
+
     claude-code = {
       # `git+https` et pas `github:` : ce dernier récupère la source via
       # l'API GitHub (tarball), qui exige un token et échoue en 401 en CI.
@@ -146,6 +171,11 @@
               ./modules/system
 
               { systemSettings.stylix.variant = target.variant; }
+
+              # Volet SYSTÈME de sops-nix (le volet home-manager est monté par
+              # profiles/default.nix). Lui seul écrit dans /run/secrets, d'où
+              # lisent les units systemd. Configuré dans modules/system/sops.
+              inputs.sops-nix.nixosModules.sops
 
               inputs.home-manager.nixosModules.home-manager
               {

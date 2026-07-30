@@ -367,6 +367,7 @@ in
           "custom/nowplaying"
           "custom/bluetooth"
           "network"
+          "custom/vpn"
           "custom/resources"
           "custom/backlight"
           "wireplumber"
@@ -409,6 +410,19 @@ in
           tooltip-format = "{ifname} {ipaddr}";
         }
         // clickIf "windowManager.sway.pickers.wifi" "wifi";
+
+        # Juste après le réseau : c'est le même sujet, et l'un se lit à la
+        # lumière de l'autre — « connecté au WiFi du café, tunnel actif ».
+        #
+        # Le tunnel démarre au boot et n'est plus jamais coupé à la main, donc ce
+        # module ne sert pas à savoir qu'on l'a activé, mais à voir tout de suite
+        # qu'il ne répond plus. D'où l'intervalle court, et l'état « ? » distinct
+        # de « Off ».
+        "custom/vpn" = {
+          exec = "${scriptDir}/vpn.sh";
+          interval = 15;
+          return-type = "json";
+        };
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
@@ -598,6 +612,13 @@ in
         #custom-weather.cloudy { color: ${c.base04}; }  /* gris neutre : couvert / brume */
         #custom-weather.rain   { color: ${c.base0D}; }  /* bleu : pluie / neige / orage  */
         #clock             { color: ${c.base05}; font-weight: bold; }
+
+        /* VPN : la couleur PORTE l'information, comme pour la météo et la
+           batterie — l'état est tout ce qu'on veut savoir d'un coup d'œil. */
+        #custom-vpn            { color: ${c.base0C}; }      /* cyan : voisin du réseau, état inconnu */
+        #custom-vpn.on         { color: ${c.base0B}; }      /* vert : tunnel actif, serveur joignable */
+        #custom-vpn.unreachable { color: ${c.bright-yellow}; } /* le tunnel est là, le serveur ne répond pas */
+        #custom-vpn.off        { color: ${c.base04}; }      /* gris neutre : coupé volontairement, pas une alerte */
 
         #custom-battery.warning  { color: ${c.bright-yellow}; }
         #custom-battery.critical { color: ${c.bright-red}; }
