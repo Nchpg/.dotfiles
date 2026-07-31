@@ -120,10 +120,35 @@
           }
         ];
 
-        # Un peer sort vers internet par la maison, et n'atteint sur le LAN que
-        # cette machine — pas la box, pas les objets connectés. Liste VIDE et
-        # non « tout le /24 » : un téléphone familial compromis ne doit pas être
-        # un pied dans la maison.
+        # SORTIE INTERNET COUPÉE, et c'est la conséquence directe du passage au
+        # tunnel restreint juste au-dessus.
+        #
+        # Tant que `allowedIPs` valait `0.0.0.0/0`, cette option était le sens
+        # même du montage : tout sortait par la maison, donc il fallait bien
+        # laisser passer. Depuis qu'on ne pousse plus que `10.8.0.0/24`, aucun
+        # peer n'envoie de trafic ordinaire dans le tunnel — la règle de forward
+        # restait donc posée sans que rien ne l'emprunte, c'est-à-dire comme
+        # surface et rien d'autre. Un appareil compromis pouvait encore ajouter
+        # la route lui-même et se servir de la maison comme nœud de sortie, avec
+        # du trafic attribuable à cette connexion.
+        #
+        # CE QUE ÇA N'AFFECTE PAS : les services de ce host. Nextcloud, le DNS
+        # et SSH sont délivrés LOCALEMENT et relèvent du pare-feu d'entrée, pas
+        # de la chaîne de forward — un peer continue de les joindre exactement
+        # comme avant.
+        #
+        # PRÉCONDITION, à vérifier avant de rebuild : un appareil appairé du
+        # temps où `wg-new-peer` fabriquait des profils en tunnel complet porte
+        # encore `AllowedIPs = 0.0.0.0/0` dans SA configuration, et perdrait
+        # alors tout internet tant que son tunnel est monté. Les profils
+        # existants ne se mettent pas à jour tout seuls. Regénérer le profil de
+        # l'appareil concerné, ou remettre cette ligne à `true` le temps de le
+        # faire.
+        peerInternetAccess = false;
+
+        # Un peer n'atteint sur le LAN que cette machine — pas la box, pas les
+        # objets connectés. Liste VIDE et non « tout le /24 » : un téléphone
+        # familial compromis ne doit pas être un pied dans la maison.
         #
         # Ce filtrage n'existait pas avant : avec le pare-feu en iptables, la
         # chaîne FORWARD n'était filtrée par rien du tout.
@@ -499,23 +524,38 @@
         # X-Forwarded-For fabriqué et envoyé à travers le tunnel ne contourne
         # rien.
         rules = [
-          # Atteint depuis la maison ou le VPN : pas de portail. C'est cette règle
-          # qui permet UNE seule URL partout, et elle porte désormais seule ce que
-          # deux règles portaient à deux noms. Les applications de synchronisation
-          # en dépendent : elles ne savent pas franchir une authentification
-          # interactive.
+          # Atteint depuis le VPN : pas de portail.
           #
-          # Depuis le passage à WireGuard natif, chaque appareil a sa propre
-          # adresse dans le tunnel : cette règle pourrait être resserrée à un ou
-          # deux peers si un jour tu ne veux plus que TOUS les appareils appairés
-          # contournent le portail.
+          # `192.168.1.0/24` a été RETIRÉ de cette liste, et c'est la seule
+          # différence de fond entre les deux plages. Dans le tunnel, `AllowedIPs`
+          # en /32 épingle l'adresse source de chaque peer à sa clé publique : un
+          # appareil ne peut pas se présenter sous celle d'un autre, et un
+          # appareil non appairé n'entre pas du tout. Sur le LAN, rien de tel —
+          # n'importe quoi de branché sur le WiFi prend une adresse du /24, donc
+          # sautait le second facteur en forçant simplement la résolution vers
+          # 192.168.1.32 (DNS statique, `curl --resolve`, l'IP avec le bon
+          # `Host`). Le contournement ne reposait sur rien d'autre que le fait
+          # que personne n'essaie.
+          #
+          # CE QUE ÇA NE COÛTE PAS : les clients de synchronisation visent
+          # `cloud.vpn.…` (cf. `nextcloud.extraHostNames`), qui passe par la
+          # règle suivante — le tunnel de gram et du téléphone est monté en
+          # permanence. Et les navigateurs de la maison tombaient DÉJÀ sur le
+          # portail : la box ne distribue pas dnsmasq comme résolveur, donc
+          # `cloud.` part vers l'edge Cloudflare et revient par le tunnel, où
+          # nginx voit 127.0.0.1. Vérifié sur le moteur de règles d'Authelia.
+          #
+          # Bénéfice à retardement : le jour où le DHCP de la box pointe vers
+          # dnsmasq — ce que modules/system/server/dns envisage explicitement —
+          # tout le LAN se serait mis à contourner le portail sans un message.
+          # La posture ne dépend plus d'un réglage hors dépôt.
+          #
+          # Si un appareil de la maison doit un jour se passer du portail, la
+          # réponse est de l'appairer au VPN, pas de rouvrir le /24.
           {
             domain = "cloud.nathanchampagne.com";
             policy = "bypass";
-            networks = [
-              "192.168.1.0/24"
-              config.systemSettings.vpn.wireguard.subnet
-            ];
+            networks = [ config.systemSettings.vpn.wireguard.subnet ];
           }
           # Nom du chemin réservé, celui que visent les clients de
           # synchronisation. Il ne résout que vers l'adresse de think dans le

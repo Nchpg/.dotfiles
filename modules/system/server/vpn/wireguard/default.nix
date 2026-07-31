@@ -128,7 +128,8 @@ let
       echo "── QR (à scanner depuis l'application WireGuard) ──"
       printf '%s' "$conf" | qrencode -t ansiutf8
       echo
-      echo "── 1. à ranger dans les secrets SYSTÈME : secrets ──"
+      echo "── 1. à ranger dans les secrets SYSTÈME ──"
+      echo "     secrets edit wireguard/''${name}_preshared_key"
       cat <<EOF
       wireguard:
         ''${name}_preshared_key: $psk

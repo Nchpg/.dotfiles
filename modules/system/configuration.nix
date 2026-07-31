@@ -53,7 +53,12 @@ in
     # secrets. Même catégorie que /var/lib/sops-nix/key.txt, un identifiant
     # d'amorçage.
     #
-    #   sudo install -d -m 700 /var/lib/nix
+    # `./init.sh` le fait, et c'est la voie à suivre. À la main, si besoin —
+    # noter le 0755 sur le RÉPERTOIRE, qui n'est pas une négligence mais la
+    # condition pour que nix ne jette pas /etc/nix/nix.conf en entier ; c'est
+    # expliqué plus bas, à la règle tmpfiles :
+    #
+    #   sudo install -d -m 755 /var/lib/nix
     #   sudo sh -c 'umask 077; echo "access-tokens = github.com=github_pat_..." \
     #     > /var/lib/nix/access-tokens.conf'
     extraOptions = ''

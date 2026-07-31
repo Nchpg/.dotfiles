@@ -142,11 +142,34 @@ if [ -n "$userPub" ]; then
 fi
 cat <<INSTRUCTIONS
 
-  1. Ajouter ces clés dans .sops.yaml du dépôt de secrets, la système sous le
-     groupe de system.yaml, l'utilisateur sous celui de secrets.yaml.
-  2. Lancer \`secrets updatekeys\` LÀ-BAS, pas ici : resceller un fichier exige
-     de pouvoir déjà le déchiffrer.
+  Il n'y a plus ni system.yaml ni secrets.yaml : UN SECRET = UN FICHIER, et les
+  destinataires de chacun se CALCULENT depuis ce que les configurations
+  déclarent. Ajouter une machine se fait donc en quatre temps, dans cet ordre.
 
-  Ensuite, ici : ./rebuild.sh
+  1. Déclarer les deux clés ci-dessus comme ANCRES dans le .sops.yaml du dépôt
+     de secrets, au-dessus du bloc généré :
+
+       - &$(hostname)-sys   age1pq1…
+       - &$(hostname)-user  age1pq1…
+
+  2. Dire quels profils cette machine fait tourner POUR DE VRAI, dans
+     hosts/default.nix de ce dépôt-ci :
+
+       systemSettings.sops.deployments.$(hostname) = [ "personal" ];
+
+     Rien d'autre ne porte cette information, et sans elle la machine ne sera
+     destinataire d'aucun fichier.
+
+  3. Regénérer la politique et remplacer le bloc généré du .sops.yaml :
+
+       nix run .#sops-policy
+
+     Le check \`sops-policy\` du flake refuse de passer tant que les deux ne
+     disent pas la même chose.
+
+  4. Lancer \`secrets updatekeys\` DEPUIS UNE MACHINE DÉJÀ AUTORISÉE, pas ici :
+     resceller un fichier exige de pouvoir déjà le déchiffrer.
+
+  Ensuite seulement, ici : ./rebuild.sh
 
 INSTRUCTIONS

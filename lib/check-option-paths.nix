@@ -49,6 +49,19 @@ in
       namespace,
       # Sous-dossier de modules/ concerné (ex. "system").
       tree,
+      # Segments de dossier qui REGROUPENT sans nommer un niveau d'option.
+      #
+      # `modules/system/server/authelia/` déclare `systemSettings.authelia.*`, et
+      # c'est voulu : `server/` dit « ces modules servent le rôle serveur », pas
+      # « ces options vivent sous systemSettings.server ». Le rôle est déjà porté
+      # par le profil qui les active ; le répéter dans chaque chemin d'option
+      # allongerait tout sans rien distinguer, et rendrait le déplacement d'un
+      # module vers/depuis ce dossier cassant pour toutes ses options.
+      #
+      # Sans cette liste le contrôle rejetait les soixante-cinq options du
+      # dossier, donc échouait en permanence — et un contrôle qui échoue toujours
+      # ne contrôle plus rien, il apprend seulement à ignorer sa sortie.
+      transparentDirs ? [ ],
     }:
     let
       leaves =
@@ -67,12 +80,20 @@ in
 
       # ".../modules/system/window-manager/sway/default.nix" -> [ "windowManager" "sway" ]
       # null pour un fichier hors de l'arbre (option redéclarée ailleurs).
+      #
+      # Les segments de `transparentDirs` sont retirés du chemin attendu : ils
+      # rangent des modules sans nommer un niveau d'option.
       dirOf =
         file:
         let
           m = builtins.match ".*/modules/${tree}/(.*)/[^/]*[.]nix" (toString file);
         in
-        if m == null then null else map kebabToCamel (lib.splitString "/" (builtins.head m));
+        if m == null then
+          null
+        else
+          lib.filter (s: !(lib.elem s transparentDirs)) (
+            map kebabToCamel (lib.splitString "/" (builtins.head m))
+          );
 
       wrong = lib.unique (
         lib.concatMap (

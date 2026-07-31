@@ -38,10 +38,24 @@ in
 
     tokenSops = lib.mkOption {
       type = lib.types.str;
-      default = "cloudflare/api_token";
+      default = "cloudflare/wrangler_token";
       description = ''
-        Nom du secret sops contenant le token API Cloudflare.
-        A renseigner via `secrets user` sous la cle correspondante.
+        Nom du secret sops contenant le jeton API Cloudflare de wrangler.
+        À créer avec `secrets edit cloudflare/wrangler_token`.
+
+        PAS `cloudflare/api_token`, et l'écart n'est pas cosmétique : ce
+        dernier est le jeton que lego lit EN ROOT sur le serveur pour la
+        validation DNS-01, donc un jeton qui porte Zone:DNS:Edit sur la zone.
+        Le déclarer ici le scellerait pour une clé de COMPTE, où il n'y a ni
+        frontière root ni frontière de machine — n'importe quel code lancé sous
+        cet utilisateur pourrait alors repointer les enregistrements du domaine
+        et se faire émettre des certificats valides pour lui.
+
+        Deux jetons distincts, et le problème de synchronisation qui avait
+        motivé le fichier unique disparaît de lui-même : ce ne sont plus la
+        même valeur, il n'y a donc plus rien à tenir aligné. Celui-ci se taille
+        au plus juste de ce dont wrangler a besoin (Workers/Pages), jamais du
+        DNS.
       '';
     };
 

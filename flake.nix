@@ -211,56 +211,142 @@
         }
       );
 
-      # `nix build .#wallpapers-all` réalise TOUTES les fetchurl du registre :
-      # les URLs wallhaven/wallpaperflare sont éphémères, une URL morte ne se
-      # découvrirait sinon qu'à la sélection du thème concerné.
-      packages.${system}.wallpapers-all = pkgs-stable.linkFarm "wallpapers-all" (
-        map (name: {
-          inherit name;
-          path = themes.wallpaperPath pkgs-stable name;
-        }) themes.wallpaperNames
-      );
-
-      # Miroir dossier <-> chemin d'option (cf. lib/check-option-paths.nix).
-      # Échoue à l'ÉVAL et pas au build : `nix flake check --no-build` en CI
-      # l'attrape sans rien construire.
+      # `nix run .#sops-policy` : imprime le bloc `creation_rules` à poser dans
+      # le .sops.yaml du dépôt PRIVÉ, déduit de ce que les cibles DÉPLOYÉES
+      # déclarent (cf. lib/sops-policy.nix et hosts/default.nix).
       #
-      # N'importe quelle cible / n'importe quel user fait l'affaire : les
-      # `options` sont déclarées HORS des `mkIf`, elles existent donc même
-      # pour un module désactivé. On prend les premières pour ne réintroduire
-      # aucune liste en dur.
-      checks.${system}.option-paths =
-        let
-          any = builtins.head (lib.attrValues nixosConfigurations);
-          anyUser = builtins.head (lib.attrValues any.config.home-manager.users);
+      # Un `run` et pas un fichier commité ici : le .sops.yaml vit dans l'autre
+      # dépôt, à côté des ancres de clés qui n'ont rien à faire dans celui-ci.
+      # Ce qui reste ici, c'est la politique ; ce qui reste là-bas, les clés.
+      packages.${system} = {
+        sops-policy = pkgs-stable.writeShellScriptBin "sops-policy" ''
+          cat ${
+            pkgs-stable.writeText "creation-rules.yaml" (myLib.sopsPolicy { inherit nixosConfigurations; })
+          }
+        '';
 
-          # Côté NixOS, `options` est exposé : on part des options déclarées
-          # et on remonte au fichier déclarant. Aucune exception nécessaire.
-          sys = myLib.checkOptionPaths.byDeclarations {
-            options = any.options.systemSettings;
-            namespace = "systemSettings";
-            tree = "system";
-          };
-
-          # Côté home-manager, les options par user ne sont pas introspectables
-          # (elles viennent d'un `imports` du sous-module) : on part des
-          # dossiers. Cf. lib/check-option-paths.nix.
-          usr = myLib.checkOptionPaths.byDirectory {
-            inherit (anyUser) userSettings;
-            root = ./modules/user;
-            # Module de base : porte userSettings.user et defaultPkgs, il n'a
-            # volontairement pas de namespace à lui.
-            exceptions = [ "home-manager" ];
-          };
-
-          report = "${sys.report}\n${usr.report}";
-        in
-        lib.throwIf (!(sys.ok && usr.ok)) report (
-          pkgs-stable.runCommand "check-option-paths" { } ''
-            echo ${lib.escapeShellArg report}
-            touch $out
-          ''
+        # `nix build .#wallpapers-all` réalise TOUTES les fetchurl du registre :
+        # les URLs wallhaven/wallpaperflare sont éphémères, une URL morte ne se
+        # découvrirait sinon qu'à la sélection du thème concerné.
+        wallpapers-all = pkgs-stable.linkFarm "wallpapers-all" (
+          map (name: {
+            inherit name;
+            path = themes.wallpaperPath pkgs-stable name;
+          }) themes.wallpaperNames
         );
+      };
+
+      # UN SEUL attribut `checks.${system}`, et pas deux chemins qui le
+      # partagent : Nix refuse de fusionner deux chemins d'attributs dont un
+      # segment est dynamique (« dynamic attribute already defined »), et
+      # `${system}` en est un.
+      checks.${system} = {
+        # La politique de ce dépôt-ci et le .sops.yaml du dépôt PRIVÉ disent la
+        # même chose, et jusqu'ici rien ne le vérifiait — le commentaire de
+        # lib/sops-policy.nix annonçait pourtant ce contrôle.
+        #
+        # Ce que son absence laissait passer n'est pas anodin, et c'est exactement
+        # le mode de panne contre lequel tout le montage est écrit : une audience
+        # qui RÉTRÉCIT. Un host retiré de `deployments`, un peer supprimé, un
+        # secret qui cesse d'être déclaré par un profil — le .sops.yaml garde ses
+        # anciens destinataires, `updatekeys` applique ce .sops.yaml tel quel, le
+        # rebuild réussit, et le rayon d'explosion reste large sans un mot.
+        # Sur-sceller n'a jamais produit d'erreur nulle part.
+        #
+        # À l'ÉVAL, comme option-paths juste en dessous, et c'est obligatoire :
+        # `nix flake check --no-build` évalue les checks sans construire leurs
+        # dérivations, donc un contrôle écrit dans un `runCommand` ne tournerait
+        # jamais en CI.
+        #
+        # On compare le SUFFIXE du fichier à partir de son marqueur : ce qui
+        # précède, ce sont les ancres de clés du dépôt privé, qui s'éditent à la
+        # main et ne regardent pas ce dépôt-ci.
+        sops-policy =
+          let
+            expected = myLib.sopsPolicy { inherit nixosConfigurations; };
+            file = "${inputs.secrets}/.sops.yaml";
+            marker = "# ATTENTION : bloc GÉNÉRÉ";
+
+            parts = lib.splitString marker (builtins.readFile file);
+            found = lib.length parts > 1;
+            block = marker + lib.concatStringsSep marker (lib.tail parts);
+
+            problem =
+              if !(builtins.pathExists file) then
+                "le dépôt de secrets ne contient pas de .sops.yaml."
+              else if !found then
+                "le .sops.yaml du dépôt de secrets ne contient pas le bloc généré (marqueur « ${marker} » absent)."
+              else if block != expected then
+                "le bloc généré du .sops.yaml ne correspond plus à ce que les configurations déclarent."
+              else
+                null;
+          in
+          lib.throwIf (problem != null)
+            ''
+              sops-policy : ${toString problem}
+
+              Les destinataires déployés ne sont donc plus ceux que ce dépôt calcule, et
+              une audience trop LARGE ne se signalerait par aucune autre erreur.
+
+                nix run .#sops-policy > /tmp/rules.yaml
+
+              Remplacer le bloc généré du .sops.yaml du dépôt privé par ce fichier, puis
+              `secrets updatekeys` depuis une machine qui peut encore ouvrir ces fichiers.
+            ''
+            (
+              pkgs-stable.runCommand "check-sops-policy" { } ''
+                echo "politique sops conforme au .sops.yaml du dépôt de secrets"
+                touch $out
+              ''
+            );
+
+        # Miroir dossier <-> chemin d'option (cf. lib/check-option-paths.nix).
+        # Échoue à l'ÉVAL et pas au build : `nix flake check --no-build` en CI
+        # l'attrape sans rien construire.
+        #
+        # N'importe quelle cible / n'importe quel user fait l'affaire : les
+        # `options` sont déclarées HORS des `mkIf`, elles existent donc même
+        # pour un module désactivé. On prend les premières pour ne réintroduire
+        # aucune liste en dur.
+        option-paths =
+          let
+            any = builtins.head (lib.attrValues nixosConfigurations);
+            anyUser = builtins.head (lib.attrValues any.config.home-manager.users);
+
+            # Côté NixOS, `options` est exposé : on part des options déclarées
+            # et on remonte au fichier déclarant.
+            sys = myLib.checkOptionPaths.byDeclarations {
+              options = any.options.systemSettings;
+              namespace = "systemSettings";
+              tree = "system";
+              # `server/` regroupe les modules du rôle serveur sans nommer un
+              # niveau d'option : `modules/system/server/authelia/` déclare bien
+              # `systemSettings.authelia.*`. Le rôle est porté par le profil qui
+              # active ces modules, le répéter dans chaque chemin n'y ajouterait
+              # rien.
+              transparentDirs = [ "server" ];
+            };
+
+            # Côté home-manager, les options par user ne sont pas introspectables
+            # (elles viennent d'un `imports` du sous-module) : on part des
+            # dossiers. Cf. lib/check-option-paths.nix.
+            usr = myLib.checkOptionPaths.byDirectory {
+              inherit (anyUser) userSettings;
+              root = ./modules/user;
+              # Module de base : porte userSettings.user et defaultPkgs, il n'a
+              # volontairement pas de namespace à lui.
+              exceptions = [ "home-manager" ];
+            };
+
+            report = "${sys.report}\n${usr.report}";
+          in
+          lib.throwIf (!(sys.ok && usr.ok)) report (
+            pkgs-stable.runCommand "check-option-paths" { } ''
+              echo ${lib.escapeShellArg report}
+              touch $out
+            ''
+          );
+      };
 
       # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.
       formatter.${system} = import ./formatter.nix { pkgs = pkgs-stable; };

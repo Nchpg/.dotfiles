@@ -173,6 +173,23 @@ in
       networking.nftables.enable = true;
       networking.firewall.filterForward = true;
 
+      # FILTRAGE DU CHEMIN INVERSE, en strict et POSÉ EXPLICITEMENT alors que
+      # c'est déjà le défaut NixOS. Écrit ici parce qu'une décision d'accès en
+      # dépend, et qu'une dépendance non écrite se perd.
+      #
+      # Ce que ça tient : les règles `networks:` d'Authelia contournent le
+      # portail pour `10.8.0.0/24` (cf. profiles/server), et cette confiance
+      # repose entièrement sur l'adresse SOURCE des paquets. En strict, nftables
+      # rend `fib saddr . mark . iif oif exists` — il vérifie que la source
+      # serait joignable PAR L'INTERFACE D'ARRIVÉE. Un appareil du LAN qui
+      # émettrait sous une adresse du tunnel est donc jeté avant d'atteindre
+      # nginx, la route vers `10.8.0.0/24` passant par wg0 et pas par le LAN.
+      #
+      # `"loose"` ne vérifierait que la routabilité, quelle que soit
+      # l'interface, et rouvrirait ce chemin-là. Ne pas y toucher sans retirer
+      # d'abord les `networks` d'Authelia.
+      networking.firewall.checkReversePath = true;
+
       warnings = lib.optional config.virtualisation.docker.enable ''
         Ce host combine le pare-feu nftables (posé par systemSettings.network.staticIPv4)
         et docker, qui écrit ses propres règles en iptables. Les conteneurs peuvent

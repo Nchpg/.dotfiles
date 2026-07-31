@@ -113,10 +113,24 @@
           claudePlugin.enable = true;
         };
         supabaseCli.enable = true;
-        cloudflareCli = {
-          enable = true;
-          accountId = "32f7902412a9edeeb7fdce0691d2c653";
-        };
+
+        # `cloudflareCli` RETIRÉ, et pas seulement parce qu'il ne servait plus.
+        #
+        # Le secret qu'il déclarait était `cloudflare/api_token`, le MÊME que
+        # lego lit en root sur think pour la validation DNS-01 — donc un jeton
+        # qui porte Zone:DNS:Edit sur la zone. Le déclarer ici le scellait aussi
+        # pour la clé de COMPTE de gram, où il n'y a plus ni frontière root ni
+        # frontière de machine : n'importe quel code tournant sous ce compte
+        # pouvait repointer `cloud.` et `auth.`, se faire émettre des
+        # certificats valides pour le domaine par DNS-01, et intercepter tout le
+        # chemin public. C'est précisément la menace que modules/system/sops
+        # décrit et referme partout ailleurs.
+        #
+        # Si wrangler redevient nécessaire ici, ce n'est PAS en rallumant cette
+        # ligne telle quelle : il faut un jeton distinct, à la portée de
+        # Workers/Pages, sous `cloudflare/wrangler_token` — c'est désormais le
+        # défaut du module, justement pour que le rallumer ne puisse plus
+        # redonner le jeton d'ACME.
       };
 
       browsers = {

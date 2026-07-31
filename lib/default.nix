@@ -31,4 +31,5 @@ lib:
   mkTlsVhost = import ./mk-tls-vhost.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
+  sopsPolicy = import ./sops-policy.nix lib;
 }
