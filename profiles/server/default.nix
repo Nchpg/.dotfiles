@@ -33,6 +33,9 @@
             # Termux sur le téléphone, pour dépanner sans ordinateur — le cas où
             # l'on est dehors, en VPN, et où il faut relancer quelque chose.
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHcL+7fSubNc+huYPG/KVsUmoXt+/GJU7stKBvT59ow/ nchpg@redmi-termux"
+            # Le poste sous Windows, d'où l'on se connecte quand on n'est pas sur
+            # gram.
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC1ZsoIRAXJRR0crPgfWJRPCNBQ+pdWqkMX6qmCq+4y1 nchpg@windows"
           ];
         }
       ];
