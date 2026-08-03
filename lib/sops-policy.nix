@@ -133,20 +133,28 @@ let
   # rognent l'indentation commune, ce qui est très bien pour de la prose et
   # désastreux pour du YAML, dont l'indentation EST la syntaxe.
   #
-  # PAS d'ancrage `^` sur le motif : sops le confronte au chemin tel qu'on le
-  # lui passe en ligne de commande, et la commande `secrets` lui donne des
-  # chemins ABSOLUS. Un motif ancré au début ne matcherait jamais.
+  # ANCRÉ AUX DEUX BOUTS, `^…$`, et c'est le seul motif qui fonctionne : sops ne
+  # confronte PAS le motif au chemin qu'on lui passe en ligne de commande, il le
+  # rend d'abord relatif au répertoire du `.sops.yaml` (`filepath.Rel` dans
+  # `parseCreationRuleForFile`). Le chemin testé pour un secret du dépôt est donc
+  # toujours `wireguard/gram_preshared_key.yaml`, relatif à la racine du dépôt,
+  # que la commande ait donné un chemin absolu ou non.
   #
-  # Une `/` en tête, en revanche, et elle n'est pas décorative : sans elle, le
-  # motif d'un secret dont le nom n'a pas de barre — `token` — correspondrait à
-  # n'importe quel `…/token.yaml`, donc à tout secret rangé sous un préfixe. La
-  # barre force la correspondance à commencer à une frontière de segment. Elle
-  # ne couvre pas le cas général (`a/b` masque toujours `p/a/b`), d'où le
-  # contrôle `shadowing` ci-dessus, qui lui le couvre.
+  # La version précédente préfixait le motif d'une `/`, sur la prémisse inverse.
+  # Aucune règle ne pouvait alors correspondre à un fichier DU dépôt : toute
+  # création sortait en « no matching creation rules found », et `updatekeys`
+  # avec elle, sops chargeant la config avant de déchiffrer. Ça n'a pas sauté aux
+  # yeux parce que les secrets existants sont antérieurs au découpage en un
+  # fichier par secret, donc jamais recréés depuis.
+  #
+  # L'ancrage rend du même coup le masquage entre règles IMPOSSIBLE — `token` ne
+  # peut plus attraper `wireguard/token.yaml`. Le contrôle `shadowing` ci-dessus
+  # reste : il ne coûte rien, et c'est lui qui parlera si un jour l'ancrage
+  # bouge.
   rule =
     path: anchors:
     [
-      "  - path_regex: /${escape path}\\.ya?ml$"
+      "  - path_regex: ^${escape path}\\.ya?ml$"
       "    key_groups:"
       "      - age:"
     ]
