@@ -343,13 +343,26 @@
               # module, on régénère la politique, et seulement ensuite on pose
               # la valeur. C'est ce qui garantit qu'aucune valeur n'existe sans
               # que ses destinataires aient été calculés.
+              #
+              # `--config` EXPLICITE, pour la même raison que dans `updatekeys` :
+              # sops cherche le `.sops.yaml` à partir du RÉPERTOIRE COURANT, pas
+              # de celui du fichier qu'on lui donne. Sans ça, une création lancée
+              # d'ailleurs que du dépôt de secrets — c'est-à-dire depuis le dépôt
+              # de configuration, neuf fois sur dix — échoue en « config file not
+              # found », alors que la règle existe.
+              #
+              # Uniquement sur la CRÉATION, et pas sur les deux appels d'édition
+              # plus bas : eux rechiffrent avec les destinataires inscrits dans le
+              # fichier, la politique ne les concerne pas. Leur passer une config
+              # ne gagnerait rien et ouvrirait la seule panne que tout ce montage
+              # cherche à éviter, une audience réécrite sans qu'on l'ait demandé.
               echo "secrets : $2 n'existe pas, création." >&2
               echo "  Structure attendue dans l'éditeur :" >&2
               echo "    ''${2%%/*}:" >&2
               echo "        ''${2#*/}: <valeur>" >&2
               echo >&2
               mkdir -p "$(dirname "$file")"
-              EDITOR="$editorBin" "$sopsBin" "$file"
+              EDITOR="$editorBin" "$sopsBin" --config "$sopsConfig" "$file"
               sync "chore: add secret $2"
               exit 0
             fi
