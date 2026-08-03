@@ -121,6 +121,12 @@
             address = "10.8.0.3";
             presharedKeyKey = "wireguard/gram_preshared_key";
           }
+          {
+            name = "windows_gram";
+            publicKey = "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=";
+            address = "10.8.0.4";
+            presharedKeyKey = "wireguard/windows_gram_preshared_key";
+          }
         ];
 
         # SORTIE INTERNET COUPÉE, et c'est la conséquence directe du passage au
