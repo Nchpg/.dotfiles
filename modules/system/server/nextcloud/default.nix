@@ -29,6 +29,13 @@ let
   # pas, se relance par `systemd-run` — ce que l'utilisateur `nextcloud` n'a pas
   # le droit de faire. La commande échoue alors sur un « Access denied » sans
   # rapport apparent avec Nextcloud.
+  # Location PHP telle que le module amont la construit, une fois toutes les
+  # définitions fusionnées — la nôtre comprise. Lue plutôt que recopiée : la
+  # location `/s/` ci-dessous en RÉUTILISE le bloc, elle ne peut donc pas
+  # diverger le jour où l'amont le modifie. Le seul couplage qui reste est le
+  # NOM de la clé.
+  phpLocation = config.services.nginx.virtualHosts.${cfg.hostName}.locations."~ \\.php(?:$|/)";
+
   occServiceConfig = {
     Type = "oneshot";
     User = "nextcloud";
@@ -223,6 +230,29 @@ in
           liste ci-dessous repartirait avec le nom interne. Le défaut se voit
           immédiatement — le lien affiche son hôte — mais il faut savoir le
           reconnaître.
+        '';
+      };
+
+      neutralNotFound = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Remplace la page d'erreur de Nextcloud par une page NEUTRE quand un
+          jeton de partage n'existe pas ou a expiré.
+
+          CE QUE ÇA FERME. Sans elle, `/s/<n_importe_quoi>` renvoie la page 404
+          complète de Nextcloud, quinze kilo-octets qui divulguent la VERSION
+          exacte (`"version":"33.0.6.2"`), la liste des applications installées
+          et les chemins `/nix-apps/…` qui trahissent NixOS — le tout sans aucun
+          jeton valide, donc à qui balaie internet. C'est une divulgation que le
+          portail retenait avant l'ouverture des partages, et la version est
+          précisément ce qui dit à un attaquant quelle faille essayer.
+
+          CE QUE ÇA NE FERME PAS : la même page est servie à quiconque détient
+          un VRAI lien. Cacher la version aux visiteurs légitimes est
+          impossible, c'est la page de partage elle-même. On sort donc des
+          balayages de masse, pas du champ de quelqu'un à qui l'on a déjà
+          envoyé un partage.
         '';
       };
 
@@ -1130,6 +1160,78 @@ in
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkHost) {
         locations."~ \\.php(?:$|/)".extraConfig = ''
           fastcgi_param HTTP_HOST $nextcloud_link_host;
+        '';
+      })
+
+      # Page d'erreur NEUTRE sur les chemins de partage, cf. `neutralNotFound`.
+      #
+      # Pourquoi une location à part plutôt qu'un `error_page` sur celle du PHP :
+      # `error_page` se résout dans la location où l'erreur SURVIENT, et celle du
+      # PHP sert tout — y compris le WebDAV, dont les 404 sont le quotidien d'un
+      # client de synchronisation. Y poser une interception viderait leur corps.
+      # On isole donc `/s/`, et rien d'autre ne change de comportement.
+      #
+      # Le bloc `fastcgi` n'est PAS recopié, il est réutilisé depuis
+      # `phpLocation` : une location dupliquée à la main divergerait en silence à
+      # la première évolution de l'amont, et la ligne qui s'y perdrait le plus
+      # discrètement est le `fastcgi_param HTTP_X_FORWARDED_FOR` — sans lui, le
+      # compteur anti-force-brute de Nextcloud sur `publicLinkAuth` verrait
+      # 127.0.0.1 pour tout le trafic du tunnel.
+      #
+      # PRIORITÉ sous celle de la location PHP (500) : les deux sont des
+      # expressions régulières, et nginx retient la PREMIÈRE qui correspond dans
+      # l'ordre du fichier. Sans ça `/index.php/s/<jeton>` — la forme que prend
+      # la requête après la réécriture interne — repartirait dans la location
+      # générique et l'interception ne servirait à rien.
+      (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.neutralNotFound) {
+        locations."~ ^/(?:index\\.php/)?s/" = {
+          priority = phpLocation.priority - 10;
+          inherit (phpLocation) fastcgiParams;
+          extraConfig = phpLocation.extraConfig + ''
+            error_page 404 = @nextcloud_share_404;
+          ''
+          # Le 401 du bloc serveur RÉPÉTÉ ici, et ce n'est pas une redondance :
+          # nginx n'hérite les `error_page` du niveau supérieur que s'il n'y en
+          # a AUCUNE au niveau courant. Poser la 404 ci-dessus annule donc
+          # l'aiguillage du 401 vers le portail pour cette location.
+          #
+          # En pratique `/s/` ne produit pas de 401 — la règle Authelia le
+          # contourne, et un partage protégé par mot de passe répond 200 avec
+          # son formulaire. C'est justement pour ça qu'il faut l'écrire : la
+          # perte ne se verrait pas.
+          + lib.optionalString authelia.enable ''
+            error_page 401 = @authelia_or_app;
+          '';
+        };
+
+        locations."@nextcloud_share_404".extraConfig = ''
+          internal;
+          # Sans ça le point de contrôle serait interrogé une seconde fois pour
+          # fabriquer une page d'erreur, la directive du bloc server étant
+          # héritée par toutes les locations.
+          auth_request off;
+          default_type text/html;
+
+          # Ni marque, ni version, ni nom d'application. Le texte s'adresse à
+          # quelqu'un dont le lien ne marche pas, pas à un administrateur.
+          return 404 '<!doctype html>
+        <html lang="fr"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Lien introuvable</title>
+        <style>
+        :root{color-scheme:light dark}
+        body{margin:0;min-height:100vh;display:grid;place-items:center;padding:2rem;
+          font:16px/1.6 system-ui,-apple-system,sans-serif;background:#fafafa;color:#1a1a1a}
+        main{max-width:30rem;text-align:center}
+        h1{font-size:1.4rem;margin:0 0 1rem;font-weight:600}
+        p{margin:0 0 .75rem;color:#5a5a5a}
+        @media(prefers-color-scheme:dark){
+          body{background:#171717;color:#ededed}p{color:#a3a3a3}}
+        </style></head><body><main>
+        <h1>Lien introuvable</h1>
+        <p>Ce lien de partage n&rsquo;existe pas, ou il a expir&eacute;.</p>
+        <p>Redemande-en un &agrave; la personne qui te l&rsquo;a envoy&eacute;.</p>
+        </main></body></html>';
         '';
       })
 
