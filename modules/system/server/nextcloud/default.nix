@@ -233,7 +233,8 @@ in
         defaultText = lib.literalExpression "les points d'entrée OCS de l'application de partage";
         description = ''
           Chemins sur lesquels `canonicalLinkHost` impose `HTTP_HOST`, au format
-          des motifs d'un `map` nginx.
+          des motifs d'un `map` nginx — évalués sur `$request_uri`, cf. le
+          commentaire du `map` pour pourquoi ce n'est pas `$uri`.
 
           UN SEUL suffit, et c'est volontaire. Le champ `url` d'un partage naît
           dans `ShareAPIController::formatShare`, servi par ces points d'entrée
@@ -1001,11 +1002,27 @@ in
       # chemins nommés — c'est ce qui garde le nom interne pleinement navigable,
       # là où `overwritehost` aurait réécrit toutes les pages.
       #
-      # Pas de `volatile`, contrairement au `map` de la limitation plus bas : ces
-      # chemins-là sont servis directement par la location PHP, sans redirection
-      # interne, donc `$uri` ne bouge pas en cours de requête.
+      # `$request_uri` et SURTOUT PAS `$uri`, et c'est tout le sujet. La location
+      # PHP du module amont finit par `try_files $fastcgi_script_name =404`, qui
+      # RÉÉCRIT `$uri` vers le fichier trouvé dès qu'il existe. Or les paramètres
+      # FastCGI sont construits en phase de contenu, donc APRÈS : au moment où
+      # nginx évalue ce `map`, `$uri` ne vaut plus
+      # `/ocs/v2.php/apps/files_sharing/api/v1/shares` mais `/ocs/v2.php`, et
+      # aucun motif ne correspond plus. Le lien repartait alors avec le nom
+      # interne, sans que rien ne le signale — reproduit puis vérifié sur une
+      # location identique à celle du module amont, avec un PHP réel derrière.
+      #
+      # `$request_uri` porte l'URL d'origine et ne bouge jamais, ni par
+      # `try_files` ni par une redirection interne. Il transporte aussi la chaîne
+      # de requête, sans conséquence : les motifs sont ancrés sur `^` et ne
+      # regardent que le début du chemin.
+      #
+      # À NE PAS confondre avec le `map` de la limitation plus bas, qui garde
+      # `$uri` à dessein : `limit_req` s'évalue en phase de PRÉ-ACCÈS, avant
+      # `try_files`, et c'est justement `$uri` qui y suit les redirections
+      # internes et permet de ne compter qu'une fois.
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkHost) ''
-        map $uri $nextcloud_link_host {
+        map $request_uri $nextcloud_link_host {
           default $http_host;
         ${lib.concatMapStrings (path: "  ${path} ${cfg.hostName};\n") cfg.publicSharing.canonicalLinkPaths}}
       '')
