@@ -114,6 +114,268 @@ in
         sudo -u nextcloud nextcloud-occ twofactorauth:disable <utilisateur>
     '';
 
+    publicSharing = {
+      enable = lib.mkEnableOption ''
+        les LIENS DE PARTAGE PUBLICS pour un destinataire extérieur.
+
+        Sans ça ils ne fonctionnent pas. Un partage « à qui a le lien » suppose
+        par définition quelqu'un qui n'a ni compte Authelia ni clé WireGuard :
+        sa requête arrive par le tunnel, nginx voit 127.0.0.1, aucune règle
+        `networks` ne s'applique et le portail le renvoie sur une page de
+        connexion qu'il ne peut pas franchir.
+
+        Ce que ça fait : place DEVANT les autres règles d'Authelia un
+        contournement limité aux chemins de `autheliaResources`, et sur le seul
+        `hostName`. Le reste de Nextcloud continue de passer par le portail —
+        `/login`, `/settings`, `/apps/files`, et surtout `/remote.php`,
+        c'est-à-dire le WebDAV qui s'ouvre avec un mot de passe de compte. C'est
+        la ligne que l'en-tête de ce module refuse de franchir, et elle n'est pas
+        franchie ici.
+
+        CE QUI PROTÈGE UN PARTAGE une fois le portail écarté :
+          - le jeton du lien, quinze caractères tirés du générateur sûr de
+            Nextcloud, soit plus de 80 bits. Aucun point d'entrée ouvert ici ne
+            liste les partages, il n'y a pas d'identifiant séquentiel, et un
+            mauvais jeton répond 404 : l'énumération n'est pas praticable ;
+          - les pages de partage partant avec `X-Robots-Tag: noindex, nofollow`,
+            elles ne se retrouvent pas dans un moteur de recherche ;
+          - `linkExpireDays`, qui borne la durée pendant laquelle un lien ayant
+            fuité reste vivant — le mode de fuite RÉEL d'un lien de partage
+            n'étant pas la force brute mais le transfert, l'historique de
+            navigateur ou l'export de conversation ;
+          - `rateLimit`, contre le martèlement des chemins ouverts.
+
+        CE QU'ON PERD, à assumer : le code de `files_sharing` devient joignable
+        depuis internet, là où le portail l'absorbait. Une faille
+        d'authentification dans cette application-là serait donc exploitable.
+        C'est irréductible — c'est exactement la surface qu'un lien public doit
+        exposer — et ce qui l'atténue est `autoUpgrade`, qui applique les
+        correctifs sans intervention.
+
+        Les chemins ouverts restent gardés par Nextcloud LUI-MÊME : un point
+        d'entrée de partage exige un jeton valide, tout le reste exige une
+        session. Le portail était une SECONDE couche, et c'est elle seule qu'on
+        retire, sur ces chemins-là uniquement
+      '';
+
+      linkExpireDays = lib.mkOption {
+        type = lib.types.nullOr lib.types.ints.positive;
+        default = null;
+        example = 60;
+        description = ''
+          Durée de vie par DÉFAUT d'un nouveau lien public, en jours. `null`
+          laisse les liens sans expiration, ce qui est le défaut de Nextcloud.
+
+          C'est la contrepartie la plus utile au retrait du portail, et celle qui
+          ne coûte rien à l'usage : elle ne demande pas de transmettre un code au
+          destinataire, elle borne simplement la fenêtre pendant laquelle un lien
+          oublié dans une conversation reste exploitable.
+
+          Une valeur par DÉFAUT et non imposée : `shareapi_enforce_expire_date`
+          reste à `no`, donc la date se rallonge depuis l'interface quand un
+          partage doit durer. Ne s'applique qu'aux liens créés ENSUITE, les
+          partages existants gardent la leur.
+
+          Sens UNIQUE, comme `disabledApps` : revenir à `null` remet bien
+          `shareapi_default_expire_date` à `no`, mais désactiver `enable` tout
+          court retire l'unité et laisse le réglage en place. Plus restrictif que
+          l'inverse, donc sans danger — juste bon à savoir.
+        '';
+      };
+
+      canonicalLinkHost = lib.mkOption {
+        type = lib.types.bool;
+        default = true;
+        description = ''
+          Fabrique les liens de partage avec `hostName`, même quand le partage
+          est créé par un `extraHostNames`.
+
+          LE PROBLÈME QUE ÇA RÈGLE. Nextcloud construit ses URL absolues à
+          partir de l'hôte de la requête en cours, et le champ `url` que renvoie
+          l'API de partage n'y échappe pas — c'est un `linkToRouteAbsolute`. Un
+          partage créé depuis l'application mobile, configurée sur le nom
+          joignable par le seul VPN, sort donc en `https://cloud.vpn.…/s/<jeton>`.
+          Ce nom ne résout que vers une adresse de tunnel : le destinataire, qui
+          n'a pas le VPN, obtient un lien MORT, et rien ne le signale au moment
+          de l'envoyer.
+
+          COMMENT, et c'est le point qui décide de tout. On ne touche PAS à
+          `overwritehost`, qui aurait été l'outil évident : sa portée est
+          l'adresse source, donc il ne sait pas distinguer une application d'un
+          navigateur venus du même tunnel. Il aurait réécrit les pages web
+          servies sur le nom interne, qui aurait alors renvoyé vers le portail
+          au premier lien suivi — le nom cessait d'être navigable — et cassé
+          l'ajout d'un compte par « Login Flow v2 ».
+
+          On agit donc au seul endroit où le lien se fabrique : nginx impose
+          `HTTP_HOST` sur les points d'entrée OCS de l'application de partage,
+          et nulle part ailleurs. Vérifié dans les sources de la version servie,
+          `Request::getInsecureServerHost()` lit `HTTP_HOST` dès lors que la
+          requête ne vient pas d'un proxy de confiance, ce qui est le cas par le
+          VPN. Le reste de l'instance — pages web, WebDAV, tout le reste
+          d'OCS — continue de voir le nom réellement demandé.
+
+          Aucun effet sur les cookies : Nextcloud n'impose de domaine de session
+          que si `cookie_domain` est configuré, ce qui n'est pas le cas, donc le
+          navigateur garde la portée du nom qu'il a réellement visité.
+
+          CE QUE ÇA NE COUVRE PAS : un lien fabriqué par un chemin absent de la
+          liste ci-dessous repartirait avec le nom interne. Le défaut se voit
+          immédiatement — le lien affiche son hôte — mais il faut savoir le
+          reconnaître.
+        '';
+      };
+
+      canonicalLinkPaths = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        readOnly = true;
+        default = [ "~^/ocs/v[12]\\.php/apps/files_sharing/" ];
+        defaultText = lib.literalExpression "les points d'entrée OCS de l'application de partage";
+        description = ''
+          Chemins sur lesquels `canonicalLinkHost` impose `HTTP_HOST`, au format
+          des motifs d'un `map` nginx.
+
+          UN SEUL suffit, et c'est volontaire. Le champ `url` d'un partage naît
+          dans `ShareAPIController::formatShare`, servi par ces points d'entrée
+          là, que l'application mobile comme le panneau de partage de l'interface
+          web appellent tous les deux. Le courriel de `sharebymail` part de la
+          même requête, il hérite donc du bon nom sans rien de plus.
+
+          En LECTURE SEULE : chaque entrée est un endroit où Nextcloud se voit
+          mentir sur l'hôte demandé. Élargir la liste se fait ici, en regardant
+          ce que ça change pour les réponses concernées.
+        '';
+      };
+
+      rateLimit = {
+        enable = lib.mkOption {
+          type = lib.types.bool;
+          default = true;
+          description = ''
+            Limite le débit de requêtes par adresse sur les chemins de partage.
+
+            Ils sont les seuls de l'instance joignables sans authentification :
+            sans plafond, ils constituent un robinet ouvert sur internet, aussi
+            bien pour marteler le code d'un partage protégé que pour éprouver
+            `files_sharing` à la recherche d'un défaut.
+
+            La clé est `$real_client_ip` (cf. modules/system/server/proxy), pas
+            `$remote_addr` : derrière le tunnel, toutes les connexions viennent
+            de 127.0.0.1 et une zone clavetée dessus mettrait la terre entière
+            dans le même seau.
+          '';
+        };
+
+        rate = lib.mkOption {
+          type = lib.types.str;
+          default = "10r/s";
+          description = ''
+            Débit soutenu par adresse, au format de `limit_req_zone`.
+
+            Large à dessein : le plafond vise l'abus, pas l'usage. Les ressources
+            statiques de la page de partage n'y sont PAS soumises, et un
+            téléchargement — même de plusieurs gigaoctets — ne compte que pour
+            une requête, la limite portant sur leur nombre et non sur le débit.
+          '';
+        };
+
+        burst = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 30;
+          description = ''
+            Rafale tolérée avant que le plafond ne morde, servie sans délai
+            (`nodelay`). Absorbe l'ouverture d'un dossier, qui enchaîne quelques
+            requêtes WebDAV d'un coup.
+          '';
+        };
+      };
+
+      autheliaResources = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        readOnly = true;
+        default = [
+          # La page de partage, la soumission du mot de passe quand le partage en
+          # porte un (/s/<jeton>/authenticate) et le téléchargement
+          # (/s/<jeton>/download).
+          "^/s/"
+          "^/index\\.php/s/"
+
+          # Point d'entrée public : le WebDAV de partage, par lequel la page
+          # liste le contenu d'un dossier et par lequel un dépôt de fichiers
+          # téléverse, plus les anciennes URL de téléchargement.
+          "^/public\\.php"
+
+          # Les DEUX seules routes publiques de l'application de partage : les
+          # vignettes, et le point d'information hérité. Nommées une par une
+          # plutôt qu'un `^/apps/files_sharing/` général, qui laisserait aussi
+          # passer `settings/shareFolder`, `accept/{id}` et `api/externalShares`
+          # — sans danger, Nextcloud exigeant une session dessus, mais sans
+          # raison d'être joignables sans le portail. Liste relevée dans
+          # apps/files_sharing/appinfo/routes.php.
+          "^/apps/files_sharing/(publicpreview|shareinfo)"
+          "^/index\\.php/apps/files_sharing/(publicpreview|shareinfo)"
+
+          # Thème, favicon et manifeste : sans eux la page publique s'affiche
+          # nue, alors qu'elle est ce qu'un destinataire voit de l'instance.
+          #
+          # Là encore les routes PUBLIQUES seulement. `^/apps/theming/` tout
+          # court exposerait `ajax/uploadImage`, `ajax/updateStylesheet` et
+          # `background/*` : réservées à l'administrateur et protégées par CSRF,
+          # mais un point de téléversement n'a rien à faire hors du portail.
+          "^/apps/theming/(theme|image|manifest|favicon|icon|img)/"
+          "^/index\\.php/apps/theming/(theme|image|manifest|favicon|icon|img)/"
+
+          # Redemandé quand la session anonyme expire pendant que la page reste
+          # ouverte. Ne divulgue rien : un jeton CSRF ne vaut que pour la session
+          # qui le demande, et celle-ci est anonyme.
+          "^/csrftoken"
+          "^/index\\.php/csrftoken"
+
+          # Ressources statiques. Ce sont les MÊMES fichiers pour tout le monde,
+          # servis avant toute notion de compte : les ouvrir ne divulgue que la
+          # version de Nextcloud, que la page de partage annonce de toute façon.
+          #
+          # Ces préfixes correspondent à de vrais répertoires de l'arborescence
+          # (`core/css`, `core/js`, `core/img`, `core/fonts`, `core/l10n`,
+          # `core/vendor`, `dist`) et non à des routes — donc à des FICHIERS, que
+          # nginx sert sans jamais entrer dans PHP. Les entrées `^/css/`, `^/js/`
+          # et `^/apple-touch-icon` de la première rédaction ont été retirées :
+          # rien ne répond dessus, et une ligne morte dans une liste de sécurité
+          # se relit comme une ligne utile.
+          #
+          # `^/apps/[^/]+/(css|js|img|fonts|l10n)/` couvre les mêmes
+          # sous-répertoires côté applications. Le seul chemin de cette forme qui
+          # soit une ROUTE et non un fichier est `theming/img/{app}/{image}`
+          # (recensé sur l'ensemble des routes livrées) : une icône thémée,
+          # publique, déjà couverte au-dessus.
+          "^/core/(css|js|img|fonts|l10n|vendor)/"
+          "^/apps/[^/]+/(css|js|img|fonts|l10n)/"
+          "^/dist/"
+          "^/favicon\\.ico$"
+        ];
+        defaultText = lib.literalExpression "les chemins qu'emprunte une page de partage public";
+        description = ''
+          Chemins exemptés du portail quand `enable` est vrai, au format
+          `resources` d'Authelia — des expressions régulières évaluées sur le
+          chemin de la requête.
+
+          Volontairement en LECTURE SEULE. Cette liste est une décision de
+          sécurité : ce qui y entre cesse d'être protégé par le portail, et un
+          ajout depuis un profil passerait inaperçu. L'élargir se fait ici, en
+          regardant ce que la ligne ouvre.
+
+          Ce qui n'y est PAS, et ne doit pas y venir : `/remote.php` (WebDAV par
+          compte), `/ocs` (API, y compris celle qui liste les partages),
+          `/login`, `/settings`, `/apps/files`.
+
+          Ce n'est pas un contrat amont : une mise à jour majeure de Nextcloud
+          peut déplacer une de ces URL, auquel cas la page de partage se met à
+          rediriger vers le portail. Le journal d'Authelia en `debug` nomme alors
+          le chemin refusé.
+        '';
+      };
+    };
+
     language = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -324,6 +586,28 @@ in
       owner = "nextcloud";
     };
 
+    # Contournement du portail sur les seuls chemins de partage public.
+    #
+    # `mkBefore` n'est PAS cosmétique : la première règle qui correspond gagne,
+    # et celle qui met `hostName` en `two_factor` — sans `networks`, donc
+    # attrapant toute origine — est justement celle qui bloque un destinataire
+    # extérieur. Sans priorité, l'ordre de fusion des listes entre modules ne
+    # garantit rien et l'option n'aurait d'effet qu'au hasard de l'évaluation.
+    #
+    # Passer AVANT les contournements du VPN est sans conséquence : ils sont
+    # eux-mêmes des `bypass`, et cette règle-ci est plus étroite qu'eux.
+    #
+    # Déclaré ici plutôt que dans le profil pour que l'option fasse ce qu'elle
+    # annonce. Le profil garde une note à l'endroit où les autres règles sont
+    # listées, l'ordre effectif devant rester lisible d'un seul endroit.
+    systemSettings.authelia.rules = lib.mkBefore (
+      lib.optional (cfg.publicSharing.enable && authelia.enable) {
+        domain = cfg.hostName;
+        policy = "bypass";
+        resources = cfg.publicSharing.autheliaResources;
+      }
+    );
+
     services.nextcloud = {
       enable = true;
       # Version majeure épinglée : les migrations de schéma sont irréversibles,
@@ -391,6 +675,13 @@ in
         # correcte que pour le trafic venant du tunnel, et serait fausse pour
         # celui du VPN, qui arrive directement sur nginx. On la restreint aux
         # requêtes issues de la boucle locale, c'est-à-dire à cloudflared.
+        #
+        # NE PAS l'élargir pour corriger les liens de partage fabriqués depuis le
+        # VPN. La tentation est réelle — `overwritehost` existe pour ça — mais sa
+        # portée est l'ADRESSE SOURCE, qui ne distingue pas l'application mobile
+        # du navigateur venus du même tunnel : le nom interne cesserait alors
+        # d'être navigable. C'est le rôle de `publicSharing.canonicalLinkHost`,
+        # qui agit sur les seuls points d'entrée où le lien se fabrique.
         overwritecondaddr = "^127\\.0\\.0\\.1$";
 
         # URL de base quand il n'y a PAS de requête HTTP dont l'hériter : le
@@ -589,6 +880,40 @@ in
         '';
     };
 
+    # Réglages de partage. Par `occ` et non par `settings` : ce sont des valeurs
+    # d'APPLICATION, rangées dans `oc_appconfig` sous l'application `core`, et un
+    # `settings` les écrirait dans config.php où personne ne les lit. Même
+    # distinction que pour le thème juste en dessous — vérifier la source plutôt
+    # que le nom.
+    systemd.services.nextcloud-sharing = lib.mkIf cfg.publicSharing.enable {
+      description = "Applique les réglages de partage public Nextcloud";
+      after = [ "nextcloud-setup.service" ];
+      requires = [ "nextcloud-setup.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = occServiceConfig;
+      script =
+        let
+          occ = lib.getExe config.services.nextcloud.occ;
+          set = key: value: "${occ} config:app:set core ${key} --value ${lib.escapeShellArg value}";
+        in
+        lib.concatStringsSep "\n" (
+          if cfg.publicSharing.linkExpireDays != null then
+            [
+              (set "shareapi_default_expire_date" "yes")
+              (set "shareapi_expire_after_n_days" (toString cfg.publicSharing.linkExpireDays))
+              # Un DÉFAUT, pas un plafond : sans cette ligne à `no`, la date
+              # posée au-dessus deviendrait indépassable et un partage qui doit
+              # durer obligerait à rebuild.
+              (set "shareapi_enforce_expire_date" "no")
+            ]
+          else
+            # Remise à zéro explicite, le mécanisme étant à sens unique : cesser
+            # d'écrire une valeur d'appconfig ne l'efface pas, et une expiration
+            # posée puis retirée du profil resterait en place indéfiniment.
+            [ (set "shareapi_default_expire_date" "no") ]
+        );
+    };
+
     # Le thème passe par `occ` et non par `settings` : ce sont des réglages
     # d'APPLICATION, contrairement à `twofactor_enforced` qui, malgré son nom,
     # était une valeur système. Vérifier la source plutôt que le nom, à chaque
@@ -667,11 +992,87 @@ in
       random_page_cost = lib.mkDefault 1.1;
     };
 
+    services.nginx.commonHttpConfig = lib.mkMerge [
+      # Hôte annoncé à PHP, pour que le lien de partage porte le nom PUBLIC même
+      # quand il naît d'une requête arrivée par un nom interne.
+      #
+      # `default $http_host` : partout ailleurs, exactement la valeur que nginx
+      # aurait transmise de toute façon. Ce `map` ne change donc RIEN hors des
+      # chemins nommés — c'est ce qui garde le nom interne pleinement navigable,
+      # là où `overwritehost` aurait réécrit toutes les pages.
+      #
+      # Pas de `volatile`, contrairement au `map` de la limitation plus bas : ces
+      # chemins-là sont servis directement par la location PHP, sans redirection
+      # interne, donc `$uri` ne bouge pas en cours de requête.
+      (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkHost) ''
+        map $uri $nextcloud_link_host {
+          default $http_host;
+        ${lib.concatMapStrings (path: "  ${path} ${cfg.hostName};\n") cfg.publicSharing.canonicalLinkPaths}}
+      '')
+
+      # Zone de limitation des chemins de partage public — les seuls de
+      # l'instance que le portail ne garde plus.
+      #
+      # La clé est `$real_client_ip` et non `$remote_addr` : derrière le tunnel,
+      # toutes les connexions viennent de cloudflared en 127.0.0.1, et une zone
+      # clavetée dessus mettrait la terre entière dans le même seau — la première
+      # requête d'un attaquant ferait tomber le partage pour tout le monde.
+      #
+      # `mkAfter` pour la même raison que dans modules/system/server/apps : nginx
+      # compile la clé d'une zone au moment où il lit la directive et refuse de
+      # démarrer sur une variable qu'il n'a pas encore vue. Ces lignes doivent
+      # passer après le `map` qui définit `$real_client_ip`.
+      #
+      # `limit_req_status` n'est PAS posé ici : le module apps l'écrit déjà au
+      # niveau http quand une de ses applications est limitée, et cette directive
+      # ne tolère pas le doublon dans un même contexte. Il est posé sur le vhost
+      # plus bas, où il vaut sans dépendre de ce que fait l'autre module.
+      (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.rateLimit.enable) (lib.mkAfter ''
+          # `volatile` désactive la mise en cache de la valeur, et c'est ce qui
+          # rend le comptage EXACT. `/s/<jeton>` n'est pas servi tel quel : la
+          # location `/` du module amont fait `try_files … /index.php$request_uri`,
+          # donc nginx repart en redirection interne et rejoue la phase où
+          # `limit_req` s'applique. Avec la valeur en cache, la même requête
+          # consommerait deux jetons ; sans cache, la seconde passe voit
+          # `$uri = /index.php/s/<jeton>`, qui ne correspond à rien ici.
+          #
+          # D'où aussi le choix de `$uri` plutôt que `$request_uri` : c'est le
+          # premier qui suit la réécriture interne, le second reste figé sur
+          # l'URL d'origine et remettrait le double comptage.
+          #
+          # Une clé VIDE désactive la limite pour la requête (comportement
+          # documenté de limit_req) : tout ce qui n'est pas un chemin de partage
+          # traverse sans être compté, ressources statiques comprises.
+          map $uri $nextcloud_share_client {
+            volatile;
+            default         "";
+            ~^/s/           $real_client_ip;
+            ~^/public\.php  $real_client_ip;
+          }
+
+          limit_req_zone $nextcloud_share_client zone=nextcloud_share:10m rate=${cfg.publicSharing.rateLimit.rate};
+        ''))
+    ];
+
     # Le module Nextcloud crée déjà ce vhost ; on n'y ajoute que le TLS et les
     # noms supplémentaires. enableACME couvre automatiquement les serverAliases,
     # donc un seul certificat porte l'ensemble.
     services.nginx.virtualHosts.${cfg.hostName} = lib.mkMerge [
       (myLib.mkTlsVhost { serverAliases = cfg.extraHostNames; })
+
+      # Au niveau du SERVEUR et non d'une location : les chemins concernés sont
+      # servis par plusieurs locations du module amont (la générique pour `/s/`,
+      # celle des scripts PHP pour `/public.php`), et c'est le `map` ci-dessus
+      # qui désigne ce qui compte. Une location dédiée obligerait à réécrire le
+      # passage à php-fpm, pour un résultat plus fragile.
+      (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.rateLimit.enable) {
+        extraConfig = ''
+          limit_req zone=nextcloud_share burst=${toString cfg.publicSharing.rateLimit.burst} nodelay;
+          # 429 et non le 503 par défaut : le premier dit « tu vas trop vite », le
+          # second « le service est en panne ».
+          limit_req_status 429;
+        '';
+      })
 
       # L'en-tête que Nextcloud lit pour connaître l'adresse du client, ÉCRASÉ
       # avec une valeur que l'appelant ne choisit pas (cf. les `map` de
@@ -698,6 +1099,22 @@ in
           fastcgi_param HTTP_X_FORWARDED_FOR $real_client_ip;
         '';
       }
+
+      # Hôte annoncé à PHP, cf. le `map` plus bas — la valeur vaut `$http_host`
+      # partout sauf sur les points d'entrée où le lien de partage se fabrique.
+      #
+      # MÊME MÉCANISME que la ligne juste au-dessus, et il vaut d'être redit :
+      # un `fastcgi_param` explicite l'emporte sur l'en-tête du client, nginx
+      # écartant de la liste qu'il transmet les noms déjà définis ici. Sans ça
+      # les deux valeurs partiraient et PHP garderait la première.
+      #
+      # Dans CETTE location précisément : elle déclare ses propres
+      # `fastcgi_param`, elle n'hérite donc pas de ceux d'un bloc parent.
+      (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkHost) {
+        locations."~ \\.php(?:$|/)".extraConfig = ''
+          fastcgi_param HTTP_HOST $nextcloud_link_host;
+        '';
+      })
 
       # Portail d'authentification devant le vhost, quand il est activé.
       #

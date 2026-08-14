@@ -398,6 +398,51 @@
         # conflit, à la maison, avec le préfixe déjà connecté.
         extraHostNames = [ "cloud.vpn.nathanchampagne.com" ];
 
+        # Liens de partage utilisables par quelqu'un d'EXTÉRIEUR : ni compte
+        # Authelia, ni clé WireGuard. Sans ça, sa requête arrive par le tunnel,
+        # nginx voit 127.0.0.1, et la règle `two_factor` plus bas — celle sans
+        # `networks`, qui attrape toute origine — le renvoie sur une page de
+        # connexion qu'il ne peut pas franchir.
+        #
+        # Le module injecte pour ça un `bypass` EN TÊTE des règles d'Authelia
+        # (`mkBefore`), limité aux chemins d'une page de partage et au seul nom
+        # public. Il n'apparaît pas dans la liste `authelia.rules` ci-dessous : la
+        # note y renvoie ici.
+        #
+        # PAS de mot de passe imposé sur les liens, et c'est un choix : il ne
+        # défendrait pas contre l'énumération, qui n'est pas praticable — jeton de
+        # quinze caractères, plus de 80 bits, aucun point d'entrée ouvert ne liste
+        # les partages, et `X-Robots-Tag: noindex` tient les moteurs de recherche
+        # à l'écart. Il ne défendrait que contre la fuite d'un lien après coup,
+        # au prix d'un code à transmettre à chaque partage et d'un abaissement
+        # GLOBAL du plancher de `password_policy`, qui vaut aussi pour les mots de
+        # passe de comptes. La case « protéger par un mot de passe » reste dans
+        # l'interface pour les partages qui le méritent.
+        #
+        # L'expiration par défaut couvre le même risque de fuite sans aucune de
+        # ces contreparties : elle ne demande rien au moment du partage.
+        publicSharing = {
+          enable = true;
+
+          # SANS ÇA, un partage créé depuis l'application mobile sort en
+          # `https://cloud.vpn.…/s/<jeton>`. L'application est configurée sur le
+          # nom interne, Nextcloud fabrique ses liens d'après l'hôte de la
+          # requête, et ce nom-là ne résout que vers l'adresse du tunnel : le
+          # destinataire reçoit un lien mort, sans que rien ne l'ait signalé au
+          # moment de l'envoyer.
+          #
+          # Vrai par défaut, redit ici parce que c'est le montage à DEUX NOMS qui
+          # rend le réglage nécessaire : sur une instance à un seul nom il ne
+          # ferait rien. Cf. l'option pour pourquoi ça ne passe pas par
+          # `overwritehost`, qui aurait rendu `cloud.vpn.` non navigable.
+          canonicalLinkHost = true;
+          # Deux mois : de quoi qu'une famille récupère des photos sans se
+          # presser, largement en deçà de la durée pendant laquelle un lien
+          # traîne dans une conversation. Rallongeable partage par partage depuis
+          # l'interface, la valeur n'étant qu'un défaut.
+          linkExpireDays = 60;
+        };
+
         # Dernier levier de performance réel pour un usage photo et vidéo : le
         # reste des réglages gratte des millisecondes, celui-ci évite de
         # redimensionner une image de 12 mégapixels pendant que quelqu'un attend
@@ -740,6 +785,13 @@
         # sans `networks` en dernière position sert de filet. Toute origine non
         # listée tombe donc sur `two_factor`, jamais sur un contournement —
         # l'erreur possible est de refuser à tort, pas d'ouvrir.
+        #
+        # UNE RÈGLE NE FIGURE PAS ICI : le module nextcloud en injecte une, en
+        # tête de liste (`mkBefore`), quand `nextcloud.publicSharing.enable` est
+        # vrai. C'est un `bypass` sur `cloud.nathanchampagne.com` restreint aux
+        # chemins d'une page de partage public — voir `publicSharing` plus haut
+        # pour ce qu'elle ouvre et ce qu'elle laisse fermé. Passer avant les deux
+        # contournements du VPN est sans effet, ce sont aussi des `bypass`.
         #
         # L'adresse évaluée est celle que nginx force depuis `$remote_addr` (cf.
         # modules/system/server/nextcloud) : l'adresse TCP réelle, qu'un client ne peut

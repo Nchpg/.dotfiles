@@ -238,6 +238,39 @@ in
       readOnly = true;
       default = {
         extraConfig = ''
+          # SEGMENTS « .. » REFUSÉS, et ce n'est pas une précaution de style :
+          # sans cette ligne, une règle `resources` peut être contournée.
+          #
+          # Authelia décide d'après `X-Original-URL`, construit sur
+          # `$request_uri` — l'URI BRUTE, telle que le client l'a envoyée.
+          # nginx, lui, sert `$uri`, la version NORMALISÉE : les `%XX` y sont
+          # décodés et les `..` résolus. Les deux divergent, et c'est
+          # exploitable. Vérifié sur un nginx réel :
+          #
+          #   GET /apps/files_sharing/../../remote.php/dav/files/x
+          #     $request_uri = /apps/files_sharing/../../remote.php/dav/files/x
+          #     $uri         = /remote.php/dav/files/x
+          #
+          # Un contournement portant sur `^/apps/files_sharing/` correspond donc
+          # à la première ligne, et nginx sert la seconde : le WebDAV par compte,
+          # que ce montage refuse justement d'exposer. La variante encodée
+          # `%2e%2e` passe pareil, nginx décodant avant de normaliser.
+          #
+          # On ne peut pas répondre en donnant `$uri` à Authelia : pour un
+          # service atteint par `proxy_pass`, nginx transmet l'URI brute au
+          # backend, et la décision cesserait alors de décrire ce qui est
+          # vraiment servi. On refuse donc la requête, ce qui aligne les deux par
+          # le haut. Aucun client légitime n'émet un segment « .. » : ni un
+          # navigateur, qui normalise avant d'envoyer, ni un client WebDAV, « . »
+          # et « .. » étant des noms réservés qu'aucun fichier ne porte.
+          #
+          # Le motif exige que les points forment un segment ENTIER. Un nom de
+          # fichier comme `mes..photos.jpg` passe donc sans encombre — vérifié
+          # lui aussi, avec les variantes encodées.
+          if ($request_uri ~* "(?:^|/|%2f)(?:\.|%2e){2}([/?]|%2f|\z)") {
+            return 400;
+          }
+
           auth_request /internal/authelia/authz;
           auth_request_set $redirection_url $upstream_http_location;
         '';
