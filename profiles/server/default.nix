@@ -25,14 +25,14 @@
           # du texte libre, et c'est le seul moyen de savoir à quoi correspond
           # une clé le jour où il faut en révoquer une. On le réécrit donc pour
           # nommer l'appareil, au lieu de garder ce que l'outil a généré —
-          # `u0_a249@localhost` pour la seconde, un identifiant d'application
+          # `u0_a375@localhost` pour la seconde, un identifiant d'application
           # Android qui ne dit rien à personne.
           sshKeys = [
             # gram, le poste depuis lequel on administre la machine.
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upf nchpg@gram"
             # Termux sur le téléphone, pour dépanner sans ordinateur — le cas où
             # l'on est dehors, en VPN, et où il faut relancer quelque chose.
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHcL+7fSubNc+huYPG/KVsUmoXt+/GJU7stKBvT59ow/ nchpg@redmi-termux"
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFLQKGgSPS//aBeJ0ZnXvDV9sr7XYC7Qu/NUIHy9B+9 nchpg@xiaomi-17t-termux"
             # Le poste sous Windows, d'où l'on se connecte quand on n'est pas sur
             # gram.
             "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC1ZsoIRAXJRR0crPgfWJRPCNBQ+pdWqkMX6qmCq+4y1 nchpg@windows"
@@ -110,10 +110,10 @@
         # comptent, et une assertion du module refuse un doublon.
         peers = [
           {
-            name = "xiaomi_redmi_note_11_lite_5g_ne";
-            publicKey = "UN49FUfFWuW3ILjZyvFuqkx1F9HtyhkJ4lf6QD8iGUU=";
+            name = "xiaomi_17t";
+            publicKey = "2XpsKYhyyKszaFd91V8cQ7yynz04RZ37S040S2OU5DY=";
             address = "10.8.0.2";
-            presharedKeyKey = "wireguard/xiaomi_redmi_note_11_lite_5g_ne_preshared_key";
+            presharedKeyKey = "wireguard/xiaomi_17t_preshared_key";
           }
           {
             name = "gram";
@@ -126,6 +126,12 @@
             publicKey = "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=";
             address = "10.8.0.4";
             presharedKeyKey = "wireguard/windows_gram_preshared_key";
+          }
+          {
+            name = "oppo_a74";
+            publicKey = "gSR1i2a2jxgn3yeszMLjFMe8n+fXOTrFPMuvy0gEhko=";
+            address = "10.8.0.5";
+            presharedKeyKey = "wireguard/oppo_a74_preshared_key";
           }
         ];
 
@@ -183,6 +189,12 @@
 
         overrides = {
           "cloud.nathanchampagne.com" = "192.168.1.32";
+
+          # Grafana, pour la même raison que le portail juste en dessous : sans
+          # cette ligne, regarder ses courbes depuis le salon fait sortir la
+          # requête jusqu'à l'edge Cloudflare pour redescendre par le tunnel vers
+          # une machine qui est sur le même commutateur.
+          "metrics.nathanchampagne.com" = "192.168.1.32";
 
           # Le portail aussi : sans cette ligne, s'authentifier depuis la maison
           # fait sortir la requête jusqu'à l'edge Cloudflare pour redescendre par
@@ -259,6 +271,103 @@
       # Prévient quand une unité échoue, sur une machine que personne ne regarde.
       # Le webhook est un identifiant : il vit dans les secrets système, pas ici.
       notify.discord.enable = true;
+
+      # Ce que `notify.discord` ne peut pas voir : les pannes qui s'annoncent au
+      # lieu de survenir. Un disque qui se remplit, une mémoire qui part en swap,
+      # une horloge qui dérive — aucune de ces trois-là ne fait échouer une unité
+      # avant qu'il soit trop tard.
+      #
+      # Les alertes repartent sur le MÊME webhook Discord : un seul endroit à
+      # regarder, et le secret existe déjà.
+      monitoring = {
+        enable = true;
+
+        grafana = {
+          # `metrics.` et non `grafana.` : le nom désigne ce qu'on vient voir,
+          # pas l'outil qui l'affiche. Changer d'outil ne devrait pas obliger à
+          # changer d'URL, ni à refaire un certificat.
+          hostName = "metrics.nathanchampagne.com";
+          # Publié par le tunnel, comme Nextcloud et le portail. Sans ça les
+          # courbes ne se regardent que depuis la maison ou le VPN — c'est-à-dire
+          # jamais au moment où l'on en a besoin, qui est celui où l'on est
+          # ailleurs et où quelque chose ne va pas.
+          public = true;
+        };
+
+        # CE QUE CES SONDES DISENT ET NE DISENT PAS. Elles partent de think, où
+        # dnsmasq réécrit les noms publics vers le LAN : elles tapent donc sur
+        # nginx en direct et ne traversent PAS le tunnel. Une panne de
+        # cloudflared reste invisible ici — c'est le dead man's switch, jugé
+        # depuis l'extérieur, qui couvre ce cas.
+        blackbox.targets = {
+          # Le chemin du VPN contourne le portail (règle `bypass` d'Authelia sur
+          # la plage WireGuard), donc la sonde reçoit la VRAIE réponse de
+          # Nextcloud : c'est la seule qui vérifie PHP et la base, pas seulement
+          # nginx. Elle suppose le tunnel WireGuard monté, ce qui est le cas —
+          # et son absence est en soi une chose qu'on veut savoir.
+          nextcloud = {
+            url = "https://cloud.vpn.nathanchampagne.com/status.php";
+            module = "http_2xx";
+          };
+
+          # Le nom PUBLIC, qui doit répondre par une redirection vers le portail.
+          # Un 200 signalerait que la protection est tombée, et la sonde le
+          # compterait comme un échec.
+          nextcloud-portail = {
+            url = "https://cloud.nathanchampagne.com/";
+            module = "http_authelia";
+          };
+
+          # Point de santé d'Authelia, servi sans authentification par le vhost
+          # du portail. Il tombe si Redis ou le fichier d'utilisateurs sont
+          # inaccessibles — deux pannes qui ferment l'accès à TOUT le reste.
+          authelia = {
+            url = "https://auth.nathanchampagne.com/api/health";
+            module = "http_2xx";
+          };
+
+          grafana = {
+            url = "https://metrics.nathanchampagne.com/";
+            module = "http_authelia";
+          };
+
+          # LA SEULE SONDE QUI VÉRIFIE LE CHEMIN PUBLIC COMPLET, et elle vaut à
+          # elle seule les quatre autres pour ça.
+          #
+          # Les autres visent des noms que dnsmasq réécrit vers le LAN (cf.
+          # `dns.overrides`) : elles tapent sur nginx en direct et ne traversent
+          # jamais le tunnel, donc une panne de cloudflared les laisse toutes au
+          # vert. L'apex, lui, n'a AUCUNE réécriture — volontairement. La requête
+          # sort jusqu'à l'edge Cloudflare et redescend par le tunnel, exactement
+          # comme celle d'un visiteur.
+          #
+          # NE PAS ajouter d'override dnsmasq pour ce nom : ce serait raccourcir
+          # le trajet, donc supprimer ce que cette sonde est seule à vérifier.
+          #
+          # `http_2xx` et non `http_authelia` : le portfolio est public, aucun
+          # portail devant. Et il répond 200 sur `/` sans redirection de locale,
+          # vérifié — `next-intl` sert ici la langue par défaut à la racine.
+          portfolio = {
+            url = "https://nathanchampagne.com/";
+            module = "http_2xx";
+          };
+        };
+
+        # Battement de cœur vers healthchecks.io, seul juge extérieur du montage.
+        # L'URL de ping est une capacité — qui la détient peut maintenir le
+        # service en « tout va bien » — donc elle vit dans sops.
+        #
+        # Santé physique des disques, découverte automatique. C'est la seule
+        # chose surveillée ici dont la panne détruit des données : smartd la
+        # détectait déjà, mais notifiait par `systembus-notify`, qui ne va nulle
+        # part sur une machine sans session graphique.
+        disks.enable = true;
+
+        # À RÉGLER CÔTÉ HEALTHCHECKS : période 15 min, grâce 10 min. Coller au
+        # plus près des 5 minutes ferait sonner à chaque rebuild nocturne
+        # d'autoUpgrade, qui redémarre Alertmanager.
+        deadManSwitch.enable = true;
+      };
 
       # UN SEUL NOM, deux chemins. `cloud.` répond l'adresse du LAN à la maison
       # et dans le VPN (réécriture dnsmasq ci-dessus), le tunnel ailleurs — et
@@ -480,6 +589,111 @@
         ];
       };
 
+      # Portfolio, servi depuis une image construite par GitHub Actions à chaque
+      # poussée sur `main` du dépôt du site. think ne détient aucune source : elle
+      # tire une image et la fait tourner, c'est tout.
+      #
+      # Le digest se relève dans la sortie du run qui a publié l'image. Mettre à
+      # jour le site = pousser, remplacer la ligne ci-dessous, rebuild.
+      apps."portfolio" = {
+        domain = "nathanchampagne.com";
+
+        # Un seul conteneur, donc pas d'`entrypoint` à désigner et aucun réseau
+        # posé : il n'y a personne à résoudre.
+        containers.web = {
+          image = "ghcr.io/nchpg/portfolio@sha256:6093e42281be766045cac3f474d29a4defe93244fdfa3eff6a1c69439d74d114";
+          # Next en mode `standalone` écoute sur 3000 (cf. le Dockerfile du site).
+          port = 3000;
+
+          # PAS un secret, malgré son nom : ce jeton est servi dans un
+          # `<meta name="google-site-verification">` du HTML, donc lisible par
+          # quiconque affiche la source. Et le connaître ne permet à personne de
+          # revendiquer le domaine — Google émet un jeton DIFFÉRENT par compte, la
+          # difficulté étant de le placer sur le site, pas de le deviner. Il peut
+          # donc rester en clair, là où `environmentFiles` serait requis pour une
+          # vraie valeur sensible.
+          #
+          # Les variables `NEXT_PUBLIC_*` du site ne sont PAS ici, et ce n'est pas
+          # un oubli : Next les remplace textuellement pendant `npm run build`,
+          # donc les poser à l'exécution n'aurait aucun effet. Elles vivent dans
+          # les `build-args` du workflow.
+          environment.GOOGLE_SITE_VERIFICATION = "TfARlD-WI-dO71XO0G7bcmm5VvA_ra5idC-HK-Nd9qM";
+        };
+      };
+
+      # RLkart : simulateur de karting piloté par apprentissage par renforcement.
+      # Deux conteneurs, traduction directe de son `docker-compose.yml`.
+      #
+      # `frontend` sert les fichiers statiques et porte son propre nginx, qui
+      # proxifie `/generate` et `/simulate` vers `http://backend:8000`. Cette
+      # ligne-là fonctionne SANS ÊTRE TOUCHÉE : les deux conteneurs partagent le
+      # réseau de l'application et s'y résolvent par leur nom.
+      #
+      # Ce que ça change par rapport au compose : `backend` ne publie plus
+      # `8000:8000`. Il n'ouvre RIEN sur le host, donc plus personne sur le LAN
+      # ne peut appeler l'API en court-circuitant nginx. Seul `frontend` est
+      # publié, sur la boucle locale.
+      apps."rlkart" = {
+        domain = "rlkart.nathanchampagne.com";
+        entrypoint = "frontend";
+
+        containers = {
+          frontend = {
+            image = "ghcr.io/nchpg/rlkart-frontend@sha256:5f7b09c3452b9b1502e2b8c108f48bad28d31ef577b190b691624b1b7f282cb2";
+            # L'image officielle nginx écoute sur 80. Sous 1024, donc le module
+            # lui rend `CAP_NET_BIND_SERVICE` — sans quoi elle ne peut pas se
+            # lier, même en root.
+            port = 80;
+
+            # Son nginx résout `backend` À L'ANALYSE de sa configuration, pas à
+            # chaque requête. Démarré en premier, il meurt sur
+            # `host not found in upstream` et boucle indéfiniment.
+            dependsOn = [ "backend" ];
+
+            # L'image officielle nginx démarre en root, s'approprie ses
+            # répertoires de cache, puis abandonne ses privilèges pour ses
+            # processus de travail. Sans ces trois-là, elle meurt sur
+            # `chown("/var/cache/nginx/client_temp", 101) failed`.
+            #
+            # C'est le signe qu'une variante `nginxinc/nginx-unprivileged`
+            # rendrait tout ça inutile : elle tourne en utilisateur non
+            # privilégié sur un port haut, donc sans aucune de ces capacités ni
+            # `NET_BIND_SERVICE`. À envisager la prochaine fois qu'on touche à ce
+            # Dockerfile.
+            capabilities = [
+              "CHOWN"
+              "SETUID"
+              "SETGID"
+            ];
+          };
+
+          backend = {
+            image = "ghcr.io/nchpg/rlkart-backend@sha256:939e1f49e41a5b1e3a2fdf298a4d4f1ccd892ae6b92da9f9805e5b6937d7429d";
+            # Rien n'est publié sur le host pour ce conteneur — seul le point
+            # d'entrée l'est. Le port est déclaré quand même parce qu'il dit la
+            # vérité sur ce que l'image écoute, et que le module s'en sert pour
+            # décider des capacités à accorder.
+            port = 8000;
+          };
+        };
+
+        # LE POINT QUI COMPTE SUR CETTE APPLICATION-CI. `/simulate` déclenche une
+        # simulation physique côté serveur, et `/generate` fabrique un tracé :
+        # deux chemins qui coûtent du processeur à chaque appel. Exposés sans
+        # limite, c'est un robinet ouvert sur internet — quelques boucles
+        # suffisent à saturer think, ce qui emporterait Nextcloud et le reste.
+        #
+        # Les chemins sont désignés plutôt que l'application entière : charger la
+        # page ne doit pas consommer le quota qui protège le calcul.
+        rateLimit = {
+          enable = true;
+          paths = [
+            "/generate"
+            "/simulate"
+          ];
+        };
+      };
+
       # Tunnel créé depuis gram (`cloudflared tunnel login` puis `tunnel create`,
       # qui exigent un navigateur). Ici ne tourne que le démon, nourri par le
       # JSON de credentials via sops.
@@ -580,12 +794,58 @@
             policy = "bypass";
             networks = [ config.systemSettings.vpn.wireguard.subnet ];
           }
+          # La MÊME chose, pour think elle-même, et uniquement pour la page
+          # d'état. Elle existe pour la sonde de surveillance, qui vérifie que
+          # Nextcloud répond vraiment — PHP et la base interrogés — et pas
+          # seulement que nginx sert quelque chose.
+          #
+          # POURQUOI L'ADRESSE DU LAN et non celle du tunnel, alors que la sonde
+          # vise bien `cloud.vpn.` donc `10.8.0.1` : le masquerade posé par
+          # `networking.nat` pour le tunnel (cf. modules/system/server/vpn/wireguard)
+          # correspond à toute source dans `10.8.0.0/24` sans exclure la moindre
+          # interface. Un paquet que think émet vers sa propre adresse de tunnel
+          # traverse POSTROUTING et ressort en 192.168.1.32. La règle au-dessus
+          # ne peut donc PAS s'appliquer, et le chemin du VPN n'est pas
+          # empruntable depuis la machine qui le sert.
+          #
+          # CE QUE ÇA N'OUVRE PAS. `resources` restreint à la seule page d'état,
+          # qui ne divulgue que la version de Nextcloud. Et pour se présenter
+          # sous cette adresse, il faut la détenir : une source falsifiée
+          # n'établit pas de poignée de main TCP. En pratique, seule cette
+          # machine correspond.
+          #
+          # Si le masquerade change un jour et cesse de réécrire ce trafic, la
+          # règle précédente reprend la main toute seule — la sonde ne casse pas.
+          {
+            domain = "cloud.vpn.nathanchampagne.com";
+            policy = "bypass";
+            networks = [ "${config.systemSettings.network.staticIPv4.address}/32" ];
+            resources = [ "^/status\\.php$" ];
+          }
           # Nom PUBLIC, servi par le tunnel : deux facteurs, sans exception.
           # Aucune `networks` ici, donc cette règle attrape toute origine que les
           # précédentes n'ont pas reconnue.
           {
             domain = "cloud.nathanchampagne.com";
             policy = "two_factor";
+          }
+          # Grafana. Deux facteurs comme le reste, mais surtout `subject` :
+          # c'est la SEULE chose qui empêche un compte familial d'y entrer, et
+          # d'y entrer administrateur — Grafana délègue toute son
+          # authentification au portail et donne le rôle Admin à quiconque le
+          # franchit (cf. modules/system/server/monitoring).
+          #
+          # Aucune `networks` : contrairement à Nextcloud, rien ici n'a besoin
+          # d'un chemin qui contourne. Ni depuis le LAN, ni depuis le VPN.
+          #
+          # Le nom du compte est celui du fichier d'utilisateurs d'Authelia, pas
+          # celui du compte Unix — ils se ressemblent, ils n'ont pas à coïncider.
+          # Une valeur fausse ferme l'accès (page « Accès refusé ») au lieu de
+          # l'ouvrir, c'est le bon sens de l'erreur.
+          {
+            domain = "metrics.nathanchampagne.com";
+            policy = "two_factor";
+            subject = [ "user:nathan" ];
           }
         ];
       };

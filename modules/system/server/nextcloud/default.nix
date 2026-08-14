@@ -393,6 +393,44 @@ in
         # requêtes issues de la boucle locale, c'est-à-dire à cloudflared.
         overwritecondaddr = "^127\\.0\\.0\\.1$";
 
+        # URL de base quand il n'y a PAS de requête HTTP dont l'hériter : le
+        # cron et `occ`. Sans elle, Nextcloud retombe sur `http://localhost`,
+        # et c'est ce que fabriquaient les liens partis de la tâche de fond —
+        # notifications, rappels de partage, courriels de réinitialisation.
+        # Injoignables pour le destinataire, et en clair.
+        #
+        # Effet de bord à connaître : les vérifications d'installation
+        # (`occ setupchecks`) s'en servent aussi pour se joindre elles-mêmes.
+        # Elles resteront en échec, mais pour une autre raison — Authelia leur
+        # répond une redirection vers le portail, la source étant l'adresse LAN
+        # du serveur, retirée des règles de contournement. Ce sont des FAUX
+        # positifs : le point de terminaison WebDAV, les en-têtes de sécurité,
+        # `.well-known` et les fichiers `.mjs` sont tous correctement servis par
+        # nginx, ce qu'on peut vérifier depuis un client authentifié.
+        "overwrite.cli.url" = "https://${cfg.hostName}";
+
+        # ffmpeg pour le fournisseur d'aperçus `Movie`. Le chemin du binaire est
+        # donné EXPLICITEMENT plutôt que laissé à la recherche dans le PATH, et
+        # c'est le fond d'un bug qui a duré.
+        #
+        # La version précédente posait `env[PATH]` sur le pool php-fpm, ce qui
+        # est nécessaire en principe : PHP-FPM efface l'environnement de ses
+        # processus de travail, si bien qu'un PATH posé sur l'unité systemd
+        # resterait sur le seul processus maître. Sauf que le module amont
+        # définit DÉJÀ ce PATH, par l'option `phpEnv.PATH`. Le fichier de pool
+        # se retrouvait avec deux lignes `env[PATH]`, dont la seconde — celle de
+        # l'amont, sans ffmpeg — écrasait la nôtre. Aucun conflit côté Nix, les
+        # deux valeurs venant d'options différentes : l'échec était SILENCIEUX
+        # et le module avait l'air correct.
+        #
+        # `preview_ffmpeg_path` sort de cette course. Nextcloud le lit en
+        # priorité et ne cherche dans le PATH que s'il est absent (vérifié dans
+        # `PreviewManager.php`). Rien à réordonner, rien à forcer.
+        #
+        # Ce que ça n'explique PAS : les échecs sur `.wmv` venus du CRON, qui a
+        # bien ffmpeg dans son PATH. Ceux-là tiennent au fichier lui-même.
+        preview_ffmpeg_path = "${pkgs-stable.ffmpeg-headless}/bin/ffmpeg";
+
         # Cf. l'option chunkSizeMiB.
         max_chunk_size = cfg.chunkSizeMiB * 1024 * 1024;
 
@@ -482,18 +520,6 @@ in
       };
     };
 
-    # ffmpeg pour le fournisseur d'aperçus `Movie`, qui ne fait qu'appeler le
-    # binaire et le cherche dans le PATH. Absent, il échoue en SILENCE.
-    #
-    # Par `env[PATH]` du pool et non par le PATH de l'unité systemd : PHP-FPM
-    # efface l'environnement de ses processus de travail (`clear_env = yes`), si
-    # bien qu'un PATH posé sur l'unité reste sur le processus maître. C'est ce
-    # qui faisait que les photos avaient leur vignette et pas les vidéos, les
-    # images étant traitées par PHP lui-même.
-    services.phpfpm.pools.nextcloud.settings."env[PATH]" = lib.makeBinPath [
-      pkgs-stable.ffmpeg-headless
-    ];
-
     # La tâche de fond fabrique aussi des aperçus. Elle tourne en PHP CLI et non
     # derrière fpm, donc le PATH de l'unité lui suffit.
     systemd.services.nextcloud-cron.path = [ pkgs-stable.ffmpeg-headless ];
@@ -502,7 +528,12 @@ in
     # passage, il est donc rapide en régime établi. Le RATTRAPAGE initial se
     # lance à la main, une seule fois :
     #
-    #   sudo -u nextcloud nextcloud-occ preview:generate-all
+    #   sudo nextcloud-occ preview:generate-all
+    #
+    # En ROOT et non en `sudo -u nextcloud` : le wrapper se relance par
+    # `systemd-run` pour charger les credentials, ce que l'utilisateur
+    # `nextcloud` n'a pas le droit de demander. Même cause que le
+    # `LoadCredential` d'`occServiceConfig`.
     #
     # Sur une bibliothèque déjà remplie, comptez des heures : à lancer dans un
     # tmux, pas dans une session SSH qu'une coupure interromprait.
@@ -511,9 +542,11 @@ in
       after = [ "nextcloud-setup.service" ];
       requires = [ "nextcloud-setup.service" ];
       path = [ pkgs-stable.ffmpeg-headless ];
-      serviceConfig = {
-        Type = "oneshot";
-        User = "nextcloud";
+      # `occServiceConfig` et non un bloc à part : c'est lui qui porte le
+      # `LoadCredential` sans lequel le wrapper `occ` échoue sur un « Access
+      # denied » qui ne nomme ni Nextcloud ni les credentials. Cette unité s'en
+      # passait, et échouait donc à chaque passage du minuteur.
+      serviceConfig = occServiceConfig // {
         # Longue et sans urgence : elle ne doit pas disputer le processeur aux
         # requêtes des utilisateurs.
         Nice = 19;

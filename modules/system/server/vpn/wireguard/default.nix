@@ -472,8 +472,15 @@ in
     # sur le ruleset produit : sans ce mkForce, la règle du module amont est bien
     # là et les peers atteignent tout le LAN.
     #
-    # Conséquence à connaître : si un autre module vient un jour poser ses
-    # propres règles de traversée, elles seront écrasées sans bruit.
+    # Conséquence à connaître : un autre module qui poserait ses propres règles
+    # de traversée SANS forcer les verrait écartées sans bruit. C'est arrivé —
+    # `modules/system/server/apps` a besoin d'autoriser le trafic entre
+    # conteneurs, et sa règle disparaissait purement et simplement.
+    #
+    # La convention est donc : QUI ÉCRIT DANS CETTE OPTION FORCE. Deux
+    # définitions de même priorité fusionnent entre elles, tout en continuant
+    # d'exclure celle du module `nat` restée en priorité normale. Vérifier le
+    # ruleset produit après coup, jamais l'intention.
     networking.firewall.extraForwardRules = lib.mkForce (
       lib.optionalString cfg.peerInternetAccess ''
         iifname "wg0" oifname != "wg0" ip daddr != { ${lib.concatStringsSep ", " nonRoutable} } accept comment "peers vers internet"
@@ -487,9 +494,26 @@ in
     # et que les autres appareils du LAN n'aient pas besoin d'une route de retour
     # vers le tunnel.
     #
-    # Le trafic destiné à CE host n'est pas concerné : il est délivré localement,
-    # sans passer par POSTROUTING. nginx voit donc la vraie adresse `10.8.0.x`,
-    # ce qui est tout l'intérêt de l'opération.
+    # Le trafic D'UN PEER VERS CE HOST n'est pas concerné : il arrive par INPUT,
+    # est délivré localement, et ne traverse jamais POSTROUTING. nginx voit donc
+    # la vraie adresse `10.8.0.x`, ce qui est tout l'intérêt de l'opération —
+    # c'est ce qui fait fonctionner les règles `networks` d'Authelia.
+    #
+    # CE QUI EST BIEN CONCERNÉ, en revanche, et qui coûte une demi-journée à
+    # comprendre : le trafic que CE HOST ÉMET vers sa propre adresse de tunnel.
+    # Un paquet localement engendré traverse OUTPUT puis POSTROUTING, la règle
+    # `ip saddr 10.8.0.0/24 masquerade` correspond — elle n'exclut aucune
+    # interface, pas même `lo` — et la source est réécrite en 192.168.1.32.
+    # La socket, elle, continue d'annoncer `10.8.0.1`, donc `curl --write-out
+    # %{local_ip}` et `ip route get` disent tous les deux le contraire de ce qui
+    # arrive vraiment à nginx.
+    #
+    # CONSÉQUENCE PRATIQUE : depuis think, une requête vers `cloud.vpn.…` est vue
+    # par Authelia comme venant du LAN, donc aucune règle `bypass` de la plage du
+    # tunnel ne s'y applique et elle tombe sur `default_policy = deny`. Le chemin
+    # du VPN n'est PAS empruntable depuis la machine qui le sert. Constaté en
+    # voulant y placer une sonde de surveillance.
+    #
     # `internalIPs` et non `internalInterfaces` avec un `externalInterface` : le
     # module réseau identifie la carte par un MOTIF (`en*` par défaut), que
     # networkd accepte mais dont les règles de NAT ne peuvent rien faire — un

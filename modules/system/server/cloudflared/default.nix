@@ -32,6 +32,31 @@ in
       '';
     };
 
+    metricsAddress = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "127.0.0.1:2000";
+      description = ''
+        Adresse d'écoute de la page `/metrics` du démon, au format `hôte:port`.
+        `null` — le défaut — la laisse fermée, comme cloudflared le fait
+        lui-même.
+
+        POURQUOI L'OUVRIR : c'est le seul endroit d'où l'on apprend que le tunnel
+        a perdu ses connecteurs vers l'edge. L'unité systemd reste `active` dans
+        ce cas — le démon tourne, il n'a simplement plus de chemin vers
+        internet — et les sondes lancées depuis ce host ne le voient pas non
+        plus, les noms publics y étant réécrits vers le LAN par dnsmasq. La panne
+        se découvre alors par quelqu'un qui n'arrive pas à ouvrir un service.
+
+        À poser sur la BOUCLE LOCALE : cette page décrit la topologie du tunnel
+        et les connexions établies, elle n'a rien à faire sur le réseau.
+
+        L'option vit ICI plutôt que chez celui qui consomme la mesure, parce que
+        seul ce module connaît le nom de l'unité à modifier — il est construit
+        par le module amont à partir de l'UUID du tunnel.
+      '';
+    };
+
     ingress = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -82,9 +107,32 @@ in
     #
     # Le nom de l'unité est construit par le module amont à partir de l'UUID,
     # d'où l'interpolation plutôt qu'un nom écrit à la main.
-    systemd.services = lib.mkIf (config.systemSettings.notify.discord.enable && cfg.tunnelId != null) {
-      "cloudflared-tunnel-${cfg.tunnelId}" = config.systemSettings.notify.discord.onFailure;
-    };
+    #
+    # CE NOM NE SORT PAS D'ICI. Le module de surveillance a besoin d'agir sur la
+    # même unité pour lui ouvrir son point de métriques ; il passe par
+    # `metricsAddress` ci-dessous et non par le nom, qui est un détail
+    # d'implémentation du module amont. Un module extérieur qui écrirait
+    # `systemd.services."cloudflared-tunnel-<uuid>"` ne se contenterait pas de
+    # cesser de fonctionner le jour où ce nom change : il CRÉERAIT une unité
+    # vide portant l'ancien nom, sans que rien ne le signale.
+    systemd.services = lib.mkIf (cfg.tunnelId != null) (
+      lib.mkMerge [
+        (lib.mkIf config.systemSettings.notify.discord.enable {
+          "cloudflared-tunnel-${cfg.tunnelId}" = config.systemSettings.notify.discord.onFailure;
+        })
+
+        # Ouvre la page de métriques du démon, fermée par défaut.
+        #
+        # Par l'ENVIRONNEMENT et non par un argument : le module amont écrit son
+        # `ExecStart` en dur, et l'écraser avec `mkForce` reviendrait à recopier
+        # une ligne de commande qui divergerait en silence à la première mise à
+        # jour de nixpkgs. `TUNNEL_METRICS` est la variable que cloudflared
+        # associe lui-même à `--metrics` (vérifié dans le binaire).
+        (lib.mkIf (cfg.metricsAddress != null) {
+          "cloudflared-tunnel-${cfg.tunnelId}".environment.TUNNEL_METRICS = cfg.metricsAddress;
+        })
+      ]
+    );
 
     services.cloudflared = {
       enable = true;

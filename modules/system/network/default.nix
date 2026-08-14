@@ -168,8 +168,12 @@ in
       # Réserve à connaître : docker et libvirt posent leurs règles en iptables.
       # Les deux backends coexistent sans erreur mais s'évaluent dans un ordre
       # qui n'est pas garanti, et un conteneur peut alors être joignable en
-      # contournant ces règles-ci. Aucun host à IP fixe n'en fait tourner
-      # aujourd'hui ; `systemSettings.sites` en amènerait, d'où l'avertissement.
+      # contournant ces règles-ci. D'où l'avertissement plus bas.
+      #
+      # `systemSettings.apps` n'est PAS concerné : il fait tourner ses conteneurs
+      # sous podman, qui n'écrit pas en iptables, et ne publie que le point
+      # d'entrée sur la boucle locale. Le cas visé reste docker, qu'un profil
+      # peut activer pour autre chose.
       networking.nftables.enable = true;
       networking.firewall.filterForward = true;
 
