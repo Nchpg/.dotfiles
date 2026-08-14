@@ -1300,7 +1300,15 @@ in
           # retire un en-tête précis d'une réponse d'amont, ce que nginx nu ne
           # sait pas faire — il ne sait que le cacher là où le `fastcgi_pass` a
           # lieu, ce qui frapperait aussi les vrais partages.
-          more_clear_headers 'Set-Cookie';
+          #
+          # `-s 404` n'est PAS optionnel, et son absence est un piège vérifié :
+          # sans filtre de statut, `more_clear_headers` ne s'applique qu'à une
+          # liste de codes CÂBLÉE dans le module (200, 201, 204, 206, 301, 302,
+          # 303, 304, 307, 308) qui n'inclut pas le 404. La directive passait
+          # alors le test de configuration sans rien effacer, et les cookies
+          # `oc_sessionPassphrase` continuaient de trahir Nextcloud sur la page
+          # censée être neutre.
+          more_clear_headers -s 404 'Set-Cookie';
 
           # Ni marque, ni version, ni nom d'application. Le texte s'adresse à
           # quelqu'un dont le lien ne marche pas, pas à un administrateur.
