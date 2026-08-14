@@ -1184,7 +1184,22 @@ in
       # la requête après la réécriture interne — repartirait dans la location
       # générique et l'interception ne servirait à rien.
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.neutralNotFound) {
-        locations."~ ^/(?:index\\.php/)?s/" = {
+        # TOUS les chemins publics servis par PHP, et pas seulement `/s/`.
+        # Mesuré sur l'instance : `/apps/files_sharing/publicpreview/<bidon>`
+        # (15 093 o) et `/apps/theming/{theme,image}/<bidon>` (14 760 o)
+        # servaient la même page bavarde que `/s/`. N'en fermer qu'un aurait
+        # laissé la porte ouverte à côté.
+        #
+        # Les chemins STATIQUES restent dehors, et c'est délibéré : leurs 404
+        # font 5 400 octets et ne divulguent ni version ni liste d'applications
+        # (vérifié sur `/dist/`, `/core/css/`, `/core/img/`). Les inclure
+        # aurait fait passer chaque fichier par PHP au lieu de le servir
+        # directement.
+        #
+        # `/public.php` reste dehors aussi : ses erreurs sont propres, et
+        # intercepter ses 404 remplacerait les corps XML que le WebDAV public
+        # renvoie à la page de partage quand elle liste un dossier.
+        locations."~ ^/(?:index\\.php/)?(?:s/|apps/files_sharing/(?:publicpreview|shareinfo)|apps/theming/(?:theme|image|manifest|favicon|icon|img)/)" = {
           priority = phpLocation.priority - 10;
           inherit (phpLocation) fastcgiParams;
           extraConfig = phpLocation.extraConfig + ''
