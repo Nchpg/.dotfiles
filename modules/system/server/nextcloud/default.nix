@@ -319,6 +319,36 @@ in
             requêtes WebDAV d'un coup.
           '';
         };
+
+        previewRate = lib.mkOption {
+          type = lib.types.str;
+          default = "40r/s";
+          description = ''
+            Débit par adresse pour les VIGNETTES de partage
+            (`/apps/files_sharing/publicpreview/`), zone distincte de `rate`.
+
+            Ces chemins sont ouverts sans portail mais échappaient à la limite
+            générale : détenteur d'un lien vers un dossier fourni, on pouvait
+            marteler la génération d'aperçus, chacun coûtant un redimensionnement
+            d'image. Atténué par `previews.pregenerate` et l'arrondi des tailles
+            aux puissances de quatre — quelques aperçus distincts par fichier,
+            déjà fabriqués — mais un grand album laisse une charge soutenue
+            possible.
+
+            Plus HAUT que `rate` à dessein : une galerie charge quarante
+            vignettes d'un coup, un plafond serré les couperait en carrés
+            cassés. Le but est d'écrêter l'abus, pas l'affichage normal.
+          '';
+        };
+
+        previewBurst = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 80;
+          description = ''
+            Rafale tolérée sur les vignettes avant que `previewRate` ne morde.
+            Dimensionnée pour l'ouverture d'une galerie entière d'un coup.
+          '';
+        };
       };
 
       autheliaResources = lib.mkOption {
@@ -1097,7 +1127,24 @@ in
             ~^/public\.php  $real_client_ip;
           }
 
+          # Zone SÉPARÉE pour les vignettes, cf. `previewRate`. Deux seaux
+          # distincts et non un seul élargi : l'ouverture d'une galerie ne doit
+          # pas consommer le quota qui protège la soumission d'un mot de passe,
+          # et inversement.
+          #
+          # Le motif accepte les DEUX formes, `/apps/…` et `/index.php/apps/…` :
+          # la seconde est celle que prend l'URI après la réécriture interne du
+          # module amont, et `limit_req` peut l'évaluer sur l'une ou l'autre
+          # selon le chemin emprunté. Les couvrir toutes deux évite un trou qui
+          # ne dépendrait que de l'ordre des phases nginx.
+          map $uri $nextcloud_preview_client {
+            volatile;
+            default                                              "";
+            ~^/(?:index\.php/)?apps/files_sharing/publicpreview  $real_client_ip;
+          }
+
           limit_req_zone $nextcloud_share_client zone=nextcloud_share:10m rate=${cfg.publicSharing.rateLimit.rate};
+          limit_req_zone $nextcloud_preview_client zone=nextcloud_preview:10m rate=${cfg.publicSharing.rateLimit.previewRate};
         ''))
     ];
 
@@ -1115,6 +1162,12 @@ in
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.rateLimit.enable) {
         extraConfig = ''
           limit_req zone=nextcloud_share burst=${toString cfg.publicSharing.rateLimit.burst} nodelay;
+          # Deuxième seau, plus large, pour les seules vignettes. Deux `limit_req`
+          # dans un même contexte s'appliquent CHACUN : une requête doit passer
+          # les deux. Une vignette relève du second par sa clé (le premier `map`
+          # lui rend une chaîne vide, donc pas de limite côté `nextcloud_share`),
+          # et le reste du partage relève du premier.
+          limit_req zone=nextcloud_preview burst=${toString cfg.publicSharing.rateLimit.previewBurst} nodelay;
           # 429 et non le 503 par défaut : le premier dit « tu vas trop vite », le
           # second « le service est en panne ».
           limit_req_status 429;
@@ -1226,6 +1279,28 @@ in
           # héritée par toutes les locations.
           auth_request off;
           default_type text/html;
+
+          # EN-TÊTES DE SESSION EFFACÉS, et c'est ce qui rend la page vraiment
+          # neutre. Sans ça, la réponse porte encore le `Set-Cookie` que PHP a
+          # posé avant l'interception — `oc_sessionPassphrase`,
+          # `__Host-nc_sameSiteCookielax` — dont les NOMS sont une signature
+          # Nextcloud sans équivoque. Cacher la version dans le corps ne servait
+          # à rien tant qu'un `Set-Cookie` trahissait le produit à un scanner qui
+          # tape `/s/n_importe_quoi`.
+          #
+          # Sûr sur CE chemin précisément : un jeton invalide (404) n'ouvre
+          # aucune session, le cookie n'a donc aucune utilité. On ne l'efface pas
+          # sur les réponses 200 d'un vrai partage, qui en ont besoin pour la
+          # saisie du mot de passe — d'où l'effacement ICI et pas sur la location
+          # qui passe à php-fpm.
+          #
+          # `more_clear_headers` vient du module `headers-more`, présent par
+          # défaut dans le nginx de NixOS (aux côtés de `dav` et `rtmp`, vérifié
+          # dans `nginx -V`) : aucun module à ajouter, aucune recompilation. Il
+          # retire un en-tête précis d'une réponse d'amont, ce que nginx nu ne
+          # sait pas faire — il ne sait que le cacher là où le `fastcgi_pass` a
+          # lieu, ce qui frapperait aussi les vrais partages.
+          more_clear_headers 'Set-Cookie';
 
           # Ni marque, ni version, ni nom d'application. Le texte s'adresse à
           # quelqu'un dont le lien ne marche pas, pas à un administrateur.
