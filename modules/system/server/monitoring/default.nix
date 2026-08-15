@@ -958,7 +958,98 @@ let
           legend = "usure {{ device }}";
         }
       ];
-    });
+    })
+
+    # CINQ PANNEAUX POUR CINQ ALERTES QUI N'EN AVAIENT AUCUN. Une alerte sans
+    # panneau oblige à ouvrir un SSH pour savoir ce qu'elle raconte : c'est
+    # exactement ce qui s'est passé quand `nixos-upgrade` a échoué quinze nuits
+    # d'affilée, Discord nommant « une unité » sans dire laquelle ni depuis
+    # quand. Les métriques étaient déjà collectées, il ne manquait que de les
+    # regarder.
+    ++ [
+      (mkTs {
+        # Une SÉRIE PAR UNITÉ, pas un compteur : le nom de l'unité est
+        # précisément l'information que l'alerte ne transporte pas, et la forme
+        # de la courbe distingue une panne franche d'un clignotement — ce que
+        # les faux « Résolu » de nixos-upgrade auraient montré d'un coup d'œil.
+        id = 19;
+        title = "Unités systemd en échec";
+        x = 0;
+        y = 44;
+        unit = "short";
+        targets = [
+          {
+            expr = "node_systemd_unit_state{state=\"failed\"} == 1";
+            legend = "{{ name }}";
+          }
+        ];
+      })
+      (mkTs {
+        # `up` par tâche : c'est la santé de la COLLECTE elle-même. Une tâche
+        # tombée ne rend pas ses métriques fausses, elle les fait disparaître —
+        # et un graphe vide ressemble à un graphe calme.
+        id = 20;
+        title = "Cibles de collecte";
+        x = 12;
+        y = 44;
+        unit = "short";
+        targets = [
+          {
+            expr = "up";
+            legend = "{{ job }}";
+          }
+        ];
+      })
+      (mkTs {
+        # Sur une heure glissante, parce que le compteur brut est cumulatif
+        # depuis le démarrage : sa valeur ne dit rien, sa progression dit tout.
+        id = 21;
+        title = "Processus tués faute de mémoire";
+        x = 0;
+        y = 52;
+        unit = "short";
+        targets = [
+          {
+            expr = "increase(node_vmstat_oom_kill[1h])";
+            legend = "tués sur 1 h";
+          }
+        ];
+      })
+      (mkTs {
+        # `min` explicitement nul est FAUX ici, la dérive allant dans les deux
+        # sens : un décalage négatif est aussi fatal aux codes TOTP qu'un
+        # positif, et le défaut du helper écrêterait la moitié de la courbe.
+        id = 22;
+        title = "Dérive d'horloge";
+        x = 12;
+        y = 52;
+        unit = "s";
+        min = null;
+        targets = [
+          {
+            expr = "node_timex_offset_seconds";
+            legend = "décalage";
+          }
+        ];
+      })
+      (mkTs {
+        # L'autre façon de remplir un disque, et la plus déroutante : `df`
+        # annonce de la place libre pendant que toute écriture échoue. Nextcloud
+        # et ses miniatures sont le producteur de petits fichiers de la machine.
+        id = 23;
+        title = "Inodes libres";
+        x = 0;
+        y = 60;
+        w = 24;
+        unit = "short";
+        targets = [
+          {
+            expr = "node_filesystem_files_free{${fsSelector}}";
+            legend = "{{ mountpoint }}";
+          }
+        ];
+      })
+    ];
   };
 
   dashboardsDir = pkgs-stable.linkFarm "grafana-dashboards" [
