@@ -18,16 +18,19 @@ in
         "nix-command"
         "flakes"
       ];
-      # Caches binaires claude-code (pas de follows, cf. flake.nix) et
-      # ros.cachix.org (nix-ros-overlay, sinon recompile ROS2 depuis les
-      # sources). extra-* s'ajoute aux défauts, ne les remplace pas.
+      # Cache binaire claude-code (pas de follows, cf. flake.nix). extra-*
+      # s'ajoute aux défauts, ne les remplace pas.
+      #
+      # UNE CLÉ DE CONFIANCE EST UNE AUTORISATION DE SERVIR N'IMPORTE QUEL
+      # chemin du store, pas seulement ceux du projet qui l'a motivée. Elle ne
+      # se garde donc que tant que le projet est réellement utilisé :
+      # ros.cachix.org a été retiré à ce titre, nix-ros-overlay ayant disparu
+      # des inputs sans que la clé suive.
       extra-substituters = [
         "https://claude-code.cachix.org"
-        "https://ros.cachix.org"
       ];
       extra-trusted-public-keys = [
         "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
-        "ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="
       ];
     };
     # 100 % flake : plus de channels ni de NIX_PATH.
