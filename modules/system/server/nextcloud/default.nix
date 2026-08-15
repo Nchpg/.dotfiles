@@ -1317,22 +1317,29 @@ in
       # la requête après la réécriture interne — repartirait dans la location
       # générique et l'interception ne servirait à rien.
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.neutralNotFound) {
-        # TOUS les chemins publics servis par PHP, et pas seulement `/s/`.
-        # Mesuré sur l'instance : `/apps/files_sharing/publicpreview/<bidon>`
-        # (15 093 o) et `/apps/theming/{theme,image}/<bidon>` (14 760 o)
-        # servaient la même page bavarde que `/s/`. N'en fermer qu'un aurait
-        # laissé la porte ouverte à côté.
+        # Chemins de PARTAGE uniquement, `/s/` et les points publics de
+        # files_sharing. Ils ont une propriété que les autres chemins ouverts
+        # n'ont pas : ils ne renvoient 404 QUE sur un jeton absent ou expiré,
+        # jamais au fil d'un usage normal. Intercepter leur 404 est donc sans
+        # dommage collatéral.
         #
-        # Les chemins STATIQUES restent dehors, et c'est délibéré : leurs 404
-        # font 5 400 octets et ne divulguent ni version ni liste d'applications
-        # (vérifié sur `/dist/`, `/core/css/`, `/core/img/`). Les inclure
-        # aurait fait passer chaque fichier par PHP au lieu de le servir
-        # directement.
+        # THEMING EN A ÉTÉ RETIRÉ, et c'est une correction. `apps/theming/img/`
+        # est à DOUBLE usage : une route PHP (`img/{app}/{image}`, deux segments)
+        # ET un dossier de fichiers statiques — les vignettes de thème de la page
+        # Apparence (`accessibility-dark.svg`, `app.svg`, `default-source.svg`,
+        # les `.jpg`). Cette location a une priorité inférieure à celle des
+        # fichiers statiques, donc elle passait AVANT eux et détournait ces
+        # images vers php-fpm, qui n'a pas de route à un seul segment : 404, et
+        # les vignettes de la page Apparence cassées. Le mécanisme de la fuite de
+        # version sur `/apps/theming/theme/<bidon>.css` reste donc ouvert à un
+        # scanner — moindre mal assumé, et bien plus obscur que `/s/`, la seule
+        # cible qu'un balayage vise vraiment.
         #
-        # `/public.php` reste dehors aussi : ses erreurs sont propres, et
-        # intercepter ses 404 remplacerait les corps XML que le WebDAV public
-        # renvoie à la page de partage quand elle liste un dossier.
-        locations."~ ^/(?:index\\.php/)?(?:s/|apps/files_sharing/(?:publicpreview|shareinfo)|apps/theming/(?:theme|image|manifest|favicon|icon|img)/)" = {
+        # Les chemins STATIQUES en général restent dehors pour la même raison :
+        # les faire passer par PHP les casse ou les ralentit. `/public.php` aussi
+        # (ses 404 sont des corps XML que la page de partage attend, et ils ne
+        # divulguent rien).
+        locations."~ ^/(?:index\\.php/)?(?:s/|apps/files_sharing/(?:publicpreview|shareinfo))" = {
           priority = phpLocation.priority - 10;
           inherit (phpLocation) fastcgiParams;
           extraConfig = phpLocation.extraConfig + ''
@@ -1391,7 +1398,11 @@ in
           more_clear_headers -s 404 'Set-Cookie';
 
           # Ni marque, ni version, ni nom d'application. Le texte s'adresse à
-          # quelqu'un dont le lien ne marche pas, pas à un administrateur.
+          # quelqu'un dont le lien de partage ne marche pas : cette location
+          # n'intercepte plus que les chemins de partage, qui ne renvoient 404
+          # que sur un jeton absent ou expiré. `publicpreview` et `shareinfo` en
+          # font partie mais leur corps n'est jamais lu par un humain — c'est le
+          # cas `/s/` qui compte.
           return 404 '<!doctype html>
         <html lang="fr"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
