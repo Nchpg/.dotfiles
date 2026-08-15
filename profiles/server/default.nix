@@ -436,6 +436,20 @@
           # ferait rien. Cf. l'option pour pourquoi ça ne passe pas par
           # `overwritehost`, qui aurait rendu `cloud.vpn.` non navigable.
           canonicalLinkHost = true;
+
+          # Complète le réglage ci-dessus pour l'INTERFACE WEB, que la réécriture
+          # nginx ne peut pas atteindre : le navigateur fabrique le lien à partir
+          # de son URL, pas du champ renvoyé par le serveur. Ce réglage patche le
+          # bundle Nextcloud pour figer l'hôte du lien de partage.
+          #
+          # DETTE ASSUMÉE : c'est du code minifié amont. Une garde au build
+          # empêche le patch de disparaître en silence, mais au prix inverse — une
+          # mise à jour Nextcloud qui change ces bundles fera ÉCHOUER le build
+          # nocturne d'autoUpgrade jusqu'à réajustement du motif (alerte Discord,
+          # ancienne génération conservée). Activé parce que le partage doit
+          # marcher depuis le navigateur sur `cloud.vpn.` comme depuis l'app.
+          canonicalLinkWebUi = true;
+
           # Deux mois : de quoi qu'une famille récupère des photos sans se
           # presser, largement en deçà de la durée pendant laquelle un lien
           # traîne dans une conversation. Rallongeable partage par partage depuis

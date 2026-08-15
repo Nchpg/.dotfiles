@@ -36,6 +36,46 @@ let
   # NOM de la clé.
   phpLocation = config.services.nginx.virtualHosts.${cfg.hostName}.locations."~ \\.php(?:$|/)";
 
+  # Paquet Nextcloud, patché quand `canonicalLinkWebUi` est vrai pour figer
+  # l'hôte du lien de partage DANS le bundle web. Cf. l'option pour le pourquoi
+  # et le coût. Le patch est un remplacement ciblé sur le seul appel qui
+  # construit ce lien, doublé d'une garde qui fait échouer le build si le motif
+  # n'est plus trouvé — le silence n'est pas une option pour du code amont
+  # minifié.
+  nextcloudPackage =
+    if cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkWebUi then
+      pkgs-stable.nextcloud33.overrideAttrs (old: {
+        postInstall = (old.postInstall or "") + ''
+          export NC_SHARE_HOST=${cfg.hostName}
+          total=0
+          for f in $out/dist/*.js; do
+            # `~` comme délimiteur, PAS `{}` : le motif contient des accolades
+            # (`\{token\}`, `[^}]`) qui fermeraient un `s{}{}` par erreur.
+            # `[^}]*?` capture la valeur de baseURL — `(0,x.$_)()` ou
+            # `getBaseUrl()` selon la minification — sans présumer du symbole,
+            # qui change d'un bundle à l'autre. L'ancre, elle, vient du source
+            # (route et noms de champs) et reste stable.
+            n=$(${pkgs-stable.perl}/bin/perl -0777 -i -pe '
+              BEGIN{$c=0}
+              $c += s~(["\x27]/s/\{token\}["\x27],\s*\{\s*token:\s*this\.share\.token\s*\}\s*,\s*\{\s*baseURL:\s*)[^}]*?(\s*\})~$1"https://$ENV{NC_SHARE_HOST}"$2~g;
+              END{print STDERR $c}
+            ' "$f" 2>&1 >/dev/null)
+            total=$((total + n))
+          done
+          echo "canonical share-link (web UI) : $total remplacement(s)"
+          # GARDE. Deux occurrences exécutées (une par bundle) plus une chaîne
+          # source embarquée : au moins deux. En dessous, le motif a bougé — build
+          # arrêté ici plutôt que de laisser le lien redevenir le nom interne sans
+          # bruit. Réajuster l'ancre dans modules/system/server/nextcloud.
+          if [ "$total" -lt 2 ]; then
+            echo "ERREUR canonicalLinkWebUi : motif du lien de partage introuvable (attendu >=2, obtenu $total). Le bundle Nextcloud a changé de forme ; ajuster le motif." >&2
+            exit 1
+          fi
+        '';
+      })
+    else
+      pkgs-stable.nextcloud33;
+
   occServiceConfig = {
     Type = "oneshot";
     User = "nextcloud";
@@ -226,10 +266,50 @@ in
           que si `cookie_domain` est configuré, ce qui n'est pas le cas, donc le
           navigateur garde la portée du nom qu'il a réellement visité.
 
-          CE QUE ÇA NE COUVRE PAS : un lien fabriqué par un chemin absent de la
-          liste ci-dessous repartirait avec le nom interne. Le défaut se voit
-          immédiatement — le lien affiche son hôte — mais il faut savoir le
-          reconnaître.
+          CE QUE ÇA NE COUVRE PAS : le lien affiché par l'INTERFACE WEB. Celle-ci
+          ne lit pas le champ `url` du serveur, elle reconstruit le lien côté
+          navigateur à partir de `window.location` (vérifié dans le bundle :
+          `generateUrl('/s/{token}', …, { baseURL: getBaseUrl() })`). Un partage
+          créé au navigateur sur le nom interne affiche donc ce nom. Pour couvrir
+          ce cas-là, et lui seul, voir `canonicalLinkWebUi`. L'application
+          mobile, elle, lit bien le champ `url` et bénéficie de cette option-ci.
+        '';
+      };
+
+      canonicalLinkWebUi = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Fige l'hôte du lien de partage DANS L'INTERFACE WEB, en patchant le
+          code compilé de Nextcloud.
+
+          À DISTINGUER de `canonicalLinkHost`, qui agit sur l'API OCS (donc sur
+          l'application mobile) par une réécriture nginx. Le navigateur, lui,
+          n'utilise pas cette API : il fabrique le lien lui-même à partir de
+          `window.location`, que rien côté serveur ne contrôle. Le seul point de
+          prise est le bundle JavaScript.
+
+          CE QUE ÇA FAIT : un override du paquet Nextcloud remplace, dans les
+          bundles `dist/*.js`, le `baseURL` du seul appel qui construit le lien
+          de partage — `generateUrl('/s/{token}', …, { baseURL: getBaseUrl() })`
+          — par `hostName` en dur. Ciblé sur cet appel : la navigation reste
+          relative, `extraHostNames` reste navigable sans portail, rien d'autre
+          ne bouge.
+
+          LE COÛT, à assumer pleinement. On patche du code MINIFIÉ, non
+          contractuel, régénéré à chaque version de Nextcloud. Une garde au build
+          compte les remplacements et FAIT ÉCHOUER la construction s'il en manque
+          — le patch ne peut donc pas disparaître en silence. Mais la
+          contrepartie est directe : le jour où une mise à jour de Nextcloud
+          change ces bundles, le build échoue, et sur ce système `autoUpgrade`
+          cesse d'aboutir jusqu'à ce que le motif soit réajusté (une alerte
+          Discord le signale, l'ancienne génération continue de tourner). C'est
+          une dette de maintenance délibérée, en échange d'un lien correct au
+          navigateur quel que soit le nom visité.
+
+          Laissé à `false` par défaut : le reste du module n'a aucun couplage à
+          l'amont de cette nature, et l'imposer serait le trahir. À activer en
+          connaissance de cause.
         '';
       };
 
@@ -674,7 +754,7 @@ in
       # Version majeure épinglée : les migrations de schéma sont irréversibles,
       # un saut de majeure au hasard d'un bump de nixpkgs se découvrirait après
       # coup et sans retour possible.
-      package = pkgs-stable.nextcloud33;
+      package = nextcloudPackage;
 
       hostName = cfg.hostName;
       https = true;
