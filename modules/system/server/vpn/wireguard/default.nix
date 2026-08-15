@@ -386,14 +386,50 @@ in
         assertion = !lib.elem cfg.serverAddress peerAddresses;
         message = "systemSettings.vpn.wireguard.peers : un appareil utilise ${cfg.serverAddress}, qui est l'adresse du serveur (serverAddress).";
       }
+      {
+        # RÉSOLVEUR POUSSÉ QUI N'ÉCOUTE PAS, la panne la plus silencieuse que
+        # ce module puisse produire.
+        #
+        # Le pare-feu ouvre le port 53 sur `wg0` — `mkInternalPorts` y met le
+        # tunnel comme le LAN — donc rien, côté filtrage, ne signale le
+        # problème. Mais dnsmasq n'écoute QUE sur la boucle locale et sur
+        # l'adresse du LAN (cf. `listen-address` dans modules/system/server/dns),
+        # jamais sur l'adresse du tunnel. Un peer à qui l'on pousserait
+        # `serverAddress` comme résolveur recevrait donc un refus de connexion
+        # sur chaque requête, et perdrait TOUTE résolution tant que le tunnel
+        # est monté — y compris pour les noms publics.
+        #
+        # Vérifié le 15 août 2026 : `ss -tuln` sur think ne montre le port 53
+        # que sur 127.0.0.1 et 192.168.1.32 (les écoutes sur 10.89.x sont
+        # aardvark-dns, pour les conteneurs).
+        #
+        # Deux façons de satisfaire cette assertion : ne pas pousser cette
+        # adresse, ou ajouter l'adresse du tunnel au `listen-address` du module
+        # DNS — ce dernier suppose aussi d'ordonner dnsmasq après wg0, son
+        # `bind-interfaces` exigeant que l'adresse existe au démarrage.
+        assertion =
+          !(lib.elem cfg.serverAddress cfg.dns)
+          || lib.elem cfg.serverAddress (config.services.dnsmasq.settings.listen-address or [ ]);
+        message = "systemSettings.vpn.wireguard.dns pousse ${cfg.serverAddress} aux peers, mais aucun résolveur n'écoute sur cette adresse : ils perdraient toute résolution dans le tunnel. Ajoute-la au listen-address de dnsmasq, ou retire-la de `dns`.";
+      }
     ];
 
-    warnings = lib.optional (peersWithoutPsk != [ ]) ''
-      systemSettings.vpn.wireguard : ${lib.concatStringsSep ", " peersWithoutPsk} n'ont pas de clé pré-partagée (presharedKeyKey).
-      Leur trafic, s'il est enregistré aujourd'hui, sera déchiffrable le jour où X25519 tombe.
-      `sudo wg-new-peer <nom> <adresse>` en génère une ; la remplacer sur un peer existant demande
-      de regénérer aussi son profil client.
-    '';
+    warnings =
+      lib.optional
+        (static != null && lib.elem static.address cfg.dns && !lib.elem "0.0.0.0/0" cfg.allowedIPs)
+        ''
+          systemSettings.vpn.wireguard : le résolveur poussé aux peers est ${static.address}, une adresse du LAN,
+          alors que `allowedIPs` ne route que ${lib.concatStringsSep ", " cfg.allowedIPs} dans le tunnel.
+          Un peer la joindra donc par le réseau où il se trouve : ça marche à la maison, et nulle part ailleurs.
+          C'est le DÉFAUT de l'option `dns`, hérité du temps où le tunnel était complet — le laisser en place
+          sur un tunnel restreint casse la résolution des appareils dès qu'ils sortent.
+        ''
+      ++ lib.optional (peersWithoutPsk != [ ]) ''
+        systemSettings.vpn.wireguard : ${lib.concatStringsSep ", " peersWithoutPsk} n'ont pas de clé pré-partagée (presharedKeyKey).
+        Leur trafic, s'il est enregistré aujourd'hui, sera déchiffrable le jour où X25519 tombe.
+        `sudo wg-new-peer <nom> <adresse>` en génère une ; la remplacer sur un peer existant demande
+        de regénérer aussi son profil client.
+      '';
 
     # Lues par systemd-networkd, qui tourne sous son propre utilisateur.
     #
