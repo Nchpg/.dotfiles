@@ -43,6 +43,34 @@ let
   authelia = config.systemSettings.authelia;
   cloudflared = config.systemSettings.cloudflared;
   notify = config.systemSettings.notify.discord;
+  nextcloud = config.systemSettings.nextcloud;
+  wireguard = config.systemSettings.vpn.wireguard;
+
+  # Chaque exporteur applicatif suit le service qu'il observe : allumer celui de
+  # PHP-FPM sur une machine sans Nextcloud ne produirait pas une erreur, mais
+  # une tâche de collecte en échec permanent, donc une alerte `CibleInjoignable`
+  # qui hurle sans rien signaler.
+  appsOn = svc: cfg.apps.enable && svc;
+
+  # Le nom lisible des pairs WireGuard n'est PAS dans l'interface : `wg show` ne
+  # connaît que des clés publiques. L'exporteur sait les traduire, à condition
+  # qu'on lui donne un fichier au format wg-quick portant des commentaires
+  # `# friendly_name`. Cette machine monte wg0 par systemd-networkd et n'a donc
+  # aucun fichier de ce genre — on le fabrique depuis la même liste de pairs qui
+  # sert à configurer l'interface, ce qui garantit qu'il ne peut pas diverger.
+  #
+  # AUCUN SECRET DEDANS, et c'est ce qui permet de le poser dans le store : que
+  # des clés PUBLIQUES et des noms. Les clés pré-partagées, elles, restent dans
+  # sops et ne passent pas par ici.
+  wireguardNames = pkgs-stable.writeText "wg0-peer-names.conf" (
+    lib.concatMapStrings (p: ''
+      # friendly_name = ${p.name}
+      [Peer]
+      PublicKey = ${p.publicKey}
+      AllowedIPs = ${p.address}/32
+
+    '') wireguard.peers
+  );
 
   # Ports de BOUCLAGE, détails d'implémentation : rien ici n'est joignable de
   # l'extérieur, donc aucune de ces valeurs n'est une adresse à communiquer.
@@ -55,6 +83,26 @@ let
     blackbox = 9115;
     grafana = 3000;
     smartctl = 9633;
+
+    # Exporteurs applicatifs. `nginxStatus` n'est PAS un exporteur mais le
+    # `stub_status` de nginx lui-même : il lui faut un socket à lui, sur la
+    # boucle locale, et surtout pas `services.nginx.statusPage`, qui écoute sur
+    # 0.0.0.0:80 et pose un vhost `localhost`. Aucun vhost de cette machine
+    # n'étant marqué `default`, en ajouter un sur le port 80 déplacerait le
+    # serveur par défaut de nginx — c'est-à-dire changerait qui répond aux
+    # requêtes dont l'en-tête `Host` ne correspond à rien, ce sur quoi repose le
+    # 404 neutre des partages Nextcloud. Un port dédié ne touche à rien.
+    #
+    # DANS LES 9000, comme tout ce bloc, et surtout pas dans les 8000 : les
+    # applications de `systemSettings.apps` s'y servent (8080, 8081, 8222 sont
+    # pris), et rien ne fait échouer le build en cas de collision — nginx
+    # démarrerait simplement en « Address already in use », après déploiement,
+    # emportant tous les vhosts avec lui.
+    nginxStatus = 9114;
+    nginx = 9113;
+    phpfpm = 9253;
+    wireguardExporter = 9586;
+    autheliaMetrics = 9959;
   };
 
   # Répertoire où systemd dépose les credentials de l'unité alertmanager.
@@ -503,6 +551,43 @@ let
           expr = "increase(smartctl_device_attribute{attribute_id=\"199\",attribute_value_type=\"raw\"}[24h]) > 0";
           labels.severity = "warning";
           annotations.summary = "{{ $labels.device }} : {{ $value | printf \"%.0f\" }} erreur(s) CRC sur la liaison SATA en 24 h. Câble ou connecteur, pas le disque.";
+        }
+      ];
+    }
+    ++ lib.optional cfg.apps.enable {
+      name = "applications";
+      rules = [
+        {
+          # `max_children_reached` est un compteur : PHP-FPM l'incrémente
+          # chaque fois qu'il aurait voulu démarrer un processus de plus et
+          # n'a pas pu. Sa valeur absolue ne dit rien — elle date peut-être du
+          # mois dernier — donc la règle porte sur la PROGRESSION.
+          #
+          # C'est la traduction mesurable de « Nextcloud rame » : le pool est
+          # au plafond, les requêtes attendent, et rien côté machine ne le
+          # montre puisqu'un processus en attente ne consomme rien.
+          alert = "PoolPhpSature";
+          expr = "increase(phpfpm_max_children_reached[15m]) > 0";
+          for = "5m";
+          labels.severity = "warning";
+          annotations.summary = "Le pool PHP-FPM de Nextcloud a atteint son plafond de processus : les requêtes attendent.";
+        }
+        {
+          # L'exporteur joint sa cible mais s'en fait rejeter — socket absent,
+          # `pm.status_path` disparu, `stub_status` retiré. `CibleInjoignable`
+          # ne l'attrape PAS : de son point de vue l'exporteur répond très
+          # bien, il répond juste du vide.
+          #
+          # DEUX FORMES parce que les deux exporteurs ne comptent pas pareil, et
+          # ça se vérifie dans les binaires plutôt que par symétrie : nginx
+          # publie un `nginx_up` (« Status of the last metric scrape »), php-fpm
+          # n'a AUCUN `phpfpm_up` mais un compteur d'échecs cumulatif, donc une
+          # progression.
+          alert = "SondeApplicativeAveugle";
+          expr = "nginx_up == 0 or increase(phpfpm_scrape_failures[15m]) > 0";
+          for = "15m";
+          labels.severity = "warning";
+          annotations.summary = "Un exporteur applicatif ne parvient plus à lire sa source : la courbe est plate, pas calme.";
         }
       ];
     }
@@ -1049,6 +1134,102 @@ let
           }
         ];
       })
+    ]
+
+    # LES SERVICES, ET PLUS SEULEMENT LA MACHINE. Tout ce qui précède peut être
+    # parfaitement vert pendant que Nextcloud met trente secondes à répondre :
+    # un pool PHP saturé ne consomme ni processeur ni mémoire, il attend.
+    #
+    # Noms de métriques relevés un par un dans les binaires des exporteurs
+    # (`nginx_`, `phpfpm_`, `wireguard_`) et, pour Authelia dont le binaire Go
+    # concatène ses chaînes, dans sa documentation de référence. Aucun n'est
+    # deviné — c'est la règle que le groupe d'alertes `disques` a appris à ses
+    # dépens.
+    ++ lib.optionals cfg.apps.enable [
+      (mkTs {
+        id = 24;
+        title = "nginx — requêtes et connexions";
+        x = 0;
+        y = 68;
+        unit = "short";
+        targets = [
+          {
+            expr = "rate(nginx_http_requests_total[5m])";
+            legend = "requêtes/s";
+          }
+          {
+            expr = "nginx_connections_active";
+            legend = "connexions actives";
+          }
+          {
+            expr = "nginx_connections_waiting";
+            legend = "connexions en attente";
+          }
+        ];
+      })
+      (mkTs {
+        # `listen_queue` EST LE SIGNAL, les deux autres ne sont là que pour le
+        # lire : une file qui monte alors que les processus actifs plafonnent
+        # veut dire que le pool est au maximum et que les requêtes patientent.
+        # C'est la forme exacte que prend « Nextcloud est lent » vu d'ici.
+        id = 25;
+        title = "PHP-FPM — pool Nextcloud";
+        x = 12;
+        y = 68;
+        unit = "short";
+        targets = [
+          {
+            expr = "phpfpm_active_processes";
+            legend = "actifs";
+          }
+          {
+            expr = "phpfpm_idle_processes";
+            legend = "au repos";
+          }
+          {
+            expr = "phpfpm_listen_queue";
+            legend = "en file d'attente";
+          }
+        ];
+      })
+      (mkTs {
+        # Séparé par `success`, sans quoi le panneau ne dit rien : c'est le
+        # RAPPORT entre les deux qui compte. Une sonde blackbox voit un portail
+        # qui répond 200 ; elle ne voit pas qu'il refuse tout le monde depuis
+        # une heure, ni qu'un inconnu essaie des mots de passe en série.
+        id = 26;
+        title = "Authelia — authentifications";
+        x = 0;
+        y = 76;
+        unit = "short";
+        targets = [
+          {
+            expr = "sum by (success) (rate(authelia_authn_total[5m]))";
+            legend = "succès = {{ success }}";
+          }
+        ];
+      })
+      (mkTs {
+        # Le délai depuis la dernière poignée de main, pair par pair, et sous
+        # leur NOM plutôt que sous leur clé publique — c'est tout l'objet du
+        # fichier de correspondance fabriqué plus haut.
+        #
+        # Pas d'alerte là-dessus, volontairement : ces pairs sont des téléphones
+        # qui se connectent quand ils veulent. Un long silence est normal, et
+        # une règle dessus sonnerait chaque nuit. Le panneau sert à répondre à
+        # « pourquoi mon téléphone ne passe plus », pas à prévenir.
+        id = 27;
+        title = "WireGuard — dernier contact des pairs";
+        x = 12;
+        y = 76;
+        unit = "s";
+        targets = [
+          {
+            expr = "wireguard_latest_handshake_delay_seconds";
+            legend = "{{ friendly_name }}";
+          }
+        ];
+      })
     ];
   };
 
@@ -1173,6 +1354,52 @@ in
           découvrir seul, ce qui est préférable : un disque ajouté est surveillé
           sans qu'on y pense, alors qu'une liste écrite à la main cesse d'être
           juste au premier changement de matériel, sans rien dire.
+        '';
+      };
+    };
+
+    apps = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Métriques APPLICATIVES : nginx, PHP-FPM, Authelia et WireGuard.
+
+          Ce que ça ajoute par rapport au reste du module, qui ne regarde que la
+          MACHINE : node-exporter dira toujours que le processeur va bien
+          pendant que Nextcloud met trente secondes à répondre parce que son
+          pool PHP est saturé, et les sondes blackbox diront que le portail
+          répond 200 pendant qu'il refuse toutes les authentifications.
+
+          Chaque exporteur est activé seulement si le service qu'il observe
+          l'est : rien ne démarre pour surveiller ce qui n'existe pas.
+
+          NE COUVRE PAS Nextcloud lui-même (occupation, utilisateurs, version) :
+          son exporteur exige un jeton `serverinfo` qui doit être créé à la main
+          dans l'instance puis rangé dans les secrets, donc il ne peut pas être
+          activé par une simple option. Voir `nextcloud.tokenKey` ci-dessous.
+        '';
+      };
+
+      nextcloudTokenKey = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "nextcloud/serverinfo_token";
+        description = ''
+          Clé sops du jeton `serverinfo` de Nextcloud. `null` — le défaut —
+          laisse l'exporteur Nextcloud éteint.
+
+          DEUX GESTES MANUELS, et ils ne peuvent pas être automatisés : le jeton
+          est produit par l'instance, il ne peut donc pas venir d'un fichier que
+          le déploiement écrirait avant elle.
+
+            nextcloud-occ config:app:set serverinfo token --value "$(openssl rand -hex 32)"
+            secrets edit nextcloud/serverinfo_token
+
+          Le jeton donne accès à l'état de l'instance, pas à son contenu — d'où
+          ce chemin plutôt que la réutilisation de `nextcloud/admin_pass`, qui
+          ferait de l'exporteur un administrateur complet pour afficher trois
+          compteurs.
         '';
       };
     };
@@ -1343,6 +1570,34 @@ in
         job_name = "cloudflared";
         static_configs = [ { targets = [ cloudflared.metricsAddress ]; } ];
       }
+      ++ lib.optional (appsOn config.systemSettings.proxy.enable) {
+        job_name = "nginx";
+        static_configs = [ { targets = [ "127.0.0.1:${toString ports.nginx}" ]; } ];
+      }
+      ++ lib.optional (appsOn nextcloud.enable) {
+        job_name = "php-fpm";
+        static_configs = [ { targets = [ "127.0.0.1:${toString ports.phpfpm}" ]; } ];
+      }
+      ++ lib.optional (appsOn authelia.enable) {
+        job_name = "authelia";
+        static_configs = [ { targets = [ "127.0.0.1:${toString ports.autheliaMetrics}" ]; } ];
+      }
+      ++ lib.optional (appsOn wireguard.enable) {
+        # Une poignée de pairs, une valeur qui ne bouge qu'à la connexion :
+        # collecter plus souvent ne dirait rien de plus.
+        job_name = "wireguard";
+        scrape_interval = "1m";
+        static_configs = [ { targets = [ "127.0.0.1:${toString ports.wireguardExporter}" ]; } ];
+      }
+      ++ lib.optional (cfg.apps.nextcloudTokenKey != null) {
+        # L'exporteur interroge l'API `serverinfo`, qui recompte les fichiers :
+        # c'est une opération LOURDE côté instance, à ne pas déclencher toutes
+        # les trente secondes.
+        job_name = "nextcloud";
+        scrape_interval = "5m";
+        scrape_timeout = "1m";
+        static_configs = [ { targets = [ "127.0.0.1:9205" ]; } ];
+      }
       ++ blackboxJobs;
     };
 
@@ -1371,6 +1626,76 @@ in
       listenAddress = "127.0.0.1";
       port = ports.smartctl;
       inherit (cfg.disks) devices;
+    };
+
+    # ------------------------------------------------- exporteurs applicatifs
+
+    # `stub_status` sur un socket À PART, cf. le commentaire des ports : c'est
+    # le seul moyen d'obtenir les compteurs de nginx sans toucher au port 80 ni
+    # à l'ordre des vhosts. Pas de `enableACME` ni de TLS, l'écoute étant sur la
+    # boucle locale et le contenu étant sept entiers sans intérêt pour personne.
+    services.nginx.virtualHosts."nginx-status" = lib.mkIf (appsOn config.systemSettings.proxy.enable) {
+      listen = [
+        {
+          addr = "127.0.0.1";
+          port = ports.nginxStatus;
+        }
+      ];
+      locations."/nginx_status".extraConfig = ''
+        stub_status on;
+        access_log off;
+      '';
+    };
+
+    services.prometheus.exporters.nginx = lib.mkIf (appsOn config.systemSettings.proxy.enable) {
+      enable = true;
+      listenAddress = "127.0.0.1";
+      port = ports.nginx;
+      scrapeUri = "http://127.0.0.1:${toString ports.nginxStatus}/nginx_status";
+    };
+
+    # PHP-FPM ne publie son état que si on lui désigne un chemin pour ça ; sans
+    # cette ligne l'exporteur démarre et ne trouve rien.
+    services.phpfpm.pools.nextcloud.settings."pm.status_path" = lib.mkIf (appsOn nextcloud.enable) "/status";
+
+    services.prometheus.exporters.php-fpm = lib.mkIf (appsOn nextcloud.enable) {
+      enable = true;
+      listenAddress = "127.0.0.1";
+      port = ports.phpfpm;
+      # L'adresse de collecte ne passe que par l'environnement, le module amont
+      # n'exposant pas d'option dédiée. Le fichier va dans le store SANS
+      # réserve : il ne contient qu'un chemin de socket, aucun secret.
+      environmentFile = pkgs-stable.writeText "php-fpm-exporter.env" ''
+        PHP_FPM_SCRAPE_URI="unix:///run/phpfpm/nextcloud.sock;/status"
+      '';
+    };
+
+    # Authelia expose ses propres métriques, sans exporteur intermédiaire : le
+    # nombre d'authentifications RÉUSSIES et REFUSÉES, que rien d'autre ne voit.
+    # Une sonde blackbox constate que le portail répond, pas qu'il laisse encore
+    # entrer quelqu'un.
+    services.authelia.instances.main.settings.telemetry.metrics =
+      lib.mkIf (appsOn authelia.enable)
+        {
+          enabled = true;
+          address = "tcp://127.0.0.1:${toString ports.autheliaMetrics}";
+        };
+
+    services.prometheus.exporters.wireguard = lib.mkIf (appsOn wireguard.enable) {
+      enable = true;
+      listenAddress = "127.0.0.1";
+      port = ports.wireguardExporter;
+      # Sans ça, chaque pair n'apparaît que par sa clé publique : lisible par
+      # une machine, inutilisable dans une alerte qu'un humain doit lire à 5 h.
+      wireguardConfig = wireguardNames;
+    };
+
+    services.prometheus.exporters.nextcloud = lib.mkIf (cfg.apps.nextcloudTokenKey != null) {
+      enable = true;
+      listenAddress = "127.0.0.1";
+      port = 9205;
+      url = "https://${nextcloud.hostName}";
+      tokenFile = config.sops.secrets.${cfg.apps.nextcloudTokenKey}.path;
     };
 
     # CONDITIONNÉ À L'EXISTENCE DE CIBLES, et pas seulement par économie.
@@ -1501,6 +1826,15 @@ in
         ${cfg.deadManSwitch.pingUrlKey} = {
           mode = "0400";
           restartUnits = [ "alertmanager.service" ];
+        };
+      })
+
+      # Jeton `serverinfo` de Nextcloud. `restartUnits` pour la même raison que
+      # ci-dessus : l'exporteur lit le fichier une fois, au démarrage.
+      (lib.mkIf (cfg.apps.nextcloudTokenKey != null) {
+        ${cfg.apps.nextcloudTokenKey} = {
+          mode = "0400";
+          restartUnits = [ "prometheus-nextcloud-exporter.service" ];
         };
       })
     ];
@@ -1765,6 +2099,14 @@ in
           }";
         };
       }
+
+      # Le socket du pool PHP-FPM est en 0660 nginx:nginx, et l'exporteur tourne
+      # sous un utilisateur dynamique : sans appartenance au groupe, il démarre
+      # et se voit refuser la connexion. Lecture d'un état, aucun droit sur les
+      # fichiers de Nextcloud, qui appartiennent à un autre utilisateur.
+      (lib.mkIf (appsOn nextcloud.enable) {
+        prometheus-php-fpm-exporter.serviceConfig.SupplementaryGroups = [ "nginx" ];
+      })
 
       {
         # Engendre la clé de chiffrement de la base au premier démarrage, et

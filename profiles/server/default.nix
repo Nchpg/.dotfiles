@@ -379,6 +379,15 @@
         # plus près des 5 minutes ferait sonner à chaque rebuild nocturne
         # d'autoUpgrade, qui redémarre Alertmanager.
         deadManSwitch.enable = true;
+
+        # Métriques des services, et pas seulement de la machine. Ce que ça
+        # attrape et que rien d'autre ne voyait : un pool PHP saturé pendant que
+        # le processeur dort, et des authentifications refusées en série sur un
+        # portail qui répond 200 aux sondes.
+        #
+        # Nextcloud lui-même reste dehors — son exporteur exige un jeton créé à
+        # la main dans l'instance, cf. `apps.nextcloudTokenKey`.
+        apps.enable = true;
       };
 
       # UN SEUL NOM, deux chemins. `cloud.` répond l'adresse du LAN à la maison
