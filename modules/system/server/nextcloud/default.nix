@@ -22,13 +22,6 @@ let
   authelia = config.systemSettings.authelia;
   mail = config.systemSettings.mail;
 
-  # Réglages communs aux unités qui appellent `occ`.
-  #
-  # Le `LoadCredential` n'est pas facultatif dès qu'un `secretFile` existe : le
-  # wrapper nextcloud-occ vérifie `CREDENTIALS_DIRECTORY` et, s'il ne le trouve
-  # pas, se relance par `systemd-run` — ce que l'utilisateur `nextcloud` n'a pas
-  # le droit de faire. La commande échoue alors sur un « Access denied » sans
-  # rapport apparent avec Nextcloud.
   # Location PHP telle que le module amont la construit, une fois toutes les
   # définitions fusionnées — la nôtre comprise. Lue plutôt que recopiée : la
   # location `/s/` ci-dessous en RÉUTILISE le bloc, elle ne peut donc pas
@@ -76,6 +69,13 @@ let
     else
       pkgs-stable.nextcloud33;
 
+  # Réglages communs aux unités qui appellent `occ`.
+  #
+  # Le `LoadCredential` n'est pas facultatif dès qu'un `secretFile` existe : le
+  # wrapper nextcloud-occ vérifie `CREDENTIALS_DIRECTORY` et, s'il ne le trouve
+  # pas, se relance par `systemd-run` — ce que l'utilisateur `nextcloud` n'a pas
+  # le droit de faire. La commande échoue alors sur un « Access denied » sans
+  # rapport apparent avec Nextcloud.
   occServiceConfig = {
     Type = "oneshot";
     User = "nextcloud";
