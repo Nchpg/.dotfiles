@@ -133,6 +133,18 @@
             address = "10.8.0.5";
             presharedKeyKey = "wireguard/oppo_a74_preshared_key";
           }
+          {
+            name = "xiaomi_9t";
+            publicKey = "hcqtv8ay9e0DKE1qRxWc4+FW2JAiDkWYTbiMIjfPJCE=";
+            address = "10.8.0.6";
+            presharedKeyKey = "wireguard/xiaomi_9t_preshared_key";
+          }
+          {
+            name = "xiaomi_14tpro";
+            publicKey = "pJ7CyK5txL/l2lVqsJ7cD+VGa69WOPy7ixGH7DtIDH0=";
+            address = "10.8.0.7";
+            presharedKeyKey = "wireguard/xiaomi_14tpro_preshared_key";
+          }
         ];
 
         # SORTIE INTERNET COUPÉE, et c'est la conséquence directe du passage au
