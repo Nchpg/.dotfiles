@@ -362,6 +362,26 @@ let
       # l'exporteur, pas devinés — une règle qui vise une métrique inexistante
       # ne fait jamais échouer quoi que ce soit, elle ne protège simplement de
       # rien, en silence.
+      #
+      # ET CE N'EST PAS SUFFISANT, la leçon ayant été apprise à froid : exister
+      # dans le binaire ne veut pas dire être publié pour LE disque qu'on a.
+      # `percentage_used`, `available_spare`, `critical_warning` et
+      # `media_errors` viennent du health log NVMe et ne sortent QUE pour un
+      # NVMe. Sur le SATA de cette machine, quatre des cinq règles d'origine
+      # étaient inertes — sur le seul groupe dont les alertes annoncent une
+      # perte de données. D'où les doublons ATA plus bas.
+      #
+      # Les deux familles cohabitent volontairement : les règles NVMe restent
+      # inoffensives ici (leur métrique est absente, elles ne s'évaluent sur
+      # rien) et redeviennent utiles le jour où un NVMe est branché, sans avoir
+      # à y repenser.
+      #
+      # Côté ATA, le sélecteur porte sur `attribute_id` et NON sur
+      # `attribute_name` : les identifiants sont à peu près standards, les noms
+      # sont inventés par chaque constructeur — ce disque annonce
+      # `Reallocate_NAND_Blk_Cnt` là où la littérature dit
+      # `Reallocated_Sector_Ct`. Filtrer sur le nom, c'est refaire exactement la
+      # panne silencieuse qu'on vient de corriger.
       name = "disques";
       rules = [
         {
@@ -412,6 +432,77 @@ let
           for = "1h";
           labels.severity = "warning";
           annotations.summary = "{{ $labels.device }} a consommé {{ $value | printf \"%.0f\" }} % de son endurance d'écriture.";
+        }
+
+        # --- Équivalents ATA/SATA des quatre règles NVMe ci-dessus ---------
+
+        {
+          # Attribut 202, pendant exact de `percentage_used` : la valeur BRUTE
+          # est le pourcentage CONSOMMÉ (27 % au moment où cette règle est
+          # écrite), la valeur normalisée étant son complément. Sémantique
+          # Crucial/Micron, qui est ce qui est branché ; un autre constructeur
+          # peut loger autre chose sous 202, à revérifier au changement de
+          # disque.
+          alert = "DisqueUsureElevee";
+          expr = "smartctl_device_attribute{attribute_id=\"202\",attribute_value_type=\"raw\"} > 85";
+          for = "1h";
+          labels.severity = "warning";
+          annotations.summary = "{{ $labels.device }} a consommé {{ $value | printf \"%.0f\" }} % de son endurance d'écriture.";
+        }
+        {
+          # Secteurs définitivement NON RELUS : 187 remontés au système, 198
+          # découverts par l'analyse hors ligne. L'équivalent ATA de
+          # `media_errors`. Ces deux-là ne font que MONTER, donc le seuil est
+          # zéro et un `for` court suffit — il n'y a rien à confirmer, c'est
+          # déjà arrivé.
+          alert = "DisqueSecteursIllisibles";
+          expr = "smartctl_device_attribute{attribute_id=~\"187|198\",attribute_value_type=\"raw\"} > 0";
+          for = "5m";
+          labels.severity = "critical";
+          annotations.summary = "{{ $labels.device }} : {{ $value | printf \"%.0f\" }} secteur(s) illisible(s) (attribut {{ $labels.attribute_id }}).";
+        }
+        {
+          # Secteurs EN ATTENTE de relecture (197), séparés des deux précédents
+          # parce que leur nature est différente : ce compteur monte ET
+          # redescend, le disque retirant un secteur de la liste dès qu'il
+          # parvient à le réécrire. Sur ce disque il oscille déjà entre 0 et 1.
+          #
+          # D'où le `for` d'une heure, seul paramètre qui distingue les deux
+          # cas : un secteur récupéré disparaît en quelques minutes, un secteur
+          # réellement mort reste en attente indéfiniment. À 5 minutes cette
+          # règle sonnerait sur du bruit, et une alerte qui crie pour rien est
+          # pire que pas d'alerte du tout.
+          alert = "DisqueSecteursEnAttente";
+          expr = "smartctl_device_attribute{attribute_id=\"197\",attribute_value_type=\"raw\"} > 0";
+          for = "1h";
+          labels.severity = "critical";
+          annotations.summary = "{{ $labels.device }} : {{ $value | printf \"%.0f\" }} secteur(s) en attente depuis plus d'une heure, donc non récupérable(s).";
+        }
+        {
+          # Blocs réalloués, sur leur PROGRESSION et non leur valeur absolue :
+          # un disque de remplacement peut arriver avec un compteur non nul
+          # d'usine, alors qu'une réallocation qui CONTINUE est le signe que la
+          # NAND lâche.
+          alert = "DisqueBlocsRealloues";
+          expr = "increase(smartctl_device_attribute{attribute_id=\"5\",attribute_value_type=\"raw\"}[24h]) > 0";
+          labels.severity = "warning";
+          annotations.summary = "{{ $labels.device }} a réalloué {{ $value | printf \"%.0f\" }} bloc(s) en 24 h : commander un remplaçant.";
+        }
+        {
+          # Erreurs CRC de la LIAISON SATA (attribut 199), pas du média : c'est
+          # le câble, le connecteur ou l'alimentation, pas la NAND. Les données
+          # sont retransmises, donc rien n'est perdu — mais un lien qui se
+          # dégrade finit par faire tomber le disque du bus, ce qui, sur une
+          # machine à disque unique, arrête tout.
+          #
+          # Sur la PROGRESSION, impérativement : le compteur est cumulatif
+          # depuis la sortie d'usine et vaut déjà plusieurs milliers ici, hérité
+          # d'un câblage antérieur. Une règle sur la valeur absolue serait
+          # allumée en permanence, donc ignorée, donc inutile.
+          alert = "DisqueLiaisonSataDegradee";
+          expr = "increase(smartctl_device_attribute{attribute_id=\"199\",attribute_value_type=\"raw\"}[24h]) > 0";
+          labels.severity = "warning";
+          annotations.summary = "{{ $labels.device }} : {{ $value | printf \"%.0f\" }} erreur(s) CRC sur la liaison SATA en 24 h. Câble ou connecteur, pas le disque.";
         }
       ];
     }
@@ -852,6 +943,19 @@ let
         {
           expr = "smartctl_device_available_spare";
           legend = "réserve {{ device }}";
+        }
+        # Même grandeur, autre bus : les deux séries NVMe ci-dessus sont vides
+        # sur un SATA, celle-ci l'est sur un NVMe. Les garder ensemble évite un
+        # panneau à retoucher au prochain changement de disque — cf. le groupe
+        # d'alertes `disques` pour le détail de l'attribut 202.
+        #
+        # Pas de série « réserve » côté ATA : ce disque l'expose bien (attribut
+        # 180, blocs de secours restants) mais en NOMBRE DE BLOCS, qui n'a rien
+        # à faire dans un panneau en pourcentage. Elle est couverte par alerte
+        # plutôt que tracée faussement.
+        {
+          expr = "smartctl_device_attribute{attribute_id=\"202\",attribute_value_type=\"raw\"}";
+          legend = "usure {{ device }}";
         }
       ];
     });
