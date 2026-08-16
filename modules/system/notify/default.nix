@@ -56,6 +56,36 @@ let
         code="-"
       fi
 
+      # COURSE ENTRE `OnFailure=` ET `Restart=`, et elle se perd systematiquement
+      # sur un service qui se releve vite. systemd declenche cette unite-ci puis
+      # replanifie le service ; le temps qu'on demarre et qu'on interroge, il est
+      # deja reparti. `systemctl show` decrit alors la tentative REUSSIE, et le
+      # message annonce un echec en affirmant « Result=success, code 0 ».
+      #
+      # Constate au redemarrage du 16 aout : cloudflared a echoue faute de DNS,
+      # s'est relance une seconde plus tard, et l'alerte disait l'inverse de ce
+      # qui venait de se produire.
+      #
+      # On ne peut pas remonter l'etat qui a declenche l'alerte — systemd ne le
+      # passe pas au gestionnaire — donc on decrit la situation telle qu'elle est
+      # AU MOMENT DE L'ENVOI. Un service revenu tout seul reste digne d'interet :
+      # `NRestarts` dit s'il bat la chamade ou s'il s'agissait d'un hoquet unique.
+      etat=""
+      if [ "$load" = "loaded" ]; then
+        active=$(systemctl show -p ActiveState --value "$unit" 2> /dev/null || echo inconnu)
+        restarts=$(systemctl show -p NRestarts --value "$unit" 2> /dev/null || echo "?")
+
+        if [ "$active" = "active" ]; then
+          etat="
+
+✅ l'unité est **repartie toute seule** depuis (redémarrages : \`$restarts\`). L'échec a bien eu lieu, mais il n'a pas duré."
+        else
+          etat="
+
+état actuel : \`$active\` (redémarrages : \`$restarts\`)"
+        fi
+      fi
+
       umask 077
       conf=$(mktemp)
       body=$(mktemp)
@@ -86,7 +116,8 @@ let
         --arg unit "$unit" \
         --arg result "$result" \
         --arg code "$code" \
-        '{ content: "⚠️ **\($host)** : unité `\($unit)` en échec.\nrésultat : `\($result)`, code de sortie : `\($code)`\n\n`journalctl -u \($unit) -n 50 --no-pager`" }' \
+        --arg etat "$etat" \
+        '{ content: "⚠️ **\($host)** : unité `\($unit)` en échec.\nrésultat : `\($result)`, code de sortie : `\($code)`\($etat)\n\n`journalctl -u \($unit) -n 50 --no-pager`" }' \
         > "$body"
 
       curl --silent --show-error --max-time 20 \
