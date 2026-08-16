@@ -62,10 +62,15 @@ let
   # AUCUN SECRET DEDANS, et c'est ce qui permet de le poser dans le store : que
   # des clés PUBLIQUES et des noms. Les clés pré-partagées, elles, restent dans
   # sops et ne passent pas par ici.
+  # LE COMMENTAIRE VA DEDANS, après `[Peer]`, et l'ordre n'est pas une question
+  # de style : l'exporteur rattache `# friendly_name` à la section OUVERTE au
+  # moment où il le lit. Placé avant `[Peer]`, chaque nom glisse sur le pair
+  # suivant et le dernier n'en reçoit aucun — c'est arrivé, et ça se voit très
+  # bien une fois les noms comparés aux adresses.
   wireguardNames = pkgs-stable.writeText "wg0-peer-names.conf" (
     lib.concatMapStrings (p: ''
-      # friendly_name = ${p.name}
       [Peer]
+      # friendly_name = ${p.name}
       PublicKey = ${p.publicKey}
       AllowedIPs = ${p.address}/32
 
@@ -103,6 +108,7 @@ let
     phpfpm = 9253;
     wireguardExporter = 9586;
     autheliaMetrics = 9959;
+    nextcloudExporter = 9205;
   };
 
   # Répertoire où systemd dépose les credentials de l'unité alertmanager.
@@ -589,7 +595,20 @@ let
           labels.severity = "warning";
           annotations.summary = "Un exporteur applicatif ne parvient plus à lire sa source : la courbe est plate, pas calme.";
         }
-      ];
+      ]
+      ++ lib.optional (cfg.apps.nextcloudTokenKey != null) {
+        # `nextcloud_up` tombe à 0 dès que l'API refuse l'exporteur, et les deux
+        # causes valent d'être signalées : un jeton devenu faux, ou le
+        # contournement Authelia qui a cessé de correspondre parce que
+        # l'application a déplacé son URL. Aucune des deux ne coupe le service,
+        # donc rien d'autre ne le dirait — les panneaux se videraient en
+        # silence, ce qui ressemble à une instance au repos.
+        alert = "MetriquesNextcloudAveugles";
+        expr = "nextcloud_up == 0";
+        for = "30m";
+        labels.severity = "warning";
+        annotations.summary = "L'exporteur Nextcloud n'obtient plus rien de l'API serverinfo : jeton invalide, ou chemin non contourné dans Authelia.";
+      };
     }
     ++ lib.singleton {
       name = "meta";
@@ -720,6 +739,13 @@ let
       min ? 0,
       fill ? 10,
       stack ? false,
+      # Chiffres après la virgule. `null` — le défaut — laisse Grafana décider,
+      # ce qui convient partout sauf aux TAUX : `rate()` produit une moyenne,
+      # donc une valeur fractionnaire même quand ce qu'on compte est entier par
+      # nature. « 24,7 requêtes par minute » est exact et illisible ; poser 0 ici
+      # arrondit l'AFFICHAGE sans toucher à la donnée, que l'infobulle montre
+      # toujours en entier.
+      decimals ? null,
     }:
     {
       inherit id title;
@@ -735,7 +761,7 @@ let
       };
       fieldConfig = {
         defaults = {
-          inherit unit min;
+          inherit unit min decimals;
           color.mode = "palette-classic";
           custom = {
             drawStyle = "line";
@@ -1125,12 +1151,41 @@ let
         title = "Inodes libres";
         x = 0;
         y = 60;
-        w = 24;
         unit = "short";
         targets = [
           {
             expr = "node_filesystem_files_free{${fsSelector}}";
             legend = "{{ mountpoint }}";
+          }
+        ];
+      })
+      (mkTs {
+        # Processeur, circuit graphique intégré et disque sur le même axe : ce
+        # qui informe n'est pas la valeur absolue mais l'ÉCART entre elles et
+        # leur dérive commune. Trois courbes qui montent ensemble sur des
+        # semaines, c'est de la poussière ou un ventilateur qui faiblit — une
+        # panne lente, donc invisible au jour le jour.
+        #
+        # La jointure sur `node_hwmon_chip_names` sert uniquement à la légende :
+        # sans elle les séries s'appellent `pci0000:00_0000:00:18_3`, ce qui
+        # n'apprend rien à qui regarde le panneau six mois plus tard.
+        #
+        # Pas d'alerte : le matériel se protège seul par throttling bien avant
+        # tout seuil qu'on écrirait ici, et une machine dans un placard passe
+        # légitimement l'été plus chaud que l'hiver.
+        id = 30;
+        title = "Températures";
+        x = 12;
+        y = 60;
+        unit = "celsius";
+        targets = [
+          {
+            expr = "node_hwmon_temp_celsius * on(chip) group_left(chip_name) node_hwmon_chip_names";
+            legend = "{{ chip_name }}";
+          }
+          {
+            expr = "smartctl_device_temperature{temperature_type=\"current\"}";
+            legend = "disque {{ device }}";
           }
         ];
       })
@@ -1152,10 +1207,13 @@ let
         x = 0;
         y = 68;
         unit = "short";
+        decimals = 0;
         targets = [
           {
-            expr = "rate(nginx_http_requests_total[5m])";
-            legend = "requêtes/s";
+            # Par minute comme le panneau Authelia, et pour la même raison : un
+            # taux par seconde sur cette machine s'affiche en centièmes.
+            expr = "rate(nginx_http_requests_total[5m]) * 60";
+            legend = "requêtes/min";
           }
           {
             expr = "nginx_connections_active";
@@ -1193,19 +1251,54 @@ let
         ];
       })
       (mkTs {
-        # Séparé par `success`, sans quoi le panneau ne dit rien : c'est le
-        # RAPPORT entre les deux qui compte. Une sonde blackbox voit un portail
-        # qui répond 200 ; elle ne voit pas qu'il refuse tout le monde depuis
-        # une heure, ni qu'un inconnu essaie des mots de passe en série.
+        # `authelia_authz` et NON `authelia_authn_total` : ce dernier ne compte
+        # que les saisies d'identifiants, donc il n'existe pas tant que personne
+        # ne s'est connecté depuis le dernier démarrage — un panneau vide la
+        # plupart du temps. `authz` compte les DÉCISIONS d'autorisation, à
+        # chaque requête, et c'est le flux continu qu'on veut voir.
+        #
+        # Lecture des codes : 200 = laissé passer, 401 = renvoyé au portail. Une
+        # sonde blackbox voit un portail qui répond ; elle ne voit pas qu'il
+        # refuse tout le monde depuis une heure, ni qu'un inconnu insiste.
+        # PAR MINUTE, d'où le `* 60` : `rate()` produit un taux PAR SECONDE, et
+        # sur une machine familiale ça donne des valeurs comme 0,41 qu'il faut
+        # convertir de tête pour se représenter quoi que ce soit. Multiplié par
+        # soixante, la même mesure se lit « 25 décisions par minute ».
+        #
+        # Le calcul reste fait sur une fenêtre de 5 minutes : c'est le lissage,
+        # pas l'unité. Une rafale d'une seconde reste visible, simplement étalée.
+        # DEUX SÉRIES SEULEMENT, ET C'EST UNE LIMITE DE LA SOURCE. Authelia
+        # n'expose sur `authz` que le label `code` — rien sur la règle qui a
+        # tranché. Impossible, donc, de distinguer ici une session valide d'un
+        # `bypass` (partage public, requête venue du tunnel, chemin serverinfo) :
+        # les deux comptent 200. Les légendes le disent plutôt que de laisser
+        # croire à une mesure des connexions.
+        #
+        # CE QUI RESTE EXPLOITABLE malgré ça, et c'est l'essentiel : un `bypass`
+        # ne produit JAMAIS de 401. La courbe des renvois au portail est donc
+        # pure, et c'est celle qui porte le signal — un mur de 401 sans 200 en
+        # regard, c'est soit l'authentification cassée, soit quelqu'un qui
+        # insiste depuis l'extérieur.
+        #
+        # Les CONNEXIONS proprement dites vivent dans `authelia_authn_total`,
+        # qui n'existe qu'après la première saisie d'identifiants suivant un
+        # redémarrage. Pas de panneau dessus : il resterait vide des semaines
+        # entières, ce qui se lit « rien ne se passe » au lieu de « rare par
+        # nature ».
         id = 26;
-        title = "Authelia — authentifications";
+        title = "Authelia — requêtes filtrées par minute";
         x = 0;
         y = 76;
         unit = "short";
+        decimals = 0;
         targets = [
           {
-            expr = "sum by (success) (rate(authelia_authn_total[5m]))";
-            legend = "succès = {{ success }}";
+            expr = "sum(rate(authelia_authz_total{code=\"200\"}[5m])) * 60";
+            legend = "laissées passer (session ou contournement)";
+          }
+          {
+            expr = "sum(rate(authelia_authz_total{code!=\"200\"}[5m])) * 60";
+            legend = "renvoyées au portail";
           }
         ];
       })
@@ -1225,8 +1318,95 @@ let
         unit = "s";
         targets = [
           {
-            expr = "wireguard_latest_handshake_delay_seconds";
+            # L'exporteur publie l'HORODATAGE de la dernière poignée de main,
+            # pas son ancienneté — `wireguard_latest_handshake_delay_seconds`
+            # existe dans le binaire mais n'est pas exposé par cette version. La
+            # soustraction est donc faite ici.
+            expr = "time() - wireguard_latest_handshake_seconds";
             legend = "{{ friendly_name }}";
+          }
+        ];
+      })
+    ]
+
+    # Nextcloud vu de l'INTÉRIEUR, ce qu'aucune des sources ci-dessus ne donne :
+    # la sonde blackbox dit que l'instance répond, node-exporter dit qu'il reste
+    # de la place, mais personne ne sait combien de comptes s'en servent ni
+    # combien de mises à jour attendent.
+    #
+    # Séparé de `apps.enable` parce que la condition n'est pas la même : cet
+    # exporteur exige un jeton posé à la main dans l'instance, et un
+    # contournement Authelia étroit pour l'atteindre (cf. le profil). Les quatre
+    # autres n'ont besoin de rien.
+    ++ lib.optionals (cfg.apps.nextcloudTokenKey != null) [
+      (mkTs {
+        id = 28;
+        title = "Nextcloud — comptes et partages";
+        x = 0;
+        y = 84;
+        unit = "short";
+        targets = [
+          {
+            expr = "nextcloud_users_total";
+            legend = "comptes";
+          }
+          {
+            expr = "nextcloud_active_users_daily_total";
+            legend = "actifs sur 24 h";
+          }
+          {
+            # `nextcloud_shares_total` est VENTILÉ par `type` — six séries, une
+            # par mécanisme de partage. Sans le label dans la légende, Grafana
+            # affiche six fois « partages » et le panneau devient illisible.
+            #
+            # Ventilé plutôt que sommé, parce que les types ne disent pas la
+            # même chose : `link` est un partage public, exposé à quiconque
+            # détient l'URL, là où `user` et `group` restent internes. Un total
+            # les confondrait dans un seul chiffre.
+            expr = "nextcloud_shares_total";
+            legend = "partages {{ type }}";
+          }
+          {
+            # Déplacé depuis le panneau de stockage : c'est un COMPTE, il n'a
+            # rien à faire sur un axe en octets. Sa pente est ce qui compte —
+            # c'est le producteur d'inodes de la machine, à rapprocher du
+            # panneau `Inodes libres` plus haut.
+            expr = "nextcloud_files_total";
+            legend = "fichiers";
+          }
+        ];
+      })
+      (mkTs {
+        # PAS de panneau « mises à jour en attente », qui était le premier
+        # réflexe : `nextcloud_apps_updates_available_total` et
+        # `nextcloud_system_update_available` existent dans le binaire de
+        # l'exporteur mais ne sortent PAS ici — l'API `serverinfo` ne renvoie
+        # cette section que si l'application `updatenotification` la remplit.
+        # Un panneau sur ces noms restait vide, ce qui ressemble à « rien à
+        # mettre à jour » alors que ça veut dire « je ne sais pas ».
+        #
+        # UNIQUEMENT DES OCTETS ICI, et c'est la raison d'être de ce découpage :
+        # l'unité est une propriété du PANNEAU, pas de la série. Mêler un compte
+        # de fichiers à des tailles obligeait à choisir « short », qui affiche
+        # 4.29e+11 au lieu de 400 Gio — illisible pour les deux. Le compte de
+        # fichiers a rejoint le panneau voisin, qui est déjà en `short`.
+        #
+        # `bytes` comme les autres panneaux de volume du tableau : Grafana y
+        # rend des multiples binaires (Kio, Mio, Gio), cohérent avec ce que
+        # rapportent le noyau et `df`.
+        id = 29;
+        title = "Nextcloud — stockage";
+        x = 12;
+        y = 84;
+        unit = "bytes";
+        targets = [
+          {
+            expr = "nextcloud_free_space_bytes";
+            legend = "espace libre";
+          }
+          {
+            expr = "nextcloud_database_size_bytes";
+            legend = "base de données";
           }
         ];
       })
@@ -1581,6 +1761,28 @@ in
       ++ lib.optional (appsOn authelia.enable) {
         job_name = "authelia";
         static_configs = [ { targets = [ "127.0.0.1:${toString ports.autheliaMetrics}" ]; } ];
+
+        # RENOMMAGE À LA COLLECTE. Authelia publie ses compteurs sous
+        # `authelia_authz` et `authelia_request`, sans le suffixe `_total` que
+        # la convention Prometheus impose. Ce sont bien des compteurs — ils ne
+        # font que croître — mais toute requête `rate()` dessus déclenche un
+        # avertissement « metric might not be a counter » dans Grafana.
+        #
+        # Corrigé ICI plutôt qu'en ignorant l'avertissement : le nom devient
+        # conforme, les requêtes se lisent comme les autres, et l'avertissement
+        # disparaît pour de bon au lieu d'être toléré à chaque ouverture.
+        #
+        # `${"$"}{1}` et non `$1` : Prometheus utilise l'expansion Go, où `$1_total`
+        # désigne un groupe nommé `1_total` — inexistant, donc remplacé par du
+        # vide. Les accolades sont obligatoires dès qu'un caractère de mot suit.
+        metric_relabel_configs = [
+          {
+            source_labels = [ "__name__" ];
+            regex = "authelia_(authz|request)";
+            target_label = "__name__";
+            replacement = "authelia_${"$"}{1}_total";
+          }
+        ];
       }
       ++ lib.optional (appsOn wireguard.enable) {
         # Une poignée de pairs, une valeur qui ne bouge qu'à la connexion :
@@ -1596,7 +1798,7 @@ in
         job_name = "nextcloud";
         scrape_interval = "5m";
         scrape_timeout = "1m";
-        static_configs = [ { targets = [ "127.0.0.1:9205" ]; } ];
+        static_configs = [ { targets = [ "127.0.0.1:${toString ports.nextcloudExporter}" ]; } ];
       }
       ++ blackboxJobs;
     };
@@ -1693,8 +1895,13 @@ in
     services.prometheus.exporters.nextcloud = lib.mkIf (cfg.apps.nextcloudTokenKey != null) {
       enable = true;
       listenAddress = "127.0.0.1";
-      port = 9205;
-      url = "https://${nextcloud.hostName}";
+      port = ports.nextcloudExporter;
+      # LE PREMIER NOM SUPPLÉMENTAIRE, jamais `hostName` : le nom public passe
+      # par le portail sans exception, l'exporteur y récolte la page de connexion
+      # d'Authelia et échoue sur « invalid character '<' » — du HTML là où il
+      # attend du JSON. C'est sous le nom interne que vit le contournement, cf.
+      # la règle `serverinfo` du profil.
+      url = "https://${lib.head nextcloud.extraHostNames}";
       tokenFile = config.sops.secrets.${cfg.apps.nextcloudTokenKey}.path;
     };
 
@@ -1834,6 +2041,16 @@ in
       (lib.mkIf (cfg.apps.nextcloudTokenKey != null) {
         ${cfg.apps.nextcloudTokenKey} = {
           mode = "0400";
+          # 0400 n'a de sens qu'avec un propriétaire : par défaut le secret
+          # appartient à root, et l'exporteur — qui tourne sous son propre
+          # compte — se voit refuser la lecture.
+          #
+          # Possible ICI et pas pour alertmanager, dont le contournement par
+          # `LoadCredential` est documenté plus haut : le module amont de
+          # l'exporteur Nextcloud déclare un utilisateur STATIQUE, donc un nom
+          # qu'un `owner` sops peut désigner. Alertmanager, lui, tourne en
+          # `DynamicUser` sous un uid qui change à chaque démarrage.
+          owner = "nextcloud-exporter";
           restartUnits = [ "prometheus-nextcloud-exporter.service" ];
         };
       })
@@ -2105,7 +2322,18 @@ in
       # et se voit refuser la connexion. Lecture d'un état, aucun droit sur les
       # fichiers de Nextcloud, qui appartiennent à un autre utilisateur.
       (lib.mkIf (appsOn nextcloud.enable) {
-        prometheus-php-fpm-exporter.serviceConfig.SupplementaryGroups = [ "nginx" ];
+        prometheus-php-fpm-exporter.serviceConfig = {
+          SupplementaryGroups = [ "nginx" ];
+
+          # Le durcissement amont n'autorise que AF_INET et AF_INET6, si bien
+          # que l'exporteur ne peut pas OUVRIR le socket du pool : il sort en
+          # « exit status 2 » sans un mot de plus, et le journal ne nomme jamais
+          # l'appel refusé — c'est le mode d'échec normal d'un filtre systemd.
+          #
+          # La liste est concaténée, pas remplacée : AF_INET et AF_INET6 restent
+          # en place pour l'écoute HTTP des métriques.
+          RestrictAddressFamilies = [ "AF_UNIX" ];
+        };
       })
 
       {

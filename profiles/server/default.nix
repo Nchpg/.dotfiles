@@ -385,9 +385,15 @@
         # le processeur dort, et des authentifications refusées en série sur un
         # portail qui répond 200 aux sondes.
         #
-        # Nextcloud lui-même reste dehors — son exporteur exige un jeton créé à
-        # la main dans l'instance, cf. `apps.nextcloudTokenKey`.
         apps.enable = true;
+
+        # Jeton `serverinfo`, produit par l'instance et rangé dans les secrets.
+        # DÉCLARER LA CLÉ D'ABORD : c'est cette déclaration qui fait apparaître
+        # la règle de création dans le .sops.yaml du dépôt privé (bloc généré
+        # par `nix run .#sops-policy`), et sans règle sops refuse de créer le
+        # fichier. L'ordre inverse — créer le secret puis câbler l'option —
+        # échoue sur « no matching creation rules found ».
+        apps.nextcloudTokenKey = "nextcloud/serverinfo_token";
       };
 
       # UN SEUL NOM, deux chemins. `cloud.` répond l'adresse du LAN à la maison
@@ -963,6 +969,35 @@
             policy = "bypass";
             networks = [ "${config.systemSettings.network.staticIPv4.address}/32" ];
             resources = [ "^/status\\.php$" ];
+          }
+          # MÊME MONTAGE que la règle ci-dessus, et pour la même raison : l'appel
+          # part de cette machine, donc ressort en 192.168.1.32 après masquerade.
+          # Séparée d'elle parce que ce qu'elle ouvre n'est PAS de même nature et
+          # devait être pesé à part.
+          #
+          # Sert l'exporteur Prometheus. L'API `serverinfo` en dit nettement plus
+          # que `status.php` : occupation, comptes, partages, versions de PHP et
+          # de la base, état des tâches de fond.
+          #
+          # AUTHELIA N'EST PAS LA SEULE SERRURE, et c'est ce qui rend l'ouverture
+          # acceptable : Nextcloud exige sur ce chemin son propre jeton
+          # `serverinfo`, que l'exporteur envoie en en-tête `NC-Token`. Retirer
+          # le portail ne rend donc pas l'API publique, ça la ramène à
+          # l'authentification que l'application fait elle-même. S'y ajoutent la
+          # restriction d'origine — qu'une source falsifiée ne franchit pas,
+          # faute de poignée de main TCP — et le fait que ce nom n'est ni dans
+          # l'ingress du tunnel ni résolvable publiquement, vérifié.
+          #
+          # CHEMIN EXACT et non préfixe : `serverinfo/` couvrirait tout ce que
+          # l'application ajoutera plus tard sous cette racine, y compris des
+          # points d'entrée qui n'existent pas encore et que personne ne
+          # relirait. Si l'exporteur change d'URL un jour, il tombera en 302 avec
+          # du HTML au lieu de JSON — bruyant, donc réparable.
+          {
+            domain = "cloud.vpn.nathanchampagne.com";
+            policy = "bypass";
+            networks = [ "${config.systemSettings.network.staticIPv4.address}/32" ];
+            resources = [ "^/ocs/v2\\.php/apps/serverinfo/api/v1/info" ];
           }
           # Nom PUBLIC, servi par le tunnel : deux facteurs, sans exception.
           # Aucune `networks` ici, donc cette règle attrape toute origine que les

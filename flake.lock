@@ -309,11 +309,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1786792852,
-        "narHash": "sha256-wUmJLoFklhQt7jyfDlQOph+BL1j1vulLwQ7JJ05xQK4=",
+        "lastModified": 1786828819,
+        "narHash": "sha256-g7j7jUD38ENqkbMS4+M6h+wbyEX1kc8akCdvtfmuvpw=",
         "owner": "Nchpg",
         "repo": "secrets",
-        "rev": "7978f5de4dedf05b0122c8b5ef09f8e905032fb3",
+        "rev": "78819858b3b8021a2f86d8c1de09bcbb3d910614",
         "type": "github"
       },
       "original": {
