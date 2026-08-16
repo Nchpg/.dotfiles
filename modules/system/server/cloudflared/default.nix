@@ -131,6 +131,29 @@ in
         (lib.mkIf (cfg.metricsAddress != null) {
           "cloudflared-tunnel-${cfg.tunnelId}".environment.TUNNEL_METRICS = cfg.metricsAddress;
         })
+
+        # ATTENDRE LE RÉSOLVEUR LOCAL. Le module amont n'ordonne le tunnel que
+        # sur `network-online.target`, ce qui garantit une adresse mais pas un
+        # DNS qui répond. Or la toute première chose que fait cloudflared est de
+        # résoudre `region1.v2.argotunnel.com` pour joindre l'edge, et il ABANDONNE
+        # si ça échoue au lieu de réessayer :
+        #
+        #   Couldn't resolve SRV record region1.v2.argotunnel.com: no such host
+        #
+        # Au redémarrage du 16 août, le tunnel a démarré deux secondes avant que
+        # dnsmasq soit debout, échoué, alerté sur Discord, puis s'est relancé
+        # avec succès. `Restart=on-failure` rattrapait, mais produisait une
+        # alerte à CHAQUE redémarrage de la machine — donc du bruit régulier sur
+        # le canal qui doit rester digne de confiance.
+        #
+        # `wants` et non `requires` : si dnsmasq est absent ou tombe plus tard,
+        # le tunnel doit vivre sa vie. On veut un ORDRE, pas une dépendance dure.
+        (lib.mkIf config.systemSettings.dns.enable {
+          "cloudflared-tunnel-${cfg.tunnelId}" = {
+            after = [ "dnsmasq.service" ];
+            wants = [ "dnsmasq.service" ];
+          };
+        })
       ]
     );
 

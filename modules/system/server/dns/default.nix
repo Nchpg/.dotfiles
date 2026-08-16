@@ -206,6 +206,28 @@ in
         # tiennent donc jamais dans la fenêtre de dix secondes du `StartLimitBurst`.
         # L'unité continue d'essayer au lieu d'abandonner.
         systemd.services.dnsmasq.serviceConfig.RestartSec = 5;
+
+        # ATTENDRE QUE L'ADRESSE EXISTE. Le module amont n'ordonne dnsmasq que
+        # sur `network.target`, qui signifie « la configuration réseau a été
+        # LANCÉE », pas « les adresses sont posées ». Or dnsmasq écoute
+        # explicitement sur l'adresse statique, et une écoute sur une adresse
+        # absente échoue net :
+        #
+        #   failed to create listening socket for 192.168.1.32:
+        #   Cannot assign requested address
+        #
+        # C'est ce qui s'est produit au redémarrage du 16 août — première
+        # tentative à 04:49:59, réussie seulement à 04:50:05, six secondes
+        # pendant lesquelles la machine n'avait aucun résolveur. `Restart=always`
+        # rattrapait, au prix d'une fenêtre aveugle et d'une alerte en cascade
+        # sur tout ce qui a besoin du DNS au démarrage.
+        #
+        # `network-online.target` est atteint quand systemd-networkd a fini de
+        # configurer les liens, adresses comprises.
+        systemd.services.dnsmasq = {
+          after = [ "network-online.target" ];
+          wants = [ "network-online.target" ];
+        };
       }
     ]
   );
