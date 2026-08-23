@@ -387,6 +387,26 @@
             url = "https://rlkart.nathanchampagne.com/";
             module = "http_2xx";
           };
+
+          # MNIST, pour la même raison que rlkart : une application en
+          # conteneur que rien d'autre ne surveille de près. Elle est même plus
+          # exposée à passer inaperçue, n'ayant qu'un seul processus — s'il
+          # meurt au chargement du modèle, l'unité redémarre en boucle et le
+          # seul symptôme visible ailleurs est une passerelle défaillante.
+          #
+          # `/` et non `/predict` : la sonde ne poste pas de corps JSON, et
+          # celle qui consommerait le quota du chemin qu'elle protège serait à
+          # l'envers. La racine suffit à conclure, parce que c'est LE MÊME
+          # processus qui sert la page et l'inférence — il n'y a pas de façade
+          # qui pourrait répondre 200 pendant que le modèle est mort.
+          #
+          # Comme les deux au-dessus, ce nom n'a pas de réécriture dnsmasq : la
+          # requête sort jusqu'à l'edge Cloudflare et redescend par le tunnel,
+          # donc la sonde couvre le chemin public complet. Ne pas en ajouter.
+          mnist = {
+            url = "https://mnist.nathanchampagne.com/";
+            module = "http_2xx";
+          };
         };
 
         # Battement de cœur vers healthchecks.io, seul juge extérieur du montage.
@@ -911,6 +931,60 @@
             "/generate"
             "/simulate"
           ];
+        };
+      };
+
+      # MNIST : un réseau de neurones convolutif écrit en C++ sans bibliothèque
+      # d'apprentissage, avec son serveur HTTP dans le même binaire.
+      #
+      # UN SEUL CONTENEUR, contrairement à rlkart : il n'y a pas de nginx de
+      # façade à mettre devant. Le binaire répond `public/index.html` sur toute
+      # requête GET et réserve `POST /predict` à l'inférence, donc l'aiguillage
+      # qui justifiait un frontend séparé là-bas n'existe pas ici.
+      #
+      # Les poids sont EMBARQUÉS dans l'image, copiés à la construction depuis
+      # `mnist_cnn.model` (795 Ko). C'est ce qui rend cette application
+      # compatible avec la sortie internet fermée du module : elle ne va rien
+      # chercher au démarrage.
+      apps."mnist" = {
+        domain = "mnist.nathanchampagne.com";
+
+        containers.web = {
+          image = "ghcr.io/nchpg/mnist-cnn-cpp@sha256:64d15f30c87fdcb4774aed39f2bb99cedda84fd50c45f559b82ce6f31e9b8dc1";
+
+          # Le binaire écoute sur 8080, passé en argument par son `CMD`.
+          # Au-dessus de 1024, donc aucune capacité à rendre — vérifié en
+          # exécutant l'image avec `--cap-drop=ALL`, elle démarre et répond.
+          port = 8080;
+
+          # Non privilégié, et c'est VÉRIFIÉ et non supposé : le serveur ne fait
+          # que lire son modèle et sa page sous /app, il n'écrit nulle part.
+          # Beaucoup d'images en sont incapables sans volume préparé ; celle-ci
+          # le supporte, autant le prendre.
+          user = "1000:1000";
+
+          # MESURÉ : 1,5 Mo au repos, 10 Mo après une série d'inférences. Le
+          # plafond est vingt fois au-dessus — il ne gênera jamais un usage
+          # normal, il est là pour qu'une fuite reste chez elle au lieu
+          # d'envoyer le tueur de mémoire du noyau chercher PostgreSQL.
+          memory = "256m";
+        };
+
+        # `/predict` SEUL, et pas l'application entière : c'est le seul chemin
+        # qui fait tourner le réseau. Le reste est une page statique servie par
+        # le même binaire, et la charger ne doit pas entamer le quota qui
+        # protège le calcul.
+        #
+        # Le débit par défaut est très large pour cette application : une
+        # inférence prend 17 ms mesurées, et l'interface n'appelle `/predict`
+        # que sur un clic de bouton, jamais pendant le tracé. Personne
+        # n'atteindra soixante appels par minute à la main.
+        #
+        # Pas de `proxyTimeout` pour la même raison : à 17 ms, les soixante
+        # secondes par défaut de nginx sont hors de portée.
+        rateLimit = {
+          enable = true;
+          paths = [ "/predict" ];
         };
       };
 
