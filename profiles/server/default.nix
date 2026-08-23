@@ -363,6 +363,30 @@
             url = "https://nathanchampagne.com/";
             module = "http_2xx";
           };
+
+          # RLkart, publié sur internet exactement comme le portfolio et qui
+          # n'avait AUCUNE sonde — le seul des six noms publics dans ce cas.
+          #
+          # Ça compte plus que pour les autres, parce que c'est une application
+          # en CONTENEUR : rien d'autre ne la surveille de près. Un service
+          # systemd qui meurt se voit, un conteneur qui redémarre en boucle
+          # reste `active` (cf. `ServiceRedemarreEnBoucle`, qui couvre la
+          # boucle) et un conteneur qui répond des erreurs ne se voit QUE
+          # d'ici.
+          #
+          # Comme le portfolio, ce nom n'a pas de réécriture dnsmasq : la
+          # requête sort jusqu'à l'edge Cloudflare et redescend par le tunnel,
+          # donc la sonde vérifie le chemin public complet et pas seulement
+          # nginx. Ne pas ajouter d'override pour ce nom.
+          #
+          # `/` et non `/generate` ou `/simulate` : ces deux-là déclenchent un
+          # calcul côté serveur et sont limités en débit à dessein. Une sonde
+          # qui les appellerait chaque minute consommerait le quota censé
+          # protéger la machine.
+          rlkart = {
+            url = "https://rlkart.nathanchampagne.com/";
+            module = "http_2xx";
+          };
         };
 
         # Battement de cœur vers healthchecks.io, seul juge extérieur du montage.
@@ -387,6 +411,27 @@
         #
         apps.enable = true;
 
+        # Les JOURNAUX à côté des courbes, dans la même interface et sur le même
+        # axe de temps. Ce que ça change concrètement : une alerte Discord
+        # arrivait jusqu'ici avec `journalctl -u <unité> -n 50` en pied de
+        # message, commande qu'on ne peut pas taper depuis un téléphone. La
+        # réponse est maintenant à deux clics de la courbe qui a décroché.
+        #
+        # Aucun port ouvert, aucun compte à créer, rien qui sorte de la maison —
+        # contrairement au chemin Datadog, dont c'est précisément le produit
+        # payant. Les deux cohabitent sans se gêner : Datadog garde les métriques
+        # vues de l'extérieur, Loki garde le texte.
+        logs.enable = true;
+
+        # Trente jours par défaut, gardés tels quels. Le journal sert à
+        # comprendre un incident récent ; c'est la COURBE qu'on relit à trois
+        # mois, et elle est chez Prometheus pour quatre-vingt-dix jours.
+        #
+        # Rien dans `excludeUnits` non plus : on collecte tout. La sonde blackbox
+        # produit à elle seule un tiers des lignes, toutes normales, et c'est le
+        # premier candidat si le volume devient un jour un sujet — il ne l'est
+        # pas à 4 Mo par jour.
+
         # Jeton `serverinfo`, produit par l'instance et rangé dans les secrets.
         # DÉCLARER LA CLÉ D'ABORD : c'est cette déclaration qui fait apparaître
         # la règle de création dans le .sops.yaml du dépôt privé (bloc généré
@@ -394,6 +439,40 @@
         # fichier. L'ordre inverse — créer le secret puis câbler l'option —
         # échoue sur « no matching creation rules found ».
         apps.nextcloudTokenKey = "nextcloud/serverinfo_token";
+      };
+
+      # Agent Datadog : les mêmes mesures que ci-dessus, mais DÉPOSÉES AILLEURS.
+      # C'est tout ce qu'il apporte, et c'est assumé — Prometheus voit plus de
+      # choses et garde quatre-vingt-dix jours quand le gratuit de Datadog en
+      # garde un. Ce qu'on gagne : pouvoir regarder les dernières vingt-quatre
+      # heures de courbes de think depuis un navigateur au moment où think ne
+      # répond plus, donc où Grafana est injoignable avec elle.
+      #
+      # AUCUN LOG N'EST ENVOYÉ, et ce n'est pas un réglage oublié : Log
+      # Management est un produit payant chez Datadog, jamais compris dans le
+      # gratuit. L'essai de quatorze jours d'un compte neuf le fait fonctionner
+      # le temps qu'on s'y habitue, puis il s'arrête sans message. Le module
+      # coupe donc la collecte explicitement ; son en-tête donne les trois lignes
+      # à écrire et l'ordre de grandeur de la facture (~1 $/mois ici) le jour où
+      # l'on voudrait vraiment lire le journal depuis leur interface.
+      #
+      # PRÉCONDITION HORS DÉPÔT, dans cet ordre, sans quoi le rebuild échoue à
+      # l'ÉVALUATION sur « Cannot find path … datadog/api_key.yaml » :
+      #
+      #   1. créer le compte sur la région EUROPE (le site ne se change plus
+      #      après coup, cf. l'option `site` du module) et relever la clé d'API ;
+      #   2. `nix run .#sops-policy` et reporter le bloc dans le .sops.yaml du
+      #      dépôt privé — c'est cette déclaration-ci qui y fait apparaître la
+      #      règle de création, et sans règle sops refuse de créer le fichier ;
+      #   3. `secrets` pour poser la valeur, puis bump du lock de l'entrée
+      #      `secrets` ;
+      #   4. rebuild.
+      datadog = {
+        enable = true;
+
+        # Aucune étiquette : filtrer un parc d'une seule machine ne sert à rien.
+        # À renseigner le jour où une deuxième émet vers le même compte — c'est
+        # le seul moyen de les distinguer autrement qu'une par une.
       };
 
       # UN SEUL NOM, deux chemins. `cloud.` répond l'adresse du LAN à la maison

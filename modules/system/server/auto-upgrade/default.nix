@@ -77,6 +77,25 @@ in
       operation = "switch";
     };
 
+    # SIGNALEMENT IMMÉDIAT DE L'ÉCHEC, comme nginx, Loki ou Vaultwarden.
+    #
+    # C'était la seule unité importante du host à ne pas l'avoir, et c'est
+    # justement celle qui a le plus de raisons de l'avoir : elle est la SEULE à
+    # modifier le système sans que personne ne regarde. Un flake qui ne construit
+    # plus — une entrée amont cassée, un patch Nextcloud qui ne s'applique plus —
+    # laisse la machine sur son ancienne génération, donc en état de marche,
+    # donc parfaitement silencieuse. Les correctifs de sécurité cessent
+    # simplement d'arriver, ce qui est exactement le trou que ce module existe
+    # pour fermer.
+    #
+    # `UniteSystemdEnEchec` finit par le dire (cf. modules/system/server/monitoring),
+    # mais après dix minutes d'état en échec et par le détour d'Alertmanager. Sur
+    # une unité qui ne tourne qu'une fois par nuit, autant être prévenu tout de
+    # suite.
+    #
+    # Le nom de l'unité est celui que pose le module amont pour `system.autoUpgrade`.
+    systemd.services.nixos-upgrade = lib.mkIf config.systemSettings.notify.discord.enable config.systemSettings.notify.discord.onFailure;
+
     # Une montée par nuit, donc une génération par nuit. L'ESP est déjà borné
     # par `configurationLimit` (cf. modules/system/boot) ; c'est la racine qui
     # se remplit, et `nix.gc.automatic` seul n'y change rien : sans
