@@ -54,6 +54,13 @@ let
     # ne posait pas ce problème. Purgé pour repartir de 1.
     unset SHLVL
 
+    # Le pilote GPU propriétaire (nvidia) fait râler sway au démarrage et
+    # refuse de se lancer sans cet aveu explicite. Équivalent au flag
+    # --unsupported-gpu, mais posé ici pour couvrir aussi sway.desktop (GDM),
+    # qui fait Exec=sway sans argument. Sway ne le lit que s'il détecte
+    # effectivement un pilote propriétaire : no-op ailleurs.
+    export SWAY_UNSUPPORTED_GPU=true
+
     # Appels informatifs (--validate, --version...) : sway sort SANS ouvrir de
     # session, donc pas de cleanupSession derrière (ça tuerait la session EN
     # COURS). Liste testée : -C/--validate coupait la session avant son ajout.
