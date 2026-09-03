@@ -841,7 +841,7 @@
         # Un seul conteneur, donc pas d'`entrypoint` à désigner et aucun réseau
         # posé : il n'y a personne à résoudre.
         containers.web = {
-          image = "ghcr.io/nchpg/portfolio@sha256:6093e42281be766045cac3f474d29a4defe93244fdfa3eff6a1c69439d74d114";
+          image = "ghcr.io/nchpg/portfolio@sha256:5a775183b0dbb7915e032e03f98f49ca15a935239953422105399e5c78c99e0e";
           # Next en mode `standalone` écoute sur 3000 (cf. le Dockerfile du site).
           port = 3000;
 
