@@ -1005,7 +1005,12 @@
       # (`cloudflared tunnel route dns <tunnel> trafficvision.nathanchampagne.com`
       # depuis gram, ou le CNAME proxifié équivalent chez Cloudflare). L'ingress
       # côté think est généré par le module, lui, et n'a rien à écrire ici.
-      apps."trafficvision" = {
+      #
+      # `traffic` et pas `trafficvision` : le nom de l'attribut donne celui du
+      # pont réseau (`br-<nom>`), que le noyau limite à quinze caractères. Il est
+      # interne — réseau, unités systemd, règles de pare-feu — et n'a pas à
+      # suivre le domaine servi, qui reste complet juste en dessous.
+      apps."traffic" = {
         domain = "trafficvision.nathanchampagne.com";
 
         containers.web = {
