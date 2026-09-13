@@ -686,7 +686,7 @@ in
         # podman refuse de créer le pont et l'application ne démarre pas — sans
         # que le message dise que le nom de l'application est en cause.
         assertion = lib.all (n: lib.stringLength (bridgeOf n) <= 15) names;
-        message = "systemSettings.apps : le nom d'une application à plusieurs conteneurs doit tenir en 12 caractères — le pont réseau s'appelle `br-<nom>` et le noyau limite un nom d'interface à 15.";
+        message = "systemSettings.apps : le nom d'une application doit tenir en 12 caractères — le pont réseau s'appelle `br-<nom>` et le noyau limite un nom d'interface à 15. Le nom SERVI n'est pas concerné, c'est `domain` et il reste libre.";
       }
       {
         assertion = lib.all (
