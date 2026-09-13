@@ -988,6 +988,44 @@
         };
       };
 
+      # Traffic Vision : détection de véhicules et de plaques par YOLO, sur une
+      # vidéo déposée dans la page.
+      #
+      # RIEN NE CALCULE ICI, et c'est ce qui distingue cette application de
+      # mnist et de rlkart malgré les apparences. Le modèle (37 Mo) est
+      # téléchargé par le navigateur du visiteur, qui fait tourner
+      # onnxruntime-web sur sa propre machine : la vidéo ne quitte jamais son
+      # appareil et think ne sert que des fichiers. D'où l'absence de
+      # `rateLimit` — il n'existe aucun chemin coûteux à protéger, et une limite
+      # posée sans raison gênerait un visiteur légitime avant qui que ce soit
+      # d'autre.
+      #
+      # PRÉCONDITION HORS DÉPÔT, à poser avant le rebuild, comme pour les autres
+      # applications publiques : le nom doit être routé dans le tunnel
+      # (`cloudflared tunnel route dns <tunnel> trafficvision.nathanchampagne.com`
+      # depuis gram, ou le CNAME proxifié équivalent chez Cloudflare). L'ingress
+      # côté think est généré par le module, lui, et n'a rien à écrire ici.
+      apps."trafficvision" = {
+        domain = "trafficvision.nathanchampagne.com";
+
+        containers.web = {
+          image = "ghcr.io/nchpg/yolo-detection@sha256:7bce55e4c5397d3540dc38d2526bfe59dece26426a07b86004214c4cb6f8a2a0";
+
+          # L'image est la variante `unprivileged` de nginx, choisie exactement
+          # pour la remarque laissée sur le frontend de rlkart : elle tourne en
+          # utilisateur non privilégié sur un port haut, donc AUCUNE capacité à
+          # rendre — pas de CHOWN/SETUID/SETGID. Vérifié en l'exécutant avec
+          # `--cap-drop=ALL`, elle démarre et sert la page.
+          port = 8080;
+
+          # MESURÉ avec podman : 4,8 Mo au repos, 5,1 Mo après plusieurs
+          # téléchargements du modèle. Le plafond est vingt-cinq fois au-dessus
+          # — il laisse aussi la place au cache de pages que ces gros fichiers
+          # remplissent, qui est décompté ici mais récupérable sous pression.
+          memory = "128m";
+        };
+      };
+
       # Tunnel créé depuis gram (`cloudflared tunnel login` puis `tunnel create`,
       # qui exigent un navigateur). Ici ne tourne que le démon, nourri par le
       # JSON de credentials via sops.
