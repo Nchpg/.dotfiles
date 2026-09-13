@@ -1031,6 +1031,45 @@
         };
       };
 
+      # iSeg-2017 : segmentation des tissus cérébraux du nourrisson sur IRM
+      # T1/T2, trois modèles de 72 Ko à 1,9 Mo selon la finesse voulue.
+      #
+      # MÊME MONTAGE QUE traffic ci-dessus et pour les mêmes raisons — page
+      # statique, calcul chez le visiteur, donc pas de `rateLimit` — avec une
+      # différence à connaître avant de toucher à sa configuration nginx : cette
+      # page-là n'a PAS besoin d'isolation cross-origin. Son `app.js` fixe
+      # `ort.env.wasm.numThreads = 1`, ce qui la dispense de SharedArrayBuffer et
+      # donc des en-têtes COOP/COEP que l'autre réclame. Les deux images ne se
+      # ressemblent pas par hasard, elles diffèrent sur ce point exprès.
+      #
+      # Elle installe aussi un service worker, qui la rend utilisable hors ligne
+      # après une visite. Rien à prévoir ici : il est servi depuis le répertoire
+      # d'où il est enregistré, donc sa portée couvre le site sans en-tête
+      # `Service-Worker-Allowed`.
+      #
+      # PRÉCONDITION HORS DÉPÔT, à poser avant le rebuild : le nom doit être
+      # routé dans le tunnel (`cloudflared tunnel route dns <tunnel>
+      # iseg2017.nathanchampagne.com` depuis gram).
+      apps."iseg2017" = {
+        domain = "iseg2017.nathanchampagne.com";
+
+        containers.web = {
+          image = "ghcr.io/nchpg/iseg-2017@sha256:e0b54b079669ad0bb7cad2bf9d64baed066de45689ca618c49f36612e3f03aba";
+
+          # `iseg-2017` en minuscules dans le nom d'image, alors que le dépôt
+          # s'appelle `iSeg-2017` : ghcr.io refuse les majuscules.
+          #
+          # Même variante `unprivileged` de nginx que traffic, donc aucune
+          # capacité à rendre. Vérifié en exécutant l'image avec `--cap-drop=ALL`
+          # et `--security-opt=no-new-privileges`, elle démarre et sert la page.
+          port = 8080;
+
+          # MESURÉ avec podman : 5,4 Mo au repos, 4,8 Mo après une série de
+          # téléchargements des modèles et des IRM d'exemple.
+          memory = "128m";
+        };
+      };
+
       # Tunnel créé depuis gram (`cloudflared tunnel login` puis `tunnel create`,
       # qui exigent un navigateur). Ici ne tourne que le démon, nourri par le
       # JSON de credentials via sops.
