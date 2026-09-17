@@ -1,8 +1,19 @@
-{ lib, ... }:
+{ lib, inputs, ... }:
 
 # Réglages matériel de gram (LG Gram 2024, Meteor Lake), importés par
 # hosts/default.nix. hardware-configuration.nix est généré à part.
 {
+  # Configuration propre à cette machine qui n'a pas à être publiée. Elle vit
+  # dans le dépôt de secrets, déjà entrée du flake et déjà épinglée par
+  # flake.lock : ce qui est déployé ne change donc qu'après un
+  # `nix flake update secrets`, qui se voit dans un diff ici — le même
+  # raisonnement que pour les valeurs chiffrées.
+  #
+  # L'entrée est en `flake = false`, donc `inputs.secrets` est un CHEMIN DU
+  # STORE. L'import reste par conséquent pur, et rebuild.sh n'a pas besoin de
+  # `--impure`, ce qu'il refuse explicitement.
+  imports = [ "${inputs.secrets}/think.nix" ];
+
   # Dimensionné sur la RAM de CE host, pas sur le profil : pas de partition
   # de swap sur gram, la pression mémoire est absorbée par zram et earlyoom
   # tue avant que le système ne parte en thrashing.
