@@ -88,6 +88,13 @@
         };
       };
 
+      # AFS du CRI depuis la maison : `afs mount` prend le ticket Kerberos si
+      # besoin puis monte ~/mnt/afs (cf. modules/user/epita/afs).
+      epita.afs = {
+        enable = true;
+        login = "nathan.champagne";
+      };
+
       agents = {
         claude = {
           enable = true;
