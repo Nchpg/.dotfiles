@@ -198,5 +198,9 @@ bindsym XF86MonBrightnessUp exec ~/.config/sway/brightness.sh up
 # injecté seulement si le module flameshot est activé (cf. modules/user/sway).
 @flameshotBinds@
 
+# Enregistrement vidéo wf-recorder ($mod+Print / $mod+Shift+Print, toggle) :
+# bloc injecté seulement si le module wf-recorder est activé.
+@wfRecorderBinds@
+
 # Modules additionnels
 include ~/.config/sway/conf.d/*.conf

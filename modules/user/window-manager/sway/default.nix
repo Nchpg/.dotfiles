@@ -48,6 +48,13 @@ let
     for_window [class="flameshot"] floating enable, border none, fullscreen disable
   '';
 
+  # Toggle : le même bind démarre puis arrête l'enregistrement (cf. le script
+  # screenrec du module wf-recorder). Print/Shift+Print restent à flameshot.
+  wfRecorderBinds = bindIf "gui.wfRecorder" ''
+    bindsym $mod+Print exec screenrec region
+    bindsym $mod+Shift+Print exec screenrec screen
+  '';
+
   # Résolu par stylix (thème actif ou surcharge userSettings.stylix.wallpaper).
   # Pas de ligne bg si stylix est coupé pour ce user.
   wallpaperBg = lib.optionalString (
@@ -82,6 +89,7 @@ let
         "@swayncBind@"
         "@flameshotDaemon@"
         "@flameshotBinds@"
+        "@wfRecorderBinds@"
       ]
       [
         config.userSettings.terminal.default
@@ -95,6 +103,7 @@ let
         swayncBind
         flameshotDaemon
         flameshotBinds
+        wfRecorderBinds
       ]
       templateContent;
 
