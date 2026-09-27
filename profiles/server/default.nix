@@ -145,6 +145,12 @@
             address = "10.8.0.7";
             presharedKeyKey = "wireguard/xiaomi_14tpro_preshared_key";
           }
+          {
+            name = "lenovo_tab_p12";
+            publicKey = "AyLyEp/YhPJaLNMwIfyZibWt6XymReCgVUXLLQ6JqXs=";
+            address = "10.8.0.8";
+            presharedKeyKey = "wireguard/lenovo_tab_p12_preshared_key";
+          }
         ];
 
         # SORTIE INTERNET COUPÉE, et c'est la conséquence directe du passage au
