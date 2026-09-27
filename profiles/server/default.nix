@@ -3,6 +3,33 @@
 # Profil headless : ni session graphique ni GDM (cf. modules/system/gdm, dont le
 # défaut suit la présence d'un window manager), une IP fixe et SSH. Prévu pour
 # tourner sur le host think, cible `server-think`.
+let
+  # Sources admises sur les services réservés à TES appareils dans le tunnel
+  # (le coffre, MyETF), pas aux téléphones de la famille.
+  #
+  # Dérivé des peers PAR LEUR NOM plutôt que recopié en dur : le jour où une
+  # adresse change dans `vpn.wireguard.peers`, l'autorisation suit. Le
+  # `throwIf` couvre le cas inverse — un peer renommé disparaîtrait
+  # silencieusement de cette liste, et le seul symptôme serait un 403 depuis
+  # l'appareil concerné, sans rien pour le relier à ce fichier.
+  #
+  # L'adresse de think en plus, pour la sonde de surveillance seule : elle vise
+  # 10.8.0.1 mais ressort masquée en 192.168.1.32 (cf. `allowedNetworks` dans
+  # modules/system/server/vaultwarden).
+  mesAppareils =
+    let
+      miens = [
+        "xiaomi_17t"
+        "gram"
+        "windows_gram"
+      ];
+      trouves = lib.filter (p: lib.elem p.name miens) config.systemSettings.vpn.wireguard.peers;
+    in
+    lib.throwIf (lib.length trouves != lib.length miens)
+      "profiles/server : un appareil de `mesAppareils` ne figure plus dans vpn.wireguard.peers. Renommer un peer lui retirerait l'accès en silence — corrige la liste `miens`."
+      (map (p: "${p.address}/32") trouves)
+    ++ [ "${config.systemSettings.network.staticIPv4.address}/32" ];
+in
 {
   config = {
     systemSettings = {
@@ -413,6 +440,15 @@
             url = "https://mnist.nathanchampagne.com/";
             module = "http_2xx";
           };
+
+          # MyETF, réservée au tunnel comme le coffre : la sonde part de think,
+          # dont l'adresse est dans `mesAppareils` pour cette raison. Elle vise
+          # 10.8.0.1 par le nom public, donc elle couvre aussi le joker DNS
+          # `*.vpn.` chez Cloudflare.
+          myetf = {
+            url = "https://etf.vpn.nathanchampagne.com/";
+            module = "http_2xx";
+          };
         };
 
         # Battement de cœur vers healthchecks.io, seul juge extérieur du montage.
@@ -799,29 +835,7 @@
         # famille, qui n'ont aucune raison d'atteindre ton coffre. Trois de
         # moins devant la page de connexion, et ce sont justement les trois que
         # tu ne maîtrises pas.
-        #
-        # Dérivé des peers PAR LEUR NOM plutôt que recopié en dur : le jour où
-        # une adresse change dans la liste ci-dessus, l'autorisation suit. Le
-        # `throwIf` couvre le cas inverse — un peer renommé disparaîtrait
-        # silencieusement de cette liste, et le seul symptôme serait un 403
-        # depuis l'appareil concerné, sans rien pour le relier à ce fichier.
-        #
-        # L'adresse de think en plus, pour la sonde de surveillance seule : elle
-        # vise 10.8.0.1 mais ressort masquée en 192.168.1.32 (cf. l'option dans
-        # le module).
-        allowedNetworks =
-          let
-            miens = [
-              "xiaomi_17t"
-              "gram"
-              "windows_gram"
-            ];
-            trouves = lib.filter (p: lib.elem p.name miens) config.systemSettings.vpn.wireguard.peers;
-          in
-          lib.throwIf (lib.length trouves != lib.length miens)
-            "profiles/server : un appareil autorisé sur le coffre ne figure plus dans vpn.wireguard.peers. Renommer un peer lui retirerait l'accès en silence — corrige la liste `miens`."
-            (map (p: "${p.address}/32") trouves)
-          ++ [ "${config.systemSettings.network.staticIPv4.address}/32" ];
+        allowedNetworks = mesAppareils;
 
         # FERMÉE depuis la création du premier compte. Les suivants — la famille
         # — passent par une invitation envoyée depuis une organisation du
@@ -1076,6 +1090,59 @@
         };
       };
 
+      # MyETF : analyse de portefeuilles d'ETF, servie depuis l'image que
+      # GitHub Actions publie à chaque poussée sur `main` du dépôt Nchpg/MyETF.
+      #
+      # JOIGNABLE PAR LE TUNNEL WIREGUARD ET RIEN D'AUTRE, comme le coffre :
+      # `public = false` ne pose aucune route dans cloudflared, et nginx refuse
+      # toute source hors de tes appareils. Ce sont tes positions et tes
+      # comptes, la famille n'a pas à y accéder.
+      #
+      # Aucun enregistrement DNS à créer : le joker `*.vpn.nathanchampagne.com`
+      # pointe déjà vers 10.8.0.1 chez Cloudflare, en « DNS only ».
+      apps."myetf" = {
+        domain = "etf.vpn.nathanchampagne.com";
+        public = false;
+        allowedNetworks = mesAppareils;
+
+        # Les cotations viennent de Yahoo Finance, de la BCE, de justETF… à
+        # chaque requête ou presque. Sans sortie, l'application démarre et
+        # affiche des portefeuilles sans prix.
+        internetAccess = true;
+
+        containers.web = {
+          image = "ghcr.io/nchpg/myetf@sha256:aebdb5a878db0709140386fdb1df33ef985b78e39a3b3caeeed9a0b124949792";
+          # Next en mode `standalone` écoute sur 3000 (cf. le Dockerfile).
+          port = 3000;
+
+          # Le dépôt est privé, l'image aussi : contrairement au portfolio, le
+          # tirage anonyme est refusé. Même jeton que le suivi de candidatures
+          # (PAT classique, `read:packages` seul), qui couvre tous les packages
+          # du compte.
+          login = {
+            username = "Nchpg";
+            passwordFile = config.sops.secrets."stage/ghcr_token".path;
+          };
+
+          # Portefeuilles, comptes et cache des cotations. Volume NOMMÉ : podman
+          # le remplit au premier montage depuis l'image, qui a déjà donné
+          # `/app/data` à son utilisateur non root — rien à préparer sur le
+          # host. À sauvegarder : c'est la seule copie de tes portefeuilles
+          # hors de gram.
+          volumes = [
+            {
+              source = "myetf-data";
+              target = "/app/data";
+              readOnly = false;
+            }
+          ];
+
+          # Pas de BASIC_AUTH_* : la barrière est le tunnel et la liste
+          # d'adresses ci-dessus. En local comme ici, l'application ne demande
+          # rien sans ces variables.
+        };
+      };
+
       # Tunnel créé depuis gram (`cloudflared tunnel login` puis `tunnel create`,
       # qui exigent un navigateur). Ici ne tourne que le démon, nourri par le
       # JSON de credentials via sops.
@@ -1295,5 +1362,11 @@
         nameservers = [ "127.0.0.1" ];
       };
     };
+
+    # Jeton GHCR en lecture seule, pour tirer l'image privée de MyETF (cf.
+    # `apps."myetf"`). Lu par root, au `podman login` qui précède le tirage.
+    # Le module privé de think le déclare aussi, pour son propre conteneur :
+    # les deux définitions fusionnent.
+    sops.secrets."stage/ghcr_token" = { };
   };
 }

@@ -112,7 +112,27 @@ let
 
   limitedApps = lib.filter (n: cfg.${n}.rateLimit.enable) names;
 
+  egressApps = lib.filter (n: cfg.${n}.internetAccess) names;
 
+  # Destinations qu'une application autorisée à sortir n'atteint PAS : le LAN,
+  # le tunnel, la boucle locale et le reste de ce qui ne se route pas sur
+  # internet. Même liste que la sortie des peers dans
+  # modules/system/server/vpn/wireguard, pour la même raison — « internet »
+  # ne doit pas vouloir dire « la box et les objets connectés ».
+  nonRoutable = [
+    "10.0.0.0/8"
+    "172.16.0.0/12"
+    "192.168.0.0/16"
+    "169.254.0.0/16"
+    "127.0.0.0/8"
+    "100.64.0.0/10"
+    "224.0.0.0/4"
+    "240.0.0.0/4"
+  ];
+
+  # `ghcr.io/moi/app@sha256:…` -> `ghcr.io`. Un nom sans hôte vient de Docker
+  # Hub, qui n'a pas besoin d'identifiants ici : aucune image n'en vient.
+  registryOf = image: lib.head (lib.splitString "/" image);
 
   zoneOf = appName: "app_${sanitize appName}";
 
@@ -210,6 +230,38 @@ let
       default = [ ];
       example = lib.literalExpression ''[ config.sops.secrets."monapp/env".path ]'';
       description = "Fichiers d'environnement, pour les secrets (sops).";
+    };
+
+    login = lib.mkOption {
+      default = null;
+      description = ''
+        Identifiants du registre, pour une image PRIVÉE. `null` : tirage
+        anonyme, ce qui suffit aux images publiques.
+
+        Le registre est déduit de l'image, pour qu'il ne puisse pas désigner un
+        autre hôte que celui d'où elle vient. Le jeton est lu depuis un fichier
+        — un secret sops — et jamais écrit dans le store.
+
+        Un jeton en LECTURE seule (`read:packages` pour ghcr.io) : c'est tout ce
+        que think fait d'un registre.
+      '';
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            username = lib.mkOption {
+              type = lib.types.str;
+              example = "moi";
+              description = "Compte du registre.";
+            };
+
+            passwordFile = lib.mkOption {
+              type = lib.types.path;
+              example = lib.literalExpression ''config.sops.secrets."ghcr/token".path'';
+              description = "Fichier contenant le jeton, typiquement un secret sops.";
+            };
+          };
+        }
+      );
     };
 
     cmd = lib.mkOption {
@@ -490,6 +542,47 @@ in
               '';
             };
 
+            allowedNetworks = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              example = [ "10.8.0.2/32" ];
+              description = ''
+                Sources autorisées par nginx, en notation `allow` : tout le
+                reste reçoit un 403 avant d'atteindre l'application. `null` :
+                aucun filtrage.
+
+                Le montage du coffre (cf. modules/system/server/vaultwarden),
+                pour une application qui ne doit sortir que par le tunnel
+                WireGuard : un nom sous `vpn.` résolu vers 10.8.0.1, `public`
+                à faux, et ici les adresses des appareils admis. C'est la
+                barrière qui tient le jour où un nom se retrouve routé par
+                mégarde — cloudflared arrive en 127.0.0.1, qui n'est pas dans
+                la liste.
+
+                Posé au niveau `server`, donc hérité par toutes les locations, y
+                compris celles de la limitation de débit. Ne regarde que
+                l'adresse de la connexion, jamais un en-tête.
+              '';
+            };
+
+            internetAccess = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Laisse les conteneurs de l'application ouvrir des connexions vers
+                internet — une API de cotations, un service tiers.
+
+                Vers internet SEULEMENT : les plages privées, le tunnel et la
+                boucle locale restent fermés, si bien qu'un conteneur compromis
+                n'y gagne pas un pied sur le LAN. Le retour du trafic passe par
+                la règle `established` du pare-feu, rien à ouvrir pour lui.
+
+                Faux par défaut : une application qui n'a rien à chercher dehors
+                doit échouer bruyamment le jour où elle essaie, plutôt que de
+                disposer en silence d'un accès que personne ne lui a accordé.
+              '';
+            };
+
             containers = lib.mkOption {
               description = ''
                 Conteneurs de l'application, un par service — la traduction
@@ -624,6 +717,18 @@ in
       {
         assertion = lib.all (a: !a.public) (lib.attrValues cfg) || config.systemSettings.cloudflared.enable;
         message = "systemSettings.apps : une application marquée `public` a besoin de systemSettings.cloudflared.enable pour être routée, aucun port n'étant ouvert sur la box.";
+      }
+      {
+        # Le trafic public arrive par cloudflared, donc de 127.0.0.1 : une liste
+        # qui ne le contient pas refuse tout internet, une liste qui le contient
+        # l'admet tout entier. Dans les deux cas le filtrage ne dit pas ce qu'il
+        # semble dire.
+        assertion = lib.all (a: !(a.public && a.allowedNetworks != null)) (lib.attrValues cfg);
+        message = "systemSettings.apps : `allowedNetworks` n'a pas de sens sur une application `public` — tout ce qui vient du tunnel Cloudflare se présente en 127.0.0.1.";
+      }
+      {
+        assertion = lib.all (a: a.allowedNetworks != [ ]) (lib.attrValues cfg);
+        message = "systemSettings.apps : `allowedNetworks` est vide, donc nginx refuserait toute source. `null` pour ne pas filtrer.";
       }
       {
         assertion = lib.all (a: a.containers != { }) (lib.attrValues cfg);
@@ -786,6 +891,11 @@ in
 
           inherit (c.container) cmd user;
 
+          login = lib.mkIf (c.container.login != null) {
+            registry = registryOf c.container.image;
+            inherit (c.container.login) username passwordFile;
+          };
+
           extraOptions = [
             # AUCUNE capacité. Un processus qui écoute au-dessus de 1024 et sert
             # des fichiers n'en utilise pas une seule. Sans ça, le moteur en
@@ -863,74 +973,71 @@ in
     # réseau à la main. Ce genre de bascule doit être automatique, sinon le
     # prochain changement d'option réseau coûtera la même demi-heure.
     systemd.services = lib.mkMerge (
-      (map (
-        appName:
-        {
-          ${networkUnitOf appName} = {
-            description = "Réseau des conteneurs de ${appName}";
-            wantedBy = [ "multi-user.target" ];
-            after = [ "network-online.target" ];
-            wants = [ "network-online.target" ];
+      (map (appName: {
+        ${networkUnitOf appName} = {
+          description = "Réseau des conteneurs de ${appName}";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "network-online.target" ];
+          wants = [ "network-online.target" ];
 
-            serviceConfig = {
-              Type = "oneshot";
-              RemainAfterExit = true;
-            };
-
-            # `script` et non `serviceConfig.ExecStart` : le `||` est une
-            # construction du SHELL, que systemd n'interprète pas. En ExecStart,
-            # podman recevrait « || » comme argument.
-            #
-            # ARGUMENTS ÉCHAPPÉS, parce que ceci est un shell lancé par root :
-            # les noms viennent de la configuration et non d'un inconnu, mais une
-            # interpolation nue dans une commande privilégiée est une mauvaise
-            # habitude qui finit par rencontrer une valeur inattendue. Une
-            # assertion restreint déjà les noms ; l'échappement est la seconde
-            # barrière.
-            #
-            # `isolate=true` : netavark bloque alors le trafic entre réseaux
-            # portant cette option. Ce n'est PAS son défaut — la page de manuel
-            # est explicite, l'isolation ne vaut qu'entre réseaux qui l'ont
-            # demandée. Deux applications ne peuvent donc pas se parler, et ça ne
-            # dépend pas seulement des règles de pare-feu posées plus bas.
-            script =
-              let
-                net = lib.escapeShellArg (networkOf appName);
-                bridge = lib.escapeShellArg (bridgeOf appName);
-                opts = lib.escapeShellArgs [
-                  "--opt"
-                  "com.docker.network.bridge.name=${bridgeOf appName}"
-                  "--opt"
-                  "isolate=true"
-                ];
-              in
-              ''
-                create() {
-                  ${podmanBin} network create ${opts} ${net}
-                }
-
-                if ! ${podmanBin} network exists ${net}; then
-                  create
-                  exit 0
-                fi
-
-                # Le pont RÉELLEMENT en place, comparé à celui qu'on attend. Un
-                # écart signifie que le réseau vient d'une version antérieure de
-                # ce module et que les règles de pare-feu ne le désignent plus.
-                actual=$(${podmanBin} network inspect ${net} --format '{{.NetworkInterface}}' 2> /dev/null || true)
-
-                if [ "$actual" != ${bridge} ]; then
-                  echo "réseau ${networkOf appName} : pont « $actual » au lieu de « ${bridgeOf appName} », recréation" >&2
-                  # `-f` : les conteneurs attachés sont détachés d'office. Ils
-                  # sont `partOf` cette unité (cf. plus bas), donc systemd les a
-                  # déjà arrêtés avant d'arriver ici, et les redémarrera après.
-                  ${podmanBin} network rm -f ${net}
-                  create
-                fi
-              '';
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
           };
-        }
-      ) names)
+
+          # `script` et non `serviceConfig.ExecStart` : le `||` est une
+          # construction du SHELL, que systemd n'interprète pas. En ExecStart,
+          # podman recevrait « || » comme argument.
+          #
+          # ARGUMENTS ÉCHAPPÉS, parce que ceci est un shell lancé par root :
+          # les noms viennent de la configuration et non d'un inconnu, mais une
+          # interpolation nue dans une commande privilégiée est une mauvaise
+          # habitude qui finit par rencontrer une valeur inattendue. Une
+          # assertion restreint déjà les noms ; l'échappement est la seconde
+          # barrière.
+          #
+          # `isolate=true` : netavark bloque alors le trafic entre réseaux
+          # portant cette option. Ce n'est PAS son défaut — la page de manuel
+          # est explicite, l'isolation ne vaut qu'entre réseaux qui l'ont
+          # demandée. Deux applications ne peuvent donc pas se parler, et ça ne
+          # dépend pas seulement des règles de pare-feu posées plus bas.
+          script =
+            let
+              net = lib.escapeShellArg (networkOf appName);
+              bridge = lib.escapeShellArg (bridgeOf appName);
+              opts = lib.escapeShellArgs [
+                "--opt"
+                "com.docker.network.bridge.name=${bridgeOf appName}"
+                "--opt"
+                "isolate=true"
+              ];
+            in
+            ''
+              create() {
+                ${podmanBin} network create ${opts} ${net}
+              }
+
+              if ! ${podmanBin} network exists ${net}; then
+                create
+                exit 0
+              fi
+
+              # Le pont RÉELLEMENT en place, comparé à celui qu'on attend. Un
+              # écart signifie que le réseau vient d'une version antérieure de
+              # ce module et que les règles de pare-feu ne le désignent plus.
+              actual=$(${podmanBin} network inspect ${net} --format '{{.NetworkInterface}}' 2> /dev/null || true)
+
+              if [ "$actual" != ${bridge} ]; then
+                echo "réseau ${networkOf appName} : pont « $actual » au lieu de « ${bridgeOf appName} », recréation" >&2
+                # `-f` : les conteneurs attachés sont détachés d'office. Ils
+                # sont `partOf` cette unité (cf. plus bas), donc systemd les a
+                # déjà arrêtés avant d'arriver ici, et les redémarrera après.
+                ${podmanBin} network rm -f ${net}
+                create
+              fi
+            '';
+        };
+      }) names)
 
       # Chaque conteneur attend son réseau. `requires` et pas seulement `after` :
       # un conteneur démarré sans son réseau ne dégrade pas, il échoue.
@@ -940,16 +1047,13 @@ in
       # en font partie, et les relance ensuite. Sans lui, une recréation
       # arracherait le pont sous des conteneurs qui continueraient de tourner en
       # croyant être connectés.
-      ++ (map (
-        c:
-        {
-          ${unitOf c.key} = {
-            after = [ "${networkUnitOf c.appName}.service" ];
-            requires = [ "${networkUnitOf c.appName}.service" ];
-            partOf = [ "${networkUnitOf c.appName}.service" ];
-          };
-        }
-      ) allContainers)
+      ++ (map (c: {
+        ${unitOf c.key} = {
+          after = [ "${networkUnitOf c.appName}.service" ];
+          requires = [ "${networkUnitOf c.appName}.service" ];
+          partOf = [ "${networkUnitOf c.appName}.service" ];
+        };
+      }) allContainers)
 
       # DÉLAI ENTRE DEUX TENTATIVES, porté à dix secondes.
       #
@@ -1069,6 +1173,12 @@ in
         lib.concatMapStrings (n: ''
           iifname "${bridgeOf n}" oifname "${bridgeOf n}" accept comment "trafic interne a ${n}"
         '') names
+        # La sortie vers internet, pour les seules applications qui la
+        # déclarent (cf. `internetAccess`). Le masquerade est posé par netavark
+        # sur chaque réseau qu'il crée, rien à ajouter de ce côté.
+        + lib.concatMapStrings (n: ''
+          iifname "${bridgeOf n}" oifname != "${bridgeOf n}" ip daddr != { ${lib.concatStringsSep ", " nonRoutable} } accept comment "${n} vers internet"
+        '') egressApps
       )
     );
 
@@ -1103,7 +1213,19 @@ in
     );
 
     services.nginx.virtualHosts = lib.mapAttrs' (
-      name: app: lib.nameValuePair app.domain (myLib.mkTlsVhost { locations = locationsOf name app; })
+      name: app:
+      lib.nameValuePair app.domain (
+        myLib.mkTlsVhost (
+          {
+            locations = locationsOf name app;
+          }
+          // lib.optionalAttrs (app.allowedNetworks != null) {
+            extraConfig = ''
+              ${lib.concatMapStrings (n: "allow ${n};\n") app.allowedNetworks}deny all;
+            '';
+          }
+        )
+      )
     ) cfg;
 
     # Une entrée par application publique dans le tunnel déjà existant.
