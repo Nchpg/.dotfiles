@@ -47,8 +47,7 @@ in
     hardware.graphics = {
       enable = true;
       extraPackages = with pkgs-unstable; [
-        intel-compute-runtime # OpenCL driver
-        intel-compute-runtime.drivers # Level-Zero -> /run/opengl-driver/lib
+        intel-compute-runtime # OpenCL + Level-Zero (libze_intel_gpu.so)
         intel-media-driver
         vpl-gpu-rt
         level-zero
