@@ -1111,7 +1111,7 @@ in
         internetAccess = true;
 
         containers.web = {
-          image = "ghcr.io/nchpg/myetf@sha256:c5953a5fb6130b5d82ab9932088ee4038b04bd4dd07917385ddabb7df2d78a59";
+          image = "ghcr.io/nchpg/myetf@sha256:6ef61304b70df03c2c641d2c3085554a9112fed8cac3ff0f552d32b9f2e22593";
           # Next en mode `standalone` écoute sur 3000 (cf. le Dockerfile).
           port = 3000;
 
