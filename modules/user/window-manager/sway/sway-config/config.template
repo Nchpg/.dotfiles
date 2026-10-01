@@ -69,7 +69,11 @@ seat * xcursor_theme Adwaita 24
     @menuBind@
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
 
-    bindsym Control+Escape exec @lockCmd@
+    # --locked : marche AUSSI écran verrouillé, donc sur l'écran rouge (verrou
+    # abandonné, swaylock mort) : relance un swaylock, que sway accepte en
+    # remplacement -> écran de mot de passe au lieu d'un reboot forcé. Sans
+    # effet si un swaylock tourne déjà (garde pgrep, cf. lockBindCmd).
+    bindsym --locked Control+Escape exec @lockCmd@
 
     # Capot fermé sans veille (cf. `awake`) : l'écran interne ne s'éteint
     # pas tout seul (rétroéclairage allumé contre le clavier). --locked :

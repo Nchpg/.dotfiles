@@ -122,8 +122,41 @@ let
   # Reste une fenêtre de 2 s sur l'inactivité (verrou auto puis capot fermé
   # aussitôt), jugée négligeable.
   graceArgs = "--grace 2";
-  swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
+  # swaylock-effects patché (./swaylock-effects-defer-ack.patch) : brancher
+  # ou débrancher un écran pendant le verrouillage envoie des configures
+  # rapprochés ; sans tampon libre, swaylock acquittait la nouvelle taille et
+  # validait la surface sans image à cette taille -> erreur de protocole,
+  # sway le tue, écran rouge sans issue (reboot forcé). Le patch n'acquitte
+  # qu'une fois un tampon à la bonne taille attaché, comme swaylock amont.
+  #
+  # Même garde-fou que le patch de sway : build arrêté si un des fichiers
+  # patchés change (relire, retester au sway imbriqué avec `swaymsg
+  # create_output` pendant le verrou, mettre à jour les empreintes).
+  swaylockPatchedFiles = ''
+    091f2a07579124c1a7f30977432edbde45bef2243fd81248cdbfbabf4b136956  main.c
+    4cfb98b4f31231217a090a7ca6ec9131976ce6f28bfcb45a726a56c5fcbc125e  render.c
+    deaf48855906eccb3ede3ef15a05bad64fed8d93fa0615b7492566ed1f71b673  include/swaylock.h
+  '';
+  swaylockPackage = cfg.pkgs.swaylock-effects.overrideAttrs (old: {
+    prePatch = (old.prePatch or "") + ''
+      if ! sha256sum --check --quiet <<'EOF'
+      ${swaylockPatchedFiles}
+      EOF
+      then
+        echo "swaylock-effects-defer-ack.patch : les fichiers ci-dessus ont changé dans swaylock-effects ''${version}." >&2
+        echo "Relire et retester le patch, puis mettre à jour swaylockPatchedFiles" >&2
+        echo "(modules/user/window-manager/sway/default.nix)." >&2
+        exit 1
+      fi
+    '';
+    patches = (old.patches or [ ]) ++ [ ./swaylock-effects-defer-ack.patch ];
+  });
+  swaylockBin = "${swaylockPackage}/bin/swaylock";
   lockCmd = "${swaylockBin} ${lockArgs} ${fadeArgs}";
+  # Bind Ctrl+Échap (--locked) : ne lance un swaylock que s'il n'en tourne
+  # aucun. Verrouille en temps normal ; sur l'écran rouge (swaylock mort),
+  # en relance un pour déverrouiller ; sans effet sous un verrou vivant.
+  lockBindCmd = "${cfg.pkgs.procps}/bin/pgrep -x swaylock >/dev/null || ${lockCmd}";
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
   lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${fadeArgs} ${graceArgs}";
@@ -198,7 +231,7 @@ let
       [
         config.userSettings.terminal.default
         tmuxBind
-        lockCmd
+        lockBindCmd
         "${lidCloseCmd}"
         wallpaperBg
         chromeBind
@@ -259,7 +292,7 @@ in
       awake
       brightnessctl # remplace `light`, retiré en nixpkgs 26.05
       playerctl
-      swaylock-effects
+      swaylockPackage
     ];
 
     # Lock après 10 min d'inactivité, écrans éteints après 15 min (rallumés au
