@@ -1,0 +1,132 @@
+diff --git a/include/sway/server.h b/include/sway/server.h
+index 8c81148..64a8f80 100644
+--- a/include/sway/server.h
++++ b/include/sway/server.h
+@@ -16,6 +16,11 @@ struct sway_session_lock {
+ 	struct wlr_surface *focused;
+ 	bool abandoned;
+ 
++	// Fonds opaques des sorties affichés seulement quand le client a dessiné
++	// (cf. lock.c) : évite le flash noir avant la première image du locker.
++	bool revealed;
++	struct wl_event_source *reveal_timer;
++
+ 	struct wl_list outputs; // struct sway_session_lock_output
+ 
+ 	// invalid if the session is abandoned
+diff --git a/sway/lock.c b/sway/lock.c
+index b1df657..19d1c1e 100644
+--- a/sway/lock.c
++++ b/sway/lock.c
+@@ -28,6 +28,50 @@ struct sway_session_lock_output {
+ 	struct wl_listener surface_map;
+ };
+ 
++// Délai max (ms) pendant lequel le contenu reste visible derrière un verrou
++// qui n'a pas encore dessiné. Au-delà, fond opaque quoi qu'il arrive.
++#define SESSION_LOCK_REVEAL_TIMEOUT_MS 200
++
++static void lock_output_show_background(struct sway_session_lock_output *output) {
++	wlr_scene_node_set_enabled(&output->background->node, true);
++}
++
++// Garde-fou : masque TOUTES les sorties (timeout, abandon du client).
++static void session_lock_reveal_all(struct sway_session_lock *lock) {
++	lock->revealed = true;
++	if (lock->reveal_timer) {
++		wl_event_source_remove(lock->reveal_timer);
++		lock->reveal_timer = NULL;
++	}
++	struct sway_session_lock_output *output;
++	wl_list_for_each(output, &lock->outputs, link) {
++		lock_output_show_background(output);
++	}
++}
++
++// Toutes les sorties actives ont reçu leur image : le garde-fou n'a plus
++// d'objet. Les sorties éteintes (root->all_outputs les inclut) n'auront
++// jamais de surface du locker, on ne les attend pas.
++static void session_lock_check_all_drawn(struct sway_session_lock *lock) {
++	if (lock->revealed) {
++		return;
++	}
++	struct sway_session_lock_output *output;
++	wl_list_for_each(output, &lock->outputs, link) {
++		if (output->output->enabled && !output->background->node.enabled) {
++			return;
++		}
++	}
++	session_lock_reveal_all(lock);
++}
++
++static int handle_reveal_timeout(void *data) {
++	struct sway_session_lock *lock = data;
++	sway_log(SWAY_DEBUG, "session lock: client too slow to draw, blanking outputs");
++	session_lock_reveal_all(lock);
++	return 0;
++}
++
+ static void focus_surface(struct sway_session_lock *lock,
+ 		struct wlr_surface *focused) {
+ 	lock->focused = focused;
+@@ -61,6 +105,9 @@ static void refocus_output(struct sway_session_lock_output *output) {
+ 
+ static void handle_surface_map(struct wl_listener *listener, void *data) {
+ 	struct sway_session_lock_output *surf = wl_container_of(listener, surf, surface_map);
++	// Le client a dessiné sur cette sortie : le fond passe derrière lui.
++	lock_output_show_background(surf);
++	session_lock_check_all_drawn(surf->lock);
+ 	if (surf->lock->focused == NULL) {
+ 		focus_surface(surf->lock, surf->surface->surface);
+ 	}
+@@ -176,6 +223,12 @@ static struct sway_session_lock_output *session_lock_output_create(
+ 		return NULL;
+ 	}
+ 
++	// Caché tant que le client n'a rien dessiné ici, sauf si le verrou est
++	// abandonné ou déjà révélé (sortie branchée en cours de verrouillage,
++	// timeout écoulé) : là, opaque tout de suite.
++	wlr_scene_node_set_enabled(&background->node,
++		lock->abandoned || lock->revealed);
++
+ 	lock_output->output = output;
+ 	lock_output->tree = tree;
+ 	lock_output->background = background;
+@@ -192,6 +245,11 @@ static struct sway_session_lock_output *session_lock_output_create(
+ }
+ 
+ static void sway_session_lock_destroy(struct sway_session_lock* lock) {
++	if (lock->reveal_timer) {
++		wl_event_source_remove(lock->reveal_timer);
++		lock->reveal_timer = NULL;
++	}
++
+ 	struct sway_session_lock_output *lock_output, *tmp_lock_output;
+ 	wl_list_for_each_safe(lock_output, tmp_lock_output, &lock->outputs, link) {
+ 		// destroying the node will also destroy the whole lock output
+@@ -250,6 +308,8 @@ static void handle_abandon(struct wl_listener *listener, void *data) {
+ 	}
+ 
+ 	lock->abandoned = true;
++	// Client mort : fond rouge visible partout, immédiatement.
++	session_lock_reveal_all(lock);
+ 	wl_list_remove(&lock->destroy.link);
+ 	wl_list_remove(&lock->unlock.link);
+ 	wl_list_remove(&lock->new_surface.link);
+@@ -279,6 +339,16 @@ static void handle_session_lock(struct wl_listener *listener, void *data) {
+ 
+ 	wl_list_init(&sway_lock->outputs);
+ 
++	sway_lock->reveal_timer = wl_event_loop_add_timer(server.wl_event_loop,
++		handle_reveal_timeout, sway_lock);
++	if (sway_lock->reveal_timer) {
++		wl_event_source_timer_update(sway_lock->reveal_timer,
++			SESSION_LOCK_REVEAL_TIMEOUT_MS);
++	} else {
++		// Pas de timer = pas de garde-fou : comportement d'origine.
++		sway_lock->revealed = true;
++	}
++
+ 	sway_log(SWAY_DEBUG, "session locked");
+ 
+ 	struct sway_seat *seat;
