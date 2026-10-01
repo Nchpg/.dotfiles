@@ -168,6 +168,26 @@ in
       Terminal=false
     '';
 
+    # `awake` (cf. ../default.nix) : verrouille en gardant la machine éveillée
+    # capot fermé. Tasse en orange (base09), la couleur de l'anneau de ce
+    # verrou-là, pour l'associer d'un coup d'œil.
+    xdg.dataFile."icons/rofi-awake.svg".text = ''
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+        <path fill="none" stroke="${c.base09}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              d="M4 10 h12 v4 a5 5 0 0 1 -5 5 h-2 a5 5 0 0 1 -5 -5 z M16 11 h1.5 a2.5 2.5 0 0 1 0 5 H16 M8 3 v4 M12 3 v4"/>
+      </svg>
+    '';
+
+    xdg.dataFile."applications/awake.desktop".text = ''
+      [Desktop Entry]
+      Type=Application
+      Name=Awake
+      Comment=Verrouiller en restant éveillé capot fermé
+      Icon=${config.xdg.dataHome}/icons/rofi-awake.svg
+      Exec=awake
+      Terminal=false
+    '';
+
     home.file.".config/sway/conf.d/rofi.conf".text = ''
       for_window [app_id="rofi"] floating enable, border none
     '';
