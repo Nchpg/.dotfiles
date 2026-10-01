@@ -78,8 +78,8 @@ let
   # ci-dessous : une seule définition, pas de divergence possible.
   # Écran SANS capture (branché pendant le verrouillage) : swaylock prend
   # l'image par défaut (--image sans nom de sortie) et lui applique les mêmes
-  # effets (flou, vignette) qu'aux captures. Sans elle, fond blanc
-  # (--color par défaut). Fond d'écran stylix réduit à 1920 px au build :
+  # effets (flou, vignette) qu'aux captures. Sans elle, couleur unie
+  # (--color, blanche par défaut, d'où le base00 ci-dessous). Fond d'écran stylix réduit à 1920 px au build :
   # le flou est calculé au verrouillage, sur TOUTES les images, une image
   # 4K le rallongerait. --color en dernier recours (pas de fond d'écran).
   lockFallbackImage =
@@ -99,19 +99,25 @@ let
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
     + " --fade-in 1";
-  # Le bref noir (~66 ms) avant le fondu ne vient PAS de swaylock : sway pose
-  # un fond opaque sur tous les écrans dès la demande de verrouillage
-  # (sway/lock.c), jusqu'à la première image du client. Voulu par le
-  # protocole ext-session-lock, rien à régler côté config. Un assombrissement
-  # préalable (chayang) a été essayé : pire, le bureau revient en pleine
-  # luminosité pendant la capture + le flou, après le noir.
-  # Délai de grâce (n'importe quel input déverrouille) seulement hors veille :
-  # le timer de swaylock est en CLOCK_MONOTONIC, figé pendant la suspension.
-  # Sur before-sleep, la grâce restait donc entière au réveil -> ouvrir le
-  # capot et bouger la souris déverrouillait sans mot de passe.
+  # Le bref noir (~66 ms) qui précédait le fondu venait de sway, pas de
+  # swaylock : fond opaque posé dès la demande de verrouillage, jusqu'à la
+  # première image du client. Supprimé par un patch de sway, cf.
+  # modules/system/window-manager/sway (sway-smooth-lock.patch). Un
+  # assombrissement préalable (chayang) avait été essayé avant : pire, le
+  # bureau revient en pleine luminosité pendant la capture + le flou.
+  # Délai de grâce (n'importe quel input déverrouille) pour le SEUL verrou
+  # d'inactivité, où il rattrape un verrou non voulu. Le timer de swaylock
+  # est en CLOCK_MONOTONIC, figé pendant la suspension : une grâce en cours
+  # au moment de la veille reste entière au réveil, et ouvrir le capot puis
+  # bouger la souris déverrouille sans mot de passe. D'où aucune grâce :
+  #   - sur before-sleep (la veille suit immédiatement) ;
+  #   - sur le bind manuel : Ctrl+Échap puis capot fermé dans les 2 s est un
+  #     geste naturel, et ce verrou-là est voulu, la grâce n'y sert à rien.
+  # Reste une fenêtre de 2 s sur l'inactivité (verrou auto puis capot fermé
+  # aussitôt), jugée négligeable.
   graceArgs = "--grace 2";
   swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
-  lockCmd = "${swaylockBin} ${lockArgs} ${graceArgs}";
+  lockCmd = "${swaylockBin} ${lockArgs}";
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
   lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${graceArgs}";
@@ -125,6 +131,11 @@ let
   # (veille). Rien à désactiver, impossible de l'oublier actif.
   # Pas de délai de grâce : ouvrir le capot et toucher une touche ne doit
   # pas suffire à déverrouiller.
+  #
+  # N'inhibe QUE le capot, pas `sleep` : rien d'autre ne met en veille ici,
+  # et bloquer `sleep` empêcherait UPower d'agir à batterie critique
+  # (CriticalPowerAction=HybridSleep) -> portable vidé jusqu'à la coupure
+  # si awake est oublié sur batterie.
   #
   # Anneau orange du thème (au lieu du violet) et « Éveillé » sous l'heure :
   # on voit d'un coup d'œil que ce verrou-là garde la machine allumée.
@@ -155,7 +166,7 @@ let
     name = "awake";
     runtimeInputs = [ cfg.pkgs.systemd ];
     text = ''
-      exec systemd-inhibit --what=handle-lid-switch:sleep --mode=block \
+      exec systemd-inhibit --what=handle-lid-switch --mode=block \
         --who=awake --why="Session verrouillée, éveillée capot fermé (awake)" \
         ${swaylockBin} ${lockArgs} ${awakeArgs}
     '';

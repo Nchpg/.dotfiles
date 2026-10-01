@@ -15,7 +15,7 @@ index 8c81148..64a8f80 100644
  
  	// invalid if the session is abandoned
 diff --git a/sway/lock.c b/sway/lock.c
-index b1df657..19d1c1e 100644
+index b1df657..b5f8a4a 100644
 --- a/sway/lock.c
 +++ b/sway/lock.c
 @@ -28,6 +28,50 @@ struct sway_session_lock_output {
@@ -113,17 +113,33 @@ index b1df657..19d1c1e 100644
  	wl_list_remove(&lock->destroy.link);
  	wl_list_remove(&lock->unlock.link);
  	wl_list_remove(&lock->new_surface.link);
-@@ -279,6 +339,16 @@ static void handle_session_lock(struct wl_listener *listener, void *data) {
+@@ -259,9 +319,13 @@ static void handle_session_lock(struct wl_listener *listener, void *data) {
+ 	struct wlr_session_lock_v1 *lock = data;
+ 	struct wl_client *client = wl_resource_get_client(lock->resource);
+ 
++	// Remplacer un verrou abandonné : l'écran était rouge (contenu masqué),
++	// le nouveau verrou ne doit pas le dévoiler le temps de dessiner.
++	bool replacing_abandoned = false;
+ 	if (server.session_lock.lock) {
+ 		if (server.session_lock.lock->abandoned) {
+ 			sway_log(SWAY_INFO, "Replacing abandoned lock");
++			replacing_abandoned = true;
+ 			sway_session_lock_destroy(server.session_lock.lock);
+ 		} else {
+ 			sway_log(SWAY_ERROR, "Cannot lock an already locked session");
+@@ -279,6 +343,18 @@ static void handle_session_lock(struct wl_listener *listener, void *data) {
  
  	wl_list_init(&sway_lock->outputs);
  
-+	sway_lock->reveal_timer = wl_event_loop_add_timer(server.wl_event_loop,
-+		handle_reveal_timeout, sway_lock);
++	sway_lock->reveal_timer = replacing_abandoned ? NULL :
++		wl_event_loop_add_timer(server.wl_event_loop,
++			handle_reveal_timeout, sway_lock);
 +	if (sway_lock->reveal_timer) {
 +		wl_event_source_timer_update(sway_lock->reveal_timer,
 +			SESSION_LOCK_REVEAL_TIMEOUT_MS);
 +	} else {
-+		// Pas de timer = pas de garde-fou : comportement d'origine.
++		// Verrou abandonné remplacé, ou timer impossible à créer : opaque
++		// d'emblée, comportement d'origine.
 +		sway_lock->revealed = true;
 +	}
 +
