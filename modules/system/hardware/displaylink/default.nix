@@ -18,5 +18,9 @@ in
     # S'ajoute (fusion de liste) au "modesetting" posé par intel-graphics :
     # ne PAS le remettre ici, la liste ne déduplique pas.
     services.xserver.videoDrivers = [ "displaylink" ];
+
+    # evdi gère mal le curseur matériel sous wlroots : un second curseur
+    # figé reste affiché sur l'écran du dock. Curseur logiciel partout.
+    environment.sessionVariables.WLR_NO_HARDWARE_CURSORS = "1";
   };
 }
