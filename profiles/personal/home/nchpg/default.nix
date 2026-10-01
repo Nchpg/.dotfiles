@@ -208,6 +208,8 @@
       };
 
       tmux.enable = true;
+
+      cli.kat.enable = true;
     };
   };
 }
