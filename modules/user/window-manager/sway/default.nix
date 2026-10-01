@@ -97,8 +97,14 @@ let
     + lockFallbackImage
     + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
-    + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
-    + " --fade-in 1";
+    + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000";
+  # Fondu net -> flou, pour les verrous qu'on VOIT se poser. Pas sur
+  # before-sleep : la veille gèle le fondu en cours et il reprend à
+  # l'ouverture du capot, ce qui donne l'illusion que le verrou se pose
+  # au réveil (il est posé avant la veille). Sans fondu, swaylock rend aussi
+  # la main dès le verrouillage (avec, -f attend fondu + 0,5 s) : la veille
+  # part plus vite.
+  fadeArgs = "--fade-in 1";
   # Le bref noir (~66 ms) qui précédait le fondu venait de sway, pas de
   # swaylock : fond opaque posé dès la demande de verrouillage, jusqu'à la
   # première image du client. Supprimé par un patch de sway, cf.
@@ -117,10 +123,10 @@ let
   # aussitôt), jugée négligeable.
   graceArgs = "--grace 2";
   swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
-  lockCmd = "${swaylockBin} ${lockArgs}";
+  lockCmd = "${swaylockBin} ${lockArgs} ${fadeArgs}";
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
-  lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${graceArgs}";
+  lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${fadeArgs} ${graceArgs}";
   lockCmdBeforeSleep = "${swaylockBin} -f ${lockArgs}";
 
   # `awake` : verrouille ET garde la machine éveillée capot fermé (session
@@ -168,7 +174,7 @@ let
     text = ''
       exec systemd-inhibit --what=handle-lid-switch --mode=block \
         --who=awake --why="Session verrouillée, éveillée capot fermé (awake)" \
-        ${swaylockBin} ${lockArgs} ${awakeArgs}
+        ${swaylockBin} ${lockArgs} ${fadeArgs} ${awakeArgs}
     '';
   };
 
