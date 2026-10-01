@@ -140,6 +140,11 @@ seat * xcursor_theme Adwaita 24
     # Swap focus between the tiling area and the floating area
     bindsym $mod+space focus mode_toggle
 
+    # Plafond des fenêtres flottantes. Par défaut c'est la taille de TOUT le
+    # layout (les deux écrans) : le sélecteur de fichiers GTK, qui retient sa
+    # taille de l'écran 2560x1600, débordait de l'écran 1080p.
+    floating_maximum_size 1800 x 1000
+
     # Move focus to the parent container
     bindsym $mod+a focus parent
 #
