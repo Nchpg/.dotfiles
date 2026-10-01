@@ -81,12 +81,18 @@ let
     + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000"
-    + " --grace 2 --fade-in 1";
+    + " --fade-in 1";
+  # Délai de grâce (n'importe quel input déverrouille) seulement hors veille :
+  # le timer de swaylock est en CLOCK_MONOTONIC, figé pendant la suspension.
+  # Sur before-sleep, la grâce restait donc entière au réveil -> ouvrir le
+  # capot et bouger la souris déverrouillait sans mot de passe.
+  graceArgs = "--grace 2";
   swaylockBin = "${cfg.pkgs.swaylock-effects}/bin/swaylock";
-  lockCmd = "${swaylockBin} ${lockArgs}";
+  lockCmd = "${swaylockBin} ${lockArgs} ${graceArgs}";
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
-  lockCmdDaemonized = "${swaylockBin} -f ${lockArgs}";
+  lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${graceArgs}";
+  lockCmdBeforeSleep = "${swaylockBin} -f ${lockArgs}";
 
   finalConfigContent =
     lib.replaceStrings
@@ -178,7 +184,7 @@ in
       timeouts = [
         {
           timeout = 600;
-          command = lockCmdDaemonized;
+          command = lockCmdIdle;
         }
         {
           timeout = 900;
@@ -186,7 +192,7 @@ in
           resumeCommand = "${swaymsgBin} 'output * power on'";
         }
       ];
-      events."before-sleep" = lockCmdDaemonized;
+      events."before-sleep" = lockCmdBeforeSleep;
     };
 
     # Pas de stylix.targets.sway : ce target ne thémise que
