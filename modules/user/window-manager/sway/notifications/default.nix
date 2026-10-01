@@ -2,6 +2,7 @@
   config,
   lib,
   myLib,
+  osConfig,
   ...
 }:
 
@@ -150,6 +151,60 @@ let
       echo ok > "$state"
     fi
   '';
+
+  # Tunnel vers think (cf. systemSettings.vpn.client) : prévient quand le
+  # serveur cesse de répondre, et quand il revient. Même test que le module
+  # vpn de waybar (TCP 443 sur 10.8.0.1), mais dans un service à part :
+  # waybar lance son script une fois PAR ÉCRAN, les notifs seraient doublées.
+  #
+  # Un changement d'état n'est notifié qu'une fois confirmé par deux tests
+  # d'affilée : au réveil, le réseau met quelques secondes à revenir, et un
+  # seul échec déclencherait une fausse alerte suivie d'un « rétabli ».
+  vpnClient = osConfig.systemSettings.vpn.client.enable or false;
+
+  vpnAlert = cfg.pkgs.writeShellScript "vpn-alert" ''
+    set -u
+    notify=${cfg.pkgs.libnotify}/bin/notify-send
+    dir="''${XDG_RUNTIME_DIR:-/tmp}/vpn-alert"
+    mkdir -p "$dir"
+
+    if [ ! -d /sys/class/net/wg0 ]; then
+      now=off
+    elif ${cfg.pkgs.coreutils}/bin/timeout 2 ${cfg.pkgs.bash}/bin/bash -c 'exec 3<>/dev/tcp/10.8.0.1/443' 2>/dev/null; then
+      now=on
+    else
+      now=down
+    fi
+
+    shown=$(cat "$dir/shown" 2>/dev/null || echo "")
+    pending=$(cat "$dir/pending" 2>/dev/null || echo "")
+
+    # Premier passage de la session : on prend l'état tel quel, sans notif.
+    if [ -z "$shown" ]; then
+      echo "$now" > "$dir/shown"
+      exit 0
+    fi
+
+    if [ "$now" = "$shown" ]; then
+      rm -f "$dir/pending"
+      exit 0
+    fi
+    if [ "$now" != "$pending" ]; then
+      echo "$now" > "$dir/pending"
+      exit 0
+    fi
+
+    rm -f "$dir/pending"
+    echo "$now" > "$dir/shown"
+    sync=string:x-canonical-private-synchronous:vpn
+    case "$now" in
+      down) "$notify" -u normal -i ${icon "status/network-vpn-no-route" c.base08} -h "$sync" "VPN : think injoignable" \
+              "Le tunnel est monté mais 10.8.0.1 ne répond plus. Nextcloud ne synchronise pas." ;;
+      off)  "$notify" -u normal -i ${icon "status/network-vpn-disabled" c.base0A} -h "$sync" "VPN : tunnel arrêté" \
+              "wg0 n'existe plus. sudo systemctl start wg-quick-wg0" ;;
+      on)   "$notify" -u normal -i ${icon "status/network-vpn" c.base0B} -h "$sync" "VPN : think joignable" "Le tunnel fonctionne de nouveau." ;;
+    esac
+  '';
 in
 {
   options = {
@@ -209,6 +264,23 @@ in
       Timer = {
         OnBootSec = "1min";
         OnUnitActiveSec = "1min";
+      };
+      Install.WantedBy = [ "timers.target" ];
+    };
+
+    systemd.user.services.vpn-alert = lib.mkIf vpnClient {
+      Unit.Description = "Alerte de perte du tunnel VPN vers think";
+      Service = {
+        Type = "oneshot";
+        ExecStart = "${vpnAlert}";
+      };
+    };
+    systemd.user.timers.vpn-alert = lib.mkIf vpnClient {
+      Unit.Description = "Vérifie périodiquement que think répond dans le tunnel";
+      Timer = {
+        OnBootSec = "1min";
+        OnUnitActiveSec = "30s";
+        AccuracySec = "5s"; # défaut 1 min : le 30 s ne voudrait rien dire
       };
       Install.WantedBy = [ "timers.target" ];
     };
