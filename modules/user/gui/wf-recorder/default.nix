@@ -8,6 +8,11 @@
 let
   cfg = config.userSettings.gui.wfRecorder;
 
+  # Icônes de notif aux couleurs du thème (cf. lib/mk-themed-icon.nix).
+  c = config.lib.stylix.colors.withHashtag;
+  iconRec = myLib.mkThemedIcon cfg.pkgs "actions/media-record" c.base08;
+  iconDone = myLib.mkThemedIcon cfg.pkgs "actions/object-select" c.base0B;
+
   # Un seul script pour les deux binds Sway : le mode arrive en argument.
   # Sémantique TOGGLE — le même bind démarre puis arrête, parce qu'un
   # wf-recorder lancé par `exec` sway n'a pas de terminal où faire Ctrl-C.
@@ -53,12 +58,12 @@ let
       mkdir -p ${lib.escapeShellArg cfg.outputDir}
       file=${lib.escapeShellArg cfg.outputDir}/"rec-$(date +%F-%H%M%S).mp4"
 
-      notify-send -t 2000 "Enregistrement démarré" "$(basename "$file")"
+      notify-send -t 2000 -i ${iconRec} "Enregistrement démarré" "$(basename "$file")"
       wf-recorder ${lib.optionalString cfg.audio "--audio "}"''${target[@]}" -f "$file"
 
       # Chemin dans le presse-papier : la notif swaync disparaît, pas le chemin.
       printf '%s' "$file" | wl-copy
-      notify-send "Enregistrement sauvegardé" "$file"
+      notify-send -i ${iconDone} "Enregistrement sauvegardé" "$file"
     '';
   };
 in

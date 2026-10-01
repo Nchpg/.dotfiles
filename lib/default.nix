@@ -27,6 +27,7 @@ lib:
   mkInternalPorts = import ./mk-internal-ports.nix lib;
   optionEnabled = import ./option-enabled.nix lib;
   mkPkgsOption = import ./mk-pkgs-option.nix;
+  mkThemedIcon = import ./mk-themed-icon.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
   mkTlsVhost = import ./mk-tls-vhost.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;

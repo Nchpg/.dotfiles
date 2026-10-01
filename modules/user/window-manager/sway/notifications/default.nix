@@ -13,6 +13,9 @@ let
   # Taille "popups" de stylix, un peu petite pour des notifs.
   popupSize = toString (config.stylix.fonts.sizes.popups + 3);
 
+  # Icônes de notif aux couleurs du thème (cf. lib/mk-themed-icon.nix).
+  icon = myLib.mkThemedIcon cfg.pkgs;
+
   swayncStyle = ''
     * {
       font-family: "${font}";
@@ -117,8 +120,10 @@ let
     state="''${XDG_RUNTIME_DIR:-/tmp}/battery-alert.state"
     last=$(cat "$state" 2>/dev/null || echo ok)
 
-    icon_low=${cfg.pkgs.adwaita-icon-theme}/share/icons/Adwaita/symbolic/status/battery-low-symbolic.svg
-    icon_caution=${cfg.pkgs.adwaita-icon-theme}/share/icons/Adwaita/symbolic/status/battery-caution-symbolic.svg
+    # Jaune -> orange -> rouge avec la gravité.
+    icon_low=${icon "status/battery-low" c.base0A}
+    icon_verylow=${icon "status/battery-low" c.base09}
+    icon_caution=${icon "status/battery-caution" c.base08}
 
     # Détermine le palier courant (du plus grave au moins grave).
     bucket=ok; urgency=normal; icon="$icon_low"; title=""; body=""
@@ -126,7 +131,7 @@ let
       bucket=crit; urgency=critical; icon="$icon_caution"
       title="Batterie critique"; body="Batterie à $cap% — branche le chargeur !"
     elif [ "$cap" -le "$verylow" ]; then
-      bucket=verylow; urgency=critical; icon="$icon_low"
+      bucket=verylow; urgency=critical; icon="$icon_verylow"
       title="Batterie très faible"; body="Batterie à $cap%"
     elif [ "$cap" -le "$low" ]; then
       bucket=low; urgency=normal; icon="$icon_low"
