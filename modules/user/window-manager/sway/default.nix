@@ -134,6 +134,23 @@ let
     "--ring-color ${config.lib.stylix.colors.base09}"
     + " --key-hl-color ${config.lib.stylix.colors.base0A}"
     + " --datestr Éveillé";
+  # Capot fermé : on éteint l'écran interne quand AUCUNE veille ne suit,
+  # c'est-à-dire si :
+  #   - `awake` tient son inhibiteur (repéré par son --who chez logind) ;
+  #   - ou un autre écran est actif : logind ignore alors le capot
+  #     (HandleLidSwitchDocked=ignore par défaut), l'écran resterait allumé.
+  # Sinon la veille arrive et éteint tout : on n'y touche pas, l'écran doit
+  # rester capturable par le swaylock de before-sleep (sinon fond de repli
+  # au lieu du bureau flouté).
+  lidCloseCmd = cfg.pkgs.writeShellScript "lid-close" ''
+    if ${cfg.pkgs.systemd}/bin/systemd-inhibit --list --no-legend --no-pager \
+      | ${cfg.pkgs.gawk}/bin/awk '$1 == "awake" { found = 1 } END { exit !found }' \
+      || ${swaymsgBin} -t get_outputs \
+      | ${lib.getExe cfg.pkgs.jq} -e '[.[] | select(.active and .name != "eDP-1")] | length > 0' >/dev/null; then
+      exec ${swaymsgBin} output eDP-1 power off
+    fi
+  '';
+
   awake = cfg.pkgs.writeShellApplication {
     name = "awake";
     runtimeInputs = [ cfg.pkgs.systemd ];
@@ -150,6 +167,7 @@ let
         "@terminal@"
         "@tmuxBind@"
         "@lockCmd@"
+        "@lidCloseCmd@"
         "@wallpaperBg@"
         "@chromeBind@"
         "@firefoxBind@"
@@ -164,6 +182,7 @@ let
         config.userSettings.terminal.default
         tmuxBind
         lockCmd
+        "${lidCloseCmd}"
         wallpaperBg
         chromeBind
         firefoxBind

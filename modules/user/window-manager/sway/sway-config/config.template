@@ -73,9 +73,11 @@ seat * xcursor_theme Adwaita 24
 
     # Capot fermé sans veille (cf. `awake`) : l'écran interne ne s'éteint
     # pas tout seul (rétroéclairage allumé contre le clavier). --locked :
-    # doit marcher écran verrouillé, c'est justement le cas d'awake. Sans
-    # awake, la veille suit de toute façon : sans effet visible.
-    bindswitch --locked lid:on output eDP-1 power off
+    # doit marcher écran verrouillé, c'est justement le cas d'awake.
+    # Éteint SEULEMENT si awake est actif (cf. lidCloseCmd) : sinon la
+    # veille suit, et un écran déjà éteint fait échouer la capture de
+    # swaylock (before-sleep) -> fond de repli au lieu du bureau flouté.
+    bindswitch --locked lid:on exec @lidCloseCmd@
     bindswitch --locked lid:off output eDP-1 power on
 
 
