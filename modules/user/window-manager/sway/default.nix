@@ -37,15 +37,28 @@ let
   swayncBind = bindIf "windowManager.sway.notifications" "bindsym $mod+n exec swaync-client -t -sw";
 
   flameshotDaemon = bindIf "gui.flameshot" "exec QT_QPA_PLATFORM=wayland flameshot";
+
+  # La surface de l'overlay couvre TOUT le layout (tous les écrans), mais
+  # flameshot demande lui-même un plein écran sur UN output juste après le
+  # map : sway y compresse l'image, et ça écrase un for_window. On attend
+  # cette demande puis on repasse en `fullscreen global` (étalé 1:1).
+  flameshotGui = cfg.pkgs.writeShellScript "flameshot-gui" ''
+    QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui &
+    for _ in $(seq 40); do
+      mode=$(swaymsg -t get_tree | ${lib.getExe cfg.pkgs.jq} '[.. | objects | select(.type == "con" and .name == "flameshot") | .fullscreen_mode] | first // empty')
+      if [ "$mode" = 1 ]; then
+        exec swaymsg '[title="^flameshot$"] border none, fullscreen enable global'
+      fi
+      sleep 0.05
+    done
+  '';
   flameshotBinds = bindIf "gui.flameshot" ''
     # QT_QPA_PLATFORM=wayland : copie via KSystemClipboard (wlr-data-control),
     # actif seulement en Wayland natif. QT_QPA_PLATFORMTHEME=xdgdesktopportal :
     # boîte "Save" via le sélecteur de fichiers GTK.
-    bindsym Print exec QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui
+    # Lancé via flameshotGui (cf. plus haut) pour le multi-écran.
+    bindsym Print exec ${flameshotGui}
     bindsym Shift+Print exec grim -g "$(slurp -d)" - | wl-copy
-
-    for_window [app_id="flameshot"] floating enable, border none, fullscreen disable
-    for_window [class="flameshot"] floating enable, border none, fullscreen disable
   '';
 
   # Toggle : le même bind démarre puis arrête l'enregistrement (cf. le script
