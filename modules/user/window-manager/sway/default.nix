@@ -152,15 +152,38 @@ let
     patches = (old.patches or [ ]) ++ [ ./swaylock-effects-defer-ack.patch ];
   });
   swaylockBin = "${swaylockPackage}/bin/swaylock";
+  pgrep = "${cfg.pkgs.procps}/bin/pgrep";
+  pkill = "${cfg.pkgs.procps}/bin/pkill";
+  user = config.home.username;
   lockCmd = "${swaylockBin} ${lockArgs} ${fadeArgs}";
   # Bind Ctrl+Échap (--locked) : ne lance un swaylock que s'il n'en tourne
   # aucun. Verrouille en temps normal ; sur l'écran rouge (swaylock mort),
   # en relance un pour déverrouiller ; sans effet sous un verrou vivant.
-  lockBindCmd = "${cfg.pkgs.procps}/bin/pgrep -x swaylock >/dev/null || ${lockCmd}";
+  # -u : seulement les swaylock de CE compte, sinon un processus « swaylock »
+  # d'un autre utilisateur (guest) ferait croire au verrou et Ctrl+Échap ne
+  # verrouillerait plus rien.
+  lockBindCmd = "${pgrep} -u ${user} -x swaylock >/dev/null || ${lockCmd}";
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
   lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${fadeArgs} ${graceArgs}";
-  lockCmdBeforeSleep = "${swaylockBin} -f ${lockArgs}";
+  # Avant la veille, on REMPLACE tout swaylock déjà lancé par un verrou sans
+  # grâce : un verrou d'inactivité (grâce 2 s) posé juste avant la veille
+  # gardait sinon sa grâce gelée jusqu'au réveil (cf. graceArgs), et le
+  # swaylock de before-sleep échouait (« already locked »). SIGTERM (défaut
+  # de pkill) tue swaylock SANS déverrouiller (seul SIGUSR1 déverrouille) :
+  # sway passe le verrou en « abandonné » (écran rouge, toujours verrouillé)
+  # et accepte le nouveau en remplacement. Si le remplacement échouait, on
+  # reste sur l'écran rouge verrouillé, levé par Ctrl+Échap : pas de fuite.
+  lockCmdBeforeSleep = cfg.pkgs.writeShellScript "lock-before-sleep" ''
+    if ${pgrep} -u ${user} -x swaylock >/dev/null; then
+      ${pkill} -u ${user} -x swaylock
+      for _ in $(seq 40); do
+        ${pgrep} -u ${user} -x swaylock >/dev/null || break
+        sleep 0.05
+      done
+    fi
+    exec ${swaylockBin} -f ${lockArgs}
+  '';
 
   # `awake` : verrouille ET garde la machine éveillée capot fermé (session
   # Claude Code pilotée à distance, par ex.). L'inhibiteur logind vit
@@ -194,7 +217,7 @@ let
   # au lieu du bureau flouté).
   lidCloseCmd = cfg.pkgs.writeShellScript "lid-close" ''
     if ${cfg.pkgs.systemd}/bin/systemd-inhibit --list --no-legend --no-pager \
-      | ${cfg.pkgs.gawk}/bin/awk '$1 == "awake" { found = 1 } END { exit !found }' \
+      | ${cfg.pkgs.gawk}/bin/awk '$1 == "awake" && $3 == "${user}" { found = 1 } END { exit !found }' \
       || ${swaymsgBin} -t get_outputs \
       | ${lib.getExe cfg.pkgs.jq} -e '[.[] | select(.active and .name != "eDP-1")] | length > 0' >/dev/null; then
       exec ${swaymsgBin} output eDP-1 power off
@@ -312,7 +335,7 @@ in
           resumeCommand = "${swaymsgBin} 'output * power on'";
         }
       ];
-      events."before-sleep" = lockCmdBeforeSleep;
+      events."before-sleep" = "${lockCmdBeforeSleep}";
     };
 
     # Pas de stylix.targets.sway : ce target ne thémise que
