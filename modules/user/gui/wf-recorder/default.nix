@@ -28,6 +28,7 @@ let
       wl-clipboard
       sway # swaymsg, pour l'output focus
       jq
+      glib.bin # gdbus, pour fermer la notif de démarrage
     ];
     text = ''
       # -x : ne matche que le process wf-recorder lui-même, pas ce wrapper
@@ -58,11 +59,36 @@ let
       mkdir -p ${lib.escapeShellArg cfg.outputDir}
       file=${lib.escapeShellArg cfg.outputDir}/"rec-$(date +%F-%H%M%S).mp4"
 
-      notify-send -t 2000 -i ${iconRec} "Enregistrement démarré" "$(basename "$file")"
+      # La notif ne doit pas finir DANS la vidéo : affichée 1 s puis fermée
+      # avant de lancer wf-recorder (le 0.5 s laisse finir l'animation de
+      # sortie de swaync).
+      id=$(notify-send -p -i ${iconRec} "Enregistrement démarré" "$(basename "$file")")
+      sleep 1
+      gdbus call --session --dest org.freedesktop.Notifications \
+        --object-path /org/freedesktop/Notifications \
+        --method org.freedesktop.Notifications.CloseNotification "$id" >/dev/null || true
+      sleep 0.5
+
+      # Idem pour les notifs qui arriveraient PENDANT l'enregistrement :
+      # « ne pas déranger » le temps de la capture, état d'avant restauré en
+      # sortie (trap : aussi si wf-recorder échoue, errexit oblige).
+      if command -v swaync-client >/dev/null; then
+        dnd_before=$(swaync-client -D 2>/dev/null || echo false)
+        if [ "$dnd_before" != true ]; then
+          swaync-client -dn >/dev/null
+          trap 'swaync-client -df >/dev/null' EXIT
+        fi
+      fi
+
       wf-recorder ${lib.optionalString cfg.audio "--audio "}"''${target[@]}" -f "$file"
 
       # Chemin dans le presse-papier : la notif swaync disparaît, pas le chemin.
       printf '%s' "$file" | wl-copy
+      # DND rétabli AVANT la notif de fin, sinon elle serait masquée.
+      if [ "''${dnd_before:-true}" != true ]; then
+        swaync-client -df >/dev/null
+        trap - EXIT
+      fi
       notify-send -i ${iconDone} "Enregistrement sauvegardé" "$file"
     '';
   };
