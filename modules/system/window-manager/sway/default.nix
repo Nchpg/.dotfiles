@@ -175,6 +175,16 @@ in
     xdg.portal = {
       enable = true;
       wlr.enable = true; # backend Screencast/Screenshot pour wlroots
+      # Dès 2 écrans, xdpw lance un sélecteur pour choisir celui à partager,
+      # cherché dans son PATH systemd où il n'y en a aucun : le partage échoue
+      # sans erreur côté appli ("no output found"). Clic sur l'écran voulu.
+      wlr.settings.screencast = {
+        chooser_type = "simple";
+        chooser_cmd = "${lib.getExe cfg.pkgs.slurp} -f 'Monitor: %o' -or";
+        # Recommandé multi-GPU : l'écran DisplayLink (evdi) est sur un autre
+        # device DRM que l'iGPU.
+        force_mod_linear = 1;
+      };
       extraPortals = [ cfg.pkgs.xdg-desktop-portal-gtk ];
 
       # Sans routage explicite, avec plusieurs backends, FileChooser n'est
