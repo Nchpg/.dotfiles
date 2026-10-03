@@ -91,13 +91,16 @@ let
         ''
       );
 
-  lockArgs =
-    "--screenshots --clock --indicator"
+  # Sans --screenshots : seulement pour remplacer un verrou existant avant
+  # la veille (cf. lockCmdBeforeSleep), où la capture serait l'écran rouge.
+  lockArgsNoCapture =
+    "--clock --indicator"
     + " --color ${config.lib.stylix.colors.base00}"
     + lockFallbackImage
     + " --indicator-radius 150 --indicator-thickness 7 --effect-blur 7x5"
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000";
+  lockArgs = "--screenshots " + lockArgsNoCapture;
   # Fondu net -> flou, pour les verrous qu'on VOIT se poser. Pas sur
   # before-sleep : la veille gèle le fondu en cours et il reprend à
   # l'ouverture du capot, ce qui donne l'illusion que le verrou se pose
@@ -154,6 +157,8 @@ let
   swaylockBin = "${swaylockPackage}/bin/swaylock";
   pgrep = "${cfg.pkgs.procps}/bin/pgrep";
   pkill = "${cfg.pkgs.procps}/bin/pkill";
+  sleep = "${cfg.pkgs.coreutils}/bin/sleep";
+  ps = "${cfg.pkgs.procps}/bin/ps";
   user = config.home.username;
   lockCmd = "${swaylockBin} ${lockArgs} ${fadeArgs}";
   # Bind Ctrl+Échap (--locked) : ne lance un swaylock que s'il n'en tourne
@@ -166,21 +171,32 @@ let
   # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
   # (swayidle attend la fin de la commande avant de continuer).
   lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${fadeArgs} ${graceArgs}";
-  # Avant la veille, on REMPLACE tout swaylock déjà lancé par un verrou sans
-  # grâce : un verrou d'inactivité (grâce 2 s) posé juste avant la veille
-  # gardait sinon sa grâce gelée jusqu'au réveil (cf. graceArgs), et le
-  # swaylock de before-sleep échouait (« already locked »). SIGTERM (défaut
+  # Avant la veille, on REMPLACE un swaylock encore dans sa grâce par un
+  # verrou sans grâce : un verrou d'inactivité (grâce 2 s) posé juste avant
+  # la veille gardait sinon sa grâce gelée jusqu'au réveil (cf. graceArgs),
+  # et le swaylock de before-sleep échouait (« already locked »). Un verrou
+  # de plus de 3 s n'a plus de grâce : on le garde tel quel. SIGTERM (défaut
   # de pkill) tue swaylock SANS déverrouiller (seul SIGUSR1 déverrouille) :
   # sway passe le verrou en « abandonné » (écran rouge, toujours verrouillé)
-  # et accepte le nouveau en remplacement. Si le remplacement échouait, on
-  # reste sur l'écran rouge verrouillé, levé par Ctrl+Échap : pas de fuite.
+  # et accepte le nouveau en remplacement. Ce nouveau verrou ne capture pas
+  # l'écran (lockArgsNoCapture) : la capture serait ce fond rouge, flouté.
+  # Si le remplacement échouait, on reste sur l'écran rouge verrouillé, levé
+  # par Ctrl+Échap : pas de fuite.
+  # `sleep` et `ps` en chemins absolus, {1..40} au lieu de `seq` : le PATH
+  # du service swayidle n'a pas coreutils.
   lockCmdBeforeSleep = cfg.pkgs.writeShellScript "lock-before-sleep" ''
-    if ${pgrep} -u ${user} -x swaylock >/dev/null; then
-      ${pkill} -u ${user} -x swaylock
-      for _ in $(seq 40); do
-        ${pgrep} -u ${user} -x swaylock >/dev/null || break
-        sleep 0.05
+    pids=$(${pgrep} -u ${user} -x swaylock)
+    if [ -n "$pids" ]; then
+      for pid in $pids; do
+        age=$(${ps} -o etimes= -p "$pid") || continue
+        [ "$age" -lt 3 ] || exit 0
       done
+      ${pkill} -u ${user} -x swaylock
+      for _ in {1..40}; do
+        ${pgrep} -u ${user} -x swaylock >/dev/null || break
+        ${sleep} 0.05
+      done
+      exec ${swaylockBin} -f ${lockArgsNoCapture}
     fi
     exec ${swaylockBin} -f ${lockArgs}
   '';
