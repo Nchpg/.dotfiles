@@ -336,6 +336,15 @@ in
             # continuerait d'annoncer l'ancien TXT et lego conclurait à tort que la
             # propagation a échoué.
             dnsResolver = "1.1.1.1:53";
+
+            # Sans ARI, lego n'envoie plus le champ `replaces`, que Let's Encrypt
+            # refuse (403 « requester account did not request the certificate
+            # being replaced ») pour un certificat émis par un AUTRE compte —
+            # cas de tous ceux émis avant le passage de `acmeEmail` à null, qui a
+            # changé de compte. Le renouvellement se cale alors sur la seule
+            # expiration (`--dynamic`) : on perd les renouvellements anticipés
+            # que Let's Encrypt demande via ARI lors d'une révocation de masse.
+            extraLegoRenewFlags = [ "--ari-disable" ];
           };
         };
 
