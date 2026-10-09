@@ -40,6 +40,13 @@ let
 
     /* GTK ignore `gap` : marge sur l'icône à la place. */
     .notification-content .image { margin-right: 18px; }
+    /* Le style de base de swaync arrondit l'image (border-radius: 100px),
+       fait pour les avatars : ça rogne les coins des icônes. Même
+       sélecteur que lui pour passer devant. */
+    .notification-row .notification-background .notification
+      .notification-default-action .notification-content .image {
+      border-radius: 0;
+    }
     .notification-content .text-box { margin-left: 4px; }
 
     .summary { font-weight: bold; font-size: 1.15em; color: ${c.base05}; }
