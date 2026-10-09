@@ -34,6 +34,9 @@ in
       commandLineArgs = [
         "--ozone-platform-hint=auto"
         "--enable-features=WaylandWindowDecorations"
+        # Rouvre fenêtres et onglets de la dernière fois, comme
+        # browser.startup.page = 3 côté Firefox (cf. sway-session restore).
+        "--restore-last-session"
       ];
     };
   };

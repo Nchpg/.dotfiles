@@ -40,6 +40,9 @@ in
         # désinstalle au rebuild toute extension installée à la main).
         settings = {
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
+          # Rouvre fenêtres et onglets de la dernière fois : c'est ce qui
+          # remplit les fenêtres que `sway-session restore` remet en place.
+          "browser.startup.page" = 3;
         };
         userChrome = lib.optionalString themed ''
           /* Appliquer uniquement les couleurs Stylix sans modifier la disposition */

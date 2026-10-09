@@ -68,6 +68,13 @@ let
     bindsym $mod+Shift+Print exec screenrec screen
   '';
 
+  # Photo des fenêtres avant un reboot, puis tout relancer et ranger à sa
+  # place (cf. le module session).
+  sessionBinds = bindIf "windowManager.sway.session" ''
+    bindsym $mod+F5 exec sway-session save
+    bindsym $mod+Shift+F5 exec sway-session restore
+  '';
+
   # Résolu par stylix (thème actif ou surcharge userSettings.stylix.wallpaper).
   # Pas de ligne bg si stylix est coupé pour ce user.
   wallpaperBg = lib.optionalString (
@@ -266,6 +273,7 @@ let
         "@flameshotDaemon@"
         "@flameshotBinds@"
         "@wfRecorderBinds@"
+        "@sessionBinds@"
       ]
       [
         config.userSettings.terminal.default
@@ -281,6 +289,7 @@ let
         flameshotDaemon
         flameshotBinds
         wfRecorderBinds
+        sessionBinds
       ]
       templateContent;
 

@@ -19,6 +19,7 @@
         waybar.enable = true;
         notifications.enable = true;
         rofi.enable = true;
+        session.enable = true;
 
         pickers = {
           cliphist.enable = true;

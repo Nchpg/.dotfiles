@@ -231,5 +231,9 @@ bindsym XF86MonBrightnessUp exec ~/.config/sway/brightness.sh up
 # bloc injecté seulement si le module wf-recorder est activé.
 @wfRecorderBinds@
 
+# Sauvegarde/restauration des fenêtres ($mod+F5 / $mod+Shift+F5) : bloc
+# injecté seulement si le module session est activé.
+@sessionBinds@
+
 # Modules additionnels
 include ~/.config/sway/conf.d/*.conf
