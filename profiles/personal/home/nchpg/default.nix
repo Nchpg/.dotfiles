@@ -165,10 +165,7 @@
         # maison, donc la synchro passe en direct sans tunnel ni portail.
         nextcloud.enable = true;
 
-        artcraft = {
-          enable = true;
-          tray.enable = true;
-        };
+        artcraft.enable = true;
       };
 
       gui = {
