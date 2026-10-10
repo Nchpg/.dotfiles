@@ -161,6 +161,9 @@ in
     libxkbcommon
     vulkan-loader
     libGL
+    # Sélecteur de fichiers (rfd) : passe par le portail via libdbus, sinon
+    # retombe sur zenity, absent -> aucune fenêtre à l'ouverture de fichier.
+    dbus
   ];
 
   environment.systemPackages = with pkgs-stable; [ lm_sensors ];
