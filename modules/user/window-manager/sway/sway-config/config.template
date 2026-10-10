@@ -169,6 +169,11 @@ seat * xcursor_theme Adwaita 24
     # taille de l'écran 2560x1600, débordait de l'écran 1080p.
     floating_maximum_size 1800 x 1000
 
+    # Dialogues du portail (sélecteur de fichiers...) : ils ne flottent d'eux-
+    # mêmes que rattachés à une fenêtre parente. Les apps qui n'en passent pas
+    # (rfd : Craft App Suite...) les ouvraient en tuile.
+    for_window [app_id="xdg-desktop-portal-gtk"] floating enable
+
     # Move focus to the parent container
     bindsym $mod+a focus parent
 #
