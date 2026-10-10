@@ -60,6 +60,18 @@ let
       cp -r ${extracted}/usr/share/icons $out/share/
     '';
   };
+
+  syncDesktop = cfg.pkgs.writeShellApplication {
+    name = "artcraft-sync-desktop";
+    runtimeInputs = with cfg.pkgs; [
+      coreutils
+      findutils
+      gnugrep
+      gnused
+      desktop-file-utils
+    ];
+    text = builtins.readFile ./sync-desktop.sh;
+  };
 in
 {
   options.userSettings.apps.artcraft = {
@@ -74,7 +86,31 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ launcher ];
+    home.packages = [
+      launcher
+      syncDesktop
+    ];
+
+    # Entrées de menu des apps installées par le launcher (cf.
+    # sync-desktop.sh) : resynchro à chaque install/MAJ/désinstall dans
+    # ~/Applications, et une fois à la connexion pour rattraper l'existant.
+    systemd.user.paths.artcraft-sync-desktop = {
+      Unit.Description = "Surveille ~/Applications (apps ArtCraft)";
+      Path = {
+        PathChanged = "%h/Applications";
+        MakeDirectory = true;
+      };
+      Install.WantedBy = [ "default.target" ];
+    };
+
+    systemd.user.services.artcraft-sync-desktop = {
+      Unit.Description = "Entrées de menu des apps ArtCraft (~/Applications)";
+      Service = {
+        Type = "oneshot";
+        ExecStart = "${syncDesktop}/bin/artcraft-sync-desktop";
+      };
+      Install.WantedBy = [ "default.target" ];
+    };
 
     # Unité systemd plutôt que l'option « Open at login » du launcher : elle
     # écrirait un fichier autostart pointant un chemin du store (cassé au
