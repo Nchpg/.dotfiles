@@ -1,0 +1,95 @@
+{
+  config,
+  lib,
+  myLib,
+  ...
+}:
+
+# ArtCraft Launcher : installe et met à jour la Craft App Suite (PhotoCraft,
+# VectorCraft, FilmCraft, ... clones open source d'Adobe). Gaté par profil.
+#
+# Partage des rôles : Nix gère le LAUNCHER (épinglé par pinned.json, bumpé par
+# update.sh), le launcher gère les APPS (AppImages dans ~/Applications, MAJ en
+# un clic). Les apps sortent quasi tous les jours en alpha : les épingler une
+# par une ferait un bump de hash par jour et par app.
+#
+# Pourquoi le launcher n'écrase pas sa version Nix : son auto-update ne
+# s'active que lancé en AppImage ($APPIMAGE) ou en .deb/.rpm dans /usr/bin.
+# Extrait par wrapType2, ni l'un ni l'autre : il affiche juste un bandeau
+# « Download » quand une version sort, à ignorer (le bump passe par update.sh).
+let
+  cfg = config.userSettings.apps.artcraft;
+
+  # Version + hash épinglés automatiquement par update.sh
+  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
+
+  pname = "artcraft-launcher";
+  # Préfixe des .desktop, icônes et unités dans l'AppImage.
+  appId = "ai.storyteller.artcraft-launcher";
+
+  src = cfg.pkgs.fetchurl {
+    url = "https://github.com/storytold/craft-launcher/releases/download/v${pinned.version}/artcraft-launcher-${pinned.version}-linux-x86_64.AppImage";
+    hash = pinned.sha256;
+  };
+
+  extracted = cfg.pkgs.appimageTools.extract {
+    inherit pname src;
+    inherit (pinned) version;
+  };
+
+  launcher = cfg.pkgs.appimageTools.wrapType2 {
+    inherit pname src;
+    inherit (pinned) version;
+
+    # Les apps lancées par le launcher (« Open ») tournent DANS son bac à
+    # sable bwrap, où le fusermount setuid ne marche pas : leur AppImage ne
+    # peut pas monter son squashfs (« No suitable fusermount binary »). Ce
+    # mode l'extrait dans /tmp à la place, au prix d'un démarrage un peu plus
+    # lent.
+    profile = ''
+      export APPIMAGE_EXTRACT_AND_RUN=1
+    '';
+
+    # .desktop de l'AppImage : Exec pointe le binaire interne, à remplacer par
+    # le wrapper (seul à monter l'environnement FHS).
+    extraInstallCommands = ''
+      install -Dm444 ${extracted}/usr/share/applications/${appId}.desktop \
+        $out/share/applications/${appId}.desktop
+      substituteInPlace $out/share/applications/${appId}.desktop \
+        --replace-fail 'Exec=artcraft-launcher' "Exec=$out/bin/${pname}"
+      cp -r ${extracted}/usr/share/icons $out/share/
+    '';
+  };
+in
+{
+  options.userSettings.apps.artcraft = {
+    enable = lib.mkEnableOption "ArtCraft Launcher (Craft App Suite, alternatives open source à Adobe)";
+
+    pkgs = myLib.mkPkgsOption { inherit lib config; };
+
+    tray.enable = lib.mkEnableOption ''
+      lancement du launcher en arrière-plan avec la session (icône de tray dans
+      waybar). Nécessaire pour les notifications de MAJ des apps : il ne
+      vérifie les releases (toutes les heures) que tant qu'il tourne'';
+  };
+
+  config = lib.mkIf cfg.enable {
+    home.packages = [ launcher ];
+
+    # Unité systemd plutôt que l'option « Open at login » du launcher : elle
+    # écrirait un fichier autostart pointant un chemin du store (cassé au
+    # prochain bump), que Sway ne lit de toute façon pas.
+    systemd.user.services.artcraft-launcher = lib.mkIf cfg.tray.enable {
+      Unit = {
+        Description = "ArtCraft Launcher (tray, MAJ de la Craft App Suite)";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        ExecStart = "${launcher}/bin/${pname} --hidden";
+        Restart = "on-failure";
+      };
+    };
+  };
+}

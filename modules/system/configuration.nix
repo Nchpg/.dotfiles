@@ -154,6 +154,13 @@ in
     stdenv.cc.cc.lib
     zlib
     openssl
+    # Apps GUI Wayland/Vulkan lancées en direct (AppImages de la Craft App
+    # Suite via leur .desktop, cf. modules/user/apps/artcraft) : sans elles,
+    # échec `NoWaylandLib` au démarrage.
+    wayland
+    libxkbcommon
+    vulkan-loader
+    libGL
   ];
 
   environment.systemPackages = with pkgs-stable; [ lm_sensors ];

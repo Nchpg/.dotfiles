@@ -164,6 +164,11 @@
         # `https://cloud.nathanchampagne.com` — le nom résout vers le LAN à la
         # maison, donc la synchro passe en direct sans tunnel ni portail.
         nextcloud.enable = true;
+
+        artcraft = {
+          enable = true;
+          tray.enable = true;
+        };
       };
 
       gui = {
