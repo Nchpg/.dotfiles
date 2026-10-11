@@ -165,10 +165,9 @@ in
       description = ''
         Monte le tunnel au démarrage.
 
-        FAUX par défaut, et c'est délibéré sur un portable : un tunnel complet
-        fait sortir tout le trafic par la maison, ce qui n'a aucun intérêt quand
-        on y est déjà et ce qui bride le débit sur une connexion plus rapide que
-        celle de la maison.
+        FAUX par défaut : c'est au host de choisir. Le tunnel ne transportant
+        que le sous-réseau du VPN (pas un tunnel complet), le monter en
+        permanence ne détourne pas le reste du trafic ; gram le fait.
 
         Bascule manuelle :
           sudo systemctl start wg-quick-wg0

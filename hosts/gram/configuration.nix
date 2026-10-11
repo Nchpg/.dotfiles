@@ -30,9 +30,9 @@
   # lui est propre. Sous `profiles/personal`, personal-think hériterait d'un
   # tunnel vers lui-même et de la même adresse.
   #
-  # Rien ne démarre au boot (cf. `autostart` du module) : un tunnel complet à la
-  # maison ferait sortir le trafic par la box pour y revenir. Bascule à la main,
-  #   sudo systemctl start wg-quick-wg0
+  # Monté au boot (`autostart` plus bas) : le tunnel ne transporte que
+  # 10.8.0.0/24, sans détour du reste du trafic. Bascule à la main au besoin,
+  #   sudo systemctl stop wg-quick-wg0
   #
   # Les deux résolveurs sont ceux de la maison, dans l'ordre : wg-quick remplace
   # le résolveur du système pendant que le tunnel est monté, ce qui fait que

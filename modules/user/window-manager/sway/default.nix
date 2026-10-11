@@ -218,9 +218,10 @@ let
   # pas suffire à déverrouiller.
   #
   # N'inhibe QUE le capot, pas `sleep` : rien d'autre ne met en veille ici,
-  # et bloquer `sleep` empêcherait UPower d'agir à batterie critique
-  # (CriticalPowerAction=HybridSleep) -> portable vidé jusqu'à la coupure
-  # si awake est oublié sur batterie.
+  # et bloquer `sleep` empêcherait UPower d'agir à batterie critique -> portable
+  # vidé jusqu'à la coupure si awake est oublié sur batterie. (Action réelle :
+  # extinction. HybridSleep, le défaut NixOS, exige un swap disque pour
+  # `resume` ; avec zram seul, UPower retombe sur PowerOff.)
   #
   # Anneau orange du thème (au lieu du violet) et « Éveillé » sous l'heure :
   # on voit d'un coup d'œil que ce verrou-là garde la machine allumée.
