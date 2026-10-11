@@ -48,6 +48,14 @@ in
       enable = true;
       package = cfg.pkgs.fish;
 
+      # Une copie UNIVERSELLE de fish_complete_path (reste de fisher) est
+      # réécrite et allongée par chaque `set`/`set -a` non scopé (complétions
+      # HM, kitty...) : 8500 entrées, 1,1 s de démarrage. La globale définie
+      # par fish suffit ; on supprime l'universelle si elle réapparaît.
+      shellInit = lib.mkBefore ''
+        set -qU fish_complete_path; and set -eU fish_complete_path
+      '';
+
       interactiveShellInit = builtins.concatStringsSep "\n" [
         (builtins.readFile ../common)
         config.userSettings.shell.devShellAliases
