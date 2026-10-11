@@ -164,6 +164,9 @@ in
     # Sélecteur de fichiers (rfd) : passe par le portail via libdbus, sinon
     # retombe sur zenity, absent -> aucune fenêtre à l'ouverture de fichier.
     dbus
+    # Son (FilmCraft, DeckCraft, EffectCraft, SoundCraft) : lié en dur, sans
+    # elle l'app ne démarre même pas (libasound.so.2 introuvable).
+    alsa-lib
   ];
 
   environment.systemPackages = with pkgs-stable; [ lm_sensors ];
