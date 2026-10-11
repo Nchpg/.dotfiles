@@ -130,6 +130,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # La lib d'adblock n'est injectée (LD_PRELOAD) que par le lanceur du tray :
+    # sans lui, sa config est déployée mais Spotify démarre sans bloqueur.
+    warnings = lib.optional (cfg.adblock && !cfg.tray.enable) ''
+      userSettings.apps.spotify.adblock n'a aucun effet sans
+      userSettings.apps.spotify.tray.enable : la bibliothèque n'est chargée
+      que par spotify-tray-custom.
+    '';
+
     programs.spicetify = {
       enable = true;
       spotifyPackage = cfg.pkgs.spotify;
