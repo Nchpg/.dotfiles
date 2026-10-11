@@ -1,7 +1,12 @@
-{ lib, inputs, ... }:
+{
+  lib,
+  inputs,
+  target,
+  ...
+}:
 
-# Réglages matériel de gram (LG Gram 2024, Meteor Lake), importés par
-# hosts/default.nix. hardware-configuration.nix est généré à part.
+# Réglages propres à think, importés par hosts/default.nix.
+# hardware-configuration.nix est généré à part.
 {
   # Configuration propre à cette machine qui n'a pas à être publiée. Elle vit
   # dans le dépôt de secrets, déjà entrée du flake et déjà épinglée par
@@ -12,10 +17,15 @@
   # L'entrée est en `flake = false`, donc `inputs.secrets` est un CHEMIN DU
   # STORE. L'import reste par conséquent pur, et rebuild.sh n'a pas besoin de
   # `--impure`, ce qu'il refuse explicitement.
-  imports = [ "${inputs.secrets}/think.nix" ];
+  #
+  # Profil server UNIQUEMENT : ce fichier déclare les apps conteneurisées
+  # (systemSettings.apps), qui exigent proxy + nftables et dérivent leurs
+  # adresses des pairs WireGuard, absents du profil personal -> personal-think
+  # ne s'évaluait plus.
+  imports = lib.optional (target.profile == "server") "${inputs.secrets}/think.nix";
 
   # Dimensionné sur la RAM de CE host, pas sur le profil : pas de partition
-  # de swap sur gram, la pression mémoire est absorbée par zram et earlyoom
+  # de swap ici, la pression mémoire est absorbée par zram et earlyoom
   # tue avant que le système ne parte en thrashing.
   systemSettings.storage.swap = {
     zram.enable = true;
