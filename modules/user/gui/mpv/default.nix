@@ -16,6 +16,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.mpv ];
+    programs.mpv = {
+      enable = true;
+      package = cfg.pkgs.mpv;
+      config = {
+        # VA-API d'abord (auto-safe seul essaie avant Vulkan Video, non géré
+        # par le GPU), puis tout décodeur matériel sûr, CPU en dernier. Sans
+        # ça mpv décode tout en logiciel, même avec un driver fonctionnel.
+        hwdec = "vaapi,auto-safe";
+        vo = "gpu-next";
+      };
+    };
   };
 }

@@ -43,19 +43,30 @@ in
     # vrai KMS ne prenne le relais (cf. nixos-hardware common/gpu/intel).
     boot.initrd.kernelModules = [ "xe" ];
 
-    # unstable pour suivre le matériel récent (aligné avec le devshell xpu).
     hardware.graphics = {
       enable = true;
-      extraPackages = with pkgs-unstable; [
-        intel-compute-runtime # OpenCL + Level-Zero (libze_intel_gpu.so)
-        intel-media-driver
-        vpl-gpu-rt
-        level-zero
+      extraPackages = [
+        # Compute en unstable pour suivre le matériel récent (aligné avec le
+        # devshell xpu).
+        pkgs-unstable.intel-compute-runtime # OpenCL + Level-Zero (libze_intel_gpu.so)
+        pkgs-unstable.level-zero
+        # Média en STABLE : chargés DANS les applis (Firefox, Chrome, mpv...),
+        # donc liés à la libva de ces applis, construites sur stable. Le driver
+        # unstable n'exporte que __vaDriverInit_1_24, que la libva stable (2.23)
+        # ne sait pas appeler -> VA-API refusé, décodage CPU partout. Le
+        # stable exporte 1_23 ET 1_24 : marche aussi avec une libva plus
+        # récente.
+        pkgs-stable.intel-media-driver
+        pkgs-stable.vpl-gpu-rt
       ];
     };
 
     environment.sessionVariables = {
       LIBVA_DRIVER_NAME = "iHD";
     };
+
+    # VA-API pour les binaires non-Nix (FilmCraft...), même nixpkgs que le
+    # driver ci-dessus.
+    programs.nix-ld.libraries = [ pkgs-stable.libva ];
   };
 }
