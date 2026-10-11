@@ -189,7 +189,11 @@ in
 
       # Sans routage explicite, avec plusieurs backends, FileChooser n'est
       # servi par personne (dialogue Qt moche dans flameshot).
-      config.common = {
+      #
+      # Sous `sway` (XDG_CURRENT_DESKTOP) et pas `common` : common s'applique
+      # aussi à GDM et GNOME, où wlr ne marche pas (xdpw plantait à chaque
+      # login GDM, capture/partage d'écran cassés sous GNOME).
+      config.sway = {
         default = [ "gtk" ];
         "org.freedesktop.impl.portal.Screenshot" = [ "wlr" ];
         "org.freedesktop.impl.portal.ScreenCast" = [ "wlr" ];
