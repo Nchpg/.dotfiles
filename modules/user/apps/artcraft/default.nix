@@ -78,11 +78,6 @@ in
     enable = lib.mkEnableOption "ArtCraft Launcher (Craft App Suite, alternatives open source à Adobe)";
 
     pkgs = myLib.mkPkgsOption { inherit lib config; };
-
-    tray.enable = lib.mkEnableOption ''
-      lancement du launcher en arrière-plan avec la session (icône de tray dans
-      waybar). Nécessaire pour les notifications de MAJ des apps : il ne
-      vérifie les releases (toutes les heures) que tant qu'il tourne'';
   };
 
   config = lib.mkIf cfg.enable {
@@ -110,22 +105,6 @@ in
         ExecStart = "${syncDesktop}/bin/artcraft-sync-desktop";
       };
       Install.WantedBy = [ "default.target" ];
-    };
-
-    # Unité systemd plutôt que l'option « Open at login » du launcher : elle
-    # écrirait un fichier autostart pointant un chemin du store (cassé au
-    # prochain bump), que Sway ne lit de toute façon pas.
-    systemd.user.services.artcraft-launcher = lib.mkIf cfg.tray.enable {
-      Unit = {
-        Description = "ArtCraft Launcher (tray, MAJ de la Craft App Suite)";
-        PartOf = [ "graphical-session.target" ];
-        After = [ "graphical-session.target" ];
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-      Service = {
-        ExecStart = "${launcher}/bin/${pname} --hidden";
-        Restart = "on-failure";
-      };
     };
   };
 }
