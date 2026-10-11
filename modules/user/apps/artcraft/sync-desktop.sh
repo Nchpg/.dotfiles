@@ -1,3 +1,5 @@
+# shellcheck shell=bash
+# (Pas de shebang : writeShellApplication l'ajoute, avec set -euo pipefail.)
 # Entrées de menu des apps installées par le launcher dans ~/Applications.
 #
 # Ni le launcher ni la plupart des apps (PdfCraft notamment) ne les créent pour
