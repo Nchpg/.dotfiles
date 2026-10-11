@@ -23,9 +23,8 @@ let
     ];
     "bluetooth.sh" = [
       pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.gnused
-      pkgs.bluez
+      pkgs.systemd # busctl
+      pkgs.jq
     ];
     "nowplaying.sh" = [
       pkgs.coreutils

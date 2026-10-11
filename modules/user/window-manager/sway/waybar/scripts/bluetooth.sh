@@ -5,25 +5,34 @@ set -euo pipefail
 #   - tooltip : noms COMPLETS + batterie, un par ligne
 # Logique reprise de sway-bar.sh.
 
-# Force la locale C : les libellés grepés ('Powered: yes', 'Battery
-# Percentage') sont en anglais, on ne dépend pas de la locale de session.
-export LC_ALL=C
+# Un SEUL appel D-Bus en lecture (busctl) plutôt que 2-3 `bluetoothctl` par
+# tour : chaque bluetoothctl s'enregistre auprès de bluetoothd (moniteur
+# d'annonces), ~23 000 lignes « Adv Monitor app reserved/disconnected » dans
+# le journal par jour avec un tour toutes les 5 s.
 
 # json_escape / emit / bat_icon : fournis par lib.sh (inliné en tête au build).
 
-if ! command -v bluetoothctl &>/dev/null; then
-    emit "󰂯  N/A" ""
+objects=$(busctl --system call org.bluez / org.freedesktop.DBus.ObjectManager \
+    GetManagedObjects --json=short 2>/dev/null) || {
+    emit "󰂯  N/A" "" # bluetoothd absent ou arrêté
     exit 0
-fi
+}
 
-powered=$(bluetoothctl show | grep -E 'Powered: yes') || true # pas de match si off
-if [[ -z "$powered" ]]; then
+# Adaptateur allumé ? (au moins un Adapter1 avec Powered = true)
+powered=$(jq -r '[.data[0][] | .["org.bluez.Adapter1"].Powered.data // empty]
+    | any' <<<"$objects")
+if [[ "$powered" != true ]]; then
     emit "󰂯  Off" ""
     exit 0
 fi
 
-# bluetoothctl injecte des codes ANSI : on les retire (sinon troncature parasite).
-connected_devices=$(bluetoothctl devices Connected | sed 's/\x1b\[[0-9;]*m//g') || true
+# Appareils connectés, un par ligne : « batterie<US>nom » (batterie vide si
+# non reportée). Séparateur \x1f (unit separator) et pas une tabulation :
+# bash fusionne les séparateurs blancs, une batterie vide décalerait le nom.
+connected_devices=$(jq -r '.data[0][]
+    | select(.["org.bluez.Device1"].Connected.data == true)
+    | "\(.["org.bluez.Battery1"].Percentage.data // "")\u001f\(.["org.bluez.Device1"].Alias.data)"' \
+    <<<"$objects")
 if [[ -z "$connected_devices" ]]; then
     emit "󰂯  On" ""
     exit 0
@@ -33,10 +42,8 @@ MAX_BT_NAME_LENGTH=15
 bar_list=""  # noms tronqués (barre)
 tip_list=""  # noms complets (tooltip), séparés par de vraies nouvelles lignes
 
-# Format des lignes : « Device AA:BB:CC:DD:EE:FF Nom de l'appareil ». On
-# découpe en bash (read) : _ = "Device", mac = adresse, full_name = le reste.
-while read -r _ mac full_name; do
-    [[ -z "$mac" ]] && continue
+while IFS=$'\x1f' read -r battery_pct full_name; do
+    [[ -z "$full_name" ]] && continue
 
     short_name=$full_name
     if [[ ${#short_name} -gt $MAX_BT_NAME_LENGTH ]]; then
@@ -44,10 +51,6 @@ while read -r _ mac full_name; do
     fi
 
     # Suffixe batterie (icône dynamique + %), identique barre et tooltip.
-    # || true : pas de batterie reportée -> greps sans match, pipeline non-zéro
-    # sous pipefail, ne doit pas tuer la boucle (repli déjà géré ci-dessous).
-    battery_pct=$(bluetoothctl info "$mac" 2>/dev/null \
-        | grep -i 'Battery Percentage' | grep -oP '\(\K[0-9]+') || true
     suffix=""
     [[ -n "$battery_pct" ]] && suffix="  $(bat_icon "$battery_pct")  ${battery_pct}%"
 
