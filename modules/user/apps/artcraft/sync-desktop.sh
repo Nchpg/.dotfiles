@@ -39,10 +39,30 @@ sync_once() {
             # son entrée.
             [[ "$id" == ai.storyteller.artcraft-launcher ]] && continue
 
-            sed -e "s|^Exec=[^ ]*|Exec=\"$appimage\"|" \
-                -e '/^TryExec=/d' \
-                "$desktop" >"$desktop_dir/$id.desktop.tmp"
-            echo "$marker" >>"$desktop_dir/$id.desktop.tmp"
+            # Dans CHAQUE ligne Exec= (entrée principale et [Desktop Action]),
+            # remplace la commande par l'AppImage, en sautant un éventuel
+            # préfixe `env VAR=val ...`. Sous [Desktop Entry], ajoute le
+            # marqueur et l'AppImage d'origine, relue au nettoyage quel que
+            # soit le format de Exec.
+            awk -v app="$appimage" -v marker="$marker" '
+                /^Exec=/ {
+                    n = split(substr($0, 6), f, " ")
+                    out = ""; done = 0
+                    for (i = 1; i <= n; i++) {
+                        t = f[i]
+                        if (!done && t != "env" && t !~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
+                            t = "\"" app "\""; done = 1
+                        }
+                        out = out (i > 1 ? " " : "") t
+                    }
+                    print "Exec=" out; next
+                }
+                /^TryExec=/ { next }
+                /^\[Desktop Entry\]$/ {
+                    print; print marker; print "X-ArtCraft-AppImage=" app; next
+                }
+                { print }
+            ' "$desktop" >"$desktop_dir/$id.desktop.tmp"
             mv "$desktop_dir/$id.desktop.tmp" "$desktop_dir/$id.desktop"
         done
 
@@ -55,11 +75,18 @@ sync_once() {
     # réécrit l'entrée sous le même id ci-dessus).
     for entry in "$desktop_dir"/*.desktop; do
         grep -qx "$marker" "$entry" || continue
-        target=$(sed -n 's|^Exec="\([^"]*\)".*|\1|p' "$entry" | head -n1)
+        target=$(sed -n 's|^X-ArtCraft-AppImage=||p' "$entry" | head -n1)
+        # Entrées antérieures à cette clé : chemin repris de Exec="...".
+        [[ -n "$target" ]] \
+            || target=$(sed -n 's|^Exec="\([^"]*\)".*|\1|p' "$entry" | head -n1)
+        # Chemin introuvable : on ne supprime rien plutôt que tout.
+        [[ -n "$target" ]] || continue
         if [[ ! -e "$target" ]]; then
-            id=$(basename "$entry" .desktop)
+            # Icônes nommées d'après la clé Icon=, pas d'après l'id du .desktop.
+            icon=$(sed -n 's|^Icon=||p' "$entry" | head -n1)
+            [[ -n "$icon" && "$icon" != */* ]] || icon=$(basename "$entry" .desktop)
             rm -f "$entry"
-            find "$icons_dir" -name "$id.*" -delete
+            find "$icons_dir" -name "$icon.*" -delete
         fi
     done
 }
