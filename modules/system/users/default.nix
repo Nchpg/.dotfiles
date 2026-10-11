@@ -72,6 +72,11 @@
     # Mots de passe non déclaratifs : mutableUsers = true (défaut NixOS),
     # posés/modifiés à la main via `passwd`.
 
+    # Binaire sudo exécutable par le seul groupe wheel : un compte non admin
+    # (guest, utilisateurs de service) ne peut même pas tenter une élévation.
+    # Rien d'autre que l'admin n'appelle sudo (ni service, ni CI).
+    security.sudo.execWheelOnly = true;
+
     assertions = [
       {
         assertion = lib.any (user: user.isAdmin) config.systemSettings.users;
