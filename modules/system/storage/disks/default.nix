@@ -58,6 +58,10 @@ in
   # Couche "volumes" de Thunar (montage USB, corbeille, MTP) : dépendance
   # cachée du module GNOME, à activer explicitement.
   services.gvfs.enable = lib.mkIf desktop true;
+  # Binaire que gvfsd-wsdd lance pour découvrir les partages Windows/SMB dans
+  # « Réseau » : sans lui, échec à chaque ouverture (« Failed to spawn the
+  # wsdd daemon »). Client seul : rien n'est annoncé ni ouvert sur le réseau.
+  environment.systemPackages = lib.mkIf desktop [ pkgs-stable.wsdd ];
 
   programs.thunar.enable = lib.mkIf desktop true;
 
