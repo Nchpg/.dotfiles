@@ -1,7 +1,6 @@
 {
   config,
   lib,
-  pkgs-stable,
   ...
 }:
 
@@ -27,8 +26,6 @@ lib.mkIf config.systemSettings.desktop.enable {
     };
   };
 
-  # Requis par la carte son du laptop.
-  hardware.firmware = with pkgs-stable; [
-    sof-firmware
-  ];
+  # sof-firmware (DSP de la carte son du laptop) : déjà fourni par
+  # hardware.enableRedistributableFirmware (modules/system/configuration.nix).
 }
