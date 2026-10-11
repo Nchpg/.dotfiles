@@ -97,6 +97,10 @@ jobs:
       # workflow à l'arborescence des modules — un déplacement de dossier
       # désactive une mise à jour sans le moindre message.
       - name: bump des modules (update.sh auto-découverts)
+        # Lu par les update.sh qui interrogent l'API GitHub (artcraft...) :
+        # sans jeton, 60 requêtes/h par IP.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export MY_FLAKE="$PWD"
           export VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json

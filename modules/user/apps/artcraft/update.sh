@@ -13,7 +13,17 @@ dir="$flake/modules/user/apps/artcraft"
 pinned_file="$dir/pinned.json"
 
 echo "🔎 Checking latest ArtCraft Launcher release..."
-version=$(curl -fsSL "https://api.github.com/repos/storytold/craft-launcher/releases/latest" | jq -r '.tag_name | ltrimstr("v")')
+# Jeton facultatif (GITHUB_TOKEN, exporté par la CI) : sans lui l'API GitHub
+# plafonne à 60 requêtes/h par IP, vite atteint sur un runner partagé.
+auth=()
+[ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+# jq -e + // empty : réponse inattendue (rate limit, pas de release) -> échec
+# explicite ici plutôt qu'une version "null" et une URL ...vnull...
+if ! version=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/storytold/craft-launcher/releases/latest" \
+    | jq -er '.tag_name // empty | ltrimstr("v")') || [ -z "$version" ]; then
+    echo "⚠️ Error: Could not read latest ArtCraft Launcher version" >&2
+    exit 1
+fi
 echo "Latest version: $version"
 
 if [ -f "$pinned_file" ]; then
