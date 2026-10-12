@@ -5,6 +5,15 @@
 # Intégré au processus `--update` de rebuild.sh.
 set -euo pipefail
 
+# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
+# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
+# choisir ; le reste des messages part alors sur stderr.
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    exec 3>&1 1>&2
+fi
+
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 dir="$flake/modules/user/tui/task"
 pinned_file="$dir/pinned.json"
@@ -16,6 +25,13 @@ if ! version=$(curl -fsSL "https://pypi.org/pypi/tasks-tui-app/json" | jq -er '.
     exit 1
 fi
 echo "Latest version: $version"
+
+if [ "$check" -eq 1 ]; then
+    current=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || true)
+    jq -nc --arg name "tasks-tui" --arg current "$current" --arg latest "$version" \
+        --arg url "https://pypi.org/project/tasks-tui-app/$version/" '{$name, $current, $latest, $url}' >&3
+    exit 0
+fi
 
 if [ -f "$pinned_file" ]; then
     current_version=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || echo "")

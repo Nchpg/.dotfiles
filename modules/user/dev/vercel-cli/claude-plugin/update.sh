@@ -6,6 +6,15 @@
 # que `claude plugin install vercel@claude-plugins-official` installerait.
 set -euo pipefail
 
+# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
+# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
+# choisir ; le reste des messages part alors sur stderr.
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    exec 3>&1 1>&2
+fi
+
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 dir="$flake/modules/user/dev/vercel-cli/claude-plugin"
 pinned_file="$dir/pinned.json"
@@ -18,6 +27,15 @@ if [ -z "$rev" ] || [ "$rev" = "null" ]; then
     exit 1
 fi
 echo "Latest pinned commit: $rev"
+
+if [ "$check" -eq 1 ]; then
+    current=$(jq -r '.rev // empty' "$pinned_file" 2>/dev/null || true)
+    url=""
+    [ -n "$current" ] && url="https://github.com/vercel/vercel-plugin/compare/${current}...${rev}"
+    jq -nc --arg current "${current:0:7}" --arg latest "${rev:0:7}" --arg url "$url" \
+        '{name: "Vercel Claude plugin", $current, $latest, $url}' >&3
+    exit 0
+fi
 
 if [ -f "$pinned_file" ]; then
     current_rev=$(jq -r '.rev // empty' "$pinned_file" 2>/dev/null || echo "")

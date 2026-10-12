@@ -10,6 +10,15 @@
 # plus bas) — le coût accepté est un rebuild local parfois plus lent/flaky.
 set -euo pipefail
 
+# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
+# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
+# choisir ; le reste des messages part alors sur stderr.
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    exec 3>&1 1>&2
+fi
+
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 file="$flake/modules/user/editors/vscode/extensions.json"
 
@@ -40,6 +49,49 @@ query_latest_version() {
         -d "$body") || return 1
     printf '%s' "$response" | jq -r '.results[0].extensions[0].versions[0].version // empty' 2>/dev/null || return 1
 }
+
+# --check : versions seulement, sans télécharger les vsix. La détection d'un
+# contenu republié à version égale (cf. plus bas) exige le téléchargement :
+# elle n'a lieu qu'en mise à jour réelle.
+if [ "$check" -eq 1 ]; then
+    changes="[]"
+    failed=0
+    # Requêtes en parallèle (une par extension) : en série, ~6 s.
+    results=$(mktemp -d)
+    trap 'rm -rf "$results"' EXIT
+    for key in $(jq -r 'keys[]' "$file"); do
+        publisher=$(jq -r ".\"$key\".publisher" "$file")
+        name=$(jq -r ".\"$key\".name" "$file")
+        (query_latest_version "$publisher" "$name" >"$results/$key" 2>/dev/null || true) &
+    done
+    wait
+    for key in $(jq -r 'keys[]' "$file"); do
+        name=$(jq -r ".\"$key\".name" "$file")
+        current=$(jq -r ".\"$key\".version" "$file")
+        latest=$(cat "$results/$key")
+        if [ -z "$latest" ]; then
+            failed=$((failed + 1))
+            continue
+        fi
+        if [ "$latest" != "$current" ]; then
+            changes=$(jq -c --arg k "$name" --arg c "$current" --arg l "$latest" \
+                '. + [{key: $k, current: $c, latest: $l}]' <<<"$changes")
+        fi
+    done
+    total=$(jq -r 'keys | length' "$file")
+    note=""
+    [ "$failed" -gt 0 ] && note="$failed extension(s) non vérifiée(s) (API Marketplace)"
+    jq -nc --argjson changes "$changes" --argjson total "$total" --arg note "$note" '{
+        name: "VS Code (extensions)",
+        current: "\($total) extensions",
+        latest: (if ($changes | length) == 0 then "\($total) extensions"
+                 else "\($changes | length) à mettre à jour" end),
+        available: (($changes | length) > 0),
+        summary: ($changes | map("\(.key) \(.current) → \(.latest)") | join(", ")),
+        $note
+    }' >&3
+    exit 0
+fi
 
 updated=0
 skipped=0

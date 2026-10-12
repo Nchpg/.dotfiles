@@ -60,7 +60,8 @@ pas le hostname).
 | Commande | Effet |
 |---|---|
 | `rebuild` | Rebuild de la cible de ce système (check git, diff nvd, reload sway/waybar) |
-| `rebuild -u` | Idem + bump de l'input claude-code et de chaque module à `update.sh` (confirmation par module) |
+| `update` | Vérifie en parallèle les modules à `update.sh` et les inputs du flake, puis propose de cocher quoi mettre à jour (sans rebuild) ; `-c` liste seulement, `-y` prend la sélection par défaut, `update NOM` restreint |
+| `rebuild -u` | `update`, puis rebuild |
 | `rebuild -y` | Idem sans confirmation si le working tree est sale |
 | `theme dark\|light\|toggle` | Bascule le thème (persistant) puis rebuild |
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |

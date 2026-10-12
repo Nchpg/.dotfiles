@@ -7,6 +7,15 @@
 # Intégré au processus `--update` de rebuild.sh.
 set -euo pipefail
 
+# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
+# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
+# choisir ; le reste des messages part alors sur stderr.
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    exec 3>&1 1>&2
+fi
+
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 dir="$flake/modules/user/tui/btop"
 pinned_file="$dir/pinned.json"
@@ -23,12 +32,25 @@ if ! pr_json=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/aristocrato
     exit 1
 fi
 
+# En --check, la PR mergée ou fermée n'est pas une mise à jour : on remonte
+# juste une note, affichée par update.sh à côté des modules à jour.
+emit_check() {
+    local current
+    current=$(jq -r '.rev // empty' "$pinned_file" 2>/dev/null || true)
+    jq -nc --arg current "${current:0:7}" --arg latest "${2:-${current:0:7}}" \
+        --arg url "${3:-}" --arg note "${1:-}" \
+        '{name: "btop (PR #1457 · GPU xe)", $current, $latest, $url, $note}' >&3
+    exit 0
+}
+
 if [ "$(printf '%s' "$pr_json" | jq -r '.merged')" = "true" ]; then
+    [ "$check" -eq 1 ] && emit_check "PR mergée : retirer l'override btopXe"
     echo "🎉 PR #$pr mergée : retirer btopXe de modules/user/tui/btop/default.nix"
     echo "   (et xeGpuSupport) dès que nixpkgs embarque une version de btop qui l'inclut."
     exit 0
 fi
 if [ "$state" != "open" ]; then
+    [ "$check" -eq 1 ] && emit_check "PR fermée sans merge : override à réévaluer"
     echo "⚠️ PR #$pr fermée sans merge : override conservé tel quel, à réévaluer." >&2
     exit 0
 fi
@@ -36,6 +58,11 @@ fi
 repo=$(printf '%s' "$pr_json" | jq -er '.head.repo.full_name')
 rev=$(printf '%s' "$pr_json" | jq -er '.head.sha')
 echo "Latest PR commit: $rev ($repo)"
+
+if [ "$check" -eq 1 ]; then
+    current_rev=$(jq -r '.rev // empty' "$pinned_file" 2>/dev/null || true)
+    emit_check "" "${rev:0:7}" "https://github.com/$repo/compare/${current_rev}...${rev}"
+fi
 
 if [ -f "$pinned_file" ]; then
     current_rev=$(jq -r '.rev // empty' "$pinned_file" 2>/dev/null || echo "")

@@ -1,4 +1,6 @@
 {
+  lib,
+  config,
   pkgs-stable,
   target,
   myLib,
@@ -39,8 +41,8 @@
             echo "usage: rebuild [-p PROFILE] [-H HOST] [-V dark|light] [-u|--update] [-y|--yes]"
             echo "  défaut (cible de ce système) : --profile $profile --host $host --variant $variant"
             echo "  -V : variante de thème (la commande \`theme\` s'en sert pour toggler)"
-            echo "  -u : met à jour l'input claude-code et les modules à update.sh"
-            echo "       (confirmation par module) avant le rebuild"
+            echo "  -u : lance \`update\` (modules à update.sh + inputs du flake, au"
+            echo "       choix) avant le rebuild"
             echo "  -y : aucune confirmation (working tree sale, modules -u) ; ne"
             echo "       touche JAMAIS au lock des secrets (avertit seulement)"
             exit 0 ;;
@@ -51,6 +53,12 @@
       ${myLib.mkFlakeGuard {
         name = "rebuild";
         scriptName = "rebuild.sh";
+      }}
+
+      # Pour `-u` : rebuild.sh lance update.sh, qui a besoin de gum.
+      ${myLib.mkUpdateEnv {
+        inherit lib config;
+        inherit (pkgs-stable) gum;
       }}
 
       exec "$flake/rebuild.sh" --profile "$profile" --host "$host" --variant "$variant" ''${extra[@]+"''${extra[@]}"}

@@ -7,6 +7,15 @@
 # Intégré au processus `--update` de rebuild.sh.
 set -euo pipefail
 
+# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
+# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
+# choisir ; le reste des messages part alors sur stderr.
+check=0
+if [ "${1:-}" = "--check" ]; then
+    check=1
+    exec 3>&1 1>&2
+fi
+
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 dir="$flake/modules/user/agents/kimi-code"
 pinned_file="$dir/pinned.json"
@@ -14,6 +23,13 @@ pinned_file="$dir/pinned.json"
 echo "🔎 Checking latest Kimi Code version (npm registry)..."
 version=$(curl -fsSL "https://registry.npmjs.org/@moonshot-ai/kimi-code" | jq -r '."dist-tags".latest')
 echo "Latest version: $version"
+
+if [ "$check" -eq 1 ]; then
+    current=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || true)
+    jq -nc --arg name "Kimi Code" --arg current "$current" --arg latest "$version" \
+        --arg url "https://www.npmjs.com/package/@moonshot-ai/kimi-code/v/$version" '{$name, $current, $latest, $url}' >&3
+    exit 0
+fi
 
 if [ -f "$pinned_file" ]; then
     current_version=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || echo "")

@@ -30,6 +30,7 @@ lib:
   mkThemedIcon = import ./mk-themed-icon.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
   mkTlsVhost = import ./mk-tls-vhost.nix;
+  mkUpdateEnv = import ./mk-update-env.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
   sopsPolicy = import ./sops-policy.nix lib;

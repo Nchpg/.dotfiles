@@ -28,7 +28,7 @@ done
 # Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
     echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light] [--update] [--yes]" >&2
-    echo "  --update : bump l'input claude-code + les modules à update.sh (confirmation par module)" >&2
+    echo "  --update : lance update.sh (modules à update.sh + inputs du flake, au choix)" >&2
     echo "  --yes    : pas de confirmation (working tree sale, ni bump de module) ;" >&2
     echo "             le lock des secrets n'est alors jamais modifié (avertissement seul)" >&2
     exit 1
@@ -53,43 +53,26 @@ NC='\033[0m' # No Color
 
 cd "$(dirname "$0")"
 
-# Bump claude-code seulement sur demande (--update / rebuild -u) : le faire à
-# chaque rebuild salissait flake.lock (→ warning git systématique) et
-# re-téléchargeait claude-code inutilement.
+# Mises à jour seulement sur demande (--update / rebuild -u) : les faire à
+# chaque rebuild salissait flake.lock (→ warning git systématique). Délégué à
+# update.sh (aussi lançable seul via `update`) : vérifie tout en parallèle,
+# puis propose modules épinglés et inputs du flake à cocher. Garde-fou
+# conservé : contrairement à la CI (PR relue avant merge), un `rebuild -u`
+# enchaîne directement sur le switch, donc rien ne s'applique sans choix
+# explicite — sauf --yes (genclean), qui prend la sélection par défaut
+# (modules + claude-code). Jamais fatal : un échec garde l'état précédent.
 if [[ "$UPDATE" -eq 1 ]]; then
-    echo "⬆️  Updating claude-code flake input to latest..."
-    # Non bloquant : si offline / rate-limit, on garde la version déjà lockée.
-    nix flake update claude-code || echo "⚠️  bump claude-code ignoré (offline/rate-limit) — version lockée conservée."
-
-    # Auto-discovery : tout module qui veut être bumpé par `rebuild -u` place un
-    # `update.sh` (nom exact) à sa racine — pas de liste à tenir à jour ici.
-    # Même mécanisme côté CI, cf. update.yml. Chaque échec reste local au
-    # module (offline, API tierce down, ...), jamais fatal pour les autres.
-    # Chargé dans un tableau (pas de `while read < <(find ...)`) : sinon le
-    # `read -p` de confirmation ci-dessous lirait le flux de `find` au lieu du
-    # terminal, et sauterait silencieusement toutes les mises à jour.
-    # Pas de -maxdepth : il valait 4 et sautait silencieusement
-    # dev/vercel-cli/claude-plugin/update.sh (un cran plus profond). Borner la
-    # profondeur couple ce script à l'arborescence des modules — un déplacement
-    # de dossier désactive une mise à jour sans le moindre message.
-    mapfile -d '' -t update_scripts < <(find modules -name update.sh -print0 | sort -z)
-    for script in "${update_scripts[@]}"; do
-        module_dir="$(dirname "$script")"
-
-        # Contrairement à la CI (protégée par une PR à relire avant merge), un
-        # `rebuild -u` local enchaîne directement sur `nixos-rebuild switch` :
-        # sans ce garde-fou, une version fraîchement publiée (donc jamais
-        # auditée) s'appliquerait sur la machine sans confirmation. --yes
-        # (genclean) saute la question, comme pour le git status plus bas.
-        if [[ "$YES" -ne 1 ]]; then
-            read -p "Mettre à jour ce module ($module_dir) ? [y/N] " -n 1 -r
-            echo
-            [[ $REPLY =~ ^[Yy]$ ]] || continue
-        fi
-
-        echo "⬆️  Running $script..."
-        MY_FLAKE="$PWD" "$script" || echo "⚠️  $script ignoré (échec) — état précédent conservé."
-    done
+    update_args=()
+    [[ "$YES" -eq 1 ]] && update_args+=(--yes)
+    # Ctrl+C dans la liste (130) : on abandonne aussi le rebuild. Tout autre
+    # échec : on reconstruit avec l'état actuel.
+    UPDATE_FROM_REBUILD=1 ./update.sh "${update_args[@]}" && rc=0 || rc=$?
+    if [[ "$rc" -eq 130 ]]; then
+        echo "Rebuild annulé."
+        exit 130
+    elif [[ "$rc" -ne 0 ]]; then
+        echo "⚠️  update en échec — rebuild avec l'état actuel."
+    fi
 fi
 
 
