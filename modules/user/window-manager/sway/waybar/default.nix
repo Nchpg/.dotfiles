@@ -53,7 +53,7 @@ let
   # programs.btop (pas pkgs.btop, amont driver i915-only) : support GPU xe
   # (PR #1457) si activé côté user.
   btop = "${config.programs.btop.package}/bin/btop";
-  # Thunar « éphémère » du clic sur la case disque : flottant, Échap/q pour
+  # Thunar « éphémère » du clic sur la case disque : flottant, Échap pour
   # fermer, fermé à l'ouverture d'un fichier (cf. thunar-float/daemon.sh).
   thunarFloatLauncher = pkgs.writeShellApplication {
     name = "thunar-float";
@@ -346,7 +346,7 @@ in
 
     systemd.user.services.thunar-float = {
       Unit = {
-        Description = "Thunar éphémère du clic waybar (flottant, Échap/q, fermé à l'ouverture)";
+        Description = "Thunar éphémère du clic waybar (flottant, Échap, fermé à l'ouverture)";
         PartOf = [ "graphical-session.target" ];
         After = [ "graphical-session.target" ];
       };

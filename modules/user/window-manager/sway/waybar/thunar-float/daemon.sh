@@ -2,14 +2,17 @@
 # (Pas de shebang : writeShellApplication l'ajoute, avec set -euo pipefail.)
 #
 # Thunar « éphémère », ouvert par le clic sur la case disque de waybar
-# (launcher.sh) : flottant et centré, fermé par Échap ou q, et fermé tout seul
+# (launcher.sh) : flottant et centré, fermé par Échap, et fermé tout seul
 # quand on y ouvre un fichier. Les Thunar ouverts autrement restent en tuile
 # et normaux.
 #
 # Sway n'a pas de raccourci « seulement si telle fenêtre a le focus », et un
-# mode désactiverait tous les autres raccourcis. On AJOUTE donc Échap et q à
-# la volée quand la fenêtre éphémère prend le focus, et on les RETIRE dès
-# qu'elle le perd : ailleurs, ces touches arrivent normalement aux applis.
+# mode désactiverait tous les autres raccourcis. On AJOUTE donc Échap à la
+# volée quand la fenêtre éphémère prend le focus, et on le RETIRE dès qu'elle
+# le perd : ailleurs, la touche arrive normalement aux applis.
+#
+# Pas de `q` : il fermait la fenêtre même en tapant une recherche ou un chemin
+# (sway capte la touche avant Thunar, sans savoir quel champ a le focus).
 
 dir="${XDG_RUNTIME_DIR:-/tmp}/thunar-float"
 mkdir -p "$dir"
@@ -18,19 +21,19 @@ float_id="" focused="" bound=0
 
 unbind() {
     ((bound)) || return 0
-    swaymsg -q 'unbindsym Escape; unbindsym q' 2>/dev/null || true
+    swaymsg -q 'unbindsym Escape' 2>/dev/null || true
     bound=0
 }
 bind() {
     ((bound)) && return 0
-    if swaymsg -q "bindsym --no-repeat Escape [con_id=$float_id] kill; bindsym --no-repeat q [con_id=$float_id] kill"; then
+    if swaymsg -q "bindsym --no-repeat Escape [con_id=$float_id] kill"; then
         bound=1
     fi
 }
-# Jamais d'Échap/q volés au reste de la session si le démon s'arrête : on les
+# Jamais d'Échap volé au reste de la session si le démon s'arrête : on le
 # retire au départ (reste d'une instance tuée) et à la sortie.
 cleanup() {
-    swaymsg -q 'unbindsym Escape; unbindsym q' 2>/dev/null || true
+    swaymsg -q 'unbindsym Escape' 2>/dev/null || true
     # Le pipeline d'écoute (lancé en fond plus bas) part avec nous.
     local pids
     mapfile -t pids < <(jobs -p)
@@ -39,10 +42,7 @@ cleanup() {
 cleanup
 trap cleanup EXIT
 # SIGTERM (arrêt du service, rebuild) : passe par le trap EXIT pour retirer
-# Échap/q, sinon ils resteraient capturés pour toute la session.
-trap 'exit 0' TERM INT HUP
-# SIGTERM (arrêt du service, rebuild) : sans ça bash meurt sans passer par
-# le trap EXIT, et Échap/q resteraient capturés pour toute la session.
+# Échap, sinon il resterait capturé pour toute la session.
 trap 'exit 0' TERM INT HUP
 
 hz=$(getconf CLK_TCK)
@@ -101,5 +101,5 @@ swaymsg -t subscribe -m '["window"]' \
     done &
 # En fond + `wait` : bash ne traite un signal qu'entre deux commandes, et ce
 # pipeline ne se termine jamais. Au premier plan, SIGTERM restait sans effet
-# (Échap/q jamais retirés) ; `wait`, lui, est interrompu par le signal.
+# (Échap jamais retiré) ; `wait`, lui, est interrompu par le signal.
 wait $!
