@@ -22,5 +22,11 @@ in
     # evdi gère mal le curseur matériel sous wlroots : un second curseur
     # figé reste affiché sur l'écran du dock. Curseur logiciel partout.
     environment.sessionVariables.WLR_NO_HARDWARE_CURSORS = "1";
+
+    # dlm.service (DisplayLinkManager) n'est voulu QUE par la règle udev du
+    # dock (SYSTEMD_WANTS). Restart=always le gardait en vie après
+    # débranchement : ~5 % d'un cœur à scruter un dock absent. Arrêté dès que
+    # plus rien ne le veut, relancé par udev au rebranchement.
+    systemd.services.dlm.unitConfig.StopWhenUnneeded = true;
   };
 }
