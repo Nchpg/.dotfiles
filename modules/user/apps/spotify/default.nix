@@ -35,16 +35,17 @@ let
   # Adblock niveau RÉSEAU (LD_PRELOAD), pas dans nixpkgs. Contrairement aux
   # extensions spicetify qui manipulent le player (et cassaient la lecture de
   # certaines pistes), il bloque juste les domaines de pub.
+  # Version + hashes épinglés automatiquement par update.sh
+  adblockPinned = builtins.fromJSON (builtins.readFile ./pinned.json);
   spotifyAdblock = cfg.pkgs.rustPlatform.buildRustPackage {
     pname = "spotify-adblock";
-    version = "1.1.0";
+    inherit (adblockPinned) version cargoHash;
     src = cfg.pkgs.fetchFromGitHub {
       owner = "abba23";
       repo = "spotify-adblock";
-      rev = "v1.1.0";
-      hash = "sha256-Em8ICO+GtA1k/urBA7e9+OdZmHvthTy+iRWueUz4+40=";
+      rev = "v${adblockPinned.version}";
+      inherit (adblockPinned) hash;
     };
-    cargoHash = "sha256-gxGetdqaoJa/ZF1VnW6UXJyJfLBGZxZnyKpT/Qk/8Og=";
     doCheck = false; # pas de tests amont
     # cdylib -> on installe le .so et la config nous-mêmes.
     installPhase = ''

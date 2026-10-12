@@ -16,19 +16,22 @@ let
     exec = "tasks-tui";
   };
 
+  # Version + hash épinglés automatiquement par update.sh
+  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
+
   # Publié sur PyPI, pas dans nixpkgs. unicurses est importé par
   # tasks_tui/main.py mais ABSENT du pyproject.toml upstream (bug
   # d'empaquetage) : rajouté à la main sinon l'app crash au démarrage.
   tasks-tui = py.buildPythonApplication rec {
     pname = "tasks-tui-app";
-    version = "0.1.7";
+    inherit (pinned) version;
     pyproject = true;
 
     src = py.fetchPypi {
       # le sdist s'appelle tasks_tui_app-<ver>.tar.gz (underscores)
       pname = "tasks_tui_app";
       inherit version;
-      hash = "sha256-MtqWZ2ajQSCmfIAWA4kEpQ2YcC9tVP1+5/o/03ufTuM=";
+      inherit (pinned) hash;
     };
 
     build-system = [ py.setuptools ];
