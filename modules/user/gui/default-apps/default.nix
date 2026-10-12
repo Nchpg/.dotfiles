@@ -82,7 +82,6 @@ let
   imageTypes = [
     "image/png"
     "image/jpeg"
-    "image/gif"
     "image/webp"
     "image/bmp"
     "image/tiff"
@@ -104,7 +103,10 @@ let
     "image/x-adobe-dng"
   ];
 
+  # GIF avec les vidéos : ce sont des animations, pas des images à retoucher
+  # (lues en boucle, cf. le profil extension.gif du module mpv).
   videoTypes = [
+    "image/gif"
     "video/mp4"
     "video/x-matroska"
     "video/webm"

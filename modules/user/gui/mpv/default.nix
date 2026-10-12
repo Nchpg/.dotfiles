@@ -26,6 +26,11 @@ in
         hwdec = "vaapi,auto-safe";
         vo = "gpu-next";
       };
+      # Profil appliqué automatiquement par mpv aux .gif : en boucle comme dans
+      # une visionneuse, au lieu de se fermer à la fin de la première lecture.
+      profiles."extension.gif" = {
+        loop-file = "inf";
+      };
     };
   };
 }
