@@ -235,16 +235,22 @@ if [ ! -s "$tmp/plan" ]; then
 fi
 
 total=$(wc -l <"$tmp/plan")
+plural=""
+[ "$total" -gt 1 ] && plural="s"
 if [ "$fancy" -eq 1 ]; then
-    gum spin --spinner dot --title " Vérification de $total dépendances…" -- "$0" __checks "$tmp"
+    gum spin --spinner dot --title " Vérification de $total dépendance$plural…" -- "$0" __checks "$tmp"
 else
-    echo "Vérification de $total dépendances…"
+    echo "Vérification de $total dépendance$plural…"
     run_checks "$tmp"
 fi
 
 # ── Lecture des résultats ───────────────────────────────────────────────────
-# Par id : name, current, latest, url, état (available | uptodate | error).
-declare -A NAME CUR LAT URL STATE NOTE SUMMARY ERRMSG
+# Par id : name, current, latest, url, état (available | uptodate | error |
+# expanded). Un module peut détailler des sous-éléments (`items`, ex. une
+# ligne par extension VS Code) : chacun devient alors un id proposé à part
+# (<id>.<n>, PARENT et KEY renseignés), le module lui-même passe en
+# « expanded » et n'est plus listé que pour ses notes.
+declare -A NAME CUR LAT URL STATE NOTE SUMMARY ERRMSG PARENT KEY CHILDREN
 read_result() {
     local id="$1" fallback="$2" json
     NAME[$id]="$fallback"
@@ -266,6 +272,23 @@ read_result() {
     else
         STATE[$id]=uptodate
     fi
+
+    local n k cid
+    n=$(jq -r '.items // [] | length' <<<"$json")
+    [ "$n" -gt 0 ] || return 0
+    STATE[$id]=expanded
+    CHILDREN[$id]=""
+    for ((k = 0; k < n; k++)); do
+        cid="$id.$k"
+        NAME[$cid]=$(jq -r --argjson k "$k" '.items[$k].name' <<<"$json")
+        CUR[$cid]=$(jq -r --argjson k "$k" '.items[$k].current // ""' <<<"$json")
+        LAT[$cid]=$(jq -r --argjson k "$k" '.items[$k].latest // ""' <<<"$json")
+        URL[$cid]=$(jq -r --argjson k "$k" '.items[$k].url // ""' <<<"$json")
+        KEY[$cid]=$(jq -r --argjson k "$k" '.items[$k].key' <<<"$json")
+        PARENT[$cid]="$id"
+        STATE[$cid]=available
+        CHILDREN[$id]+="$cid "
+    done
 }
 for i in "${m_ids[@]}"; do read_result "m$i" "$(basename "$(dirname "${scripts[$i]}")")"; done
 for i in "${f_ids[@]}"; do read_result "f$i" "${inputs[$i]}"; done
@@ -325,7 +348,13 @@ ids_of() {
     local i
     for i in "$@"; do echo "$prefix$i"; done
 }
-mapfile -t m_all < <(ids_of m "${m_ids[@]}")
+# Modules, avec leurs sous-éléments juste après eux.
+m_all=()
+for id in $(ids_of m "${m_ids[@]}"); do
+    m_all+=("$id")
+    # shellcheck disable=SC2206 # liste d'ids sans espace, découpage voulu
+    [ -n "${CHILDREN[$id]:-}" ] && m_all+=(${CHILDREN[$id]})
+done
 mapfile -t f_all < <(ids_of f "${f_ids[@]}")
 [ ${#m_all[@]} -gt 0 ] && section "📦  Modules épinglés (update.sh)" "${m_all[@]}"
 [ ${#f_all[@]} -gt 0 ] && section "❄   Inputs du flake (flake.lock)" "${f_all[@]}"
@@ -364,7 +393,7 @@ choose() {
     local sel
     sel=$(IFS=,; echo "${preselected[*]}")
     set +e
-    picked=$(gum choose --no-limit --ordered --height 15 \
+    picked=$(gum choose --no-limit --height 15 \
         --header "$header" --cursor-prefix "› " --selected-prefix "◉ " --unselected-prefix "○ " \
         ${sel:+--selected="$sel"} -- "${labels[@]}")
     rc=$?
@@ -373,9 +402,15 @@ choose() {
     # dans un sous-shell). Échap : rien de coché dans cette catégorie.
     [ "$rc" -eq 130 ] && return 130
     [ "$rc" -ne 0 ] && return 0
+    # Rendus dans l'ordre de la liste, quel que soit l'ordre de cochage.
+    declare -A chosen
     while IFS= read -r l; do
-        [ -n "$l" ] && echo "${by_label[$l]}"
+        [ -n "$l" ] && chosen["${by_label[$l]}"]=1
     done <<<"$picked"
+    for id in "$@"; do
+        [ -n "${chosen[$id]:-}" ] && echo "$id"
+    done
+    return 0
 }
 
 m_sel=()
@@ -437,12 +472,28 @@ fi
 # Modules en parallèle, un statut par ligne rafraîchi sur place.
 if [ ${#m_sel[@]} -gt 0 ]; then
     echo
+    # Un job par script : les sous-éléments cochés d'un même module partent
+    # ensemble, via `--only KEY...`.
+    declare -A JOB ONLY
+    jobs_order=()
     for id in "${m_sel[@]}"; do
-        script="${scripts[${id#m}]}"
+        job="${PARENT[$id]:-$id}"
+        JOB[$id]="$job"
+        if [ -z "${ONLY[$job]+set}" ]; then
+            ONLY[$job]=""
+            jobs_order+=("$job")
+        fi
+        [ -n "${KEY[$id]:-}" ] && ONLY[$job]+="${KEY[$id]} "
+    done
+    for job in "${jobs_order[@]}"; do
+        script="${scripts[${job#m}]}"
+        args=()
+        # shellcheck disable=SC2206 # clés sans espace, découpage voulu
+        [ -n "${ONLY[$job]}" ] && args=(--only ${ONLY[$job]})
         (
             set +e
-            MY_FLAKE="$flake" "$flake/$script" >"$tmp/$id.log" 2>&1
-            echo $? >"$tmp/$id.done"
+            MY_FLAKE="$flake" "$flake/$script" "${args[@]}" >"$tmp/$job.log" 2>&1
+            echo $? >"$tmp/$job.done"
         ) &
     done
 
@@ -452,8 +503,8 @@ if [ ${#m_sel[@]} -gt 0 ]; then
         local frame="$1" id rc
         for id in "${m_sel[@]}"; do
             printf '\033[2K'
-            if [ -f "$tmp/$id.done" ]; then
-                rc=$(cat "$tmp/$id.done")
+            if [ -f "$tmp/${JOB[$id]}.done" ]; then
+                rc=$(cat "$tmp/${JOB[$id]}.done")
                 if [ "$rc" = 0 ]; then
                     printf '  %s✓%s  %-*s  %s%s%s\n' "$OK" "$R" "$width" "${NAME[$id]}" "$OK" "${LAT[$id]}" "$R"
                 else
@@ -466,8 +517,8 @@ if [ ${#m_sel[@]} -gt 0 ]; then
         done
     }
     all_done() {
-        local id
-        for id in "${m_sel[@]}"; do [ -f "$tmp/$id.done" ] || return 1; done
+        local job
+        for job in "${jobs_order[@]}"; do [ -f "$tmp/$job.done" ] || return 1; done
     }
 
     if [ -t 1 ]; then
@@ -490,13 +541,17 @@ if [ ${#m_sel[@]} -gt 0 ]; then
     wait
 
     for id in "${m_sel[@]}"; do
-        if [ "$(cat "$tmp/$id.done")" = 0 ]; then
+        if [ "$(cat "$tmp/${JOB[$id]}.done")" = 0 ]; then
             done_ok=$((done_ok + 1))
         else
             failures=$((failures + 1))
-            printf '\n  %s%s :%s\n' "$ERR" "${NAME[$id]}" "$R"
-            grep -v '^\s*$' "$tmp/$id.log" | tail -n 5 | sed 's/^/     /'
         fi
+    done
+    # Log des échecs, une fois par job (pas par sous-élément).
+    for job in "${jobs_order[@]}"; do
+        [ "$(cat "$tmp/$job.done")" = 0 ] && continue
+        printf '\n  %s%s :%s\n' "$ERR" "${NAME[$job]}" "$R"
+        grep -v '^\s*$' "$tmp/$job.log" | tail -n 5 | sed 's/^/     /'
     done
 fi
 

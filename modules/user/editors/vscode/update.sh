@@ -22,6 +22,14 @@ fi
 flake="${MY_FLAKE:-$HOME/.dotfiles}"
 file="$flake/modules/user/editors/vscode/extensions.json"
 
+# --only KEY... : ne traite que ces extensions (clés publisher.name), pour
+# que update.sh puisse les proposer une par une. Sans option : toutes.
+only=()
+if [ "${1:-}" = "--only" ]; then
+    shift
+    only=("$@")
+fi
+
 if [ ! -f "$file" ]; then
     echo "Fichier introuvable : $file" >&2
     exit 1
@@ -74,8 +82,9 @@ if [ "$check" -eq 1 ]; then
             continue
         fi
         if [ "$latest" != "$current" ]; then
-            changes=$(jq -c --arg k "$name" --arg c "$current" --arg l "$latest" \
-                '. + [{key: $k, current: $c, latest: $l}]' <<<"$changes")
+            changes=$(jq -c --arg k "$key" --arg n "$name" --arg c "$current" --arg l "$latest" \
+                --arg u "https://marketplace.visualstudio.com/items?itemName=$key" \
+                '. + [{key: $k, name: "VS Code · \($n)", current: $c, latest: $l, url: $u}]' <<<"$changes")
         fi
     done
     total=$(jq -r 'keys | length' "$file")
@@ -87,7 +96,7 @@ if [ "$check" -eq 1 ]; then
         latest: (if ($changes | length) == 0 then "\($total) extensions"
                  else "\($changes | length) à mettre à jour" end),
         available: (($changes | length) > 0),
-        summary: ($changes | map("\(.key) \(.current) → \(.latest)") | join(", ")),
+        items: $changes,
         $note
     }' >&3
     exit 0
@@ -106,6 +115,9 @@ note_skip() {
 }
 
 for key in $(jq -r 'keys[]' "$file"); do
+    if [ ${#only[@]} -gt 0 ] && ! printf '%s\n' "${only[@]}" | grep -qxF "$key"; then
+        continue
+    fi
     publisher=$(jq -r ".\"$key\".publisher" "$file")
     name=$(jq -r ".\"$key\".name" "$file")
     current=$(jq -r ".\"$key\".version" "$file")
