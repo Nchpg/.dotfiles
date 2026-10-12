@@ -53,7 +53,25 @@ let
   # programs.btop (pas pkgs.btop, amont driver i915-only) : support GPU xe
   # (PR #1457) si activé côté user.
   btop = "${config.programs.btop.package}/bin/btop";
-  thunar = "${pkgs.thunar}/bin/thunar";
+  # Thunar « éphémère » du clic sur la case disque : flottant, Échap/q pour
+  # fermer, fermé à l'ouverture d'un fichier (cf. thunar-float/daemon.sh).
+  thunarFloatLauncher = pkgs.writeShellApplication {
+    name = "thunar-float";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.thunar
+    ];
+    text = builtins.readFile ./thunar-float/launcher.sh;
+  };
+  thunarFloatDaemon = pkgs.writeShellApplication {
+    name = "thunar-float-daemon";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.sway # swaymsg
+      pkgs.jq
+    ];
+    text = builtins.readFile ./thunar-float/daemon.sh;
+  };
 
   # Installés par ./scripts.nix, qui possède aussi ce chemin.
   inherit (cfg) scriptDir;
@@ -326,6 +344,19 @@ in
       };
     };
 
+    systemd.user.services.thunar-float = {
+      Unit = {
+        Description = "Thunar éphémère du clic waybar (flottant, Échap/q, fermé à l'ouverture)";
+        PartOf = [ "graphical-session.target" ];
+        After = [ "graphical-session.target" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        ExecStart = "${thunarFloatDaemon}/bin/thunar-float-daemon";
+        Restart = "on-failure";
+      };
+    };
+
     # Les scripts épinglent déjà leurs deps (cf. ./scripts.nix) : gardés ici
     # seulement comme CLI pratiques (playerctl pilote aussi Spotify).
     home.packages = [
@@ -506,7 +537,7 @@ in
           exec = "${scriptDir}/disk.sh";
           interval = 30;
           return-type = "json";
-          on-click = thunar;
+          on-click = "${thunarFloatLauncher}/bin/thunar-float";
         };
 
         # Module custom (pas le natif) : ajoute profil d'alimentation et
