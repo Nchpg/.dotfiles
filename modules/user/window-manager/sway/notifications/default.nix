@@ -168,6 +168,9 @@ let
   # d'affilée : au réveil, le réseau met quelques secondes à revenir, et un
   # seul échec déclencherait une fausse alerte suivie d'un « rétabli ».
   vpnClient = osConfig.systemSettings.vpn.client.enable or false;
+  # Signal qui réveille la case vpn de waybar (= vpnSignal dans
+  # modules/user/window-manager/sway/waybar/default.nix).
+  vpnWaybarSignal = 10;
 
   vpnAlert = cfg.pkgs.writeShellScript "vpn-alert" ''
     set -u
@@ -175,13 +178,24 @@ let
     dir="''${XDG_RUNTIME_DIR:-/tmp}/vpn-alert"
     mkdir -p "$dir"
 
+    addr=""
     if [ ! -d /sys/class/net/wg0 ]; then
       now=off
-    elif ${cfg.pkgs.coreutils}/bin/timeout 2 ${cfg.pkgs.bash}/bin/bash -c 'exec 3<>/dev/tcp/10.8.0.1/443' 2>/dev/null; then
-      now=on
     else
-      now=down
+      read -r _ _ addr _ < <(${cfg.pkgs.iproute2}/bin/ip -4 -brief addr show wg0 2>/dev/null) || true
+      if ${cfg.pkgs.coreutils}/bin/timeout 2 ${cfg.pkgs.bash}/bin/bash -c 'exec 3<>/dev/tcp/10.8.0.1/443' 2>/dev/null; then
+        now=on
+      else
+        now=down
+      fi
     fi
+
+    # État brut publié pour le module vpn de waybar (« epoch état adresse »),
+    # réveillé par signal : il n'a plus à refaire cette même sonde de son côté.
+    printf -v epoch '%(%s)T' -1
+    printf '%s %s %s\n' "$epoch" "$now" "$addr" > "$dir/state.tmp"
+    ${cfg.pkgs.coreutils}/bin/mv -f "$dir/state.tmp" "$dir/state"
+    ${cfg.pkgs.procps}/bin/pkill -RTMIN+${toString vpnWaybarSignal} waybar 2>/dev/null || true
 
     shown=$(cat "$dir/shown" 2>/dev/null || echo "")
     pending=$(cat "$dir/pending" 2>/dev/null || echo "")
@@ -196,8 +210,14 @@ let
       rm -f "$dir/pending"
       exit 0
     fi
-    if [ "$now" != "$pending" ]; then
-      echo "$now" > "$dir/pending"
+    # Notifie un changement seulement s'il tient 30 s (sonde toutes les
+    # 15 s) : une coupure d'un instant ne mérite pas d'alerte. « état epoch ».
+    read -r pending_state pending_since <<<"$pending" || true
+    if [ "$now" != "$pending_state" ] || [ -z "''${pending_since:-}" ]; then
+      echo "$now $epoch" > "$dir/pending"
+      exit 0
+    fi
+    if [ $((epoch - ''${pending_since:-$epoch})) -lt 30 ]; then
       exit 0
     fi
 
@@ -286,8 +306,10 @@ in
       Unit.Description = "Vérifie périodiquement que think répond dans le tunnel";
       Timer = {
         OnBootSec = "1min";
-        OnUnitActiveSec = "30s";
-        AccuracySec = "5s"; # défaut 1 min : le 30 s ne voudrait rien dire
+        # 15 s : sert aussi la case vpn de waybar (même sonde, cf. vpnAlert),
+        # qui doit montrer vite que think ne répond plus.
+        OnUnitActiveSec = "15s";
+        AccuracySec = "3s"; # défaut 1 min : le 15 s ne voudrait rien dire
       };
       Install.WantedBy = [ "timers.target" ];
     };

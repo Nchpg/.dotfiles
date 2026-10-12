@@ -171,6 +171,9 @@ let
 
   # Réveille le module luminosité pour rafraîchir l'icône/le % (clic/molette).
   backlightSignal = 9;
+  # Réveille la case vpn quand vpn-alert publie un nouvel état (même valeur que
+  # vpnWaybarSignal dans modules/user/window-manager/sway/notifications).
+  vpnSignal = 10;
   refreshBacklight = "${pkill} -RTMIN+${toString backlightSignal} waybar";
   # Le choix PERSISTE au reboot via un flag : couper pose le fichier, rallumer
   # le retire, ExecCondition dessus (sans flag, WantedBy graphical-session
@@ -418,9 +421,14 @@ in
         # module ne sert pas à savoir qu'on l'a activé, mais à voir tout de suite
         # qu'il ne répond plus. D'où l'intervalle court, et l'état « ? » distinct
         # de « Off ».
+        #
+        # La sonde elle-même est faite par vpn-alert toutes les 15 s, qui
+        # publie l'état et réveille ce module par signal (une seule connexion
+        # TCP au lieu de deux). Interval long = filet sans client VPN.
         "custom/vpn" = {
           exec = "${scriptDir}/vpn.sh";
-          interval = 15;
+          interval = 60;
+          signal = vpnSignal;
           return-type = "json";
         };
 
