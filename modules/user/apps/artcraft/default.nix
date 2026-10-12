@@ -46,8 +46,23 @@ let
     # peut pas monter son squashfs (« No suitable fusermount binary »). Ce
     # mode l'extrait dans /tmp à la place, au prix d'un démarrage un peu plus
     # lent.
+    #
+    # Fermer la fenêtre QUITTE le launcher : son réglage « Keep running in the
+    # tray » (vrai par défaut) le laisserait tourner en fond. Remis à faux à
+    # chaque lancement, dans le fichier où il garde ses réglages (une seule
+    # occurrence ; fichier absent : réglages partiels acceptés, le reste prend
+    # ses valeurs par défaut).
     profile = ''
       export APPIMAGE_EXTRACT_AND_RUN=1
+
+      artcraft_settings="''${XDG_DATA_HOME:-$HOME/.local/share}/${appId}/app.ron"
+      if [ -f "$artcraft_settings" ]; then
+        ${cfg.pkgs.gnused}/bin/sed -i 's/close_to_tray:true/close_to_tray:false/' "$artcraft_settings"
+      else
+        ${cfg.pkgs.coreutils}/bin/mkdir -p "$(${cfg.pkgs.coreutils}/bin/dirname "$artcraft_settings")"
+        printf '{\n    "settings": "(close_to_tray:false)",\n}\n' >"$artcraft_settings"
+      fi
+      unset artcraft_settings
     '';
 
     # .desktop de l'AppImage : Exec pointe le binaire interne, à remplacer par
