@@ -29,7 +29,8 @@ done
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
     echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light] [--update] [--yes]" >&2
     echo "  --update : bump l'input claude-code + les modules à update.sh (confirmation par module)" >&2
-    echo "  --yes    : pas de confirmation (working tree sale, ni bump de module)" >&2
+    echo "  --yes    : pas de confirmation (working tree sale, ni bump de module) ;" >&2
+    echo "             le lock des secrets n'est alors jamais modifié (avertissement seul)" >&2
     exit 1
 fi
 
@@ -144,7 +145,9 @@ fi
 SECRETS_STORE="${MY_SECRETS:-$HOME/.secrets}"
 if [ -d "$SECRETS_STORE/.git" ] && [ -f flake.lock ]; then
     SECRETS_HEAD="$(git -C "$SECRETS_STORE" rev-parse HEAD 2> /dev/null || true)"
-    SECRETS_LOCKED="$(grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
+    # jq sur la structure du lock ; grep en repli (jq absent du PATH).
+    SECRETS_LOCKED="$(jq -r '.nodes.secrets.locked.rev // empty' flake.lock 2> /dev/null \
+        || grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
 
     if [ -n "$SECRETS_HEAD" ] && [ -n "$SECRETS_LOCKED" ] && [ "$SECRETS_HEAD" != "$SECRETS_LOCKED" ]; then
         echo -e "${YELLOW}Le lock ne pointe pas sur ton dernier commit de secrets.${NC}"
@@ -152,22 +155,50 @@ if [ -d "$SECRETS_STORE/.git" ] && [ -f flake.lock ]; then
         echo "  lock  : $SECRETS_LOCKED"
         echo -e "  Rebuild en l'état = ${RED}déploiement de l'ANCIENNE valeur${NC}."
         echo
+        # --yes (genclean, theme...) ne bouge JAMAIS ce lock : une maintenance
+        # de générations n'a pas à déployer de nouvelles valeurs de secrets
+        # sans qu'on l'ait demandé. Avertissement seul, révision épinglée.
         if [[ "$YES" -eq 1 ]]; then
-            echo "(--yes) Mise à jour du lock."
-            REPLY=y
+            echo -e "${YELLOW}(--yes) Lock non modifié, poursuite avec la révision épinglée.${NC}"
+            echo "  Pour déployer la nouvelle : \`secrets sync\`, ou rebuild sans --yes."
+            REPLY=n
         else
             read -p "Mettre le lock à jour maintenant ? [Y/n] " -n 1 -r
             echo
         fi
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            # sudo : le jeton de lecture du dépôt privé est en 0600 root, et la
-            # récupération d'une entrée se fait dans l'évaluateur.
-            # --refresh : sans lui Nix resert une résolution vieille d'une heure.
-            sudo nix flake update secrets --refresh || {
+            # Mêmes précautions que `secrets sync` (modules/system/commands/secrets) :
+            #  - sudo : le jeton de lecture du dépôt privé est en 0600 root, et
+            #    la récupération d'une entrée se fait dans l'évaluateur ;
+            #  - NIX_CONFIG : ce jeton, même sur une machine neuve dont
+            #    /etc/nix/nix.conf ne l'inclut pas encore (cf. plus bas) ;
+            #  - safe.directory : root opère sur un dépôt qui t'appartient ;
+            #  - --refresh : sans lui Nix resert une résolution vieille d'une heure ;
+            #  - propriétaire de flake.lock restauré (réécrit par root).
+            lock_owner="$(stat -c '%u:%g' flake.lock)"
+            sudo env \
+                NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
+                GIT_CONFIG_COUNT=1 \
+                GIT_CONFIG_KEY_0=safe.directory \
+                GIT_CONFIG_VALUE_0="$PWD" \
+                nix flake update secrets --refresh --flake "$PWD" || {
                 echo -e "${RED}Mise à jour du lock échouée.${NC}" >&2
                 exit 1
             }
-        else
+            if [ "$(stat -c '%u:%g' flake.lock)" != "$lock_owner" ]; then
+                sudo chown -h "$lock_owner" -- flake.lock
+            fi
+            # Le lock pointe-t-il VRAIMENT sur le commit local ? Il prend le HEAD
+            # distant : des commits non poussés dans le dépôt privé passeraient
+            # sinon sans un mot, et le rebuild déploierait l'ancienne valeur.
+            SECRETS_LOCKED="$(jq -r '.nodes.secrets.locked.rev // empty' flake.lock 2> /dev/null \
+                || grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
+            if [ "$SECRETS_LOCKED" != "$SECRETS_HEAD" ]; then
+                echo -e "${RED}Le lock pointe sur $SECRETS_LOCKED, pas sur ton commit local $SECRETS_HEAD.${NC}" >&2
+                echo "  Commits de secrets non poussés ? \`git -C $SECRETS_STORE push\`, puis relance." >&2
+                exit 1
+            fi
+        elif [[ "$YES" -ne 1 ]]; then
             echo -e "${YELLOW}Poursuite avec la révision épinglée.${NC}"
         fi
     fi
