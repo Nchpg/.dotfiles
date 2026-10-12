@@ -166,6 +166,8 @@
         nextcloud.enable = true;
 
         artcraft.enable = true;
+
+        claudeDesktop.enable = true;
       };
 
       gui = {
