@@ -171,6 +171,18 @@ in
     # Son (FilmCraft, DeckCraft, EffectCraft, SoundCraft) : lié en dur, sans
     # elle l'app ne démarre même pas (libasound.so.2 introuvable).
     alsa-lib
+    # X11, chargées à l'exécution (dlopen) : certaines apps n'ont QUE ce
+    # backend (DeckCraft 0.5 : « XNotSupported ... libX11.so.6 », aucune
+    # fenêtre) et passent alors par XWayland ; les autres s'en servent en repli
+    # sans Wayland.
+    libx11
+    libxcursor
+    libxi
+    libxrandr
+    libxcb
+    libxext
+    libxrender
+    libxfixes
   ];
 
   environment.systemPackages = with pkgs-stable; [ lm_sensors ];
