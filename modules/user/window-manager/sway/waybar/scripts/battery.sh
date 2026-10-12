@@ -3,8 +3,8 @@ set -euo pipefail
 # Batterie (module custom). Remplace le module `battery` natif pour pouvoir
 # afficher, EN PLUS du %/temps/santé/cycles, deux infos que le tooltip-format
 # natif ne sait pas produire (ses placeholders sont figés) :
-#   - le profil d'alimentation (performance / équilibré / économie), via
-#     power-profiles-daemon (powerprofilesctl) ;
+#   - le profil d'alimentation (performance / équilibré / économie), lu chez
+#     power-profiles-daemon par D-Bus ;
 #   - le régime des ventilateurs : état marche/arrêt (acpi_fan) + mode LG
 #     (lg-laptop/fan_mode : silencieux vs performance).
 #
@@ -71,17 +71,24 @@ energy_full_design=$(<"$bat/energy_full_design")
 if [[ $energy_full_design =~ ^[0-9]+$ ]] && (( energy_full_design > 0 )); then
     health=$(( (energy_full * 100 + energy_full_design / 2) / energy_full_design ))
 fi
-cycles=$(cat "$bat/cycle_count" 2>/dev/null) || true # absent sur certaines batteries
+cycles=""
+# absent sur certaines batteries. `read` (builtin) plutôt que `cat` : ce
+# script tourne toutes les 10 s, chaque processus évité compte.
+[[ -r $bat/cycle_count ]] && read -r cycles <"$bat/cycle_count"
 
 # --- Profil d'alimentation (power-profiles-daemon) ---------------------------
+# Propriété D-Bus lue directement (busctl, ~8 ms) plutôt que `powerprofilesctl
+# get` : script Python, ~180 ms de CPU à chaque appel, soit la moitié du coût
+# de tous les scripts de la barre. Sortie : s "power-saver".
 profile=""
-if command -v powerprofilesctl &>/dev/null; then
-    case "$(powerprofilesctl get 2>/dev/null)" in
-        performance) profile="Performance" ;;
-        balanced)    profile="Équilibré" ;;
-        power-saver) profile="Économie" ;;
-    esac
-fi
+ppd=$(busctl --system get-property org.freedesktop.UPower.PowerProfiles \
+    /org/freedesktop/UPower/PowerProfiles org.freedesktop.UPower.PowerProfiles \
+    ActiveProfile 2>/dev/null) || true # démon absent : pas de ligne profil
+case "$ppd" in
+    *'"performance"') profile="Performance" ;;
+    *'"balanced"')    profile="Équilibré" ;;
+    *'"power-saver"') profile="Économie" ;;
+esac
 
 # --- Ventilateurs : état (acpi_fan) + mode (lg-laptop) -----------------------
 # Le numéro hwmon n'est pas stable : on cherche le capteur nommé "acpi_fan"
@@ -92,12 +99,15 @@ fi
 fan_rpm=""
 for namefile in /sys/class/hwmon/hwmon*/name; do
     [[ $(<"$namefile") == acpi_fan ]] || continue
-    v=$(cat "${namefile%/name}/fan1_input" 2>/dev/null) || true
+    v=""
+    read -r v <"${namefile%/name}/fan1_input" 2>/dev/null || true
     [[ $v =~ ^[0-9]+$ ]] && { fan_rpm=$v; break; }
 done
 # Valeurs alignées sur lg-control (modules/user/lg-control) : 0=Optimal,
 # 1=Silencieux, 2=Performance — même sysfs, même mapping des deux côtés.
-case "$(cat /sys/devices/platform/lg-laptop/fan_mode 2>/dev/null)" in
+lg_fan_mode=""
+read -r lg_fan_mode </sys/devices/platform/lg-laptop/fan_mode 2>/dev/null || true
+case "$lg_fan_mode" in
     0) fan_mode="optimal" ;;
     1) fan_mode="silencieux" ;;
     2) fan_mode="performance" ;;

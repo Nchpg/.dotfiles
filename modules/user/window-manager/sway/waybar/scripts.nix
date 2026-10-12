@@ -53,7 +53,7 @@ let
     ];
     "battery.sh" = [
       pkgs.coreutils
-      pkgs.power-profiles-daemon
+      pkgs.systemd # busctl
     ];
     # `timeout` vient de coreutils, la connexion TCP de test est un builtin bash.
     "vpn.sh" = [
