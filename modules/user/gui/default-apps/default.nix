@@ -103,10 +103,11 @@ let
     "image/x-adobe-dng"
   ];
 
-  # GIF avec les vidéos : ce sont des animations, pas des images à retoucher
-  # (lues en boucle, cf. le profil extension.gif du module mpv).
+  # GIF à part : des animations, pas des images à retoucher, lues en boucle
+  # dans mpv (cf. le profil extension.gif du module mpv).
+  gifTypes = [ "image/gif" ];
+
   videoTypes = [
-    "image/gif"
     "video/mp4"
     "video/x-matroska"
     "video/webm"
@@ -169,7 +170,8 @@ in
         // to (craft "wordcraft") wordTypes
         // to (craft "photocraft") imageTypes
         // to (craft "lightcraft") rawTypes
-        // to "mpv.desktop" videoTypes
+        // to "mpv.desktop" gifTypes
+        // to "vlc.desktop" videoTypes
         // {
           "application/pdf" = craft "pdfcraft";
           "image/svg+xml" = craft "vectorcraft"; # vectoriel : Illustrator

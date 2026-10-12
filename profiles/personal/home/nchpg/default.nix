@@ -172,6 +172,7 @@
         displays.enable = true;
         pavucontrol.enable = true;
         mpv.enable = true;
+        vlc.enable = true;
         flameshot.enable = true;
         wfRecorder.enable = true;
         feh.enable = true;
