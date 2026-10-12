@@ -66,8 +66,8 @@ launched_by_file() {
 }
 
 swaymsg -t subscribe -m '["window"]' \
-    | jq --unbuffered -r '[.change, .container.id, (.container.app_id // ""), (.container.pid // 0)] | @tsv' \
-    | while IFS=$'\t' read -r change id app pid; do
+    | jq --unbuffered -r '[.change, .container.id, (.container.app_id // ""), (.container.pid // 0), .container.type] | @tsv' \
+    | while IFS=$'\t' read -r change id app pid type; do
         case $change in
             new)
                 # Fenêtre Thunar demandée par le clic waybar il y a < 10 s.
@@ -75,10 +75,14 @@ swaymsg -t subscribe -m '["window"]' \
                     && (($(date +%s) - $(stat -c %Y "$dir/pending") < 10)); then
                     rm -f "$dir/pending"
                     float_id=$id
-                    swaymsg -q "[con_id=$id] floating enable, resize set 1200 750, move position center" || true
-                    # Au premier lancement, Thunar impose sa taille juste après
-                    # s'être affiché : on repasse derrière lui.
-                    (sleep 0.4 && swaymsg -q "[con_id=$id] resize set 1200 750, move position center") >/dev/null 2>&1 &
+                    # Déjà flottante : la règle du launcher a joué dès la
+                    # première image, rien à refaire. Sinon (un Thunar
+                    # tournait déjà) : rattrapage après coup.
+                    if [ "$type" != floating_con ]; then
+                        swaymsg -q "[con_id=$id] floating enable, resize set 1200 750, move position center" || true
+                        # Thunar impose sa taille juste après s'être affiché.
+                        (sleep 0.4 && swaymsg -q "[con_id=$id] resize set 1200 750, move position center") >/dev/null 2>&1 &
+                    fi
                 # Nouvelle fenêtre lancée PAR ce Thunar alors qu'il avait le
                 # focus : un fichier vient d'y être ouvert. Les dialogues de
                 # Thunar lui-même (renommer, propriétés...) sont exclus.

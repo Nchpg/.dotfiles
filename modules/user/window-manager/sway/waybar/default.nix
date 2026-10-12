@@ -59,6 +59,7 @@ let
     name = "thunar-float";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.sway # swaymsg
       pkgs.thunar
     ];
     text = builtins.readFile ./thunar-float/launcher.sh;
