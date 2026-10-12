@@ -28,3 +28,8 @@ else
   exit 1
 fi
 
+# Rafraîchit tout de suite la case luminosité de waybar (signal 9 =
+# backlightSignal dans waybar/default.nix) : elle n'a plus besoin de relire
+# la luminosité toutes les 3 s pour rattraper les touches clavier.
+pkill -RTMIN+9 waybar 2>/dev/null || true
+

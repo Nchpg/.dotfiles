@@ -435,7 +435,10 @@ in
 
         "custom/backlight" = {
           exec = "${scriptDir}/backlight.sh";
-          interval = 3; # filet pour capter les touches clavier de luminosité
+          # Rafraîchi par signal à chaque changement (touches clavier via
+          # sway-config/brightness.sh, molette et menu ici). Relecture lente
+          # en filet, pour un changement fait par un autre moyen.
+          interval = 60;
           signal = backlightSignal;
           return-type = "json";
           format = "{icon}   {text}";
