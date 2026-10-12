@@ -64,6 +64,9 @@ in
   environment.systemPackages = lib.mkIf desktop [ pkgs-stable.wsdd ];
 
   programs.thunar.enable = lib.mkIf desktop true;
+  # Service de miniatures que Thunar interroge par D-Bus : sans lui, pas
+  # d'aperçus et une erreur « not activatable » à chaque dossier ouvert.
+  services.tumbler.enable = lib.mkIf desktop true;
 
   # Les commandes admin NVMe exigent CAP_SYS_ADMIN : waybar (user) ne peut
   # pas appeler smartctl lui-même, d'où cet export périodique vers

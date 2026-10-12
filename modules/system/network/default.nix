@@ -139,6 +139,9 @@ in
     # NetworkManager gère les interfaces (DHCP inclus).
     (lib.mkIf (static == null) {
       networking.networkmanager.enable = true;
+      # Activé d'office avec NetworkManager, mais aucune machine n'a de modem
+      # 4G/5G : un démon de plus qui tournait à vide.
+      networking.modemmanager.enable = false;
     })
 
     (lib.mkIf (static != null) {

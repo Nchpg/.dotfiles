@@ -82,6 +82,10 @@ in
     }
 
     (lib.mkIf cfg.earlyoom.enable {
+      # systemd-oomd (actif par défaut) ferait doublon avec earlyoom, et ne
+      # surveille de toute façon aucun cgroup ici.
+      systemd.oomd.enable = false;
+
       services.earlyoom = {
         enable = true;
         # Agit quand RAM ET swap passent sous 5 % libres (SIGTERM), SIGKILL à 2,5 %.

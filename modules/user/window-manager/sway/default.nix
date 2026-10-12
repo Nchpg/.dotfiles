@@ -345,8 +345,10 @@ in
     ];
 
     # Lock après 10 min d'inactivité, écrans éteints après 15 min (rallumés au
-    # premier input), et lock systématique avant mise en veille (sinon la
-    # session revient déverrouillée au réveil).
+    # premier input), mise en veille après 30 min, et lock systématique avant
+    # mise en veille (sinon la session revient déverrouillée au réveil). Sans
+    # la veille, un portable laissé ouvert tirait 5-8 W indéfiniment, écran
+    # noir.
     services.swayidle = {
       enable = true;
       package = cfg.pkgs.swayidle;
@@ -359,6 +361,10 @@ in
           timeout = 900;
           command = "${swaymsgBin} 'output * power off'";
           resumeCommand = "${swaymsgBin} 'output * power on'";
+        }
+        {
+          timeout = 1800;
+          command = "systemctl suspend";
         }
       ];
       events."before-sleep" = "${lockCmdBeforeSleep}";

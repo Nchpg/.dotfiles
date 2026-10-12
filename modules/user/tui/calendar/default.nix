@@ -254,6 +254,10 @@ in
           Unit.Description = "Synchronisation Google Calendar pour ikhal";
           Service = {
             Type = "oneshot";
+            # Au réveil, le timer part souvent avant le retour du Wi-Fi (DNS
+            # injoignable) : on réessaie au lieu de rester en échec.
+            Restart = "on-failure";
+            RestartSec = "30s";
             ExecStart = "${cfg.pkgs.writeShellScript "calendar-tui-sync" ''
               set -eu
               [ -f "$HOME/.config/vdirsyncer/config" ] || exit 0
