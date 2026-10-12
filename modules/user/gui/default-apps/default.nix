@@ -2,7 +2,6 @@
   config,
   lib,
   myLib,
-  pkgs-stable,
   ...
 }:
 
@@ -25,9 +24,15 @@ let
   # du cache MIME, comme sans défaut.
   craft = app: "ai.storyteller.${app}.desktop";
 
-  # Code et texte structuré : nvim, pas un traitement de texte. Le texte brut
-  # (text/plain) va à WordCraft.
+  # Tout ce qui est texte sans être un document de traitement de texte, et tout
+  # ce qu'on ne reconnaît pas : nvim. Règle : WordCraft seulement quand on est
+  # SÛR que c'est un document (wordTypes), nvim dans le doute. Les fichiers sans
+  # type propre (Dockerfile, .conf, .ini, .nix...) sont du text/plain, les
+  # inconnus de l'application/octet-stream.
   codeTypes = [
+    "text/plain"
+    "application/octet-stream"
+    "application/x-zerosize" # fichier vide
     "text/markdown"
     "text/x-markdown"
     "text/x-csrc"
@@ -63,6 +68,15 @@ let
     "text/xml"
     "text/x-diff"
     "text/x-patch"
+  ];
+
+  # Documents de traitement de texte (formats que WordCraft déclare savoir
+  # ouvrir). Pas de .doc : WordCraft ne le gère pas.
+  wordTypes = [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document" # .docx
+    "application/vnd.oasis.opendocument.text" # .odt
+    "application/rtf"
+    "text/rtf"
   ];
 
   imageTypes = [
@@ -116,20 +130,6 @@ let
 
   to = app: types: lib.genAttrs types (_: app);
 
-  # Types absents de shared-mime-info : sans eux ces fichiers sont du
-  # `text/plain` et partent dans WordCraft. Base MIME du profil reconstruite
-  # par home-manager (xdg.mime.enable, actif par défaut).
-  extraMimeTypes = pkgs-stable.writeTextDir "share/mime/packages/dotfiles-code.xml" ''
-    <?xml version="1.0" encoding="UTF-8"?>
-    <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
-      <mime-type type="text/x-nix">
-        <sub-class-of type="text/plain"/>
-        <comment>Nix expression</comment>
-        <glob pattern="*.nix"/>
-      </mime-type>
-    </mime-info>
-  '';
-
   # nvim dans le terminal par défaut : l'entrée nvim.desktop du paquet est en
   # Terminal=true, que xdg-open (mode générique) ignore -> nvim sans terminal.
   nvimInTerminal = myLib.mkTerminalCmd {
@@ -145,8 +145,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    home.packages = [ extraMimeTypes ];
-
     xdg.desktopEntries.nvim-terminal = {
       name = "Neovim";
       genericName = "Éditeur de texte";
@@ -166,13 +164,13 @@ in
       defaultApplications =
         to "firefox.desktop" webTypes
         // to "nvim-terminal.desktop" codeTypes
+        // to (craft "wordcraft") wordTypes
         // to (craft "photocraft") imageTypes
         // to (craft "lightcraft") rawTypes
         // to "mpv.desktop" videoTypes
         // {
           "application/pdf" = craft "pdfcraft";
           "image/svg+xml" = craft "vectorcraft"; # vectoriel : Illustrator
-          "text/plain" = craft "wordcraft";
           "inode/directory" = "thunar.desktop";
           "x-scheme-handler/msteams" = "teams.desktop";
           "x-scheme-handler/claude-cli" = "claude-code-url-handler.desktop";
