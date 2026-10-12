@@ -43,7 +43,10 @@ sync_once() {
 
             # Dans CHAQUE ligne Exec= (entrée principale et [Desktop Action]),
             # remplace la commande par l'AppImage, en sautant un éventuel
-            # préfixe `env VAR=val ...`. Sous [Desktop Entry], ajoute le
+            # préfixe `env VAR=val ...`. Guillemets seulement si le chemin a
+            # une espace : xdg-open (xdg-utils) prend sinon les guillemets pour
+            # une partie du nom, ne trouve pas la commande et retombe sur le
+            # navigateur. Sous [Desktop Entry], ajoute le
             # marqueur et l'AppImage d'origine, relue au nettoyage quel que
             # soit le format de Exec.
             awk -v app="$appimage" -v marker="$marker" '
@@ -53,7 +56,7 @@ sync_once() {
                     for (i = 1; i <= n; i++) {
                         t = f[i]
                         if (!done && t != "env" && t !~ /^[A-Za-z_][A-Za-z0-9_]*=/) {
-                            t = "\"" app "\""; done = 1
+                            t = (app ~ / / ? "\"" app "\"" : app); done = 1
                         }
                         out = out (i > 1 ? " " : "") t
                     }
