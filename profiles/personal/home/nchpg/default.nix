@@ -175,6 +175,7 @@
         flameshot.enable = true;
         wfRecorder.enable = true;
         feh.enable = true;
+        defaultApps.enable = true;
       };
 
       tui = {
