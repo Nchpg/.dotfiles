@@ -18,8 +18,7 @@ let
   # PATH, celui-ci reste ajouté en repli pour le reste.
   scriptDeps = {
     "resources.sh" = [
-      pkgs.coreutils
-      pkgs.gawk
+      pkgs.coreutils # nproc, sleep
     ];
     "bluetooth.sh" = [
       pkgs.coreutils

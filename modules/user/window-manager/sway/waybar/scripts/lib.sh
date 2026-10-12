@@ -16,9 +16,24 @@ json_escape() {
     printf '%s' "$s"
 }
 
+# json_escape_to : comme json_escape, mais écrit dans la variable nommée $1
+# au lieu de stdout -> pas de sous-shell $(...), donc pas de fork. Pour les
+# boucles qui tournent en continu (resources.sh).
+json_escape_to() { # $1 = nom de variable, $2 = valeur
+    local -n _je_out=$1
+    local s=$2
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    _je_out=$s
+}
+
 # emit : JSON waybar { texte barre, tooltip (peut être vide) }, les deux échappés.
 emit() {
-    printf '{"text":"%s","tooltip":"%s"}\n' "$(json_escape "$1")" "$(json_escape "$2")"
+    local _emit_t _emit_tt
+    json_escape_to _emit_t "$1"
+    json_escape_to _emit_tt "$2"
+    printf '{"text":"%s","tooltip":"%s"}\n' "$_emit_t" "$_emit_tt"
 }
 
 # Icônes batterie Nerd Font (Material Design), 11 niveaux (0-100% par pas de

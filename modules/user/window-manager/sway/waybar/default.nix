@@ -426,7 +426,9 @@ in
 
         "custom/resources" = {
           exec = "${scriptDir}/resources.sh";
-          interval = 3; # moins de réveils/forks qu'à 2s, gain batterie
+          # Flux continu (une ligne toutes les 3 s, cf. le script), pas
+          # d'interval ; relancé seulement s'il s'arrête.
+          restart-interval = 1;
           return-type = "json";
           on-click = termExec btop;
         };
