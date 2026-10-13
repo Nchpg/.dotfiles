@@ -496,10 +496,9 @@ in
 
         # Jeton `serverinfo`, produit par l'instance et rangé dans les secrets.
         # DÉCLARER LA CLÉ D'ABORD : c'est cette déclaration qui fait apparaître
-        # la règle de création dans le .sops.yaml du dépôt privé (bloc généré
-        # par `nix run .#sops-policy`), et sans règle sops refuse de créer le
-        # fichier. L'ordre inverse — créer le secret puis câbler l'option —
-        # échoue sur « no matching creation rules found ».
+        # la règle de création dans le .sops.yaml du dépôt privé (bloc généré,
+        # posé tout seul par `secrets edit`), et sans règle sops refuse de créer
+        # le fichier. Dans l'ordre inverse, `secrets edit` refuse et le dit.
         apps.nextcloudTokenKey = "nextcloud/serverinfo_token";
       };
 
@@ -523,12 +522,10 @@ in
       #
       #   1. créer le compte sur la région EUROPE (le site ne se change plus
       #      après coup, cf. l'option `site` du module) et relever la clé d'API ;
-      #   2. `nix run .#sops-policy` et reporter le bloc dans le .sops.yaml du
-      #      dépôt privé — c'est cette déclaration-ci qui y fait apparaître la
-      #      règle de création, et sans règle sops refuse de créer le fichier ;
-      #   3. `secrets` pour poser la valeur, puis bump du lock de l'entrée
-      #      `secrets` ;
-      #   4. rebuild.
+      #   2. `secrets edit datadog/api_key` pour poser la valeur : la règle de
+      #      création, qui découle de cette déclaration-ci, est posée d'abord
+      #      dans le .sops.yaml, puis le dépôt privé et le lock sont synchronisés ;
+      #   3. commit du lock, rebuild.
       datadog = {
         enable = true;
 

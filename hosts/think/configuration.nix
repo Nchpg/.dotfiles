@@ -10,8 +10,8 @@
 {
   # Configuration propre à cette machine qui n'a pas à être publiée. Elle vit
   # dans le dépôt de secrets, déjà entrée du flake et déjà épinglée par
-  # flake.lock : ce qui est déployé ne change donc qu'après un
-  # `nix flake update secrets`, qui se voit dans un diff ici — le même
+  # flake.lock : ce qui est déployé ne change donc qu'après une mise à jour
+  # du lock (`secrets sync`), qui se voit dans un diff ici — le même
   # raisonnement que pour les valeurs chiffrées.
   #
   # L'entrée est en `flake = false`, donc `inputs.secrets` est un CHEMIN DU

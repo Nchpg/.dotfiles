@@ -17,11 +17,10 @@ modules/
 themes/            Thèmes base16 (schemes/*.yaml) + wallpapers + fonts + galerie
 lib/               Helpers injectés en `myLib` (import-all, discover, mk-*, checks)
 overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
-docs/              Documentation longue (docs/secrets.md : sops, clés, enrôlement)
+docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi)
 devshells/         `nix develop .#python|c|xpu`
-init.sh            Enrôlement d'une machine neuve : jeton, clés age, clone des secrets
-rebuild.sh         Script de rebuild (enrobé par la commande `rebuild`)
-genclean.sh        Nettoyage interactif des générations (commande `genclean`)
+init.sh            Mise en place d'une machine neuve : host, matériel, clés age, SSH GitHub, clone des secrets, hooks, inscription
+scripts/           Scripts derrière les commandes `rebuild`, `update`, `genclean`
 formatter.nix      `nix fmt` (nixfmt sur les fichiers trackés)
 statix.toml        Config du linter statix
 ```
@@ -59,15 +58,16 @@ pas le hostname).
 
 | Commande | Effet |
 |---|---|
+| `dots` | Menu : choisis une commande ci-dessous puis un usage courant (exemples expliqués) ou tes propres arguments ; `dots help` liste tout |
 | `rebuild` | Rebuild de la cible de ce système (check git, diff nvd, reload sway/waybar) |
 | `update` | Vérifie en parallèle les modules à `update.sh` et les inputs du flake, puis propose de cocher quoi mettre à jour (sans rebuild) ; `-c` liste seulement, `-y` prend la sélection par défaut, `update NOM` restreint |
 | `rebuild -u` | `update`, puis rebuild |
 | `rebuild -y` | Idem sans confirmation si le working tree est sale |
 | `theme dark\|light\|toggle` | Bascule le thème (persistant) puis rebuild |
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |
-| `git config core.hooksPath .githooks` | Active le hook pre-commit (une fois par clone) : formate les `.nix` stagés |
+| `git config core.hooksPath .githooks` | Active les hooks (fait par `./init.sh`) : formatage des `.nix` au commit, dépôt de secrets tenu en phase au pull/push |
 | `nix flake check` | Vérifie l'évaluation du flake |
-| `secrets` / `secrets user` | Édite les secrets système / les tiens (voir `docs/secrets.md`) |
+| `secrets edit\|show\|list\|sync\|status\|policy` | Édite et synchronise les secrets (voir `docs/secrets-guide.md`) |
 
 ## Secrets
 
@@ -76,6 +76,7 @@ dans un dépôt privé, tiré comme entrée `secrets` du flake. Publier des vale
 emballées en X25519 revenait à en offrir une copie permanente à qui saura casser
 la courbe elliptique, et l'historique git rend ça irréversible.
 
-Deux fichiers, deux classes de destinataires : `system.yaml` n'est déchiffrable
-que par root sur les machines, `secrets.yaml` par ta clé utilisateur. Détails et
-procédures : `docs/secrets.md`.
+Un fichier par secret, scellé pour les seules machines dont la config le
+déclare : clé système (root) pour un secret lu par un service, clé de ton compte
+pour un secret lu par tes outils. Quoi taper : `docs/secrets-guide.md` ; le
+pourquoi : `docs/secrets.md`.

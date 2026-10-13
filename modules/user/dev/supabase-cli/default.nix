@@ -36,7 +36,7 @@ in
       default = "supabase/access_token";
       description = ''
         Nom du secret sops contenant le token d'accès Supabase.
-        A renseigner via `secrets user` sous la cle correspondante.
+        A renseigner via `secrets edit <ce nom>`.
       '';
     };
   };

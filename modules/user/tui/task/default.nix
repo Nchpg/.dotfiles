@@ -112,7 +112,7 @@ in
         # L'app écrit ~/.gtask/token.json au 1er lancement (flux navigateur),
         # token runtime mutable, hors sops. Setup : mêmes identifiants OAuth
         # que calendar-tui, projet Google Cloud avec l'API "Google Tasks"
-        # activée, via `secrets user`.
+        # activée, via `secrets edit`.
         #
         # Elle le crée en 644 alors qu'il contient un refresh token : lisible
         # par tous, contrairement à celui de vdirsyncer. Remis en 600 (et le

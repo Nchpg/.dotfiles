@@ -65,7 +65,7 @@ in
       default = "vercel/token";
       description = ''
         Nom du secret sops contenant le token Vercel.
-        A renseigner via `secrets user` sous la cle correspondante.
+        A renseigner via `secrets edit <ce nom>`.
       '';
     };
 

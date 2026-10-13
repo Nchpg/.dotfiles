@@ -11,7 +11,7 @@
 # Clé de déchiffrement : ~/.config/sops/age/keys.txt, identité age DÉDIÉE
 # générée par `./init.sh` (hybride ML-KEM-768 + X25519, cf. son en-tête). Elle
 # n'est plus dérivée de la clé SSH : une ed25519 ne donne que du X25519.
-# Éditer les secrets : `secrets user`. Cf. docs/secrets.md.
+# Éditer un secret : `secrets edit <nom>`. Cf. docs/secrets.md.
 let
   keyOwner = osConfig.systemSettings.sops.keyOwner;
 

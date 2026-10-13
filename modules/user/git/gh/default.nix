@@ -22,7 +22,7 @@ in
       default = "gh/token";
       description = ''
         Nom du secret sops contenant le PAT GitHub (Personal Access Token).
-        A renseigner via `secrets user` sous la cle correspondante.
+        A renseigner via `secrets edit <ce nom>`.
       '';
     };
 

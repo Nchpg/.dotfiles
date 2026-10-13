@@ -21,7 +21,7 @@ in
       default = "wakatime/api_key";
       description = ''
         Nom du secret sops contenant l'API key WakaTime.
-        A renseigner via `secrets user`.
+        A renseigner via `secrets edit <ce nom>`.
       '';
     };
 

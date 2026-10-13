@@ -1,5 +1,9 @@
 # Secrets (sops-nix)
 
+> Les commandes à taper, situation par situation (modifier, ajouter, nouveau
+> PC…) : **[guide pratique](secrets-guide.md)**. Ce document-ci explique le
+> pourquoi.
+
 Les valeurs chiffrées ne vivent **pas ici**. Elles sont dans un dépôt privé,
 tiré comme entrée `secrets` du flake. Ce dépôt-ci est public et ne contient que
 la configuration qui les consomme.
@@ -91,20 +95,30 @@ lieu de rester scellé pour tout le parc sans que rien ne le dise.
 Les destinataires ne s'écrivent nulle part à la main. Ils se **déduisent** de deux
 choses :
 
-- **qui déclare le secret**, c'est-à-dire le profil du module qui le consomme. Une
-  valeur déclarée par un module du profil `server` appartient à `server`, sans qu'on
-  l'annote. Une valeur déclarée des deux côtés d'un tunnel reçoit les deux rôles,
-  sans qu'aucun des deux modules connaisse l'autre.
+- **quelles machines le déclarent** : celles dont la configuration déployée contient
+  le module qui le consomme. Un secret déclaré par un module du profil `server` va
+  aux machines qui font tourner `server` ; un secret déclaré dans `hosts/gram` ne va
+  qu'à gram. Une valeur déclarée des deux côtés d'un tunnel va aux deux machines,
+  sans qu'aucun des deux modules connaisse l'autre. `secretProfiles` élargit
+  volontairement un secret à toutes les machines d'un profil.
+
+  **Par machine, et non par profil** : traduire « déclaré sous `personal` » en
+  « toutes les machines `personal` » donnait la clé privée WireGuard de gram
+  (déclarée par `hosts/gram`) à tout nouveau portable `personal`, de quoi usurper
+  gram sur le tunnel. Invisible tant qu'il n'y avait qu'une machine par profil.
 - **quelles machines font tourner quels profils**, ce que dit
   `systemSettings.sops.deployments` dans `hosts/default.nix`. C'est la seule
   information du montage qui ne se dérive de rien : `flake.nix` construit ses cibles
   par produit cartésien, donc `server-gram` existe et compile, et sans cette table
   « les machines qui font tourner server » voudrait dire « toutes ».
 
-`nix run .#sops-policy` imprime le bloc `creation_rules` qui en découle, à poser dans
-le `.sops.yaml` du dépôt privé. Le check `sops-policy` du flake refuse de passer si
-les deux divergent, et ce n'est pas du confort : une audience trop LARGE fonctionne
-mieux, pas moins. Rien d'autre ne l'attraperait.
+`secrets policy` calcule le bloc `creation_rules` qui en découle (le même que
+`nix run .#sops-policy` imprime), le pose dans le `.sops.yaml` du dépôt privé à la
+place de l'ancien, rescelle les fichiers si les destinataires ont changé, et
+synchronise. Le check `sops-policy` du flake refuse de passer si les deux
+divergent, et ce n'est pas du confort : une audience trop LARGE fonctionne mieux,
+pas moins. Rien d'autre ne l'attraperait. Ne jamais éditer ce bloc à la main :
+c'est un ajout manuel en fin de fichier qui avait mis le check en échec.
 
 Un même fichier peut relever des **deux plans** à la fois, s'il est lu par un service
 ici et par un outil sous ton compte là-bas : il reçoit alors des ancres `-sys` et des
@@ -121,9 +135,9 @@ Tout passe par `secrets`, qui choisit la bonne clé, les bons chemins, ton
 secrets edit wireguard/gram_preshared_key   # édite, CRÉE si absent, puis synchronise
 secrets show wireguard/gram_preshared_key
 secrets list           # les noms, sans aucun déchiffrement
-secrets recipients     # fichier par fichier, qui peut l'ouvrir
-secrets updatekeys     # après modification de .sops.yaml
-secrets sync           # commit + lock, sans passer par l'éditeur
+secrets policy         # régénère les règles, rescelle ce qui diffère, synchronise
+secrets sync           # commit + push + lock, sans passer par l'éditeur
+secrets status         # dépôt privé en phase avec le lock ? (muet si oui)
 ```
 
 Il n'y a **plus de commande par défaut** : il n'existe pas de « fichier des
@@ -135,12 +149,19 @@ compte. Elle tranche sur les destinataires plutôt que par essai-erreur, sops so
 en échec aussi bien quand il ne peut pas déchiffrer que quand tu abandonnes
 l'édition.
 
-`secrets recipients` est le seul contrôle qui ne se déduise pas d'un rebuild réussi,
-et il mérite un coup d'œil après chaque changement de politique : un fichier scellé
-trop largement fonctionne mieux, pas moins. C'est aussi là qu'on voit un fichier qui
-aurait gardé un destinataire **classique** — une clé qui ne commence pas par
-`age1pq1` — ce que sops accepte sans un mot et qui rouvre le fichier à la seule clé
-faible.
+**Les destinataires réels sont contrôlés en continu.** Pour chaque fichier, la
+commande compare les clés inscrites dedans à celles qu'attend le `.sops.yaml`
+(la règle du fichier, ses ancres résolues en clés). C'est le seul contrôle qui ne
+se déduise pas d'un rebuild réussi : un fichier scellé trop largement fonctionne
+mieux, pas moins. Il attrape une règle resserrée sans rescellement, l'ancre d'une
+machine réinstallée qu'on a remplacée, une clé en trop, et un destinataire
+**classique** resté dans un fichier — une clé qui ne commence pas par `age1pq1`, ce
+que sops accepte sans un mot et qui rouvre le fichier à la seule clé faible.
+
+- `secrets status` (donc chaque `git status` dans la config et chaque `rebuild`)
+  signale les fichiers qui divergent, en 0,1 s, sans rien déchiffrer ;
+- `secrets policy` et chaque `secrets edit` les rescellent. Ceux qu'aucune clé de
+  cette machine n'ouvre sont listés, à resceller depuis une machine qui le peut.
 
 Le dépôt privé est attendu dans `~/.secrets`, surchargeable par `MY_SECRETS`.
 
@@ -156,6 +177,30 @@ déploie tant qu'un commit explicite n'a pas bougé le lock, donc le changement 
 voit dans un diff au lieu d'arriver en douce la nuit suivante. `secrets` fait la
 séquence pour qu'on ne l'oublie pas.
 
+`secrets sync` reprend là où on s'est arrêté : il commite s'il y a des
+modifications, pousse s'il y a des commits en avance, et bouge le lock s'il ne
+pointe pas sur le dernier commit. Un push qui avait échoué ou un commit fait à la
+main dans `~/.secrets` se rattrapent donc par la même commande. `rebuild` la
+propose d'office quand `secrets status` signale du travail.
+
+### Ne travailler que dans la config
+
+On reste dans `~/.dotfiles` ; le dépôt privé suit, par les hooks de `.githooks`
+(activés par `./init.sh`), qui délèguent tous à `secrets git-hook`. Comme ce sont
+des hooks et pas des alias, ils marchent quel que soit le raccourci (`git st`,
+`git p`…) et le client (lazygit, éditeur).
+
+| Dans la config | Côté secrets |
+|---|---|
+| `git pull` | Si le lock tiré pointe sur une révision absente de `~/.secrets`, celui-ci est tiré en `--ff-only`. Modifications locales ou historiques divergents : avertissement, jamais de fusion sur des fichiers chiffrés. |
+| `git push` | Le lock de chaque commit poussé doit pointer sur une révision présente sur l'origin du dépôt privé. Sinon `~/.secrets` est poussé d'abord, et si ça ne suffit pas, le push est **refusé**. |
+| `git status` | `secrets status` s'affiche dessous quand il y a quelque chose à dire (hook fish `fish_postexec`, alias git résolus). |
+
+Le refus au push protège le serveur : son auto-upgrade construit la config
+**depuis GitHub**, donc avec le lock poussé. Un lock qui pointe sur un commit de
+secrets resté sur une machine ferait échouer le rebuild de la nuit.
+`git push --no-verify` passe outre.
+
 ## Ajouter un secret
 
 **L'ORDRE COMPTE**, et sops le fait respecter tout seul : sans règle correspondante
@@ -165,7 +210,8 @@ C'est ce qui garantit qu'aucune valeur n'existe sans que ses destinataires aient
 été calculés.
 
 **1. La déclaration**, dans le module qui consomme le secret — c'est elle qui
-détermine l'audience, puisque le profil du module *est* l'audience. Deux formes.
+détermine l'audience : les machines dont la configuration contient ce module. Deux
+formes.
 
 Le secret est un fichier à lui seul :
 
@@ -192,19 +238,17 @@ Le `placeholder` est un jeton bidon au build : c'est lui qui part dans le store,
 jamais la valeur. sops le remplace à l'activation. Le `/` navigue dans le YAML
 imbriqué.
 
-**2. La politique**, puisque l'audience vient de changer. Le bloc généré est à
-substituer à celui du `.sops.yaml` du dépôt privé, sans quoi le check du flake
-refusera de passer :
-
-```sh
-nix run .#sops-policy
-```
-
-**3. La valeur** :
+**2. La valeur** :
 
 ```sh
 secrets edit mon_app/api_key
 ```
+
+La politique se régénère d'elle-même au début de chaque `secrets edit` (0,1 s une
+fois l'évaluation en cache, muette si rien n'a changé) : le nouveau secret reçoit
+sa règle, calculée depuis la déclaration, sans `secrets policy` à lancer. La
+déclaration doit seulement être suivie par git — un flake ne voit que les fichiers
+suivis. Sans déclaration, la commande refuse de créer le fichier et le dit.
 
 Le fichier n'existe pas encore, la commande le crée. La création se fait **sous ton
 compte quel que soit le secret** : chiffrer ne demande que des clés publiques, seule
@@ -212,7 +256,7 @@ la relecture exige d'être destinataire. Un secret système créé ici sera donc
 pour la machine qui le consomme, et aussitôt illisible pour toi — c'est le
 comportement voulu.
 
-**4. `rebuild`.** La construction refuse de passer si la clé n'existe pas dans le
+**3. `rebuild`.** La construction refuse de passer si la clé n'existe pas dans le
 fichier : sops-nix valide le manifeste au build, donc une configuration qui
 référence un secret absent ne peut pas être déployée. Elle refuse aussi si le
 fichier lui-même n'existe pas, le chemin étant vérifié à l'évaluation.
@@ -239,68 +283,74 @@ sops.secrets."wireguard/server_private_key" = {
 ## Enrôler une machine
 
 ```sh
-git clone git@github.com:Nchpg/.dotfiles.git ~/.dotfiles
+nix-shell -p git     # git n'est pas installé sur une NixOS neuve
+git clone https://github.com/Nchpg/.dotfiles.git ~/.dotfiles
 cd ~/.dotfiles && ./init.sh
 ```
 
+En HTTPS : le dépôt est public, aucune clé n'est nécessaire pour le cloner. Et
+**dans `~/.dotfiles`**, que le script exige : home-manager y fige `MY_FLAKE`.
+
 `init.sh` pose tout ce qui doit exister **avant** le premier rebuild, dans le bon
-ordre et avec les bons droits : le jeton de lecture, la clé système, la clé
-utilisateur — deux identités age dédiées, hybrides, générées sur place — et le
-clone du dépôt privé. Chaque étape est idempotente, il ne réécrit jamais un secret
-en place.
+ordre et avec les bons droits :
 
-Il affiche ensuite les deux clés publiques de la machine, et s'arrête. La suite ne
-peut pas se faire là : une machine neuve ne peut pas s'autoriser elle-même. Quatre
-gestes, dans cet ordre, depuis une machine **déjà autorisée** :
+- le **nom du host** et le profil, demandés (le hostname vaut `nixos` sur une
+  installation neuve, ce n'est pas le nom qui sert aux ancres) ;
+- `hosts/<host>/hardware-configuration.nix`, généré pour un nouveau host, et
+  proposé à la régénération s'il cite des disques absents (réinstallation) ;
+- le jeton de lecture, la clé système, la clé utilisateur — deux identités age
+  dédiées, hybrides, générées sur place ;
+- l'**accès SSH à GitHub** : clé créée si besoin, le script attend qu'elle soit
+  ajoutée au compte, puis passe le remote de la config en SSH pour pouvoir
+  pousser ;
+- le clone du dépôt privé dans `~/.secrets`, et les hooks git ;
+- l'**inscription** de la machine, après une confirmation : ses deux clés
+  publiques comme ancres `<host>-sys` / `<host>-user` dans le `.sops.yaml` du dépôt
+  privé (remplacées si elles existent, cas d'une réinstallation), son profil dans
+  `systemSettings.sops.deployments` (`hosts/default.nix`), et son fichier matériel —
+  commités et poussés dans les deux dépôts.
 
-**1. Les ancres**, dans le `.sops.yaml` du dépôt privé, au-dessus du bloc généré :
+Chaque étape est idempotente, il ne réécrit jamais un secret en place.
 
-```yaml
-- &nouvelle-sys   age1pq1…
-- &nouvelle-user  age1pq1…
-```
-
-**2. Le parc**, dans `hosts/default.nix` de ce dépôt-ci. Rien d'autre ne porte
-l'information « cette machine fait tourner ce profil pour de vrai », et sans elle
-la machine ne devient destinataire de rien :
-
-```nix
-systemSettings.sops.deployments.nouvelle = [ "personal" ];
-```
-
-**3. La politique**, regénérée depuis les configurations, à substituer au bloc
-généré du `.sops.yaml` :
+**L'inscription ne donne accès à rien.** Une clé publique ajoutée n'ouvre aucun
+fichier : il faut encore qu'une machine qui les ouvre déjà les **rescelle** pour la
+nouvelle. C'est l'unique geste qui reste, sur une machine **déjà autorisée** :
 
 ```sh
-nix run .#sops-policy
+git pull && secrets policy
 ```
 
-**4. Le rescellement**, qui applique cette politique aux fichiers existants :
-
-```sh
-secrets updatekeys
-```
+`secrets policy` affiche, fichier par fichier, quelle machine gagne (`+newpc-user`)
+ou perd (`-gram-user`) l'accès, et demande confirmation avant de resceller. C'est
+le moment où l'accès se donne — une ancre poussée à ton insu dans le dépôt privé se
+verrait là, avant d'avoir rien ouvert.
 
 Resceller exige de pouvoir **déjà** déchiffrer — il rouvre le fichier pour le
 refermer avec la clé en plus — d'où l'obligation de le faire ailleurs que sur la
-machine neuve. Sur celle-ci, `./rebuild.sh` seulement ensuite.
+machine neuve. Les fichiers qu'aucune clé de la machine autorisée n'ouvre sont
+listés « à resceller depuis une machine qui peut les ouvrir » : `secrets policy`
+là-bas aussi.
 
-`updatekeys` ne s'arrête pas sur un fichier qu'il ne peut pas ouvrir : cette
-machine-ci ne peut plus lire les secrets qui ne la concernent pas, c'est la
-propriété recherchée. Il les liste en fin de course comme « à resceller depuis
-celle qui les détient ».
+`secrets policy` finit en donnant le commit du lock à faire (`flake.lock`) : à
+commiter et pousser, sans quoi le `git pull` de la machine neuve ne lui apporte
+rien. Puis, sur la machine neuve : `git pull && ./scripts/rebuild.sh --host <host>
+--profile <profil>`. Relancer `./init.sh` dit où l'on en est : « destinataire de
+tous ses secrets » quand chaque fichier qui doit s'ouvrir pour elle la cite.
 
-Révoquer, c'est retirer l'ancre, retirer la machine de `deployments`, regénérer la
-politique et refaire `secrets updatekeys`. Et **faire tourner les secrets
-concernés**, la machine révoquée les ayant connus — le rescellement ne reprend pas
-ce qui a déjà été lu.
+Entre l'inscription et ce commit du lock, le check `sops-policy` de la CI est
+rouge sur `main` : la config déclare une machine que le `.sops.yaml` verrouillé ne
+connaît pas encore. C'est attendu, et ça se referme avec le commit du lock.
+
+Révoquer, c'est retirer l'ancre, retirer la machine de `deployments`, puis
+`secrets policy`. Et **faire tourner les secrets concernés**, la machine révoquée
+les ayant connus — le rescellement ne reprend pas ce qui a déjà été lu.
 
 ## Réinstaller une machine
 
 Ses deux clés sont détruites. Tant que l'autre machine tient, elle rescelle vers
-les nouvelles et c'est réglé : régénérer les identités avec `./init.sh`, remplacer
-les ancres dans le `.sops.yaml`, `nix run .#sops-policy`, `secrets updatekeys`
-depuis l'autre. C'est la cérémonie d'enrôlement, à l'identique.
+les nouvelles et c'est réglé : `./init.sh` régénère les identités et **remplace**
+les ancres de la machine dans le `.sops.yaml`, puis `secrets policy` depuis
+l'autre. C'est la cérémonie d'enrôlement, à l'identique.
 
 Depuis le passage au post-quantique, ça vaut aussi pour les secrets utilisateur :
 leur clé n'est plus dérivée de `~/.ssh/id_ed25519`, donc restaurer sa clé SSH ne
