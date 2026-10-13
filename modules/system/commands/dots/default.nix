@@ -147,19 +147,43 @@ let
     ) c.examples
   ) commands;
 
-  colors = lib.optionalString config.stylix.enable (
-    let
-      c = config.lib.stylix.colors;
-    in
-    ''
-      export GUM_CHOOSE_CURSOR_FOREGROUND="#${c.base0D}"
-      export GUM_CHOOSE_HEADER_FOREGROUND="#${c.base03}"
-      export GUM_CHOOSE_SELECTED_FOREGROUND="#${c.base0B}"
-      export GUM_INPUT_PROMPT_FOREGROUND="#${c.base0D}"
-      export GUM_INPUT_HEADER_FOREGROUND="#${c.base03}"
-      export DOTS_OK="#${c.base0B}" DOTS_WARN="#${c.base0A}"
-    ''
-  );
+  # Palette des questions gum, les rôles de `update` : la palette Stylix quand
+  # le thème est actif, sinon les numéros de couleur du terminal (même rôles,
+  # 4 = bleu, 2 = vert…). Jamais les couleurs par défaut de gum, y compris sur
+  # l'écran Oui/Non (`gum confirm`), qui les gardait.
+  palette =
+    if config.stylix.enable then
+      let
+        c = config.lib.stylix.colors;
+      in
+      {
+        accent = "#${c.base0D}";
+        ok = "#${c.base0B}";
+        warn = "#${c.base0A}";
+        dim = "#${c.base03}";
+        text = "#${c.base05}";
+        base = "#${c.base00}";
+      }
+    else
+      {
+        accent = "4";
+        ok = "2";
+        warn = "3";
+        dim = "8";
+        text = "7";
+        base = "0";
+      };
+
+  colors = with palette; ''
+    export GUM_CHOOSE_CURSOR_FOREGROUND="${accent}" GUM_CHOOSE_HEADER_FOREGROUND="${dim}"
+    export GUM_CHOOSE_SELECTED_FOREGROUND="${ok}" GUM_CHOOSE_ITEM_FOREGROUND="${text}"
+    export GUM_INPUT_PROMPT_FOREGROUND="${accent}" GUM_INPUT_HEADER_FOREGROUND="${dim}"
+    export GUM_INPUT_CURSOR_FOREGROUND="${accent}" GUM_INPUT_PLACEHOLDER_FOREGROUND="${dim}"
+    export GUM_CONFIRM_PROMPT_FOREGROUND="${accent}"
+    export GUM_CONFIRM_SELECTED_BACKGROUND="${accent}" GUM_CONFIRM_SELECTED_FOREGROUND="${base}"
+    export GUM_CONFIRM_UNSELECTED_BACKGROUND="${dim}" GUM_CONFIRM_UNSELECTED_FOREGROUND="${text}"
+    export DOTS_OK="${ok}" DOTS_WARN="${warn}"
+  '';
 in
 {
   environment.systemPackages = [
