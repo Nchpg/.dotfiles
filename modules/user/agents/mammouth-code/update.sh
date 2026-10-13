@@ -4,7 +4,7 @@
 # `nix store prefetch-file` — même technique que vscode/update.sh et
 # kimi-code/update.sh, pour que le hash corresponde à l'artefact réellement
 # installé (binaire précompilé, pas de paquet npm ici).
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
@@ -21,7 +21,16 @@ dir="$flake/modules/user/agents/mammouth-code"
 pinned_file="$dir/pinned.json"
 
 echo "🔎 Checking latest Mammouth Code release..."
-version=$(curl -fsSL "https://api.github.com/repos/mammouth-ai/code/releases/latest" | jq -r '.tag_name | ltrimstr("v")')
+# Jeton facultatif (GITHUB_TOKEN, exporté par update.sh depuis gh ou par la
+# CI) : sans lui l'API GitHub plafonne à 60 requêtes/h par IP, et le 403 qui
+# s'ensuit faisait échouer ce module.
+auth=()
+[ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
+if ! release=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/mammouth-ai/code/releases/latest") \
+    || ! version=$(printf '%s' "$release" | jq -er '.tag_name | ltrimstr("v")'); then
+    echo "⚠️ Error: Could not read latest Mammouth Code release" >&2
+    exit 1
+fi
 echo "Latest version: $version"
 
 if [ "$check" -eq 1 ]; then
