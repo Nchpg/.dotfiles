@@ -20,7 +20,7 @@ SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 
 # On se place dans le flake pour que `nixos-rebuild --flake .` fonctionne quel
 # que soit le répertoire d'appel.
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 RED='\033[0;31m'
 ORANGE='\033[1;33m'
@@ -184,7 +184,7 @@ if command -v rebuild >/dev/null 2>&1; then
     echo "Rebuild du système via la commande rebuild..."
     rebuild -y
 else
-    warn "Commande 'rebuild' introuvable — relance './rebuild.sh --profile <profil> --host <host>' à la main pour rafraîchir le menu de boot."
+    warn "Commande 'rebuild' introuvable — relance './scripts/rebuild.sh --profile <profil> --host <host>' à la main pour rafraîchir le menu de boot."
 fi
 
 echo "Nettoyage terminé."

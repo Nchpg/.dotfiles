@@ -51,7 +51,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # Mises à jour seulement sur demande (--update / rebuild -u) : les faire à
 # chaque rebuild salissait flake.lock (→ warning git systématique). Délégué à
@@ -66,7 +66,7 @@ if [[ "$UPDATE" -eq 1 ]]; then
     [[ "$YES" -eq 1 ]] && update_args+=(--yes)
     # Ctrl+C dans la liste (130) : on abandonne aussi le rebuild. Tout autre
     # échec : on reconstruit avec l'état actuel.
-    UPDATE_FROM_REBUILD=1 ./update.sh "${update_args[@]}" && rc=0 || rc=$?
+    UPDATE_FROM_REBUILD=1 ./scripts/update.sh "${update_args[@]}" && rc=0 || rc=$?
     if [[ "$rc" -eq 130 ]]; then
         echo "Rebuild annulé."
         exit 130

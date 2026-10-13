@@ -25,7 +25,7 @@
 #   NOM...       : restreint aux modules / inputs dont le nom contient NOM
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 flake="$PWD"
 
 # ── Couleurs ─────────────────────────────────────────────────────────────────

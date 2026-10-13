@@ -23,7 +23,7 @@ let
 
   flakeGuard = myLib.mkFlakeGuard {
     name = "theme";
-    scriptName = "rebuild.sh";
+    scriptName = "scripts/rebuild.sh";
   };
 in
 {

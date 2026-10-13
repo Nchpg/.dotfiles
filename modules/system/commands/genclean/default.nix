@@ -5,15 +5,15 @@
 }:
 
 {
-  # Enrobe ./genclean.sh du dépôt pour le lancer depuis n'importe où.
+  # Enrobe scripts/genclean.sh du dépôt pour le lancer depuis n'importe où.
   environment.systemPackages = [
     (pkgs-stable.writeShellScriptBin "genclean" ''
       set -euo pipefail
       ${myLib.mkFlakeGuard {
         name = "genclean";
-        scriptName = "genclean.sh";
+        scriptName = "scripts/genclean.sh";
       }}
-      exec "$flake/genclean.sh" "$@"
+      exec "$flake/scripts/genclean.sh" "$@"
     '')
   ];
 }

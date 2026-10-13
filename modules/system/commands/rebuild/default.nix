@@ -8,7 +8,7 @@
 }:
 
 {
-  # Enrobe ./rebuild.sh. Profil/host/variante par défaut = ceux de la config
+  # Enrobe scripts/rebuild.sh. Profil/host/variante par défaut = ceux de la config
   # qui a construit ce système (specialArg `target`, plus robuste que parser
   # le hostname). Variante par défaut = celle du système courant : `rebuild`
   # seul reste dans la même dark/light, sans fichier d'état (cf. `theme`).
@@ -52,7 +52,7 @@
 
       ${myLib.mkFlakeGuard {
         name = "rebuild";
-        scriptName = "rebuild.sh";
+        scriptName = "scripts/rebuild.sh";
       }}
 
       # Pour `-u` : rebuild.sh lance update.sh, qui a besoin de gum.
@@ -61,7 +61,7 @@
         inherit (pkgs-stable) gum;
       }}
 
-      exec "$flake/rebuild.sh" --profile "$profile" --host "$host" --variant "$variant" ''${extra[@]+"''${extra[@]}"}
+      exec "$flake/scripts/rebuild.sh" --profile "$profile" --host "$host" --variant "$variant" ''${extra[@]+"''${extra[@]}"}
     '')
   ];
 }
