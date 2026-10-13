@@ -224,4 +224,27 @@ else
     exit 1
 fi
 
+# ── Hooks git du dépôt ───────────────────────────────────────────────────────
+#
+# Ce sont eux qui tiennent le dépôt de secrets en phase au pull et au push
+# (cf. .githooks et `secrets git-hook`). Actifs seulement si ce clone le
+# demande (core.hooksPath, réglage local jamais poussé) : un clone fait sans
+# ./init.sh les a éteints. Après un rebuild, la commande `secrets` qu'ils
+# appellent est à jour : c'est le bon moment pour le rattraper.
+#
+# --yes ne décide pas à ta place : avertissement seul.
+if [ -d .githooks ] && [ "$(git config --get core.hooksPath || true)" != .githooks ]; then
+    echo -e "${YELLOW}⚠ Hooks git inactifs dans $PWD : secrets non synchronisés au pull/push.${NC}"
+    if [[ "$YES" -eq 1 ]] || [ ! -t 0 ]; then
+        echo "  Pour les activer : git -C $PWD config core.hooksPath .githooks"
+    else
+        read -p "Les activer maintenant ? [Y/n] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            git config core.hooksPath .githooks
+            echo -e "${GREEN}✓ Hooks git actifs.${NC}"
+        fi
+    fi
+fi
+
 echo "All done."
