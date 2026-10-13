@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Nettoyage des générations NixOS, puis GC / optimise et rebuild. Lançable de
-# n'importe où via la commande `genclean` (cf. modules/system/genclean).
+# n'importe où via la commande `genclean` (cf. modules/system/commands/genclean).
 #
 # Étapes (les 3 dernières sont optionnelles, demandées en y/n) :
 #   1. SYSTÈME : garder N générations (ou X jours) — points de rollback du boot.
@@ -15,6 +15,14 @@
 #
 # Les chemins HM sont résolus à l'exécution (XDG sinon legacy per-user) → portable.
 set -euo pipefail
+
+# Aucun argument : sans ce garde, `genclean --help` (proposé par `dots`) lançait
+# directement le nettoyage. L'aide est l'en-tête ci-dessus.
+case "${1:-}" in
+    "") ;;
+    -h|--help) sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "genclean : aucun argument attendu (genclean --help)" >&2; exit 1 ;;
+esac
 
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 
