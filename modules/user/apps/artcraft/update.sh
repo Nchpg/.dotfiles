@@ -5,7 +5,7 @@
 # que le hash corresponde à l'artefact réellement empaqueté.
 # Seul le launcher est épinglé ici : les apps de la suite, il les installe et
 # les met à jour lui-même dans ~/Applications (cf. default.nix).
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
@@ -22,8 +22,9 @@ dir="$flake/modules/user/apps/artcraft"
 pinned_file="$dir/pinned.json"
 
 echo "🔎 Checking latest ArtCraft Launcher release..."
-# Jeton facultatif (GITHUB_TOKEN, exporté par la CI) : sans lui l'API GitHub
-# plafonne à 60 requêtes/h par IP, vite atteint sur un runner partagé.
+# Jeton facultatif (GITHUB_TOKEN, exporté par update.sh depuis gh ou par la
+# CI) : sans lui l'API GitHub plafonne à 60 requêtes/h par IP, vite atteint
+# sur un runner partagé.
 auth=()
 [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
 # jq -e + // empty : réponse inattendue (rate limit, pas de release) -> échec

@@ -2,7 +2,7 @@
 # Vérifie la dernière version de tasks-tui-app sur PyPI et met à jour
 # pinned.json avec le hash SRI du sdist. Pas de téléchargement : PyPI publie
 # le sha256 du fichier, converti tel quel au format attendu par fetchPypi.
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien

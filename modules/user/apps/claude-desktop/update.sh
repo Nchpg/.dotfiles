@@ -3,7 +3,7 @@
 # et met à jour pinned.json avec le hash SRI du .deb amd64, calculé via
 # `nix store prefetch-file` — même technique qu'artcraft/update.sh, pour que
 # le hash corresponde à l'artefact réellement empaqueté.
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien

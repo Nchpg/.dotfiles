@@ -4,7 +4,7 @@
 # le dernier commit de la branche de la PR (hash via `nix flake prefetch`,
 # même hash NAR que fetchFromGitHub). Une fois la PR mergée, ne bumpe plus
 # rien et rappelle de retirer l'override.
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
@@ -22,8 +22,9 @@ pinned_file="$dir/pinned.json"
 pr=1457
 
 echo "🔎 Checking btop PR #$pr (Intel xe GPU support)..."
-# Jeton facultatif (GITHUB_TOKEN, exporté par la CI) : sans lui l'API GitHub
-# plafonne à 60 requêtes/h par IP, vite atteint sur un runner partagé.
+# Jeton facultatif (GITHUB_TOKEN, exporté par update.sh depuis gh ou par la
+# CI) : sans lui l'API GitHub plafonne à 60 requêtes/h par IP, vite atteint
+# sur un runner partagé.
 auth=()
 [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
 if ! pr_json=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/aristocratos/btop/pulls/$pr") \

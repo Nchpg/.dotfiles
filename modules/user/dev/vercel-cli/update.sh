@@ -4,7 +4,7 @@
 # le hash SRI du tarball, calculé via `nix store prefetch-file` — même
 # technique que kimi-code/update.sh, pour que le hash corresponde à
 # l'artefact effectivement exécuté.
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien

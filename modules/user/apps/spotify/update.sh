@@ -4,7 +4,7 @@
 # hash NAR que fetchFromGitHub) et cargoHash, obtenu en construisant le
 # vendoring des dépendances Rust avec un hash factice puis en relisant celui
 # que Nix attendait.
-# Intégré au processus `--update` de rebuild.sh.
+# Lancé par update.sh (commande `update`, ou `rebuild -u`).
 set -euo pipefail
 
 # --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
@@ -21,8 +21,9 @@ dir="$flake/modules/user/apps/spotify"
 pinned_file="$dir/pinned.json"
 
 echo "🔎 Checking latest spotify-adblock release..."
-# Jeton facultatif (GITHUB_TOKEN, exporté par la CI) : sans lui l'API GitHub
-# plafonne à 60 requêtes/h par IP, vite atteint sur un runner partagé.
+# Jeton facultatif (GITHUB_TOKEN, exporté par update.sh depuis gh ou par la
+# CI) : sans lui l'API GitHub plafonne à 60 requêtes/h par IP, vite atteint
+# sur un runner partagé.
 auth=()
 [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
 # jq -e + // empty : réponse inattendue (rate limit, pas de release) -> échec
