@@ -105,6 +105,10 @@
 
       # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
       # HM). Chacun ajoute ensuite ses args propres.
+      # Empreinte du contenu de la config, gravée dans chaque système pour
+      # `dotstate` (cf. lib/content-hash.nix) : calculée ici une seule fois.
+      dotfilesContent = myLib.contentHash inputs.self.outPath;
+
       commonArgs = {
         inherit
           pkgs-stable
@@ -112,6 +116,7 @@
           inputs
           myLib
           themes
+          dotfilesContent
           ;
       };
 

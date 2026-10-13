@@ -17,10 +17,14 @@ let
 
   dotstate = pkgs-stable.writeShellApplication {
     name = "dotstate";
-    # `timeout`, `mktemp`, `readlink`, `uname`, `date` : coreutils.
+    # `timeout`, `mktemp`, `readlink`, `uname`, `date`, `sha256sum` :
+    # coreutils ; `tar`, `find`/`xargs`, `sed` pour l'empreinte du contenu.
     runtimeInputs = with pkgs-stable; [
       git
       coreutils
+      gnutar
+      findutils
+      gnused
     ];
     text = builtins.readFile ./dotstate.sh;
   };

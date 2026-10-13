@@ -77,9 +77,33 @@ fetchUpstream() {
   fi
 }
 
+# EMPREINTE DU CONTENU d'un commit : une ligne « <chemin> <sha256> » par
+# fichier, triées, puis le sha256 de l'ensemble. EXACTEMENT le calcul de
+# lib/content-hash.nix, gravé au build dans /etc/dotfiles/content : toute
+# modification de l'un doit se reporter dans l'autre. Mémorisée pour le
+# dernier commit vu (`content`), le calcul ne se refait qu'à un commit neuf.
+contentOf() {
+  local rev="$1" cache="$stateDir/content" tmp sum
+  if [ -r "$cache" ] && [ "$(cut -d' ' -f1 "$cache")" = "$rev" ]; then
+    cut -d' ' -f2 "$cache"
+    return 0
+  fi
+  tmp="$(mktemp -d)"
+  if ! gitf archive "$rev" | tar -x -C "$tmp"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  sum="$(cd "$tmp" && find . -type f -print0 | xargs -0 -r sha256sum \
+    | sed -E 's|^([0-9a-f]{64})  \./(.*)$|\2 \1|' | LC_ALL=C sort | sha256sum | cut -c1-64)"
+  rm -rf "$tmp"
+  mkdir -p "$stateDir"
+  echo "$rev $sum" > "$cache"
+  echo "$sum"
+}
+
 # Une ligne par écart, avec quoi faire. Rien si tout est en phase.
 compute() {
-  local head running run dirty n ahead behind out f since
+  local head running run dirty n ahead behind out f since deploy="" sysContent
 
   head="$(gitf rev-parse -q --verify HEAD)" || return 0
 
@@ -96,20 +120,31 @@ compute() {
     if [ "$run" != "$head" ]; then
       if gitf merge-base --is-ancestor "$run" HEAD 2> /dev/null; then
         n="$(gitf rev-list --count "$run..HEAD")"
-        lines+=("$n commit(s) pas encore déployé(s) : rebuild")
+        deploy="$n commit(s) pas encore déployé(s) : rebuild"
       elif gitf merge-base --is-ancestor HEAD "$run" 2> /dev/null; then
         n="$(gitf rev-list --count "HEAD..$run")"
-        lines+=("le système a $n commit(s) d'avance sur le dépôt local : git pull")
+        deploy="le système a $n commit(s) d'avance sur le dépôt local : git pull"
       elif gitf cat-file -e "$run^{commit}" 2> /dev/null; then
-        lines+=("système construit depuis une autre branche (${run:0:7}) : rebuild")
+        deploy="système construit depuis une autre branche (${run:0:7}) : rebuild"
       else
-        lines+=("système construit depuis ${run:0:7}, inconnu ici : git pull, puis rebuild")
+        deploy="système construit depuis ${run:0:7}, inconnu ici : git pull, puis rebuild"
       fi
     elif [ "$running" != "$run" ] && [ "$dirty" = 0 ]; then
       # Construit avec des modifications non commitées, depuis abandonnées :
       # le système contient quelque chose qui n'est nulle part.
-      lines+=("système construit avec des modifications abandonnées depuis : rebuild")
+      deploy="système construit avec des modifications abandonnées depuis : rebuild"
     fi
+    # Commits différents, mais peut-être le même CONTENU : construit avec des
+    # modifications, puis ces mêmes modifications commitées. L'empreinte
+    # gravée au build tranche ; sans elle (système plus ancien), on s'en tient
+    # aux commits.
+    if [ -n "$deploy" ]; then
+      sysContent="$(command cat "$current/etc/dotfiles/content" 2> /dev/null || true)"
+      if [ -n "$sysContent" ] && [ "$(contentOf "$head" || true)" = "$sysContent" ]; then
+        deploy=""
+      fi
+    fi
+    if [ -n "$deploy" ]; then lines+=("$deploy"); fi
   fi
 
   # 2. Modifications non commitées.

@@ -20,6 +20,7 @@ lib:
 
   assertSopsAvailable = import ./assert-sops-available.nix;
   checkOptionPaths = import ./check-option-paths.nix lib;
+  contentHash = import ./content-hash.nix lib;
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
   mkFlakeGuard = import ./mk-flake-guard.nix;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
