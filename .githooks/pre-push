@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Garde le dépôt de secrets en phase avec le lock : toute la logique est dans
+# `secrets git-hook` (modules/system/commands/secrets). Sans la commande, ou
+# avec une version antérieure (machine pas encore rebuildée), rien à faire.
+secrets help 2>&1 | grep -q git-hook || exit 0
+exec secrets git-hook pre-push "$@"

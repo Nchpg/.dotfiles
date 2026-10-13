@@ -2,8 +2,8 @@
 # Formate les fichiers .nix stagés avec le formatter du flake (nix fmt) puis
 # les re-stage. hardware-configuration.nix est exclu (fichier généré).
 #
-# Installé via : git config core.hooksPath .githooks   (une fois par clone,
-# cf. README). Contournement ponctuel : git commit --no-verify.
+# Activé par ./init.sh (core.hooksPath = .githooks, une fois par clone).
+# Contournement ponctuel : git commit --no-verify.
 #
 # Limite connue : si un fichier est partiellement stagé (git add -p), le
 # re-stage ajoute aussi les modifications non stagées de ce fichier.
@@ -14,5 +14,8 @@ set -euo pipefail
 mapfile -d '' -t files < <(git diff --cached --name-only -z --diff-filter=ACM -- '*.nix' ':!:*hardware-configuration.nix')
 [ ${#files[@]} -eq 0 ] && exit 0
 
-nix fmt -- "${files[@]}"
+# Flakes activés pour cette commande : sur une machine neuve, avant son premier
+# rebuild, nix.conf ne les active pas encore, et l'inscription par ./init.sh
+# commite hosts/default.nix.
+nix --extra-experimental-features 'nix-command flakes' fmt -- "${files[@]}"
 git add -- "${files[@]}"

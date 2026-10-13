@@ -62,6 +62,7 @@ in
         "set -g __bat_preview_theme ${batPreviewTheme}"
         colorsFish
         (builtins.readFile ./fzf_wrapper.fish)
+        (builtins.readFile ./secrets_status.fish)
         (builtins.readFile ./.fish)
       ];
     };

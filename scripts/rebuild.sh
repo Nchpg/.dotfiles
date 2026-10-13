@@ -112,7 +112,7 @@ fi
 # ── Cohérence du dépôt de secrets ────────────────────────────────────────────
 #
 # Le lock épingle l'entrée `secrets`, donc une valeur modifiée là-bas n'est PAS
-# déployée tant qu'un `nix flake update secrets` n'a pas bougé le lock ici. C'est
+# déployée tant que le lock ici n'a pas bougé (`secrets sync`). C'est
 # voulu — sans ça, éditer le dépôt privé suffirait à changer ce que les machines
 # déploient. Mais la contrepartie est un rebuild qui réussit en installant
 # l'ANCIENNE valeur, sans un message.
@@ -121,68 +121,41 @@ fi
 # deux clés WireGuard désynchronisées en une soirée. On compare donc, ici, au
 # moment qui compte.
 #
-# Comparaison au HEAD LOCAL, sans réseau : toute opération sur le dépôt privé
-# passe par SSH et redemanderait la phrase de passe à chaque rebuild. Le cas
-# « une autre machine a poussé » est couvert ailleurs, par le pull que la
-# commande `secrets` fait avant chaque édition.
-SECRETS_STORE="${MY_SECRETS:-$HOME/.secrets}"
-if [ -d "$SECRETS_STORE/.git" ] && [ -f flake.lock ]; then
-    SECRETS_HEAD="$(git -C "$SECRETS_STORE" rev-parse HEAD 2> /dev/null || true)"
-    # jq sur la structure du lock ; grep en repli (jq absent du PATH).
-    SECRETS_LOCKED="$(jq -r '.nodes.secrets.locked.rev // empty' flake.lock 2> /dev/null \
-        || grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
-
-    if [ -n "$SECRETS_HEAD" ] && [ -n "$SECRETS_LOCKED" ] && [ "$SECRETS_HEAD" != "$SECRETS_LOCKED" ]; then
-        echo -e "${YELLOW}Le lock ne pointe pas sur ton dernier commit de secrets.${NC}"
-        echo "  dépôt : $SECRETS_HEAD"
-        echo "  lock  : $SECRETS_LOCKED"
+# Tout passe par la commande `secrets` (modules/system/commands/secrets), seule
+# à lire le lock et à le mettre à jour : `status` sort en 1 quand `sync` a du
+# travail (modifications, commits non poussés, lock en retard sur le dépôt), en
+# 2 quand il en a mais refuserait (dépôt privé en retard : pull d'abord).
+# Sans réseau, donc sans phrase de passe SSH à chaque rebuild. Absente sur une
+# machine neuve avant son premier rebuild, où le clone est de toute façon frais.
+# `secrets help` : une commande antérieure (machine pas encore rebuildée) n'a
+# pas `status`, et son « commande inconnue » passait pour une désynchro.
+if command -v secrets > /dev/null && [[ "$(secrets help 2>&1)" == *"secrets status"* ]]; then
+    secrets_rc=0
+    secrets status || secrets_rc=$?
+    if [[ "$secrets_rc" -eq 2 ]]; then
+        # `sync` refuserait (dépôt en retard) : rien à proposer ici, le détail
+        # et la marche à suivre viennent d'être affichés.
+        echo -e "${YELLOW}Modifications de secrets non déployables avant un pull du dépôt privé ; poursuite avec la révision épinglée.${NC}"
+    elif [[ "$secrets_rc" -ne 0 ]]; then
         echo -e "  Rebuild en l'état = ${RED}déploiement de l'ANCIENNE valeur${NC}."
         echo
-        # --yes (genclean, theme...) ne bouge JAMAIS ce lock : une maintenance
+        # --yes (genclean) ne bouge JAMAIS ce lock : une maintenance
         # de générations n'a pas à déployer de nouvelles valeurs de secrets
         # sans qu'on l'ait demandé. Avertissement seul, révision épinglée.
         if [[ "$YES" -eq 1 ]]; then
             echo -e "${YELLOW}(--yes) Lock non modifié, poursuite avec la révision épinglée.${NC}"
             echo "  Pour déployer la nouvelle : \`secrets sync\`, ou rebuild sans --yes."
-            REPLY=n
         else
-            read -p "Mettre le lock à jour maintenant ? [Y/n] " -n 1 -r
+            read -p "Synchroniser maintenant (secrets sync) ? [Y/n] " -n 1 -r
             echo
-        fi
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            # Mêmes précautions que `secrets sync` (modules/system/commands/secrets) :
-            #  - sudo : le jeton de lecture du dépôt privé est en 0600 root, et
-            #    la récupération d'une entrée se fait dans l'évaluateur ;
-            #  - NIX_CONFIG : ce jeton, même sur une machine neuve dont
-            #    /etc/nix/nix.conf ne l'inclut pas encore (cf. plus bas) ;
-            #  - safe.directory : root opère sur un dépôt qui t'appartient ;
-            #  - --refresh : sans lui Nix resert une résolution vieille d'une heure ;
-            #  - propriétaire de flake.lock restauré (réécrit par root).
-            lock_owner="$(stat -c '%u:%g' flake.lock)"
-            sudo env \
-                NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
-                GIT_CONFIG_COUNT=1 \
-                GIT_CONFIG_KEY_0=safe.directory \
-                GIT_CONFIG_VALUE_0="$PWD" \
-                nix flake update secrets --refresh --flake "$PWD" || {
-                echo -e "${RED}Mise à jour du lock échouée.${NC}" >&2
-                exit 1
-            }
-            if [ "$(stat -c '%u:%g' flake.lock)" != "$lock_owner" ]; then
-                sudo chown -h "$lock_owner" -- flake.lock
+            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                secrets sync || {
+                    echo -e "${RED}Synchronisation des secrets échouée.${NC}" >&2
+                    exit 1
+                }
+            else
+                echo -e "${YELLOW}Poursuite avec la révision épinglée.${NC}"
             fi
-            # Le lock pointe-t-il VRAIMENT sur le commit local ? Il prend le HEAD
-            # distant : des commits non poussés dans le dépôt privé passeraient
-            # sinon sans un mot, et le rebuild déploierait l'ancienne valeur.
-            SECRETS_LOCKED="$(jq -r '.nodes.secrets.locked.rev // empty' flake.lock 2> /dev/null \
-                || grep -A 12 '"secrets": {' flake.lock | grep -m1 '"rev"' | cut -d'"' -f4 || true)"
-            if [ "$SECRETS_LOCKED" != "$SECRETS_HEAD" ]; then
-                echo -e "${RED}Le lock pointe sur $SECRETS_LOCKED, pas sur ton commit local $SECRETS_HEAD.${NC}" >&2
-                echo "  Commits de secrets non poussés ? \`git -C $SECRETS_STORE push\`, puis relance." >&2
-                exit 1
-            fi
-        elif [[ "$YES" -ne 1 ]]; then
-            echo -e "${YELLOW}Poursuite avec la révision épinglée.${NC}"
         fi
     fi
 fi
