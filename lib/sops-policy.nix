@@ -15,15 +15,24 @@
 #      flake.nix : `server-gram` compile, mais personne ne l'active, et la
 #      compter ici rendrait gram destinataire de tout — la faille d'origine.
 #
-#   2. L'AUDIENCE d'un secret est l'ensemble des profils qui le déclarent, union
-#      faite sur ces cibles. Rien à annoter : un secret déclaré par un module du
-#      profil server appartient à server parce que c'est server qui le déclare.
-#      La clé pré-partagée du tunnel, déclarée par le serveur ET par le client,
-#      reçoit les deux rôles sans qu'aucun des deux modules connaisse l'autre.
+#   2. L'AUDIENCE d'un secret est l'ensemble des MACHINES dont la cible
+#      déployée le déclare, union faite sur ces cibles. Rien à annoter : un
+#      secret déclaré par un module du profil server va aux machines qui font
+#      tourner server ; un secret déclaré dans hosts/gram ne va qu'à gram. La
+#      clé pré-partagée du tunnel, déclarée par le serveur ET par le client,
+#      va aux deux sans qu'aucun des deux modules connaisse l'autre.
 #
-#   3. Les DESTINATAIRES suivent : audience -> machines qui font tourner un de
-#      ces profils -> leurs clés système. C'est la traduction que sops ne peut
-#      pas faire seul, lui qui ne connaît que des clés.
+#      Par machine et non par profil, et ce n'est pas un détail : traduire
+#      « déclaré sous personal » en « toutes les machines personal » donnait la
+#      clé privée WireGuard de gram (déclarée par hosts/gram) à tout nouveau
+#      portable personal, donc de quoi usurper gram sur le tunnel. Invisible
+#      tant qu'il n'y avait qu'une machine par profil.
+#
+#   3. Les DESTINATAIRES suivent : machines -> leurs clés (système pour un
+#      secret lu par un service, de compte pour un secret lu par une session).
+#      C'est la traduction que sops ne peut pas faire seul, lui qui ne connaît
+#      que des clés. `secretProfiles` élargit volontairement à un profil
+#      entier.
 #
 # La sortie référence les ANCRES du .sops.yaml (`*think-sys`), jamais les clés
 # elles-mêmes : la politique vit dans ce dépôt-ci, qui est public, le matériel
@@ -47,9 +56,11 @@ let
 
   configOf = t: nixosConfigurations."${t.profile}-${t.host}".config;
 
-  # Accumule « nom du secret -> profils qui en ont besoin » sur les cibles
-  # déployées. `namesOf` dit où chercher les déclarations, ce qui permet de
-  # faire tourner exactement le même calcul sur les deux plans.
+  # Accumule « nom du secret -> machines qui en ont besoin » sur les cibles
+  # déployées : la machine de chaque cible qui le déclare, ou toutes celles des
+  # profils qu'un `secretProfiles` désigne. `namesOf` dit où chercher les
+  # déclarations, ce qui permet de faire tourner exactement le même calcul sur
+  # les deux plans.
   audiencesBy =
     namesOf:
     lib.foldl' (
@@ -62,7 +73,9 @@ let
         a: name:
         a
         // {
-          ${name} = lib.unique ((a.${name} or [ ]) ++ (overrides.${name} or [ t.profile ]));
+          ${name} = lib.unique (
+            (a.${name} or [ ]) ++ (if overrides ? ${name} then hostsFor overrides.${name} else [ t.host ])
+          );
         }
       ) acc (namesOf c)
     ) { } deployed;
@@ -98,10 +111,12 @@ let
   # ce sont vraiment les mêmes octets qu'il faut des deux côtés.
   allNames = lib.unique (lib.attrNames sysAudiences ++ lib.attrNames userAudiences);
 
+  # Triées : l'ordre des ancres d'une règle ne doit dépendre que de qui la
+  # reçoit, pas de l'ordre de parcours des cibles.
   anchorsFor =
     name:
-    map (h: "${h}-sys") (hostsFor (sysAudiences.${name} or [ ]))
-    ++ map (h: "${h}-user") (hostsFor (userAudiences.${name} or [ ]));
+    map (h: "${h}-sys") (lib.sort lib.lessThan (sysAudiences.${name} or [ ]))
+    ++ map (h: "${h}-user") (lib.sort lib.lessThan (userAudiences.${name} or [ ]));
 
   hostsFor =
     profiles:
@@ -142,8 +157,8 @@ let
   #
   # La version précédente préfixait le motif d'une `/`, sur la prémisse inverse.
   # Aucune règle ne pouvait alors correspondre à un fichier DU dépôt : toute
-  # création sortait en « no matching creation rules found », et `updatekeys`
-  # avec elle, sops chargeant la config avant de déchiffrer. Ça n'a pas sauté aux
+  # création sortait en « no matching creation rules found », et le
+  # rescellement (`sops updatekeys`) avec elle, sops chargeant la config avant de déchiffrer. Ça n'a pas sauté aux
   # yeux parce que les secrets existants sont antérieurs au découpage en un
   # fichier par secret, donc jamais recréés depuis.
   #

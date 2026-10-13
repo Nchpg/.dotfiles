@@ -211,9 +211,10 @@
         }
       );
 
-      # `nix run .#sops-policy` : imprime le bloc `creation_rules` à poser dans
-      # le .sops.yaml du dépôt PRIVÉ, déduit de ce que les cibles DÉPLOYÉES
-      # déclarent (cf. lib/sops-policy.nix et hosts/default.nix).
+      # `nix run .#sops-policy` : imprime le bloc `creation_rules` du .sops.yaml
+      # du dépôt PRIVÉ (que `secrets policy` y pose et synchronise), déduit de
+      # ce que les cibles DÉPLOYÉES déclarent (cf. lib/sops-policy.nix et
+      # hosts/default.nix).
       #
       # Un `run` et pas un fichier commité ici : le .sops.yaml vit dans l'autre
       # dépôt, à côté des ancres de clés qui n'ont rien à faire dans celui-ci.
@@ -249,7 +250,7 @@
         # le mode de panne contre lequel tout le montage est écrit : une audience
         # qui RÉTRÉCIT. Un host retiré de `deployments`, un peer supprimé, un
         # secret qui cesse d'être déclaré par un profil — le .sops.yaml garde ses
-        # anciens destinataires, `updatekeys` applique ce .sops.yaml tel quel, le
+        # anciens destinataires, rien ne rescelle selon un .sops.yaml périmé, le
         # rebuild réussit, et le rayon d'explosion reste large sans un mot.
         # Sur-sceller n'a jamais produit d'erreur nulle part.
         #
@@ -271,11 +272,29 @@
             found = lib.length parts > 1;
             block = marker + lib.concatStringsSep marker (lib.tail parts);
 
+            # Ancres définies (avant le marqueur) et citées (par la politique) :
+            # une ancre citée mais absente rend le fichier illisible pour sops
+            # (« unknown anchor »), alors que le bloc, lui, serait conforme.
+            namesIn =
+              re: text:
+              lib.unique (
+                lib.concatMap (l: lib.optionals (builtins.match re l != null) (builtins.match re l)) (
+                  lib.splitString "\n" text
+                )
+              );
+            defined = namesIn "[[:space:]]*-[[:space:]]+&([A-Za-z0-9_-]+)[[:space:]]+age1.*" (
+              builtins.head parts
+            );
+            cited = namesIn "[[:space:]]*-[[:space:]]+[*]([A-Za-z0-9_-]+).*" expected;
+            missingAnchors = lib.subtractLists defined cited;
+
             problem =
               if !(builtins.pathExists file) then
                 "le dépôt de secrets ne contient pas de .sops.yaml."
               else if !found then
                 "le .sops.yaml du dépôt de secrets ne contient pas le bloc généré (marqueur « ${marker} » absent)."
+              else if missingAnchors != [ ] then
+                "la politique cite des ancres que le .sops.yaml ne définit pas : ${lib.concatStringsSep ", " missingAnchors} (machine dans deployments pas encore inscrite ?)."
               else if block != expected then
                 "le bloc généré du .sops.yaml ne correspond plus à ce que les configurations déclarent."
               else
@@ -288,10 +307,10 @@
               Les destinataires déployés ne sont donc plus ceux que ce dépôt calcule, et
               une audience trop LARGE ne se signalerait par aucune autre erreur.
 
-                nix run .#sops-policy > /tmp/rules.yaml
+                secrets policy
 
-              Remplacer le bloc généré du .sops.yaml du dépôt privé par ce fichier, puis
-              `secrets updatekeys` depuis une machine qui peut encore ouvrir ces fichiers.
+              depuis une machine qui peut encore ouvrir ces fichiers : elle remplace le bloc
+              généré du .sops.yaml du dépôt privé, rescelle si besoin et synchronise.
             ''
             (
               pkgs-stable.runCommand "check-sops-policy" { } ''

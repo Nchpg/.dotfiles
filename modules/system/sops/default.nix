@@ -33,16 +33,16 @@ let
 
   declared = lib.attrNames config.sops.secrets;
 
-  # Rôles qui ont besoin de ce secret. Le défaut — le profil qui est en train de
-  # le déclarer — est presque toujours le bon, et c'est ce qui rend le mécanisme
-  # automatique : un secret déclaré par un module du profil server appartient à
-  # server, sans qu'on l'écrive nulle part.
+  # Machines qui ont besoin de ce secret, vues d'ici. Le défaut — CETTE machine,
+  # qui est en train de le déclarer — est presque toujours le bon, et c'est ce
+  # qui rend le mécanisme automatique, sans qu'on l'écrive nulle part.
   #
   # Le générateur de politique évalue TOUTES les cibles déployées et fait
-  # l'UNION de ces listes. Un secret déclaré des deux côtés d'un tunnel — la clé
-  # pré-partagée, par le serveur sous `server` et par le client sous `personal` —
-  # reçoit donc les deux, sans qu'aucun des deux modules connaisse l'autre.
-  audience = name: cfg.secretProfiles.${name} or [ target.profile ];
+  # l'UNION (cf. lib/sops-policy.nix). Un secret déclaré des deux côtés d'un
+  # tunnel — la clé pré-partagée, par le serveur et par le client — va donc aux
+  # deux, sans qu'aucun des deux modules connaisse l'autre.
+  audience =
+    name: if cfg.secretProfiles ? ${name} then hostsFor cfg.secretProfiles.${name} else [ target.host ];
 
   # Cette cible est-elle une machine réelle, ou une des combinaisons que le
   # produit cartésien de flake.nix fabrique et que personne n'active ?
@@ -53,7 +53,7 @@ let
   # ci-dessus — l'audience étant « qui le déclare », on ne peut pas se retrouver
   # hors de sa propre audience. Ça cesse d'être vrai dès qu'un `secretProfiles`
   # est écrit à la main, ou que `deployments` oublie la machine.
-  unreadable = lib.filter (name: !(lib.elem target.host (hostsFor (audience name)))) declared;
+  unreadable = lib.filter (name: !(lib.elem target.host (audience name))) declared;
 
 in
 {
@@ -118,9 +118,11 @@ in
 
           À ne renseigner que dans un cas : un rôle a besoin d'ouvrir un secret
           qu'il ne déclare pas lui-même. Sinon, ne rien écrire — l'audience par
-          défaut d'un secret est le profil qui le déclare, et le générateur fait
-          l'union sur toutes les cibles déployées, ce qui couvre déjà le cas des
-          valeurs partagées entre deux rôles qui les déclarent tous les deux.
+          défaut d'un secret est la machine qui le déclare, et le générateur
+          fait l'union sur toutes les cibles déployées, ce qui couvre déjà le
+          cas des valeurs partagées entre deux machines qui les déclarent
+          toutes les deux. Renseigné, il donne le secret à TOUTES les machines
+          de ces profils.
 
           Élargir à une MACHINE ne se fait pas ici mais dans `deployments` : ici
           on parle de rôles, la traduction en clés de machines vient de là-bas.
@@ -175,7 +177,7 @@ in
         # combinaisons, et `server-gram` doit continuer de compiler. Elle produit
         # un avertissement à la place, cf. `warnings`.
         assertion = !deployedHere || unreadable == [ ];
-        message = "systemSettings.sops : ${target.host} déclare des secrets dont elle n'est destinataire d'aucun fichier (${lib.concatStringsSep ", " unreadable}). Ajoute son profil dans systemSettings.sops.deployments, ou élargis `profiles` sur ces secrets, puis `secrets updatekeys`.";
+        message = "systemSettings.sops : ${target.host} déclare des secrets dont elle n'est destinataire d'aucun fichier (${lib.concatStringsSep ", " unreadable}). Ajoute son profil dans systemSettings.sops.deployments, ou élargis `profiles` sur ces secrets, puis `secrets policy`.";
       }
     ];
 

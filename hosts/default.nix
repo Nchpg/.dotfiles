@@ -38,7 +38,7 @@ in
     #
     # Une machine peut porter PLUSIEURS profils. Le jour où gram doit pouvoir
     # reprendre le rôle de think, c'est `gram = [ "personal" "server" ]` ici,
-    # puis `secrets updatekeys` — et l'élargissement du rayon d'explosion est
+    # puis `secrets policy` — et l'élargissement du rayon d'explosion est
     # alors un geste écrit, pas un effet de bord.
     systemSettings.sops.deployments = {
       think = [ "server" ];
