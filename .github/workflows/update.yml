@@ -75,10 +75,20 @@ jobs:
       # hebdo fantômes sur un token expiré). On échoue explicitement.
       # `set -o pipefail` indispensable : sans lui le code de retour serait
       # celui de `tee`, et un vrai échec de `nix flake update` serait masqué.
+      #
+      # Tous les inputs SAUF `secrets`, comme update.sh : le lock des secrets ne
+      # bouge que par un commit explicite (`secrets sync`), et le jeton de ce
+      # job ne voit de toute façon pas le dépôt privé (404 → échec ci-dessous).
+      # Les `follows` (tableaux) sont exclus, il n'y a rien à bumper.
       - name: bump des inputs flake
         run: |
           set -o pipefail
-          nix flake update 2>&1 | tee "${RUNNER_TEMP}"/update.log
+          # shellcheck disable=SC2016 # ${n} est du Nix, pas du shell
+          inputs=$(nix eval --impure --raw --expr '
+            let i = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.root.inputs;
+            in builtins.concatStringsSep " " (builtins.filter (n: n != "secrets" && builtins.isString i.${n}) (builtins.attrNames i))')
+          # shellcheck disable=SC2086 # liste de noms d'inputs, découpage voulu
+          nix flake update $inputs 2>&1 | tee "${RUNNER_TEMP}"/update.log
           if grep -q "unable to download" "${RUNNER_TEMP}"/update.log; then
             echo "::error::résolution d'input échouée — le lock n'a peut-être pas été mis à jour"
             exit 1
