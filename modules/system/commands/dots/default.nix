@@ -123,6 +123,17 @@ let
         ]
       ];
     }
+    {
+      # Pas une commande du PATH : le script du dépôt, ~/.dotfiles/init.sh.
+      name = "init";
+      desc = "prépare cette machine : clés, secrets, hooks, inscription";
+      examples = [
+        [
+          "init"
+          "vérifie et rattrape ce qui manque (sans risque si déjà prête)"
+        ]
+      ];
+    }
   ];
 
   # Une ligne par entrée, champs séparés par des tabulations :
@@ -146,6 +157,7 @@ let
       export GUM_CHOOSE_SELECTED_FOREGROUND="#${c.base0B}"
       export GUM_INPUT_PROMPT_FOREGROUND="#${c.base0D}"
       export GUM_INPUT_HEADER_FOREGROUND="#${c.base03}"
+      export DOTS_OK="#${c.base0B}" DOTS_WARN="#${c.base0A}"
     ''
   );
 in
@@ -153,18 +165,52 @@ in
   environment.systemPackages = [
     (pkgs-stable.writeShellApplication {
       name = "dots";
-      runtimeInputs = [ pkgs-stable.gum ];
+      runtimeInputs = [
+        pkgs-stable.gum
+        pkgs-stable.git
+      ];
       text = ''
         ${colors}
         catalog=$(cat <<'CATALOG'
         ${catalog}CATALOG
         )
 
-        # Commandes réellement installées ici, dans l'ordre du catalogue.
+        flake="''${MY_FLAKE:-$HOME/.dotfiles}"
+
+        # Commandes réellement disponibles ici, dans l'ordre du catalogue.
+        # `init` n'est pas dans le PATH : c'est le script du dépôt.
         names=()
         while IFS=$'\t' read -r kind name _; do
-          [ "$kind" = cmd ] && command -v "$name" > /dev/null && names+=("$name")
+          [ "$kind" = cmd ] || continue
+          if [ "$name" = init ]; then
+            if [ -x "$flake/init.sh" ]; then names+=(init); fi
+          elif command -v "$name" > /dev/null; then
+            names+=("$name")
+          fi
         done <<< "$catalog"
+
+        # Lance une commande du catalogue (init -> le script du dépôt).
+        run() {
+          if [ "$1" = init ]; then
+            shift
+            exec "$flake/init.sh" "$@"
+          fi
+          exec "$@"
+        }
+
+        # LES HOOKS GIT du dépôt de config (.githooks) : ce sont eux qui tiennent
+        # le dépôt de secrets en phase au pull et au push. Actifs seulement si
+        # le clone le demande (core.hooksPath, réglage local, jamais poussé) :
+        # un clone fait à la main sans ./init.sh les a donc éteints.
+        hooksOn() { [ "$(git -C "$flake" config --get core.hooksPath 2> /dev/null)" = .githooks ]; }
+        hooksStatus() {
+          [ -d "$flake/.githooks" ] || return 0
+          if hooksOn; then
+            echo "✓ hooks git actifs : secrets synchronisés au pull et au push"
+          else
+            echo "⚠ hooks git INACTIFS dans $flake : secrets non synchronisés au pull/push"
+          fi
+        }
 
         # printf compte les octets : « <clé> » décalait la colonne. ''${#} compte
         # les caractères.
@@ -190,13 +236,18 @@ in
           done <<< "$catalog"
           echo
           echo "Chaque commande a aussi son propre --help (theme : sans argument = galerie)."
+          echo
+          hooksStatus
+          if [ -d "$flake/.githooks" ] && ! hooksOn; then
+            echo "  pour les activer : git -C $flake config core.hooksPath .githooks"
+          fi
         }
 
         case "''${1:-}" in
           "") ;;
           -h | --help | help) usage; exit 0 ;;
           *)
-            if known "$1"; then exec "$@"; fi
+            if known "$1"; then run "$@"; fi
             echo "dots : commande inconnue « $1 »" >&2
             echo "  dots help pour la liste" >&2
             exit 1
@@ -215,6 +266,22 @@ in
         # le faire taire : c'est aussi là qu'il dessine le menu. On efface la
         # ligne après coup.
         bye() { printf '\e[1A\e[2K' >&2; exit 0; }
+
+        # 0. Les hooks : l'état en une ligne, et l'activation proposée s'ils
+        # sont éteints (Oui par défaut : sans eux, push et pull ne
+        # s'occupent plus des secrets).
+        if [ -d "$flake/.githooks" ]; then
+          if hooksOn; then
+            gum style --foreground "''${DOTS_OK:-2}" "$(hooksStatus)"
+          else
+            gum style --foreground "''${DOTS_WARN:-3}" "$(hooksStatus)"
+            if gum confirm "Activer les hooks git maintenant ?"; then
+              git -C "$flake" config core.hooksPath .githooks
+              gum style --foreground "''${DOTS_OK:-2}" "$(hooksStatus)"
+            fi
+          fi
+          echo
+        fi
 
         # 1. La commande.
         opts=()
@@ -249,7 +316,7 @@ in
         known "''${argv[0]:-}" || { echo "dots : commande inconnue « ''${argv[0]:-} »" >&2; exit 1; }
 
         echo "→ $line"
-        exec "''${argv[@]}"
+        run "''${argv[@]}"
       '';
     })
   ];
