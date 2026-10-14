@@ -39,6 +39,7 @@ in
         cfg.claude.enable
         || cfg.kimiCode.enable
         || cfg.mammouthCode.enable
+        || cfg.opencode.enable
         || cfg.gemini.enable
         || cfg.mistral.enable
         || cfg.codex.enable;
