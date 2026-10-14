@@ -10,6 +10,26 @@
 # mémoire de quelqu'un vaut plus que n'importe quelle couche supplémentaire.
 let
   cfg = config.systemSettings.autoUpgrade;
+
+  # Fenêtre de redémarrage déduite de `window` quand celle-ci est une heure
+  # simple (`HH:MM`) : de l'heure pleine qui la précède à deux heures plus
+  # tard, ce qui couvre le délai aléatoire de trente minutes et la durée du
+  # build. `null` pour toute autre forme d'`OnCalendar` (`Sun 04:40`,
+  # `daily`…), qu'on ne sait pas convertir : l'assertion réclame alors
+  # `rebootWindow` explicitement.
+  derivedRebootWindow =
+    let
+      m = builtins.match "([0-9]{1,2}):[0-9]{2}" cfg.window;
+      hour = lib.toIntBase10 (lib.head m);
+      fmt = h: "${lib.fixedWidthString 2 "0" (toString (lib.mod h 24))}:00";
+    in
+    if m == null then
+      null
+    else
+      {
+        lower = fmt hour;
+        upper = fmt (hour + 2);
+      };
 in
 {
   options.systemSettings.autoUpgrade = {
@@ -45,6 +65,33 @@ in
         qu'un redémarrage ne coupe personne en pleine synchronisation.
       '';
     };
+
+    rebootWindow = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            lower = lib.mkOption {
+              type = lib.types.str;
+              example = "04:00";
+              description = "Début de la plage, `HH:MM`.";
+            };
+            upper = lib.mkOption {
+              type = lib.types.str;
+              example = "06:00";
+              description = "Fin de la plage, `HH:MM`.";
+            };
+          };
+        }
+      );
+      default = derivedRebootWindow;
+      defaultText = lib.literalExpression "de l'heure pleine de `window` à deux heures plus tard, si `window` est de la forme HH:MM";
+      description = ''
+        Plage horaire hors de laquelle le redémarrage n'a PAS lieu, même si la
+        mise à jour le demande. Suit `window` par défaut : une plage figée
+        laisserait un `window` déplacé à 13:00 construire, puis ne jamais
+        redémarrer — le correctif noyau resterait inactif sans un mot.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -52,6 +99,10 @@ in
       {
         assertion = cfg.flake != null;
         message = "systemSettings.autoUpgrade.flake est requis : sans URL distante, l'unité reconstruirait la copie locale du dépôt, qui n'est pas forcément à jour.";
+      }
+      {
+        assertion = !cfg.reboot || cfg.rebootWindow != null;
+        message = "systemSettings.autoUpgrade : `window` (${cfg.window}) n'est pas de la forme HH:MM, la plage de redémarrage ne peut pas en être déduite. Renseigne rebootWindow.";
       }
     ];
 
@@ -66,10 +117,7 @@ in
       # Redémarrage seulement si le noyau ou l'initrd ont changé : le reste
       # s'applique à chaud par un switch, sans couper les services.
       allowReboot = cfg.reboot;
-      rebootWindow = {
-        lower = "04:00";
-        upper = "06:00";
-      };
+      inherit (cfg) rebootWindow;
 
       # `switch` et pas `boot` : les correctifs des services (nginx, PHP,
       # Authelia) prennent effet tout de suite plutôt que d'attendre un
@@ -94,7 +142,7 @@ in
     # suite.
     #
     # Le nom de l'unité est celui que pose le module amont pour `system.autoUpgrade`.
-    systemd.services.nixos-upgrade = lib.mkIf config.systemSettings.notify.discord.enable config.systemSettings.notify.discord.onFailure;
+    systemSettings.notify.discord.units = [ "nixos-upgrade" ];
 
     # Une montée par nuit, donc une génération par nuit. L'ESP est déjà borné
     # par `configurationLimit` (cf. modules/system/boot) ; c'est la racine qui
