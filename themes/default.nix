@@ -56,16 +56,21 @@ let
                 builtins.match "${key}:[[:space:]]*\"?([^\"]*[^\"[:space:]])\"?[[:space:]]*" hit;
           in
           if m == null then null else builtins.head m;
+
+        # Chacun lu une seule fois (une recherche linéaire par appel).
+        schemeName = field "name";
+        author = field "author";
+        variant = field "variant";
       in
       lib.throwIf (colors == { }) "themes : aucune couleur lue dans ${toString path}" (
         colors
         // {
           # Nomme les fichiers générés par stylix (base16-<slug>.conf).
           slug = name;
-          scheme = if field "name" != null then field "name" else name;
+          scheme = if schemeName != null then schemeName else name;
         }
-        // lib.optionalAttrs (field "author" != null) { author = field "author"; }
-        // lib.optionalAttrs (field "variant" != null) { variant = field "variant"; }
+        // lib.optionalAttrs (author != null) { inherit author; }
+        // lib.optionalAttrs (variant != null) { inherit variant; }
       );
 
     # .yml toléré en plus de .yaml (cyberpunk.yml en amont).
@@ -110,10 +115,8 @@ let
 
     names = builtins.attrNames pathByName; # pour lib.types.enum : typo -> éval cassée
 
-    polarity = name: (parseScheme name).variant or "dark"; # défaut de la spec
-
-    # Écrit par la galerie ; purement indicatif, aucun rebuild au changement.
-    favorites = builtins.fromJSON (builtins.readFile ./gallery/favorites.json);
+    polarity = name: polarityOf (parseScheme name);
+    polarityOf = scheme: scheme.variant or "dark"; # défaut de la spec
 
     meta = import ./wallpapers.nix;
     wallpapers = meta.registry;
@@ -135,7 +138,9 @@ let
         wallpaper ? null,
       }:
       let
-        themePolarity = polarity theme;
+        # Un seul parsing du yaml pour la polarité et la palette.
+        scheme = parseScheme theme;
+        themePolarity = polarityOf scheme;
         # Surcharge explicite > fond du thème > défaut de la polarité (garantit
         # une image même hors des ~60 thèmes couverts par themeWallpaper).
         chosen =
@@ -146,7 +151,7 @@ let
       in
       {
         polarity = themePolarity;
-        base16Scheme = parseScheme theme;
+        base16Scheme = scheme;
       }
       // lib.optionalAttrs (chosen != null) {
         image = wallpaperPath pkgs chosen;

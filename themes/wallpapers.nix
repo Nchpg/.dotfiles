@@ -5,7 +5,7 @@
 # themeWallpaper : nom de thème -> entrée du registre ci-dessous. Volontairement
 # PARTIEL (~60 thèmes sur ~510), le reste retombe sur defaultWallpaper.
 # Surchargeable via systemSettings/userSettings.stylix.wallpaper.
-{
+rec {
   # Par POLARITÉ (sombre sous thème clair jure). Défaut sombre en fichier
   # LOCAL, contrairement aux entrées distantes : ne peut pas disparaître.
   defaultWallpaper = {
@@ -13,70 +13,37 @@
     light = "custom-kyoto";
   };
 
-  themeWallpaper = {
-    alph = "alph";
-    ashes = "ashes";
-    atelier-cave = "atelier-cave";
-    atelier-dune = "atelier-dune";
-    atelier-estuary = "atelier-estuary";
-    atelier-forest = "atelier-forest";
-    atelier-heath = "atelier-heath";
-    atelier-lakeside = "atelier-lakeside";
-    atelier-plateau = "atelier-plateau";
-    atelier-savanna = "atelier-savanna";
-    atelier-seaside = "atelier-seaside";
-    atelier-sulphurpool = "atelier-sulphurpool";
-    ayu-dark = "ayu-dark";
-    bespin = "bespin";
-    caret = "caret";
-    catppuccin-frappe = "catppuccin-frappe";
-    catppuccin-mocha = "catppuccin-mocha";
-    darkmoss = "darkmoss";
-    doom-one = "doom-one";
-    dracula = "dracula";
-    ember = "ember";
-    emil = "emil";
-    eris = "eris";
-    eva = "eva";
-    everforest = "everforest";
-    fairy-floss = "fairy-floss";
-    gigavolt = "gigavolt";
-    gruvbox-dark-custom = "gruvbox-dark";
-    gruvbox-dark-custom-base24 = "gruvbox-dark";
-    gruvbox-dark-hard = "gruvbox-dark";
-    gruvbox-dark-medium = "gruvbox-dark";
-    gruvbox-light = "gruvbox-light";
-    gruvbox-light-hard = "gruvbox-light";
-    gruvbox-light-medium = "gruvbox-light";
-    helios = "helios";
-    henna = "henna";
-    horizon-dark = "horizon-dark";
-    io = "io";
-    isotope = "isotope";
-    manegarm = "manegarm";
-    material-vivid = "material-vivid";
-    miramare = "miramare";
-    monokai = "monokai";
-    nord = "nord";
-    oceanic-next = "oceanic-next";
-    old-hope = "old-hope";
-    orichalcum = "orichalcum";
-    outrun-dark = "outrun-dark";
-    selenized-dark = "solarized-dark";
-    selenized-light = "solarized-light";
-    solarized-dark = "solarized-dark";
-    solarized-light = "solarized-light";
-    spaceduck = "spaceduck";
-    stella = "stella";
-    summerfruit-dark = "summerfruit-dark";
-    tomorrow-night = "tomorrow-night";
-    twilight = "twilight";
-    ubuntu = "ubuntu";
-    uwunicorn = "uwunicorn";
-    windows-95 = "windows-95";
-    woodland = "woodland";
-    xcode-dusk = "xcode-dusk";
-  };
+  # Thème -> fond : par défaut le fond du registre qui porte LE MÊME nom (la
+  # grande majorité), plus les thèmes qui en partagent un autre. Sont exclus
+  # de cette identité les fonds du registre sans thème homonyme rattaché :
+  # custom-kyoto (sélection manuelle) et gruvbox-dark (partagé par les
+  # variantes gruvbox sombres, le thème `gruvbox-dark` lui-même retombe sur
+  # le défaut).
+  themeWallpaper =
+    let
+      notThemes = [
+        "custom-kyoto"
+        "gruvbox-dark"
+      ];
+      shared = {
+        gruvbox-dark-custom = "gruvbox-dark";
+        gruvbox-dark-custom-base24 = "gruvbox-dark";
+        gruvbox-dark-hard = "gruvbox-dark";
+        gruvbox-dark-medium = "gruvbox-dark";
+        gruvbox-light-hard = "gruvbox-light";
+        gruvbox-light-medium = "gruvbox-light";
+        selenized-dark = "solarized-dark";
+        selenized-light = "solarized-light";
+      };
+      sameName = builtins.filter (n: !(builtins.elem n notThemes)) (builtins.attrNames registry);
+    in
+    builtins.listToAttrs (
+      map (n: {
+        name = n;
+        value = n;
+      }) sameName
+    )
+    // shared;
 
   # nom -> { url; sha256; } (fetchurl) ou { path = ./wallpapers/<fichier>; }.
   # Un fond peut être partagé par plusieurs thèmes ou n'appartenir à aucun.
