@@ -3,14 +3,13 @@ set -euo pipefail
 # État Bluetooth + appareils connectés. Sortie JSON :
 #   - barre   : icône + noms TRONQUÉS (15 car.) + batterie
 #   - tooltip : noms COMPLETS + batterie, un par ligne
-# Logique reprise de sway-bar.sh.
 
 # Un SEUL appel D-Bus en lecture (busctl) plutôt que 2-3 `bluetoothctl` par
 # tour : chaque bluetoothctl s'enregistre auprès de bluetoothd (moniteur
 # d'annonces), ~23 000 lignes « Adv Monitor app reserved/disconnected » dans
 # le journal par jour avec un tour toutes les 5 s.
 
-# json_escape / emit / bat_icon : fournis par lib.sh (inliné en tête au build).
+# emit / bat_icon : fournis par lib.sh (inliné en tête au build).
 
 objects=$(busctl --system call org.bluez / org.freedesktop.DBus.ObjectManager \
     GetManagedObjects --json=short 2>/dev/null) || {

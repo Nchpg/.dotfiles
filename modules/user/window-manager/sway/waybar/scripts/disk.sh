@@ -29,7 +29,7 @@ size_h=$(fmt "$size_b")
 g=$((1024 * 1024 * 1024))
 reserve_g=$(( (size_b + g - 1) / g - (usable_b + g - 1) / g ))
 
-# Sortie JSON (emit + json_escape : cf. lib.sh).
+# Sortie JSON (emit : cf. lib.sh).
 text="󰉋   ${used_h}o : ${pct}"
 tooltip="Utilisé    ${used_h}o / ${usable_h}o  (${pct})"
 tooltip+=$'\n'"Libre      ${avail_h}o"

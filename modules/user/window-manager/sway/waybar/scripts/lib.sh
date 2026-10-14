@@ -1,24 +1,14 @@
 # shellcheck shell=bash
-# Helpers JSON partagés par les modules custom waybar. Ce fichier n'a pas de
-# shebang : il est inliné EN TÊTE de chaque script au build (cf. mkScript dans
-# modules/user/window-manager/sway/waybar/default.nix), avant le corps du script. Centralise
-# l'échappement JSON, qui n'était auparavant fait que dans bluetooth.sh.
+# Helpers partagés par les scripts des modules custom waybar. Ce fichier n'a
+# pas de shebang : il est inliné EN TÊTE de chaque script au build (cf.
+# ../scripts.nix), avant le corps du script. Aussi inliné par l'alerte
+# batterie (sway/notifications), pour find_battery.
 #
-# json_escape : échappe une valeur pour l'insérer dans un champ JSON (backslash,
-# guillemet, et vraies nouvelles lignes -> \n pour les tooltips multi-lignes).
-# Donc les scripts construisent leurs tooltips avec de VRAIES nouvelles lignes
-# ($'\n'), pas des "\n" littéraux.
-json_escape() {
-    local s=$1
-    s=${s//\\/\\\\}
-    s=${s//\"/\\\"}
-    s=${s//$'\n'/\\n}
-    printf '%s' "$s"
-}
-
-# json_escape_to : comme json_escape, mais écrit dans la variable nommée $1
-# au lieu de stdout -> pas de sous-shell $(...), donc pas de fork. Pour les
-# boucles qui tournent en continu (resources.sh).
+# json_escape_to : échappe une valeur pour l'insérer dans un champ JSON
+# (backslash, guillemet, et vraies nouvelles lignes -> \n pour les tooltips
+# multi-lignes), écrite dans la variable nommée $1 -> pas de sous-shell $(...),
+# donc pas de fork. Les scripts construisent donc leurs tooltips avec de
+# VRAIES nouvelles lignes ($'\n'), pas des "\n" littéraux.
 json_escape_to() { # $1 = nom de variable, $2 = valeur
     local -n _je_out=$1
     local s=$2
@@ -28,20 +18,37 @@ json_escape_to() { # $1 = nom de variable, $2 = valeur
     _je_out=$s
 }
 
-# emit : JSON waybar { texte barre, tooltip (peut être vide) }, les deux échappés.
+# emit TEXTE TOOLTIP [CLASSE] [ALT] : LA sortie JSON des modules custom.
+# Texte et tooltip échappés (le tooltip peut être vide) ; classe CSS (couleur)
+# et alt (clé de format-icons côté Nix) omises si vides. Sans sous-shell :
+# appelée en boucle par resources.sh.
 emit() {
-    local _emit_t _emit_tt
+    local _emit_t _emit_tt _emit_extra=""
     json_escape_to _emit_t "$1"
     json_escape_to _emit_tt "$2"
-    printf '{"text":"%s","tooltip":"%s"}\n' "$_emit_t" "$_emit_tt"
+    [[ -n ${4:-} ]] && _emit_extra+=",\"alt\":\"$4\""
+    [[ -n ${3:-} ]] && _emit_extra+=",\"class\":\"$3\""
+    printf '{"text":"%s"%s,"tooltip":"%s"}\n' "$_emit_t" "$_emit_extra" "$_emit_tt"
+}
+
+# find_battery : chemin sysfs de la première batterie (BAT0, BAT1, …) qui
+# expose sa charge ; code 1 sans batterie (desktop). Partagée par battery.sh
+# et l'alerte batterie des notifications : même détection des deux côtés.
+find_battery() {
+    local d
+    for d in /sys/class/power_supply/BAT*; do
+        if [[ -e $d/capacity ]]; then
+            printf '%s' "$d"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # Icônes batterie Nerd Font (Material Design), 11 niveaux (0-100% par pas de
-# 10) : partagées par battery.sh et bluetooth.sh (mêmes glyphes que le
-# format-icons natif dans modules/user/window-manager/sway/waybar/default.nix -> garder les DEUX
-# synchronisés si un jour ils changent). Glyphes littéraux (et non printf
-# '\U…') : insensibles à LC_ALL=C, qui en locale ASCII ne sait pas encoder ces
-# codepoints du plan astral.
+# 10) : partagées par battery.sh et bluetooth.sh. Glyphes littéraux (et non
+# printf '\U…') : insensibles à LC_ALL=C, qui en locale ASCII ne sait pas
+# encoder ces codepoints du plan astral.
 bat_icons=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹)
 bat_icon() { # $1 = pourcentage -> glyphe
     local idx=$(( ($1 + 5) / 10 ))
@@ -58,11 +65,16 @@ bat_icon() { # $1 = pourcentage -> glyphe
 
 weather_statedir() { printf '%s' "${XDG_STATE_HOME:-$HOME/.local/state}/waybar"; }
 
-# Ville courante (écrite par le menu clic-droit du module météo). Défaut Angers.
+# Nom de ville -> fragment de nom de fichier (caches par ville).
+weather_slug() { printf '%s' "${1//[^A-Za-z0-9]/_}"; }
+
+# Ville courante (écrite par le menu clic-droit du module météo, cf.
+# weather-city.sh). Défaut : WEATHER_DEFAULT_CITY, la première de
+# `weatherCities` (posée par scripts.nix).
 weather_city() {
     local city
     city=$(cat "$(weather_statedir)/weather-city" 2>/dev/null) || true
-    [[ -z "$city" ]] && city="Angers"
+    [[ -z "$city" ]] && city=$WEATHER_DEFAULT_CITY
     printf '%s' "$city"
 }
 
@@ -70,10 +82,9 @@ weather_city() {
 # (sans clé) si absent puis met en cache. Sortie vide + code !=0 si ni cache ni
 # réseau (l'appelant gère le repli).
 weather_coords() { # $1 = ville
-    local city=$1 statedir safe coordcache geo lat lon
+    local city=$1 statedir coordcache geo lat lon
     statedir=$(weather_statedir)
-    safe=${city//[^A-Za-z0-9]/_}
-    coordcache="$statedir/weather-${safe}.coords"
+    coordcache="$statedir/weather-$(weather_slug "$city").coords"
     if [[ -s "$coordcache" ]]; then
         cat "$coordcache"
         return 0

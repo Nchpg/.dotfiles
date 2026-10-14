@@ -10,26 +10,22 @@ set -euo pipefail
 #
 # Sortie JSON : icône + % dans la barre, `class` pour la couleur CSS
 # (charging/warning/critical, cf. #custom-battery dans default.nix), détail
-# complet en tooltip. json_escape vient de lib.sh (inliné en tête au build).
+# complet en tooltip. emit / find_battery / bat_icon viennent de lib.sh
+# (inliné en tête au build).
 
 export LC_ALL=C
 
-# Première batterie trouvée (BAT0, BAT1, …) : même détection que le script
-# de notifications (modules/user/notifications), plus de BAT0 en dur.
-bat=""
-for d in /sys/class/power_supply/BAT*; do
-    [[ -d $d ]] && bat=$d && break
-done
-if [[ -z $bat ]]; then
-    printf '{"text":"󰂑  N/A","tooltip":"Batterie indisponible"}\n'
+# Première batterie trouvée (BAT0, BAT1, …), même détection que l'alerte
+# batterie des notifications.
+if ! bat=$(find_battery); then
+    emit "󰂑  N/A" "Batterie indisponible"
     exit 0
 fi
 
 capacity=$(<"$bat/capacity")
 status=$(<"$bat/status")
 
-# Icône batterie : bat_icon vient de lib.sh (partagée avec bluetooth.sh) —
-# mêmes 11 niveaux que le format-icons du module natif, à garder synchronisés.
+# Icône batterie : bat_icon vient de lib.sh (partagée avec bluetooth.sh).
 icon=$(bat_icon "$capacity")
 
 # En charge : éclair sur batterie (md-battery-charging). Pleine : icône pleine.
@@ -38,11 +34,14 @@ case "$status" in
     Charging)     icon=󰂄 ; class=charging ;;
     Full)         icon=󰁹 ;;
 esac
-# Seuils de couleur : repris des `states` du module natif (warning 20, crit 10).
-# La charge a priorité (vert/charging) sur l'alerte de niveau bas.
+# Seuils de couleur : ceux des notifications batterie (BATTERY_LOW et
+# BATTERY_VERYLOW, posés par scripts.nix depuis
+# userSettings.windowManager.sway.notifications), pour que la case vire à la
+# couleur au moment où la notification tombe. La charge a priorité
+# (vert/charging) sur l'alerte de niveau bas.
 if [[ $class != charging ]]; then
-    if   (( capacity <= 10 )); then class=critical
-    elif (( capacity <= 20 )); then class=warning
+    if   (( capacity <= BATTERY_VERYLOW )); then class=critical
+    elif (( capacity <= BATTERY_LOW )); then class=warning
     fi
 fi
 
@@ -103,7 +102,7 @@ for namefile in /sys/class/hwmon/hwmon*/name; do
     read -r v <"${namefile%/name}/fan1_input" 2>/dev/null || true
     [[ $v =~ ^[0-9]+$ ]] && { fan_rpm=$v; break; }
 done
-# Valeurs alignées sur lg-control (modules/user/lg-control) : 0=Optimal,
+# Valeurs alignées sur lg-control (modules/user/tui/lg-control) : 0=Optimal,
 # 1=Silencieux, 2=Performance — même sysfs, même mapping des deux côtés.
 lg_fan_mode=""
 read -r lg_fan_mode </sys/devices/platform/lg-laptop/fan_mode 2>/dev/null || true
@@ -114,7 +113,7 @@ case "$lg_fan_mode" in
     *) fan_mode="" ;;
 esac
 
-# --- Tooltip multi-lignes (vraies \n, converties par json_escape) ------------
+# --- Tooltip multi-lignes (vraies \n, converties par emit) ---------------------
 tooltip="${capacity}%"
 [[ -n "$time_str" ]] && tooltip+="  ·  ${time_str}"
 [[ -n "$health" ]] && tooltip+=$'\n'"Santé ${health}%  ·  ${cycles} cycles"
@@ -125,5 +124,4 @@ if [[ -n "$fan_rpm" ]]; then
     tooltip+=$'\n'"Ventilateur  ${fan_line}"
 fi
 
-printf '{"text":"%s","class":"%s","tooltip":"%s"}\n' \
-    "$(json_escape "${icon}  ${capacity}%")" "$class" "$(json_escape "$tooltip")"
+emit "${icon}  ${capacity}%" "$tooltip" "$class"

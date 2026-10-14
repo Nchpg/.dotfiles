@@ -4,9 +4,9 @@
 #
 # Pourquoi un check et pas juste de la discipline : un chemin d'option erroné
 # ne casse RIEN de visible. L'option orpheline est simplement ignorée, et les
-# lecteurs tolérants (`bindIf`, `clickIf`, qui font `attrByPath … false`)
-# retombent silencieusement sur false — on perd un bind clavier ou un clic
-# waybar sans le moindre message. C'est typiquement ce qu'un déplacement de
+# lecteurs tolérants (`clickIf`, autrefois `bindIf`, qui faisaient
+# `attrByPath … false`) retombaient silencieusement sur false — on perdait un
+# bind clavier ou un clic waybar sans le moindre message. C'est typiquement ce qu'un déplacement de
 # dossier introduit.
 #
 # Deux fonctions parce que les deux arbres ne s'introspectent pas pareil :

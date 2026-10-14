@@ -39,5 +39,16 @@ in
         "--restore-last-session"
       ];
     };
+
+    # Nom de binaire résolu depuis le paquet (substituable : google-chrome-stable
+    # / chromium / ungoogled), pas un chemin store : le PATH doit résoudre le
+    # wrapper home-manager qui porte les flags Wayland.
+    home.file.".config/sway/conf.d/chrome.conf" =
+      lib.mkIf config.userSettings.windowManager.sway.enable
+        {
+          text = ''
+            bindsym $mod+Shift+c exec ${baseNameOf (lib.getExe cfg.package)}
+          '';
+        };
   };
 }

@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  osConfig,
   myLib,
   ...
 }:
@@ -16,53 +17,66 @@ let
   #  2. Le saut de taille pendant ce reflow est visible : la fenêtre naît
   #     hors-écran (cf. conf.d), fait son reflow là, et ce wrapper la ramène
   #     au centre une fois posée — d'où la nécessité que tout passe par lui.
-  scriptPath = lib.makeBinPath [
-    pkgs.sway # swaymsg, swaynag
+  scriptDeps = [
+    osConfig.programs.sway.package # swaymsg, swaynag
     pkgs.jq
     pkgs.gnugrep
     pkgs.coreutils # sleep, head
     pkgs.procps # pkill
   ];
 
-  nwg-displays-wrapped = pkgs.writeShellScriptBin "nwg-displays" ''
-    export PATH="${scriptPath}:$PATH"
+  nwg-displays-wrapped = pkgs.writeShellApplication {
+    name = "nwg-displays";
+    runtimeInputs = scriptDeps;
+    text = myLib.swayWaitSh + ''
+      # Toggle ouvre/ferme. Pas de `grep -q` : il sortirait au premier match
+      # et, sous pipefail, le SIGPIPE de swaymsg ferait échouer le test.
+      if swaymsg -t get_tree | grep '"nwg-displays"' >/dev/null; then
+        exec swaymsg '[app_id="nwg-displays"] kill'
+      fi
 
-    # Toggle ouvre/ferme.
-    if swaymsg -t get_tree | grep -q '"nwg-displays"'; then
-      exec swaymsg '[app_id="nwg-displays"] kill'
-    fi
+      # Focus mémorisé AVANT le vol de focus par nwg-displays : le masquage
+      # hors-écran rattache la fenêtre à l'écran le plus proche (souvent le
+      # secondaire), donc on la renvoie explicitement sur l'écran focus.
+      out="$(swaymsg -t get_outputs | jq -r '.[] | select(.focused).name')"
 
-    # Focus mémorisé AVANT le vol de focus par nwg-displays : le masquage
-    # hors-écran rattache la fenêtre à l'écran le plus proche (souvent le
-    # secondaire), donc on la renvoie explicitement sur l'écran focus.
-    out="$(swaymsg -t get_outputs | jq -r '.[] | select(.focused).name')"
+      ${pkgs.nwg-displays}/bin/nwg-displays >/dev/null 2>&1 &
 
-    ${pkgs.nwg-displays}/bin/nwg-displays >/dev/null 2>&1 &
-
-    # Largeur×hauteur courante de la fenêtre (vide tant qu'elle n'existe pas).
-    geo() {
-      swaymsg -t get_tree \
-        | jq -r '.. | objects | select(.app_id? == "nwg-displays").rect | "\(.width)x\(.height)"'
-    }
-
-    # Bornée à 10s (40 x 0,25s) : si nwg-displays crashe, on prévient au lieu
-    # de bloquer indéfiniment.
-    prev=""
-    cur="$(geo)"
-    tries=0
-    while [ -z "$cur" ] || [ "$cur" != "$prev" ]; do
-      tries=$((tries + 1))
-      if [ "$tries" -ge 40 ]; then
+      # Attend que la largeur×hauteur de la fenêtre se stabilise (cf.
+      # sway_wait_stable, lib/sway-wait.sh). Bornée à 10s (40 x 0,25s) : si
+      # nwg-displays crashe, on prévient au lieu de bloquer indéfiniment.
+      if ! sway_wait_stable 40 0.25 '.. | objects | select(.app_id? == "nwg-displays").rect | "\(.width)x\(.height)"' >/dev/null; then
         swaynag -t error -m "nwg-displays : la fenêtre ne s'est pas stabilisée (timeout)."
         exit 1
       fi
-      sleep 0.25
-      prev="$cur"
-      cur="$(geo)"
-    done
 
-    exec swaymsg "[app_id=\"nwg-displays\"] move container to output \"$out\", resize set 1250 800, move position center, focus; mode \"displays\""
-  '';
+      exec swaymsg "[app_id=\"nwg-displays\"] move container to output \"$out\", resize set 1250 800, move position center, focus; mode \"displays\""
+    '';
+  };
+
+  # Clonage d'écran (Sway ne sait pas mirrorer nativement), $mod+Shift+o.
+  mirror = pkgs.writeShellApplication {
+    name = "mirror";
+    runtimeInputs = scriptDeps ++ [ pkgs.wl-mirror ];
+    text = ''
+      # Toggle : arrête le miroir s'il tourne déjà.
+      if pkill -x wl-mirror; then
+        exit 0
+      fi
+
+      internal=$(swaymsg -t get_outputs \
+        | jq -r '.[] | select(.name | test("^eDP")) | .name' | head -n1)
+      external=$(swaymsg -t get_outputs \
+        | jq -r '.[] | select(.active and (.name | test("^eDP") | not)) | .name' | head -n1)
+
+      if [ -z "$external" ]; then
+        swaynag -t warning -m "Clonage : aucun écran externe détecté."
+        exit 1
+      fi
+
+      exec wl-mirror --fullscreen-output "$external" "$internal"
+    '';
+  };
 in
 {
   options.userSettings.gui.displays = {
@@ -79,38 +93,12 @@ in
       pkgs.nwg-displays
       pkgs.wlr-randr
       pkgs.wl-mirror # clonage d'écran (Sway ne sait pas mirrorer nativement)
-      pkgs.jq # parse la sortie JSON de swaymsg (wrapper + script clonage)
     ];
 
     # ~/.config/sway/outputs (sauvegardé par nwg-displays) inclus pour que
     # Sway l'applique au démarrage et au branchement à chaud. Pas en
     # déclaratif : un home.file en ferait un symlink read-only, or
     # nwg-displays doit pouvoir l'écrire.
-
-    home.file.".config/sway/launchers/mirror" = {
-      text = ''
-        #!/bin/sh
-        export PATH="${scriptPath}:${pkgs.wl-mirror}/bin:$PATH"
-
-        # Toggle : arrête le miroir s'il tourne déjà.
-        if pkill -x wl-mirror; then
-          exit 0
-        fi
-
-        internal=$(swaymsg -t get_outputs \
-          | jq -r '.[] | select(.name | test("^eDP")) | .name' | head -n1)
-        external=$(swaymsg -t get_outputs \
-          | jq -r '.[] | select(.active and (.name | test("^eDP") | not)) | .name' | head -n1)
-
-        if [ -z "$external" ]; then
-          swaynag -t warning -m "Clonage : aucun écran externe détecté."
-          exit 1
-        fi
-
-        exec wl-mirror --fullscreen-output "$external" "$internal"
-      '';
-      executable = true;
-    };
 
     home.file.".config/sway/conf.d/displays.conf".text = ''
       include ~/.config/sway/outputs
@@ -119,7 +107,7 @@ in
       for_window [app_id="nwg-displays"] floating enable, border pixel 2, move position 100000 100000
 
       bindsym $mod+o exec nwg-displays
-      bindsym $mod+Shift+o exec ~/.config/sway/launchers/mirror
+      bindsym $mod+Shift+o exec ${lib.getExe mirror}
 
       # Actif tant que nwg-displays est ouvert (fenêtre sans barre de titre :
       # ces trois binds sont ses seules voies de fermeture).

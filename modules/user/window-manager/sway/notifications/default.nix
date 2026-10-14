@@ -14,8 +14,9 @@ let
   # Taille "popups" de stylix, un peu petite pour des notifs.
   popupSize = toString (config.stylix.fonts.sizes.popups + 3);
 
-  # Icônes de notif aux couleurs du thème (cf. lib/mk-themed-icon.nix).
-  icon = myLib.mkThemedIcon cfg.pkgs;
+  # Icônes de notif aux couleurs du thème, repli sans stylix intégré (cf.
+  # lib/notify-icon.nix).
+  icon = myLib.notifyIcon config cfg.pkgs;
 
   swayncStyle = ''
     * {
@@ -109,129 +110,49 @@ let
     .notification-group-headers { color: ${c.base04}; font-weight: bold; }
   '';
 
-  # Aucune app n'envoie d'alerte batterie : générée ici, anti-spam via un
-  # fichier d'état, réarmée une fois rebranché/rechargé.
-  batteryAlert = cfg.pkgs.writeShellScript "battery-alert" ''
-    set -eu
-    notify=${cfg.pkgs.libnotify}/bin/notify-send
-    low=${toString cfg.lowBatteryThreshold}
-    verylow=${toString cfg.veryLowBatteryThreshold}
-    crit=${toString cfg.criticalBatteryThreshold}
+  # Batterie : cf. battery-alert.sh. find_battery est partagé avec la case
+  # batterie de waybar (waybar/scripts/lib.sh).
+  batteryAlert = cfg.pkgs.writeShellApplication {
+    name = "battery-alert";
+    runtimeInputs = [
+      cfg.pkgs.coreutils
+      cfg.pkgs.libnotify
+    ];
+    runtimeEnv = {
+      LOW = toString cfg.lowBatteryThreshold;
+      VERYLOW = toString cfg.veryLowBatteryThreshold;
+      CRIT = toString cfg.criticalBatteryThreshold;
+      ICON_LOW = icon "status/battery-low" (c: c.base0A);
+      ICON_VERYLOW = icon "status/battery-low" (c: c.base09);
+      ICON_CAUTION = icon "status/battery-caution" (c: c.base08);
+    };
+    text = builtins.readFile ../waybar/scripts/lib.sh + builtins.readFile ./battery-alert.sh;
+  };
 
-    for bat in /sys/class/power_supply/BAT*; do
-      [ -e "$bat/capacity" ] && break
-    done
-    [ -e "$bat/capacity" ] || exit 0
-
-    cap=$(cat "$bat/capacity")
-    status=$(cat "$bat/status")
-    state="''${XDG_RUNTIME_DIR:-/tmp}/battery-alert.state"
-    last=$(cat "$state" 2>/dev/null || echo ok)
-
-    # Jaune -> orange -> rouge avec la gravité.
-    icon_low=${icon "status/battery-low" c.base0A}
-    icon_verylow=${icon "status/battery-low" c.base09}
-    icon_caution=${icon "status/battery-caution" c.base08}
-
-    # Détermine le palier courant (du plus grave au moins grave).
-    bucket=ok; urgency=normal; icon="$icon_low"; title=""; body=""
-    if [ "$cap" -le "$crit" ]; then
-      bucket=crit; urgency=critical; icon="$icon_caution"
-      title="Batterie critique"; body="Batterie à $cap% — branche le chargeur !"
-    elif [ "$cap" -le "$verylow" ]; then
-      bucket=verylow; urgency=critical; icon="$icon_verylow"
-      title="Batterie très faible"; body="Batterie à $cap%"
-    elif [ "$cap" -le "$low" ]; then
-      bucket=low; urgency=normal; icon="$icon_low"
-      title="Batterie faible"; body="Batterie à $cap%"
-    fi
-
-    # -h ...:battery remplace la notif précédente au lieu d'empiler.
-    if [ "$status" = "Discharging" ] && [ "$bucket" != ok ]; then
-      if [ "$bucket" != "$last" ]; then
-        "$notify" -u "$urgency" -i "$icon" \
-          -h string:x-canonical-private-synchronous:battery \
-          "$title" "$body"
-      fi
-      echo "$bucket" > "$state"
-    else
-      echo ok > "$state"
-    fi
-  '';
-
-  # Tunnel vers think (cf. systemSettings.vpn.client) : prévient quand le
-  # serveur cesse de répondre, et quand il revient. Même test que le module
-  # vpn de waybar (TCP 443 sur 10.8.0.1), mais dans un service à part :
-  # waybar lance son script une fois PAR ÉCRAN, les notifs seraient doublées.
-  #
-  # Un changement d'état n'est notifié qu'une fois confirmé par deux tests
-  # d'affilée : au réveil, le réseau met quelques secondes à revenir, et un
-  # seul échec déclencherait une fausse alerte suivie d'un « rétabli ».
+  # Tunnel vers think (cf. systemSettings.vpn.client et vpn-alert.sh).
   vpnClient = osConfig.systemSettings.vpn.client.enable or false;
-  # Signal qui réveille la case vpn de waybar (= vpnSignal dans
-  # modules/user/window-manager/sway/waybar/default.nix).
-  vpnWaybarSignal = 10;
+  inherit (cfg) vpnProbe;
 
-  vpnAlert = cfg.pkgs.writeShellScript "vpn-alert" ''
-    set -u
-    notify=${cfg.pkgs.libnotify}/bin/notify-send
-    dir="''${XDG_RUNTIME_DIR:-/tmp}/vpn-alert"
-    mkdir -p "$dir"
-
-    addr=""
-    if [ ! -d /sys/class/net/wg0 ]; then
-      now=off
-    else
-      read -r _ _ addr _ < <(${cfg.pkgs.iproute2}/bin/ip -4 -brief addr show wg0 2>/dev/null) || true
-      if ${cfg.pkgs.coreutils}/bin/timeout 2 ${cfg.pkgs.bash}/bin/bash -c 'exec 3<>/dev/tcp/10.8.0.1/443' 2>/dev/null; then
-        now=on
-      else
-        now=down
-      fi
-    fi
-
-    # État brut publié pour le module vpn de waybar (« epoch état adresse »),
-    # réveillé par signal : il n'a plus à refaire cette même sonde de son côté.
-    printf -v epoch '%(%s)T' -1
-    printf '%s %s %s\n' "$epoch" "$now" "$addr" > "$dir/state.tmp"
-    ${cfg.pkgs.coreutils}/bin/mv -f "$dir/state.tmp" "$dir/state"
-    ${cfg.pkgs.procps}/bin/pkill -RTMIN+${toString vpnWaybarSignal} waybar 2>/dev/null || true
-
-    shown=$(cat "$dir/shown" 2>/dev/null || echo "")
-    pending=$(cat "$dir/pending" 2>/dev/null || echo "")
-
-    # Premier passage de la session : on prend l'état tel quel, sans notif.
-    if [ -z "$shown" ]; then
-      echo "$now" > "$dir/shown"
-      exit 0
-    fi
-
-    if [ "$now" = "$shown" ]; then
-      rm -f "$dir/pending"
-      exit 0
-    fi
-    # Notifie un changement seulement s'il tient 30 s (sonde toutes les
-    # 15 s) : une coupure d'un instant ne mérite pas d'alerte. « état epoch ».
-    read -r pending_state pending_since <<<"$pending" || true
-    if [ "$now" != "$pending_state" ] || [ -z "''${pending_since:-}" ]; then
-      echo "$now $epoch" > "$dir/pending"
-      exit 0
-    fi
-    if [ $((epoch - ''${pending_since:-$epoch})) -lt 30 ]; then
-      exit 0
-    fi
-
-    rm -f "$dir/pending"
-    echo "$now" > "$dir/shown"
-    sync=string:x-canonical-private-synchronous:vpn
-    case "$now" in
-      down) "$notify" -u normal -i ${icon "status/network-vpn-no-route" c.base08} -h "$sync" "VPN : think injoignable" \
-              "Le tunnel est monté mais 10.8.0.1 ne répond plus. Nextcloud ne synchronise pas." ;;
-      off)  "$notify" -u normal -i ${icon "status/network-vpn-disabled" c.base0A} -h "$sync" "VPN : tunnel arrêté" \
-              "wg0 n'existe plus. sudo systemctl start wg-quick-wg0" ;;
-      on)   "$notify" -u normal -i ${icon "status/network-vpn" c.base0B} -h "$sync" "VPN : think joignable" "Le tunnel fonctionne de nouveau." ;;
-    esac
-  '';
+  vpnAlert = cfg.pkgs.writeShellApplication {
+    name = "vpn-alert";
+    runtimeInputs = with cfg.pkgs; [
+      bash # /dev/tcp de la sonde, sous timeout
+      coreutils # timeout, mv, cat
+      iproute2
+      libnotify
+      procps # pkill
+    ];
+    runtimeEnv = {
+      VPN_IFACE = vpnProbe.iface;
+      VPN_PEER = vpnProbe.peer;
+      VPN_PORT = toString vpnProbe.port;
+      WAYBAR_VPN_SIGNAL = toString config.userSettings.windowManager.sway.waybar.signals.vpn;
+      ICON_DOWN = icon "status/network-vpn-no-route" (c: c.base08);
+      ICON_OFF = icon "status/network-vpn-disabled" (c: c.base0A);
+      ICON_ON = icon "status/network-vpn" (c: c.base0B);
+    };
+    text = builtins.readFile ./vpn-alert.sh;
+  };
 in
 {
   options = {
@@ -256,6 +177,30 @@ in
         default = 5;
         description = "Seuil (%) « batterie critique » (urgence critique, branche le chargeur).";
       };
+      # Paramètres de LA sonde du tunnel (vpn-alert), lus aussi par la case
+      # vpn de waybar pour ses textes : tirés de la config du client VPN, plus
+      # rien en dur des deux côtés.
+      vpnProbe = lib.mkOption {
+        type = lib.types.attrs;
+        readOnly = true;
+        default =
+          let
+            client = osConfig.systemSettings.vpn.client;
+          in
+          {
+            enable = vpnClient;
+            # Interface posée par le module client (networking.wg-quick).
+            iface = "wg0";
+            # Adresse du serveur dans le tunnel : celle que le module serveur
+            # du dépôt lui donne (même valeur sur tous les hosts).
+            peer = osConfig.systemSettings.vpn.wireguard.serverAddress;
+            # 443 : le port qui compte, celui que Nextcloud emprunte.
+            port = 443;
+            # Seuls ces sous-réseaux passent par le tunnel (textes d'aide).
+            routed = if vpnClient then client.allowedIPs else [ ];
+          };
+        description = "Paramètres de la sonde du tunnel VPN (vpn-alert), partagés avec waybar.";
+      };
     };
   };
 
@@ -279,11 +224,20 @@ in
     stylix.targets.swaync.enable = false;
     services.swaync.style = swayncStyle;
 
+    home.file.".config/sway/conf.d/notifications.conf" =
+      lib.mkIf config.userSettings.windowManager.sway.enable
+        {
+          # Ouvre/ferme le centre de notifications swaync.
+          text = ''
+            bindsym $mod+n exec swaync-client -t -sw
+          '';
+        };
+
     systemd.user.services.battery-alert = {
       Unit.Description = "Alerte de batterie faible";
       Service = {
         Type = "oneshot";
-        ExecStart = "${batteryAlert}";
+        ExecStart = lib.getExe batteryAlert;
       };
     };
     systemd.user.timers.battery-alert = {
@@ -299,14 +253,14 @@ in
       Unit.Description = "Alerte de perte du tunnel VPN vers think";
       Service = {
         Type = "oneshot";
-        ExecStart = "${vpnAlert}";
+        ExecStart = lib.getExe vpnAlert;
       };
     };
     systemd.user.timers.vpn-alert = lib.mkIf vpnClient {
       Unit.Description = "Vérifie périodiquement que think répond dans le tunnel";
       Timer = {
         OnBootSec = "1min";
-        # 15 s : sert aussi la case vpn de waybar (même sonde, cf. vpnAlert),
+        # 15 s : sert aussi la case vpn de waybar (seule sonde, cf. vpnAlert),
         # qui doit montrer vite que think ne répond plus.
         OnUnitActiveSec = "15s";
         AccuracySec = "3s"; # défaut 1 min : le 15 s ne voudrait rien dire

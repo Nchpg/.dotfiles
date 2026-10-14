@@ -153,5 +153,13 @@ in
       enable = themed;
       profileNames = [ "default" ];
     };
+
+    home.file.".config/sway/conf.d/firefox.conf" =
+      lib.mkIf config.userSettings.windowManager.sway.enable
+        {
+          text = ''
+            bindsym $mod+Shift+f exec firefox
+          '';
+        };
   };
 }

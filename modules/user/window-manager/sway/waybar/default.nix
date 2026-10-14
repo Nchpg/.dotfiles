@@ -8,17 +8,15 @@
 # Barre de la session sway (SEULE barre du dépôt : sway n'émet plus aucun
 # bloc `bar {}` natif). Blocs cliquables via les launchers
 # ~/.config/sway/launchers/*, fournis par les modules voisins ../pickers/* et
-# par tui/lg-control et tui/calendar.
+# par tui/lg-control et tui/calendar. Découpé en scripts.nix (scripts des
+# modules custom), nightlight.nix (wlsunset), thunar-float/ (clic disque) et
+# style.css.
 let
-  cfg = config.userSettings.windowManager.sway.waybar;
+  sway = config.userSettings.windowManager.sway;
+  cfg = sway.waybar;
   inherit (cfg) pkgs;
 
   c = config.lib.stylix.colors.withHashtag;
-  font = config.stylix.fonts.sansSerif.name;
-  # Nerd Font (glyphes des icônes) + emoji en dernier recours.
-  nerdFont = config.stylix.fonts.monospace.name;
-  emojiFont = config.stylix.fonts.emoji.name;
-  fontSize = toString config.stylix.fonts.sizes.desktop;
 
   home = config.home.homeDirectory;
   launcher = name: "${home}/.config/sway/launchers/${name}";
@@ -41,230 +39,160 @@ let
 
   # Référencés explicitement (clics) pour ne pas dépendre du PATH.
   playerctl = "${pkgs.playerctl}/bin/playerctl";
-  brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
-  wpctl = "${pkgs.wireplumber}/bin/wpctl";
   swaync = "${pkgs.swaynotificationcenter}/bin/swaync-client";
-  systemctl = "${pkgs.systemd}/bin/systemctl";
-  pkill = "${pkgs.procps}/bin/pkill";
 
-  # alacritty exige `-e`, kitty/foot acceptent le programme directement.
-  term = config.userSettings.terminal.default;
-  termExec = prog: if term == "alacritty" then "${term} -e ${prog}" else "${term} ${prog}";
   # programs.btop (pas pkgs.btop, amont driver i915-only) : support GPU xe
   # (PR #1457) si activé côté user.
   btop = "${config.programs.btop.package}/bin/btop";
-  # Thunar « éphémère » du clic sur la case disque : flottant, Échap pour
-  # fermer, fermé à l'ouverture d'un fichier (cf. thunar-float/daemon.sh).
-  thunarFloatLauncher = pkgs.writeShellApplication {
-    name = "thunar-float";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.sway # swaymsg
-      pkgs.thunar
-    ];
-    text = builtins.readFile ./thunar-float/launcher.sh;
-  };
-  thunarFloatDaemon = pkgs.writeShellApplication {
-    name = "thunar-float-daemon";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.sway # swaymsg
-      pkgs.jq
-    ];
-    text = builtins.readFile ./thunar-float/daemon.sh;
-  };
 
-  # Installés par ./scripts.nix, qui possède aussi ce chemin.
+  # Empaquetés par ./scripts.nix, qui possède aussi ce chemin.
   inherit (cfg) scriptDir;
 
-  # Commandes volume (wpctl), réutilisées par la molette, le clic et le menu.
-  volUp = "${wpctl} set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+";
-  volDown = "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ 5%-";
-  volMute = "${wpctl} set-mute @DEFAULT_AUDIO_SINK@ toggle";
+  # Commandes volume : les mêmes que les touches clavier (module sway).
+  inherit (sway) volume;
   volScroll = {
-    on-scroll-up = volUp;
-    on-scroll-down = volDown;
+    on-scroll-up = volume.up;
+    on-scroll-down = volume.down;
   };
-  # Ids GTK = vol<N>. Source unique = volumePresets : un menus/volume.xml
-  # statique désynchronisait silencieusement les ids si surchargé.
-  volPresets = cfg.volumePresets;
-  volPresetActions = lib.listToAttrs (
-    map (
-      p: lib.nameValuePair "vol${toString p}" "${wpctl} set-volume @DEFAULT_AUDIO_SINK@ ${toString p}%"
-    ) volPresets
-  );
-  volumeMenuXml = ''
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!-- Généré depuis `volumePresets` dans modules/user/window-manager/sway/waybar/default.nix. -->
-    <interface>
-      <object class="GtkMenu" id="menu">
-        <child>
-          <object class="GtkMenuItem" id="mute">
-            <property name="label">Mute / Unmute</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sep1"/>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="mixer">
-            <property name="label">Ouvrir le mixer</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sep2"/>
-        </child>
-  ''
-  + lib.concatMapStrings (p: ''
-    <child>
-      <object class="GtkMenuItem" id="vol${toString p}">
-        <property name="label">${toString p} %</property>
-      </object>
-    </child>
-  '') volPresets
-  + ''
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sep3"/>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="volup">
-            <property name="label">Volume +5 %</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="voldown">
-            <property name="label">Volume -5 %</property>
-          </object>
-        </child>
-      </object>
-    </interface>
-  '';
 
+  # Menus clic droit : XML + menu-actions tirés d'une même liste (cf.
+  # lib/mk-waybar-menu.nix). Ids GTK = vol<N> / pct<N> (pas de chiffre en
+  # tête), une seule source pour les préréglages : volumePresets /
+  # backlightPresets.
+  menus = {
+    volume = myLib.mkWaybarMenu (
+      [
+        {
+          id = "mute";
+          label = "Mute / Unmute";
+          action = volume.mute;
+        }
+        "sep"
+        {
+          id = "mixer";
+          label = "Ouvrir le mixer";
+          # Entrée affichée même sans le mixeur, mais muette.
+          action = if sway.pickers.volume.enable then launcher "volume-mixer" else null;
+        }
+        "sep"
+      ]
+      ++ map (p: {
+        id = "vol${toString p}";
+        label = "${toString p} %";
+        action = "${volume.set} ${toString p}%";
+      }) cfg.volumePresets
+      ++ [
+        "sep"
+        {
+          id = "volup";
+          label = "Volume +5 %";
+          action = volume.up;
+        }
+        {
+          id = "voldown";
+          label = "Volume -5 %";
+          action = volume.down;
+        }
+      ]
+    );
+
+    # Le choix PERSISTE dans le cache météo (weather-city.sh), survit aux
+    # reboots, et sert aussi de lieu au night light.
+    weather = myLib.mkWaybarMenu (
+      map (city: {
+        id = city;
+        label = city;
+        action = "${scriptDir}/weather-city.sh ${lib.escapeShellArg city}";
+      }) cfg.weatherCities
+    );
+
+    # Luminosité : la même commande que les touches clavier (module sway),
+    # qui rafraîchit elle-même cette case.
+    backlight = myLib.mkWaybarMenu (
+      [
+        {
+          id = "mode";
+          label = "Changer de mode (night light)";
+          action = nightlightToggle;
+        }
+        "sep"
+      ]
+      ++ map (p: {
+        id = "pct${toString p}";
+        label = "${toString p} %";
+        action = "${brightness} set ${toString p}";
+      }) cfg.backlightPresets
+      ++ [
+        "sep"
+        {
+          id = "inc";
+          label = "+5 %";
+          action = "${brightness} up";
+        }
+        {
+          id = "dec";
+          label = "−5 %";
+          action = "${brightness} down";
+        }
+      ]
+    );
+
+    notifications = myLib.mkWaybarMenu [
+      {
+        id = "dnd";
+        label = "Ne pas déranger (on/off)";
+        action = "${swaync} -d -sw";
+      }
+      "sep"
+      {
+        id = "panel";
+        label = "Afficher les notifications";
+        action = "${swaync} -t -sw";
+      }
+    ];
+  };
   menuDir = "${home}/.config/waybar/menus";
-  menuNames = [
-    "notifications.xml"
-  ];
+  # Attributs d'un module pour son menu clic droit.
+  withMenu = name: {
+    menu = "on-click-right";
+    menu-file = "${menuDir}/${name}.xml";
+    menu-actions = menus.${name}.actions;
+  };
 
-  # Choix courant persisté hors du store (weather.sh), survit aux reboots.
-  inherit (cfg) weatherCities;
+  weatherWake = cfg.refresh.weather;
 
-  # Signal utilisé à la fois pour `signal` côté waybar ET le `pkill` des
-  # actions de menu, pour rester cohérents.
-  weatherSignal = 8;
-  weatherWake = "${pkill} -RTMIN+${toString weatherSignal} waybar";
+  brightness = lib.getExe sway.brightness;
+  # Night light : cf. ./nightlight.nix et scripts/nightlight.sh.
+  nightlightToggle = "${scriptDir}/nightlight.sh toggle";
 
-  # `\''${…}` = ${…} littéral dans le shell ; `$HOME` reste littéral aussi.
-  weatherStateDir = "\${XDG_STATE_HOME:-$HOME/.local/state}/waybar";
-  # Écrit la ville, réveille la météo, relance le night light s'il tourne
-  # (no-op sinon) pour qu'il adopte les coords de la nouvelle ville.
-  mkWeatherAction =
-    city:
-    "mkdir -p \"${weatherStateDir}\""
-    + " && printf '%s' ${lib.escapeShellArg city} > \"${weatherStateDir}/weather-city\""
-    + " && ${weatherWake}"
-    + " && ${systemctl} --user try-restart wlsunset";
-  weatherMenuActions = lib.listToAttrs (
-    map (c: lib.nameValuePair c (mkWeatherAction c)) weatherCities
-  );
-
-  # Villes saisies librement par l'utilisateur : échappement XML minimal.
-  escapeXml = lib.replaceStrings [ "&" "<" ">" "\"" "'" ] [ "&amp;" "&lt;" "&gt;" "&quot;" "&apos;" ];
-
-  weatherMenuXml = ''
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!-- Généré depuis `weatherCities` dans modules/user/window-manager/sway/waybar/default.nix. -->
-    <interface>
-      <object class="GtkMenu" id="menu">
-  ''
-  + lib.concatMapStrings (c: ''
-    <child>
-      <object class="GtkMenuItem" id="${escapeXml c}">
-        <property name="label">${escapeXml c}</property>
-      </object>
-    </child>
-  '') weatherCities
-  + ''
-      </object>
-    </interface>
-  '';
-
-  # Réveille le module luminosité pour rafraîchir l'icône/le % (clic/molette).
-  backlightSignal = 9;
-  # Réveille la case vpn quand vpn-alert publie un nouvel état (même valeur que
-  # vpnWaybarSignal dans modules/user/window-manager/sway/notifications).
-  vpnSignal = 10;
-  refreshBacklight = "${pkill} -RTMIN+${toString backlightSignal} waybar";
-  # Le choix PERSISTE au reboot via un flag : couper pose le fichier, rallumer
-  # le retire, ExecCondition dessus (sans flag, WantedBy graphical-session
-  # relancerait systématiquement le service).
-  nightlightOffFlag = "$HOME/.local/state/wlsunset-off";
-  nightlightToggle =
-    "if ${systemctl} --user is-active --quiet wlsunset;"
-    + " then ${systemctl} --user stop wlsunset;"
-    + " ${pkgs.coreutils}/bin/mkdir -p \"$HOME/.local/state\" && ${pkgs.coreutils}/bin/touch \"${nightlightOffFlag}\";"
-    + " else ${pkgs.coreutils}/bin/rm -f \"${nightlightOffFlag}\"; ${systemctl} --user start wlsunset; fi;"
-    + " ${refreshBacklight}";
-
-  # Baisse plancher à 1 % et JAMAIS 0 % : lit le % courant et garde
-  # max(1, %-5), comme brightness.sh côté bind clavier sway.
-  backlightUp = "${brightnessctl} set 5%+; ${refreshBacklight}";
-  backlightDown =
-    "p=$(${brightnessctl} -m | ${pkgs.coreutils}/bin/cut -d, -f4 | ${pkgs.coreutils}/bin/tr -d '%');"
-    + " n=$(( p - 5 )); n=$(( n < 1 ? 1 : n ));"
-    + " ${brightnessctl} set \${n}%; ${refreshBacklight}";
-
-  # Source unique = backlightPresets. Id GTK préfixé "pct" (pas de chiffre en
-  # tête) ; "mode"/"inc"/"dec" reliés aux actions.
-  inherit (cfg) backlightPresets;
-  backlightMenuActions =
-    lib.listToAttrs (
-      map (
-        p: lib.nameValuePair "pct${toString p}" "${brightnessctl} set ${toString p}%; ${refreshBacklight}"
-      ) backlightPresets
-    )
-    // {
-      mode = nightlightToggle;
-      inc = backlightUp;
-      dec = backlightDown;
-    };
-  backlightMenuXml = ''
-    <?xml version="1.0" encoding="UTF-8"?>
-    <!-- Généré depuis `backlightPresets` dans modules/user/window-manager/sway/waybar/default.nix. -->
-    <interface>
-      <object class="GtkMenu" id="menu">
-        <child>
-          <object class="GtkMenuItem" id="mode">
-            <property name="label">Changer de mode (night light)</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sepMode"/>
-        </child>
-  ''
-  + lib.concatMapStrings (p: ''
-    <child>
-      <object class="GtkMenuItem" id="pct${toString p}">
-        <property name="label">${toString p} %</property>
-      </object>
-    </child>
-  '') backlightPresets
-  + ''
-        <child>
-          <object class="GtkSeparatorMenuItem" id="sepStep"/>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="inc">
-            <property name="label">+5 %</property>
-          </object>
-        </child>
-        <child>
-          <object class="GtkMenuItem" id="dec">
-            <property name="label">−5 %</property>
-          </object>
-        </child>
-      </object>
-    </interface>
-  '';
+  # CSS dans ./style.css, @nom@ remplacés ici : couleurs base16/base24 de
+  # stylix et polices.
+  styleVars = {
+    font = config.stylix.fonts.sansSerif.name;
+    # Nerd Font (glyphes des icônes) + emoji en dernier recours.
+    nerdFont = config.stylix.fonts.monospace.name;
+    emojiFont = config.stylix.fonts.emoji.name;
+    fontSize = toString config.stylix.fonts.sizes.desktop;
+  }
+  // lib.genAttrs [
+    "base00"
+    "base01"
+    "base02"
+    "base03"
+    "base04"
+    "base05"
+    "base09"
+    "base0A"
+    "base0B"
+    "base0C"
+    "base0D"
+    "base0E"
+    "bright-red"
+    "bright-yellow"
+  ] (n: c.${n});
+  style = lib.replaceStrings (map (n: "@${n}@") (
+    lib.attrNames styleVars
+  )) (lib.attrValues styleVars) (builtins.readFile ./style.css);
 
   # Base du module swaync (cloche + nombre). Le tooltip natif de swaync
   # (« N Notification(s) ») est laissé actif.
@@ -310,6 +238,30 @@ in
       description = "Niveaux de volume (%) proposés dans le menu clic droit.";
     };
 
+    # Signaux RTMIN qui réveillent les modules custom (`signal` côté waybar,
+    # `pkill -RTMIN+N waybar` côté scripts). Une seule table : les scripts
+    # (luminosité, vpn-alert, météo) les reçoivent d'ici.
+    signals = lib.mkOption {
+      type = lib.types.attrsOf lib.types.int;
+      readOnly = true;
+      default = {
+        weather = 8;
+        backlight = 9;
+        vpn = 10;
+      };
+      description = "Signaux RTMIN des modules custom de waybar.";
+    };
+
+    # Commande Nix-side « réveille le module X » (clics, menus).
+    refresh = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      readOnly = true;
+      default = lib.mapAttrs (
+        _: sig: "${pkgs.procps}/bin/pkill -RTMIN+${toString sig} waybar"
+      ) cfg.signals;
+      description = "Commandes `pkill -RTMIN+N waybar` par module, tirées de `signals`.";
+    };
+
     backlightPresets = lib.mkOption {
       type = lib.types.listOf lib.types.int;
       default = [
@@ -327,65 +279,16 @@ in
     # Style maison (palette Stylix) pour coller à l'ancienne barre.
     stylix.targets.waybar.enable = false;
 
-    # Lieu PAS en dur : wlsunset-geo.sh lit la ville/coords du cache météo, un
-    # changement de ville météo change aussi le lieu du night light.
-    systemd.user.services.wlsunset = {
-      Unit = {
-        Description = "wlsunset – température de couleur jour/nuit";
-        PartOf = [ "graphical-session.target" ];
-        After = [ "graphical-session.target" ];
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-      Service = {
-        # Flag posé par nightlightToggle : condition échoue -> "skipped" (pas
-        # failed), pas de relance au login si le night light a été coupé.
-        ExecCondition = "${pkgs.coreutils}/bin/test ! -e %h/.local/state/wlsunset-off";
-        ExecStart = "${scriptDir}/wlsunset-geo.sh";
-        Restart = "on-failure";
-      };
-    };
-
-    systemd.user.services.thunar-float = {
-      Unit = {
-        Description = "Thunar éphémère du clic waybar (flottant, Échap, fermé à l'ouverture)";
-        PartOf = [ "graphical-session.target" ];
-        After = [ "graphical-session.target" ];
-      };
-      Install.WantedBy = [ "graphical-session.target" ];
-      Service = {
-        ExecStart = "${thunarFloatDaemon}/bin/thunar-float-daemon";
-        Restart = "on-failure";
-      };
-    };
-
-    # Les scripts épinglent déjà leurs deps (cf. ./scripts.nix) : gardés ici
-    # seulement comme CLI pratiques (playerctl pilote aussi Spotify).
+    # CLI pratiques (les scripts épinglent leurs deps, cf. ./scripts.nix).
+    # playerctl vient du module sway.
     home.packages = [
-      pkgs.playerctl
       pkgs.curl
       pkgs.jq
     ];
 
-    home.file = lib.listToAttrs (
-      (map (
-        n:
-        lib.nameValuePair ".config/waybar/menus/${n}" {
-          source = ./menus + "/${n}";
-        }
-      ) menuNames)
-      ++ [
-        # Menus générés (cf. let), pas des fichiers source.
-        (lib.nameValuePair ".config/waybar/menus/weather.xml" {
-          text = weatherMenuXml;
-        })
-        (lib.nameValuePair ".config/waybar/menus/backlight.xml" {
-          text = backlightMenuXml;
-        })
-        (lib.nameValuePair ".config/waybar/menus/volume.xml" {
-          text = volumeMenuXml;
-        })
-      ]
-    );
+    home.file = lib.mapAttrs' (
+      name: m: lib.nameValuePair ".config/waybar/menus/${name}.xml" { text = m.xml; }
+    ) menus;
 
     programs.waybar = {
       enable = true;
@@ -460,7 +363,7 @@ in
         "custom/vpn" = {
           exec = "${scriptDir}/vpn.sh";
           interval = 60;
-          signal = vpnSignal;
+          signal = cfg.signals.vpn;
           return-type = "json";
         };
 
@@ -470,16 +373,19 @@ in
           # d'interval ; relancé seulement s'il s'arrête.
           restart-interval = 1;
           return-type = "json";
-          on-click = termExec btop;
+          on-click = myLib.mkTerminalCmd {
+            inherit config;
+            exec = btop;
+          };
         };
 
         "custom/backlight" = {
           exec = "${scriptDir}/backlight.sh";
-          # Rafraîchi par signal à chaque changement (touches clavier via
-          # sway-config/brightness.sh, molette et menu ici). Relecture lente
-          # en filet, pour un changement fait par un autre moyen.
+          # Rafraîchi par signal à chaque changement (`brightness` : touches
+          # clavier, molette et menu ici ; night light). Relecture lente en
+          # filet, pour un changement fait par un autre moyen.
           interval = 60;
-          signal = backlightSignal;
+          signal = cfg.signals.backlight;
           return-type = "json";
           format = "{icon}   {text}";
           format-icons = {
@@ -487,58 +393,47 @@ in
             off = mkIcon "f00e0"; # md-brightness : night light off
           };
           on-click = nightlightToggle;
-          on-scroll-up = backlightUp;
-          on-scroll-down = backlightDown;
-          menu = "on-click-right";
-          menu-file = "${menuDir}/backlight.xml";
-          menu-actions = backlightMenuActions;
-        };
+          on-scroll-up = "${brightness} up";
+          on-scroll-down = "${brightness} down";
+        }
+        // withMenu "backlight";
 
-        wireplumber = volScroll // {
-          format = "{icon}  {volume}%";
-          format-muted = "${mkIcon "f075f"}  {volume}%"; # md-volume-mute
-          format-icons = [ (mkIcon "f057e") ]; # md-volume-high (toujours)
-          on-click = volMute;
-          menu = "on-click-right";
-          menu-file = "${menuDir}/volume.xml";
-          menu-actions = {
-            mute = volMute;
-            volup = volUp;
-            voldown = volDown;
+        wireplumber =
+          volScroll
+          // {
+            format = "{icon}  {volume}%";
+            format-muted = "${mkIcon "f075f"}  {volume}%"; # md-volume-mute
+            format-icons = [ (mkIcon "f057e") ]; # md-volume-high (toujours)
+            on-click = volume.mute;
           }
-          // lib.optionalAttrs config.userSettings.windowManager.sway.pickers.volume.enable {
-            mixer = launcher "volume-mixer";
-          }
-          // volPresetActions;
-        };
+          // withMenu "volume";
 
-        "custom/swaync" = swayncBase // {
-          format = "{icon}  {text}";
-          format-icons = {
-            notification = bell;
-            none = bell;
-            "dnd-notification" = bellOff;
-            "dnd-none" = bellOff;
-            "inhibited-notification" = bell;
-            "inhibited-none" = bell;
-            "dnd-inhibited-notification" = bellOff;
-            "dnd-inhibited-none" = bellOff;
-            default = bell;
-          };
-          on-click = "${swaync} -t -sw";
-          menu = "on-click-right";
-          menu-file = "${menuDir}/notifications.xml";
-          menu-actions = {
-            dnd = "${swaync} -d -sw";
-            panel = "${swaync} -t -sw";
-          };
-        };
+        "custom/swaync" =
+          swayncBase
+          // {
+            format = "{icon}  {text}";
+            format-icons = {
+              notification = bell;
+              none = bell;
+              "dnd-notification" = bellOff;
+              "dnd-none" = bellOff;
+              "inhibited-notification" = bell;
+              "inhibited-none" = bell;
+              "dnd-inhibited-notification" = bellOff;
+              "dnd-inhibited-none" = bellOff;
+              default = bell;
+            };
+            on-click = "${swaync} -t -sw";
+          }
+          // withMenu "notifications";
 
         "custom/disk" = {
           exec = "${scriptDir}/disk.sh";
           interval = 30;
           return-type = "json";
-          on-click = "${thunarFloatLauncher}/bin/thunar-float";
+        }
+        // lib.optionalAttrs cfg.thunarFloat.enable {
+          on-click = lib.getExe cfg.thunarFloat.package;
         };
 
         # Module custom (pas le natif) : ajoute profil d'alimentation et
@@ -554,16 +449,13 @@ in
         "custom/weather" = {
           exec = "${scriptDir}/weather.sh";
           interval = 900; # 15 min : la météo bouge lentement, on ménage l'API
-          signal = weatherSignal;
+          signal = cfg.signals.weather;
           # Défaut exec-on-event = true relancerait weather.sh (requête réseau)
           # après CHAQUE événement souris, dont l'ouverture du menu au clic droit.
           exec-on-event = false;
           return-type = "json";
           format = "{icon}  {text}";
           on-click = weatherWake;
-          menu = "on-click-right";
-          menu-file = "${menuDir}/weather.xml";
-          menu-actions = weatherMenuActions;
           format-icons = {
             clear-day = mkIcon "f0599"; # md-weather-sunny
             clear-night = mkIcon "f0594"; # md-weather-night
@@ -580,7 +472,8 @@ in
             thunder = mkIcon "f067e"; # md-weather-lightning-rainy
             offline = mkIcon "f0f2f"; # md-weather-cloudy-alert
           };
-        };
+        }
+        // withMenu "weather";
 
         clock = {
           format = labeled "f0e8f" "{:%a %d-%m-%Y %H:%M}"; # md-calendar-clock
@@ -594,92 +487,7 @@ in
         };
       };
 
-      style = ''
-        * {
-          font-family: "${font}", "${nerdFont}", "${emojiFont}";
-          font-size: ${fontSize}pt;
-          min-height: 0;
-        }
-
-        window#waybar {
-          background: ${c.base00};
-          color: ${c.base04};
-        }
-
-        #workspaces {
-          margin-left: 6px;
-        }
-        #workspaces button {
-          padding: 3px 0;          /* hauteur ; min-width pour la largeur -> carré */
-          margin: 2px 2px;
-          min-width: 22px;
-          border: none;
-          border-radius: 4px;      /* mettre 0 pour des angles bien droits */
-          box-shadow: none;
-          background: ${c.base01};  /* fond inactif (un cran au-dessus du fond) */
-          color: ${c.base04};       /* texte inactif adouci -> l'actif ressort */
-          transition: background-color 0.15s ease, color 0.15s ease;
-        }
-        #workspaces button:hover {
-          background: ${c.base02};
-          color: ${c.base05};
-        }
-        #workspaces button.focused,
-        #workspaces button.visible {
-          background: ${c.base0D};   /* accent (bleu Stylix) pour l'actif */
-          color: ${c.base00};
-        }
-        /* bright-* (base24) : sur un thème base16, retombe sur la couleur
-           normale (repli mkBase24), rendu inchangé. */
-        #workspaces button.urgent {
-          background: ${c.bright-red};
-          color: ${c.base00};
-        }
-
-        /* Espacement des modules de droite (aère les icônes/texte) */
-        .modules-right > widget > * {
-          padding: 0 8px;
-          margin: 2px 2px;
-        }
-
-        /* Un accent de couleur par module (base16 Stylix). */
-        #custom-nowplaying { color: ${c.base0B}; }  /* vert    */
-        #custom-bluetooth  { color: ${c.base0D}; }  /* bleu    */
-        #network           { color: ${c.base0C}; }  /* cyan    */
-        #custom-resources  { color: ${c.base0A}; }  /* jaune   */
-        #custom-backlight  { color: ${c.base09}; }  /* orange (toujours, quel que soit l'état night light) */
-        #wireplumber       { color: ${c.base0E}; }  /* magenta (icône + %) */
-        #custom-swaync     { color: ${c.base0A}; }  /* jaune (cloche + nombre) */
-        #custom-disk       { color: ${c.base0C}; }  /* cyan    */
-        #custom-battery    { color: ${c.base0B}; }  /* vert    */
-        #custom-weather    { color: ${c.base0C}; }  /* cyan : partiellement/défaut */
-        #custom-weather.sunny  { color: ${c.base0A}; }  /* jaune : soleil / ciel clair  */
-        #custom-weather.cloudy { color: ${c.base04}; }  /* gris neutre : couvert / brume */
-        #custom-weather.rain   { color: ${c.base0D}; }  /* bleu : pluie / neige / orage  */
-        #clock             { color: ${c.base05}; font-weight: bold; }
-
-        /* VPN : la couleur PORTE l'information, comme pour la météo et la
-           batterie — l'état est tout ce qu'on veut savoir d'un coup d'œil. */
-        #custom-vpn            { color: ${c.base0C}; }      /* cyan : voisin du réseau, état inconnu */
-        #custom-vpn.on         { color: ${c.base0B}; }      /* vert : tunnel actif, serveur joignable */
-        #custom-vpn.unreachable { color: ${c.bright-yellow}; } /* le tunnel est là, le serveur ne répond pas */
-        #custom-vpn.off        { color: ${c.base04}; }      /* gris neutre : coupé volontairement, pas une alerte */
-
-        #custom-battery.warning  { color: ${c.bright-yellow}; }
-        #custom-battery.critical { color: ${c.bright-red}; }
-
-        #tray {
-          padding: 0 8px;
-        }
-
-        tooltip {
-          background: ${c.base01};
-          border: 1px solid ${c.base03};
-        }
-        tooltip label {
-          color: ${c.base05};
-        }
-      '';
+      inherit style;
     };
   };
 }

@@ -1,9 +1,8 @@
 # Lit `userSettings.<path>.enable` depuis un chemin donné EN CHAÎNE, et
 # ÉCHOUE si le chemin n'existe pas.
 #
-# Raison d'être : sway/default.nix (`bindIf`) et waybar/default.nix
-# (`clickIf`) décident d'émettre un bind clavier ou un `on-click` selon qu'un
-# autre module est activé. Ces chemins sont des chaînes, donc invisibles pour
+# Raison d'être : waybar/default.nix (`clickIf`) décide d'émettre un
+# `on-click` selon qu'un autre module est activé. Ces chemins sont des chaînes, donc invisibles pour
 # tout ce qui vérifie du Nix — ni l'évaluation, ni deadnix, ni le check
 # option-paths ne les regardent.
 #

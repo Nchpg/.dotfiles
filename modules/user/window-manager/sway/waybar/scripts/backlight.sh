@@ -12,7 +12,7 @@ pct=$(brightnessctl -m 2>/dev/null | cut -d, -f4) || true # ex. "42%"
 # Pas de périphérique de rétroéclairage (desktop, écran externe sans DDC...) :
 # même repli N/A que battery.sh/bluetooth.sh plutôt qu'un champ texte vide.
 if [[ -z "$pct" ]]; then
-    printf '{"text":"N/A","tooltip":"Rétroéclairage indisponible"}\n'
+    emit "N/A" "Rétroéclairage indisponible"
     exit 0
 fi
 
@@ -24,4 +24,4 @@ else
     tip="Night light désactivé"
 fi
 
-printf '{"text":"%s","alt":"%s","tooltip":"%s"}\n' "$pct" "$alt" "$tip"
+emit "$pct" "$tip" "" "$alt"

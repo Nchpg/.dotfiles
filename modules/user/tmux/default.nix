@@ -23,6 +23,20 @@ in
     # sessions seraient invisibles entre elles.
     stylix.targets.tmux.enable = true;
 
+    # Ctrl+Entrée : terminal sur la session tmux `main` (créée ou rejointe).
+    # $XDG_RUNTIME_DIR (aligné sur les shells) : sway exec passe par sh -c,
+    # donc bien expansé, toujours défini dans une session sway/wayland.
+    home.file.".config/sway/conf.d/tmux.conf" = lib.mkIf config.userSettings.windowManager.sway.enable {
+      text = ''
+        bindsym Control+Return exec ${
+          myLib.mkTerminalCmd {
+            inherit config;
+            exec = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
+          }
+        }
+      '';
+    };
+
     programs.tmux = {
       enable = true;
       # Même binaire que celui installé par le module du shell (son `pkgs`).

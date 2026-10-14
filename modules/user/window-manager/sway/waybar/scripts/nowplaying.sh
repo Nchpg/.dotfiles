@@ -9,8 +9,6 @@ set -euo pipefail
 # `restart-interval` pour le relancer s'il s'arrête). Une ligne vide masque le
 # module (Spotify fermé / stoppé).
 
-command -v playerctl &>/dev/null || exit 0
-
 MAX_NP_LENGTH=35
 SEP=$'\x1f' # unit separator : ne peut pas apparaître dans les métadonnées.
 

@@ -36,10 +36,16 @@ lib:
   mkPkgsOption = import ./mk-pkgs-option.nix;
   mkSecretEnvWrapper = import ./mk-secret-env-wrapper.nix lib;
   mkThemedIcon = import ./mk-themed-icon.nix;
+  mkRofiAction = import ./mk-rofi-action.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix lib;
   mkTlsVhost = import ./mk-tls-vhost.nix;
   mkGumEnv = import ./mk-gum-env.nix;
   mkRepoCommand = import ./mk-repo-command.nix;
+  mkWaybarMenu = import ./mk-waybar-menu.nix lib;
+  notifyIcon = import ./notify-icon.nix;
+  # Fonctions bash d'attente d'une fenêtre sway (sway_wait…), à inliner en
+  # tête d'un script writeShellApplication.
+  swayWaitSh = builtins.readFile ./sway-wait.sh;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
   schemeColors = import ./scheme-colors.nix;

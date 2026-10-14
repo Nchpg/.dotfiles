@@ -23,7 +23,7 @@ export LC_ALL=C
 # vivaient dans $XDG_RUNTIME_DIR (tmpfs, effacé au reboot) -> après un reboot
 # hors-ligne on perdait tout (affichage "--"). En state, le dernier relevé
 # connu reste affichable et on évite même un géocodage au premier lancement.
-statedir="${XDG_STATE_HOME:-$HOME/.local/state}/waybar"
+statedir=$(weather_statedir)
 mkdir -p "$statedir"
 
 # Ville courante + ses coordonnées : logique partagée avec le night light (cf.
@@ -31,8 +31,7 @@ mkdir -p "$statedir"
 # de coords par ville et ne géocode qu'au premier affichage d'une ville (ou si
 # le cache a disparu) -> une requête HTTP en moins par cycle.
 location=$(weather_city)
-safe=${location//[^A-Za-z0-9]/_}
-cache="$statedir/weather-${safe}.json"     # cache du relevé courant (par ville)
+cache="$statedir/weather-$(weather_slug "$location").json" # cache du relevé courant (par ville)
 read -r lat lon <<<"$(weather_coords "$location")"
 
 # --- Relevé courant pour ces coordonnées ; à défaut on bascule sur le cache ---
@@ -56,7 +55,7 @@ fi
 
 # Pas de relevé exploitable (ni réseau, ni cache au bon format) -> offline.
 if [[ -z "$json" ]] || ! jq -e .current >/dev/null 2>&1 <<<"$json"; then
-    printf '{"text":"--","alt":"offline","tooltip":"Météo indisponible"}\n'
+    emit "--" "Météo indisponible" "" offline
     exit 0
 fi
 
@@ -125,12 +124,11 @@ text="${temp}°"
 # frais c'est « maintenant » ; hors-ligne, c'est le dernier relevé réussi.
 updated=$(date -r "$cache" '+%d/%m %H:%M' 2>/dev/null) || true
 # En-tête = le preset choisi (et non le lieu géocodé renvoyé par l'API).
-# Tooltip multi-lignes en VRAIES nouvelles lignes ; json_escape (lib.sh) les
+# Tooltip multi-lignes en VRAIES nouvelles lignes ; emit (lib.sh) les
 # convertit en \n.
 tooltip="${location} · ${desc}"
 tooltip+=$'\n'"Ressenti ${feels}°  ·  Humidité ${humidity}%"
 tooltip+=$'\n'"Vent ${wind} km/h ${winddir}"
 [[ -n "$updated" ]] && tooltip+=$'\n'"Maj ${updated}"
 
-printf '{"text":"%s","alt":"%s","class":"%s","tooltip":"%s"}\n' \
-    "$(json_escape "$text")" "$wcat" "$class" "$(json_escape "$tooltip")"
+emit "$text" "$tooltip" "$class" "$wcat"

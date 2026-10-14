@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  osConfig,
   myLib,
   ...
 }:
@@ -8,10 +9,11 @@
 let
   cfg = config.userSettings.gui.wfRecorder;
 
-  # Icônes de notif aux couleurs du thème (cf. lib/mk-themed-icon.nix).
-  c = config.lib.stylix.colors.withHashtag;
-  iconRec = myLib.mkThemedIcon cfg.pkgs "actions/media-record" c.base08;
-  iconDone = myLib.mkThemedIcon cfg.pkgs "actions/object-select" c.base0B;
+  # Icônes de notif aux couleurs du thème, repli sans stylix intégré (cf.
+  # lib/notify-icon.nix).
+  icon = myLib.notifyIcon config cfg.pkgs;
+  iconRec = icon "actions/media-record" (c: c.base08);
+  iconDone = icon "actions/object-select" (c: c.base0B);
 
   # Un seul script pour les deux binds Sway : le mode arrive en argument.
   # Sémantique TOGGLE — le même bind démarre puis arrête, parce qu'un
@@ -26,7 +28,7 @@ let
       slurp
       libnotify
       wl-clipboard
-      sway # swaymsg, pour l'output focus
+      osConfig.programs.sway.package # swaymsg, pour l'output focus
       jq
       glib.bin # gdbus, pour fermer la notif de démarrage
     ];
@@ -123,8 +125,18 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Intégration Sway (binds $mod+Print / $mod+Shift+Print) dans sway-config,
-    # pas ici — même découpage que le module flameshot.
     home.packages = [ screenrec ];
+
+    # Toggle : le même bind démarre puis arrête l'enregistrement (cf.
+    # screenrec). Print/Shift+Print restent à flameshot. Seulement si ce user
+    # a une session sway.
+    home.file.".config/sway/conf.d/wf-recorder.conf" =
+      lib.mkIf config.userSettings.windowManager.sway.enable
+        {
+          text = ''
+            bindsym $mod+Print exec screenrec region
+            bindsym $mod+Shift+Print exec screenrec screen
+          '';
+        };
   };
 }

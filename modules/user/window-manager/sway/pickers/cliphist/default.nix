@@ -36,9 +36,12 @@ in
         cliphist = lib.getExe cfg.pkgs.cliphist;
         rofi = lib.getExe config.programs.rofi.package;
         wl-copy = "${cfg.pkgs.wl-clipboard}/bin/wl-copy";
+        # Police du thème (comme le lanceur rofi), en plus grand : on lit ici
+        # du contenu, pas des noms d'applis.
+        font = "${config.stylix.fonts.sansSerif.name} 16";
       in
       ''
-        bindsym $mod+v exec ${cliphist} list | ${rofi} -dmenu -p "  Clipboard" -theme-str 'window { width: 700px; } * { font: "sans 16"; } element-icon { size: 0px; }' | ${cliphist} decode | ${wl-copy}
+        bindsym $mod+v exec ${cliphist} list | ${rofi} -dmenu -p "  Clipboard" -theme-str 'window { width: 700px; } * { font: "${font}"; } element-icon { size: 0px; }' | ${cliphist} decode | ${wl-copy}
       '';
   };
 }
