@@ -1,11 +1,11 @@
 { config, lib, ... }:
 
 let
-  cfg = config.systemSettings.gdm;
+  cfg = config.systemSettings.desktop.gdm;
 in
 {
   options = {
-    systemSettings.gdm.enable = lib.mkOption {
+    systemSettings.desktop.gdm.enable = lib.mkOption {
       type = lib.types.bool;
       default = config.systemSettings.desktop.enable;
       description = ''

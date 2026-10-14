@@ -1,12 +1,14 @@
 { config, lib, ... }:
 
 let
+  cfg = config.systemSettings.desktop;
   wm = config.systemSettings.windowManager;
 in
 {
-  # Drapeau de POLITIQUE, pas un module de service : il ne configure rien
-  # lui-même, il dit ce qu'est la machine. Les modules concernés le lisent
-  # (gdm, hardware/audio, hardware/bluetooth, configuration.nix).
+  # Drapeau de POLITIQUE : il dit ce qu'est la machine. Les services qui n'ont
+  # de sens que sur un poste vivent sous ce dossier (audio, bluetooth, gdm,
+  # printing), ceux trop petits pour un dossier juste en dessous. D'autres
+  # modules le lisent pour leur part de bureau (storage/disks, stylix).
   options = {
     systemSettings.desktop.enable = lib.mkOption {
       type = lib.types.bool;
@@ -23,5 +25,14 @@ in
         l'une d'elles doit vraiment diverger, elle prendra son option propre.
       '';
     };
+  };
+
+  config = {
+    # Utilisé par lg-control et le module batterie de waybar. Explicite : sinon
+    # fourni seulement en dépendance cachée du module GNOME.
+    services.power-profiles-daemon.enable = cfg.enable;
+
+    # LVFS, passif (rien ne se flashe sans fwupdmgr update manuel).
+    services.fwupd.enable = cfg.enable;
   };
 }
