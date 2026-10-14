@@ -105,6 +105,20 @@ in
     # celui du VPN continuent de fonctionner. C'est donc typiquement la panne
     # qu'on découvre par quelqu'un d'autre.
     #
+    # ATTENDRE LE RÉSOLVEUR LOCAL, aussi. Le module amont n'ordonne le tunnel
+    # que sur `network-online.target`, ce qui garantit une adresse mais pas un
+    # DNS qui répond. Or la toute première chose que fait cloudflared est de
+    # résoudre `region1.v2.argotunnel.com` pour joindre l'edge, et il ABANDONNE
+    # si ça échoue au lieu de réessayer :
+    #
+    #   Couldn't resolve SRV record region1.v2.argotunnel.com: no such host
+    #
+    # Au redémarrage du 16 août, le tunnel a démarré deux secondes avant que
+    # dnsmasq soit debout, échoué, alerté sur Discord, puis s'est relancé
+    # avec succès. `Restart=on-failure` rattrapait, mais produisait une
+    # alerte à CHAQUE redémarrage de la machine — donc du bruit régulier sur
+    # le canal qui doit rester digne de confiance. Cf. `dns.dependentUnits`.
+    #
     # Le nom de l'unité est construit par le module amont à partir de l'UUID,
     # d'où l'interpolation plutôt qu'un nom écrit à la main.
     #
@@ -115,47 +129,21 @@ in
     # `systemd.services."cloudflared-tunnel-<uuid>"` ne se contenterait pas de
     # cesser de fonctionner le jour où ce nom change : il CRÉERAIT une unité
     # vide portant l'ancien nom, sans que rien ne le signale.
-    systemd.services = lib.mkIf (cfg.tunnelId != null) (
-      lib.mkMerge [
-        (lib.mkIf config.systemSettings.notify.discord.enable {
-          "cloudflared-tunnel-${cfg.tunnelId}" = config.systemSettings.notify.discord.onFailure;
-        })
+    systemSettings = lib.mkIf (cfg.tunnelId != null) {
+      notify.discord.units = [ "cloudflared-tunnel-${cfg.tunnelId}" ];
+      dns.dependentUnits = [ "cloudflared-tunnel-${cfg.tunnelId}" ];
+    };
 
-        # Ouvre la page de métriques du démon, fermée par défaut.
-        #
-        # Par l'ENVIRONNEMENT et non par un argument : le module amont écrit son
-        # `ExecStart` en dur, et l'écraser avec `mkForce` reviendrait à recopier
-        # une ligne de commande qui divergerait en silence à la première mise à
-        # jour de nixpkgs. `TUNNEL_METRICS` est la variable que cloudflared
-        # associe lui-même à `--metrics` (vérifié dans le binaire).
-        (lib.mkIf (cfg.metricsAddress != null) {
-          "cloudflared-tunnel-${cfg.tunnelId}".environment.TUNNEL_METRICS = cfg.metricsAddress;
-        })
-
-        # ATTENDRE LE RÉSOLVEUR LOCAL. Le module amont n'ordonne le tunnel que
-        # sur `network-online.target`, ce qui garantit une adresse mais pas un
-        # DNS qui répond. Or la toute première chose que fait cloudflared est de
-        # résoudre `region1.v2.argotunnel.com` pour joindre l'edge, et il ABANDONNE
-        # si ça échoue au lieu de réessayer :
-        #
-        #   Couldn't resolve SRV record region1.v2.argotunnel.com: no such host
-        #
-        # Au redémarrage du 16 août, le tunnel a démarré deux secondes avant que
-        # dnsmasq soit debout, échoué, alerté sur Discord, puis s'est relancé
-        # avec succès. `Restart=on-failure` rattrapait, mais produisait une
-        # alerte à CHAQUE redémarrage de la machine — donc du bruit régulier sur
-        # le canal qui doit rester digne de confiance.
-        #
-        # `wants` et non `requires` : si dnsmasq est absent ou tombe plus tard,
-        # le tunnel doit vivre sa vie. On veut un ORDRE, pas une dépendance dure.
-        (lib.mkIf config.systemSettings.dns.enable {
-          "cloudflared-tunnel-${cfg.tunnelId}" = {
-            after = [ "dnsmasq.service" ];
-            wants = [ "dnsmasq.service" ];
-          };
-        })
-      ]
-    );
+    # Ouvre la page de métriques du démon, fermée par défaut.
+    #
+    # Par l'ENVIRONNEMENT et non par un argument : le module amont écrit son
+    # `ExecStart` en dur, et l'écraser avec `mkForce` reviendrait à recopier
+    # une ligne de commande qui divergerait en silence à la première mise à
+    # jour de nixpkgs. `TUNNEL_METRICS` est la variable que cloudflared
+    # associe lui-même à `--metrics` (vérifié dans le binaire).
+    systemd.services = lib.mkIf (cfg.tunnelId != null && cfg.metricsAddress != null) {
+      "cloudflared-tunnel-${cfg.tunnelId}".environment.TUNNEL_METRICS = cfg.metricsAddress;
+    };
 
     services.cloudflared = {
       enable = true;

@@ -16,7 +16,7 @@ let
 
   # Authelia attend une URL dont le schéma décrit le mode de chiffrement.
   scheme =
-    if cfg.port == 465 then
+    if cfg.implicitTls then
       "submissions"
     else if cfg.port == 587 then
       "submission"
@@ -67,6 +67,21 @@ in
       type = lib.types.str;
       default = "smtp/password";
       description = "Clé du mot de passe dans le dépôt de secrets.";
+    };
+
+    implicitTls = lib.mkOption {
+      type = lib.types.bool;
+      readOnly = true;
+      default = cfg.port == 465;
+      defaultText = lib.literalExpression "port == 465";
+      description = ''
+        Vrai pour du TLS implicite (465), faux pour une négociation STARTTLS.
+        Dérivé du port, à référencer plutôt qu'à recalculer : chaque service le
+        traduit dans son propre vocabulaire (`ssl`/`tls` pour Nextcloud,
+        `force_tls`/`starttls` pour Vaultwarden, le schéma de `url` pour
+        Authelia), et trois tests `port == 465` recopiés finiraient par
+        diverger.
+      '';
     };
 
     url = lib.mkOption {

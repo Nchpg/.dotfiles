@@ -29,8 +29,13 @@ lib:
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix lib;
   mkGuardedPatch = import ./mk-guarded-patch.nix lib;
+  mkErrorPage = import ./mk-error-page.nix;
   mkIcon = import ./mk-icon.nix lib;
   mkInternalPorts = import ./mk-internal-ports.nix lib;
+  mkNextcloudShareLinkPatch = import ./mk-nextcloud-share-link-patch.nix;
+  mkProbe = import ./mk-probe.nix lib;
+  nginxAllowOnly = import ./nginx-allow-only.nix lib;
+  nonRoutableIPv4 = import ./non-routable-ipv4.nix;
   optionEnabled = import ./option-enabled.nix lib;
   mkPackageModule = import ./mk-package-module.nix;
   mkPkgsOption = import ./mk-pkgs-option.nix;

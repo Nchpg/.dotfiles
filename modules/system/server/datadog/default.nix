@@ -67,8 +67,6 @@
 # que le module amont allume par défaut — est coupé, cf. l'option `dogstatsd`.
 let
   cfg = config.systemSettings.datadog;
-
-  notify = config.systemSettings.notify.discord;
 in
 {
   options.systemSettings.datadog = {
@@ -331,33 +329,22 @@ in
       };
     };
 
-    systemd.services.datadog-agent = lib.mkMerge [
-      (lib.mkIf notify.enable notify.onFailure)
+    systemSettings.notify.discord.units = [ "datadog-agent" ];
 
-      {
-        # ATTENDRE LE RÉSOLVEUR LOCAL, pour la même raison que le tunnel (cf.
-        # modules/system/server/cloudflared) mais avec un enjeu moindre : la
-        # première chose que fait l'agent est de résoudre son site, et dnsmasq
-        # n'est pas forcément debout au moment où `network-online.target` est
-        # atteinte.
-        #
-        # L'agent RÉESSAIE, lui, donc ce qu'on évite n'est pas une panne mais une
-        # rafale d'erreurs de résolution dans le journal à chaque démarrage de la
-        # machine — c'est-à-dire du bruit dans le seul endroit où l'on va
-        # regarder quand quelque chose ne va vraiment pas.
-        #
-        # `wants` et non `requires` : si dnsmasq tombe plus tard, l'agent doit
-        # continuer sa vie. On veut un ORDRE, pas une dépendance dure.
-        after = [
-          "network-online.target"
-        ]
-        ++ lib.optional config.systemSettings.dns.enable "dnsmasq.service";
-
-        wants = [
-          "network-online.target"
-        ]
-        ++ lib.optional config.systemSettings.dns.enable "dnsmasq.service";
-      }
-    ];
+    # ATTENDRE LE RÉSOLVEUR LOCAL, pour la même raison que le tunnel (cf.
+    # modules/system/server/cloudflared) mais avec un enjeu moindre : la
+    # première chose que fait l'agent est de résoudre son site, et dnsmasq
+    # n'est pas forcément debout au moment où `network-online.target` est
+    # atteinte.
+    #
+    # L'agent RÉESSAIE, lui, donc ce qu'on évite n'est pas une panne mais une
+    # rafale d'erreurs de résolution dans le journal à chaque démarrage de la
+    # machine — c'est-à-dire du bruit dans le seul endroit où l'on va
+    # regarder quand quelque chose ne va vraiment pas.
+    systemd.services.datadog-agent = {
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+    };
+    systemSettings.dns.dependentUnits = [ "datadog-agent" ];
   };
 }

@@ -97,6 +97,36 @@ in
         silence et les ports restent FERMÉS. L'assertion plus bas garde ce cas.
       '';
     };
+
+    systemSettings.network.forwardRules = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      example = ''
+        iifname "wg0" oifname != "wg0" accept comment "peers vers internet"
+      '';
+      description = ''
+        Règles nftables de la chaîne de TRAVERSÉE (forward), à employer à la
+        place de `networking.firewall.extraForwardRules`. Alimentée par
+        plusieurs modules (le serveur WireGuard, les applications en conteneur),
+        dont les règles se concatènent.
+
+        POURQUOI UNE OPTION À PART. Dès que `filterForward` est vrai,
+        `networking.nat` écrit lui-même dans `extraForwardRules` un
+        `ip saddr { <internalIPs> } accept` SANS restriction de destination,
+        qui rouvrirait aux peers du tunnel tout le LAN. On ne peut pas se
+        contenter de poser une règle plus stricte avant, l'ordre des
+        définitions d'une option `lines` n'étant pas garanti : il faut l'écarter.
+        Ce module rend donc cette liste dans `extraForwardRules` par UN SEUL
+        `mkForce`, qui exclut la règle du module amont.
+
+        Avant, chaque module forçait lui-même `extraForwardRules`, et un
+        troisième qui aurait oublié de forcer aurait vu ses règles écartées sans
+        un message. Ici, une définition ordinaire suffit. Vérifier le ruleset
+        produit après coup, jamais l'intention :
+
+          sudo nft list chain inet nixos-fw forward
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -162,7 +192,7 @@ in
       # où l'intention était qu'il n'atteigne que les services de ce host.
       # `filterForward` n'existe QUE pour nftables, le module amont l'assert.
       # Les flux voulus sont réouverts par le module WireGuard, dans
-      # `extraForwardRules`.
+      # `forwardRules` (cf. plus haut).
       #
       # Ensuite `extraInputRules`, qui permet d'ouvrir un port sur une interface
       # désignée par un MOTIF. Le module `networking.firewall.interfaces` ne sait
@@ -180,13 +210,20 @@ in
       networking.nftables.enable = true;
       networking.firewall.filterForward = true;
 
+      # Rendu de `forwardRules`, cf. l'option pour le pourquoi du `mkForce`.
+      # Forcé même VIDE, et c'est voulu : une liste vide doit écarter la règle
+      # de `networking.nat` aussi sûrement qu'une liste pleine. Seulement ici,
+      # où `filterForward` est vrai — c'est la seule configuration où la chaîne
+      # de forward filtre quoi que ce soit.
+      networking.firewall.extraForwardRules = lib.mkForce cfg.forwardRules;
+
       # FILTRAGE DU CHEMIN INVERSE, en strict et POSÉ EXPLICITEMENT alors que
       # c'est déjà le défaut NixOS. Écrit ici parce qu'une décision d'accès en
       # dépend, et qu'une dépendance non écrite se perd.
       #
       # Ce que ça tient : les règles `networks:` d'Authelia contournent le
-      # portail pour `10.8.0.0/24` (cf. profiles/server), et cette confiance
-      # repose entièrement sur l'adresse SOURCE des paquets. En strict, nftables
+      # portail pour `10.8.0.0/24` (cf. modules/system/server/nextcloud), et
+      # cette confiance repose entièrement sur l'adresse SOURCE des paquets. En strict, nftables
       # rend `fib saddr . mark . iif oif exists` — il vérifie que la source
       # serait joignable PAR L'INTERFACE D'ARRIVÉE. Un appareil du LAN qui
       # émettrait sous une adresse du tunnel est donc jeté avant d'atteindre

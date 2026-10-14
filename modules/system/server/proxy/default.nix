@@ -12,7 +12,7 @@
 let
   cfg = config.systemSettings.proxy;
 
-  notify = config.systemSettings.notify.discord;
+  static = config.systemSettings.network.staticIPv4;
 
   certNames = lib.attrNames config.security.acme.certs;
 
@@ -37,57 +37,62 @@ let
   # fichier attrape les trois cas d'un coup, puisque c'est ce que voit un client
   # qui compte, pas ce qu'il y a sur le disque.
   #
-  # Elle ne notifie rien elle-même : elle SORT EN ERREUR, et le `onFailure`
-  # ordinaire fait le reste. Une brique de moins à écrire, et la sonde reste
-  # utilisable à la main.
-  expiryCheck = pkgs-stable.writeShellApplication {
-    name = "acme-expiry-check";
-    runtimeInputs = with pkgs-stable; [
-      openssl
-      coreutils
-    ];
-    text = ''
-      minDays=${toString cfg.expiryCheck.minDays}
-      now=$(date +%s)
-      limit=$((now + minDays * 86400))
-      status=0
+  # Elle ne notifie rien elle-même : elle SORT EN ERREUR (cf. myLib.mkProbe).
+  expiryCheckText = ''
+    minDays=${toString cfg.expiryCheck.minDays}
+    now=$(date +%s)
+    limit=$((now + minDays * 86400))
+    status=0
 
-      for host in ${lib.concatStringsSep " " certNames}; do
-        # `</dev/null` : sans lui s_client attend une saisie et ne rend jamais
-        # la main. Le `timeout` couvre le cas ou nginx accepte la connexion
-        # sans jamais terminer la poignee de main.
-        if ! pem=$(timeout 10 openssl s_client -connect 127.0.0.1:443 \
-                     -servername "$host" < /dev/null 2> /dev/null); then
-          echo "$host : aucune reponse TLS sur 127.0.0.1:443" >&2
-          status=1
-          continue
-        fi
+    for host in ${lib.concatStringsSep " " certNames}; do
+      # `</dev/null` : sans lui s_client attend une saisie et ne rend jamais
+      # la main. Le `timeout` couvre le cas ou nginx accepte la connexion
+      # sans jamais terminer la poignee de main.
+      if ! pem=$(timeout 10 openssl s_client -connect 127.0.0.1:443 \
+                   -servername "$host" < /dev/null 2> /dev/null); then
+        echo "$host : aucune reponse TLS sur 127.0.0.1:443" >&2
+        status=1
+        continue
+      fi
 
-        end=$(printf '%s' "$pem" | openssl x509 -noout -enddate 2> /dev/null | cut -d= -f2) || true
-        if [ -z "$end" ]; then
-          echo "$host : certificat servi illisible" >&2
-          status=1
-          continue
-        fi
+      end=$(printf '%s' "$pem" | openssl x509 -noout -enddate 2> /dev/null | cut -d= -f2) || true
+      if [ -z "$end" ]; then
+        echo "$host : certificat servi illisible" >&2
+        status=1
+        continue
+      fi
 
-        if ! endts=$(date -d "$end" +%s 2> /dev/null); then
-          echo "$host : date d'expiration illisible ($end)" >&2
-          status=1
-          continue
-        fi
+      if ! endts=$(date -d "$end" +%s 2> /dev/null); then
+        echo "$host : date d'expiration illisible ($end)" >&2
+        status=1
+        continue
+      fi
 
-        days=$(( (endts - now) / 86400 ))
-        if [ "$endts" -lt "$limit" ]; then
-          echo "$host : expire dans $days jours, seuil a $minDays" >&2
-          status=1
-        else
-          echo "$host : ok, $days jours restants"
-        fi
-      done
+      days=$(( (endts - now) / 86400 ))
+      if [ "$endts" -lt "$limit" ]; then
+        echo "$host : expire dans $days jours, seuil a $minDays" >&2
+        status=1
+      else
+        echo "$host : ok, $days jours restants"
+      fi
+    done
 
-      exit "$status"
-    '';
-  };
+    exit "$status"
+  '';
+
+  # Sondes déclarées par `sites`, à plat : nom de la cible -> définition.
+  probes = lib.concatLists (
+    lib.mapAttrsToList (
+      host: site:
+      lib.mapAttrsToList (name: probe: {
+        inherit name;
+        value = {
+          url = "https://${host}${probe.path}";
+          inherit (probe) module;
+        };
+      }) site.probes
+    ) cfg.sites
+  );
 in
 {
   options.systemSettings.proxy = {
@@ -156,11 +161,186 @@ in
         description = "Fréquence de la sonde, au format `OnCalendar` de systemd.";
       };
     };
+
+    sites = lib.mkOption {
+      default = { };
+      example = lib.literalExpression ''
+        {
+          "cloud.exemple.fr" = {
+            public = true;
+            probes.nextcloud-portail.module = "http_authelia";
+          };
+        }
+      '';
+      description = ''
+        NOMS SERVIS par ce host, et ce que leur publication implique hors de
+        nginx. Chaque module y déclare ses propres noms ; ce module en tire, en
+        un seul endroit :
+
+          - la route dans le tunnel Cloudflare (`cloudflared.ingress`) des noms
+            `public` ;
+          - la réécriture dnsmasq vers l'adresse du LAN (`dns.overrides`) des
+            noms `lanShortcut` ;
+          - les sondes blackbox (`monitoring.blackbox.targets`) de `probes`.
+
+        Ces trois listes vivaient jusque-là chacune de leur côté, recopiées à la
+        main dans le profil pour une partie des noms et posées par les modules
+        pour d'autres : un nom ajouté à l'une manquait aux deux autres sans que
+        rien ne le dise.
+
+        Les VHOSTS nginx restent l'affaire de chaque module, qui seul sait ce
+        qu'ils servent. Plusieurs modules peuvent décrire le même nom, leurs
+        définitions fusionnent.
+      '';
+      type = lib.types.attrsOf (
+        lib.types.submodule (
+          { config, ... }:
+          {
+            options = {
+              public = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Publie le nom sur internet par le tunnel Cloudflare. Faux par
+                  défaut : un nom n'est joignable que depuis le LAN et le VPN tant
+                  qu'on ne l'a pas décidé, et l'absence de route est elle-même une
+                  protection (cf. modules/system/server/vaultwarden).
+                '';
+              };
+
+              upstream = lib.mkOption {
+                type = lib.types.str;
+                default = "https://127.0.0.1:443";
+                description = ''
+                  Service local vers lequel le tunnel envoie ce nom. nginx sur la
+                  boucle locale, sauf exception : c'est lui qui porte le TLS et
+                  le portail.
+                '';
+              };
+
+              lanShortcut = lib.mkOption {
+                type = lib.types.bool;
+                default = config.public;
+                defaultText = lib.literalExpression "public";
+                description = ''
+                  Fait répondre au résolveur local l'adresse du LAN pour ce nom
+                  (et ses sous-domaines, syntaxe de dnsmasq). Sans ça, ouvrir
+                  depuis le salon un nom publié fait sortir la requête jusqu'à
+                  l'edge Cloudflare pour redescendre par le tunnel vers une
+                  machine qui est sur le même commutateur, et une panne de box
+                  suffit à le rendre injoignable sur place.
+
+                  Commodité et non sécurité. Et c'est À ÉCARTER pour un nom
+                  public dont une sonde doit vérifier le chemin COMPLET : la
+                  réécriture vaut aussi pour ce host, donc la sonde taperait
+                  nginx en direct et ne traverserait plus le tunnel.
+                '';
+              };
+
+              probes = lib.mkOption {
+                default = { };
+                description = ''
+                  Sondes blackbox sur ce nom, par nom de cible. Sans effet si
+                  `systemSettings.monitoring` n'est pas activé.
+
+                  Elles partent de CE host : un nom en `lanShortcut` est donc
+                  sondé sur nginx en direct, sans traverser le tunnel.
+                '';
+                type = lib.types.attrsOf (
+                  lib.types.submodule {
+                    options = {
+                      path = lib.mkOption {
+                        type = lib.types.str;
+                        default = "/";
+                        description = "Chemin sondé, barre oblique initiale comprise.";
+                      };
+
+                      module = lib.mkOption {
+                        type = lib.types.str;
+                        default = "http_2xx";
+                        description = "Module blackbox, cf. `monitoring.blackbox.targets`.";
+                      };
+                    };
+                  }
+                );
+              };
+            };
+          }
+        )
+      );
+    };
   };
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       (myLib.mkInternalPorts config { tcp = [ 443 ]; })
+
+      (lib.mkIf cfg.expiryCheck.enable (
+        myLib.mkProbe pkgs-stable {
+          name = "acme-expiry-check";
+          description = "Vérifie la date d'expiration des certificats servis";
+          timerDescription = "Sonde quotidienne d'expiration des certificats";
+          inherit (cfg.expiryCheck) interval;
+          runtimeInputs = with pkgs-stable; [
+            openssl
+            coreutils
+          ];
+          text = expiryCheckText;
+
+          # `after` et non `requires` : si nginx est arrêté, on VEUT que la
+          # sonde tourne et échoue, c'est précisément l'un des cas qu'elle
+          # existe pour attraper.
+          after = [
+            "nginx.service"
+            "network-online.target"
+          ];
+          wants = [ "network-online.target" ];
+
+          serviceConfig = {
+            DynamicUser = true;
+            NoNewPrivileges = true;
+            ProtectSystem = "strict";
+            ProtectHome = true;
+            PrivateDevices = true;
+            RestrictAddressFamilies = [
+              "AF_UNIX"
+              "AF_INET"
+              "AF_INET6"
+            ];
+          };
+        }
+      ))
+
+      # Publication des noms déclarés dans `sites` : route du tunnel,
+      # raccourci du LAN et sondes, tirés d'une seule déclaration.
+      {
+        assertions = [
+          {
+            # listToAttrs garderait la première en silence, et l'autre sonde
+            # disparaîtrait sans un mot.
+            assertion = lib.length (lib.unique (map (p: p.name) probes)) == lib.length probes;
+            message = "systemSettings.proxy.sites : deux sondes portent le même nom de cible (${
+              lib.concatStringsSep ", " (map (p: p.name) probes)
+            }).";
+          }
+          {
+            assertion = lib.all (s: !s.lanShortcut) (lib.attrValues cfg.sites) || static != null;
+            message = "systemSettings.proxy.sites : `lanShortcut` exige un adressage statique (systemSettings.network.staticIPv4), c'est l'adresse que le résolveur répond.";
+          }
+        ];
+
+        systemSettings.cloudflared.ingress = lib.mapAttrs (_: site: site.upstream) (
+          lib.filterAttrs (_: site: site.public) cfg.sites
+        );
+
+        systemSettings.dns.overrides = lib.mkIf (static != null) (
+          lib.mapAttrs (_: _: static.address) (lib.filterAttrs (_: site: site.lanShortcut) cfg.sites)
+        );
+
+        systemSettings.monitoring.blackbox.targets = lib.mkIf config.systemSettings.monitoring.enable (
+          lib.listToAttrs probes
+        );
+      }
 
       {
         # Plus d'assertion sur `acmeEmail`. Elle exigeait une adresse au motif
@@ -186,67 +366,16 @@ in
         # Dérivé de `security.acme.certs` plutôt qu'écrit à la main : les noms
         # viennent des vhosts qui posent `enableACME`, donc une liste recopiée
         # ici cesserait d'être juste au premier service ajouté, sans rien dire.
-        systemd.services = lib.mkMerge [
-          (lib.mkIf notify.enable (
-            lib.listToAttrs (
-              lib.concatMap (cert: [
-                (lib.nameValuePair "acme-${cert}" notify.onFailure)
-                (lib.nameValuePair "acme-order-renew-${cert}" notify.onFailure)
-              ]) certNames
-            )
-          ))
-
-          # nginx et le tunnel, qui cassent HTTPS sans qu'aucun certificat soit
-          # en cause. Deux lignes, et elles couvrent une panne que la sonde ne
-          # verrait qu'au prochain passage quotidien.
-          (lib.mkIf notify.enable {
-            nginx = notify.onFailure;
-          })
-
-          (lib.mkIf cfg.expiryCheck.enable {
-            acme-expiry-check = {
-              description = "Vérifie la date d'expiration des certificats servis";
-
-              # `after` et non `requires` : si nginx est arrêté, on VEUT que la
-              # sonde tourne et échoue, c'est précisément l'un des cas qu'elle
-              # existe pour attraper.
-              after = [
-                "nginx.service"
-                "network-online.target"
-              ];
-              wants = [ "network-online.target" ];
-
-              serviceConfig = {
-                Type = "oneshot";
-                ExecStart = lib.getExe expiryCheck;
-                DynamicUser = true;
-                NoNewPrivileges = true;
-                ProtectSystem = "strict";
-                ProtectHome = true;
-                PrivateDevices = true;
-                RestrictAddressFamilies = [
-                  "AF_UNIX"
-                  "AF_INET"
-                  "AF_INET6"
-                ];
-              };
-            }
-            // lib.optionalAttrs notify.enable notify.onFailure;
-          })
-        ];
-
-        systemd.timers.acme-expiry-check = lib.mkIf cfg.expiryCheck.enable {
-          description = "Sonde quotidienne d'expiration des certificats";
-          wantedBy = [ "timers.target" ];
-          timerConfig = {
-            OnCalendar = cfg.expiryCheck.interval;
-            # Rattrape le passage manqué si la machine était éteinte, sans quoi
-            # une absence prolongée créerait le trou que la sonde doit fermer.
-            Persistent = true;
-            RandomizedDelaySec = "1h";
-          };
-        };
-
+        #
+        # nginx aussi, qui casse HTTPS sans qu'aucun certificat soit en cause.
+        # Une ligne, et elle couvre une panne que la sonde ne verrait qu'au
+        # prochain passage quotidien.
+        systemSettings.notify.discord.units =
+          lib.concatMap (cert: [
+            "acme-${cert}"
+            "acme-order-renew-${cert}"
+          ]) certNames
+          ++ [ "nginx" ];
         services.nginx = {
           enable = true;
           recommendedTlsSettings = true;
@@ -309,6 +438,12 @@ in
             log_format cf_combined '$real_client_ip - $remote_user [$time_local] '
                                    '"$request" $status $body_bytes_sent '
                                    '"$http_referer" "$http_user_agent"';
+
+            # 429 et non le 503 par défaut pour un refus de `limit_req` : le premier
+            # dit « tu vas trop vite », le second « le service est en panne ». Posé
+            # UNE fois ici pour tous les vhosts qui limitent (applications, partages
+            # Nextcloud) : la directive ne tolère pas le doublon dans un contexte.
+            limit_req_status 429;
           '';
         };
 

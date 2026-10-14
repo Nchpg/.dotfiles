@@ -77,6 +77,23 @@ in
         concernés, la réponse ne venant pas de l'amont.
       '';
     };
+
+    dependentUnits = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "cloudflared-tunnel-<uuid>" ];
+      description = ''
+        Services systemd (sans `.service`) à démarrer APRÈS dnsmasq, parce que la
+        première chose qu'ils font est de résoudre un nom. Chaque module y ajoute
+        les siens sans condition : sans effet tant que ce résolveur n'est pas
+        activé.
+
+        `network-online.target` garantit une adresse, pas un DNS qui répond, et
+        dnsmasq n'est pas forcément debout quand elle est atteinte. Ce qu'on
+        pose est un ORDRE (`after` + `wants`) et non une dépendance dure : si
+        dnsmasq est absent ou tombe plus tard, ces services vivent leur vie.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable (
@@ -201,12 +218,6 @@ in
           };
         };
 
-        # Cinq secondes entre deux tentatives, contre 100 ms par défaut : avec cet
-        # espacement, cinq redémarrages s'étalent sur vingt-cinq secondes et ne
-        # tiennent donc jamais dans la fenêtre de dix secondes du `StartLimitBurst`.
-        # L'unité continue d'essayer au lieu d'abandonner.
-        systemd.services.dnsmasq.serviceConfig.RestartSec = 5;
-
         # ATTENDRE QUE L'ADRESSE EXISTE. Le module amont n'ordonne dnsmasq que
         # sur `network.target`, qui signifie « la configuration réseau a été
         # LANCÉE », pas « les adresses sont posées ». Or dnsmasq écoute
@@ -224,10 +235,23 @@ in
         #
         # `network-online.target` est atteint quand systemd-networkd a fini de
         # configurer les liens, adresses comprises.
-        systemd.services.dnsmasq = {
-          after = [ "network-online.target" ];
-          wants = [ "network-online.target" ];
-        };
+        systemd.services = {
+          dnsmasq = {
+            after = [ "network-online.target" ];
+            wants = [ "network-online.target" ];
+
+            # Cinq secondes entre deux tentatives, contre 100 ms par défaut :
+            # avec cet espacement, cinq redémarrages s'étalent sur vingt-cinq
+            # secondes et ne tiennent donc jamais dans la fenêtre de dix
+            # secondes du `StartLimitBurst`. L'unité continue d'essayer au lieu
+            # d'abandonner.
+            serviceConfig.RestartSec = 5;
+          };
+        }
+        // lib.genAttrs cfg.dependentUnits (_: {
+          after = [ "dnsmasq.service" ];
+          wants = [ "dnsmasq.service" ];
+        });
       }
     ]
   );
