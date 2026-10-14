@@ -28,6 +28,7 @@ lib:
   inherit (import ./mk-flake-guard.nix) flakeVar mkFlakeGuard;
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
+  mkGuardedPatch = import ./mk-guarded-patch.nix lib;
   mkIcon = import ./mk-icon.nix lib;
   mkInternalPorts = import ./mk-internal-ports.nix lib;
   optionEnabled = import ./option-enabled.nix lib;

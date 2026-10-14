@@ -8,12 +8,12 @@
 let
   cfg = config.systemSettings.windowManager.sway;
 
-  systemctl = "${cfg.pkgs.systemd}/bin/systemctl";
+  systemctl = "${config.systemd.package}/bin/systemctl";
 
   # Poussées dans le gestionnaire systemd user + D-Bus au démarrage de sway
-  # (cf. config.template) : elles désignent un compositor précis, laissées
-  # derrière elles pointent un mort.
-  sessionVars = "WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE SWAYSOCK";
+  # (cf. config.template, qui les lit via sessionVariables) : elles désignent
+  # un compositor précis, laissées derrière elles pointent un mort.
+  sessionVars = lib.concatStringsSep " " cfg.sessionVariables;
 
   # sway-session.target n'a que BindsTo = graphical-session.target : ça fait
   # monter la cible au start mais rien ne la redescend quand sway se termine.
@@ -37,51 +37,10 @@ let
   # remplacé plus bas, et genFinalPackage ne réapplique wrapperFeatures/
   # extraSessionCommands que sur un paquet encore overridable (pas un
   # symlinkJoin) — les options seraient silencieusement ignorées sinon.
-  # Patch local (./sway-smooth-lock.patch) : au verrouillage, sway pose un
-  # fond noir opaque sur chaque sortie AVANT que le locker ait dessiné, d'où
-  # un flash noir (~66 ms) avant le fondu de swaylock. Le fond n'apparaît plus
-  # qu'une fois la surface du locker affichée sur la sortie. Garde-fous :
-  #   - 200 ms sans image du locker -> fond opaque partout quand même ;
-  #   - locker mort (abandon) -> fond rouge immédiat, comme en amont ;
-  #   - sortie branchée après le timeout -> opaque d'emblée.
-  # Pendant cette fenêtre, l'input va déjà au seul locker (seat.c) : le
-  # bureau reste visible un instant mais n'est plus interactif.
-  #
-  # Conséquences : sway n'est plus servi par le cache (recompilé à chaque
-  # bump, ~1 min), et un bump qui touche sway/lock.c fait échouer le build
-  # sur l'application du patch — à rebaser alors, ou à retirer.
-  #
-  # Garde-fou : le patch n'est appliqué que si les fichiers qu'il modifie sont
-  # EXACTEMENT ceux contre lesquels il a été écrit et testé (empreintes
-  # ci-dessous, sources de sway 1.12). Un bump qui ne touche pas ces fichiers
-  # passe sans rien demander ; un bump qui les touche arrête le build en les
-  # nommant — même si le patch s'appliquerait encore, car un lock.c au sens
-  # changé pourrait compiler ET mal se comporter. Dans ce cas : relire le
-  # patch contre la nouvelle version, le retester (sway imbriqué : verrou
-  # filmé, écran branché/débranché, locker tué), puis mettre à jour les
-  # empreintes (`sha256sum` sur les sources non patchées).
-  swayPatchedFiles = ''
-    d147eebafe77eb2986a49dffa7a12f88d50e8793e158aa1a28192771a70a10f5  sway/lock.c
-    80af1b5ae13164f4d09851201a931d8aea7a3838b093391fc94e8337e4c1d3e5  include/sway/server.h
-  '';
-  swayUnwrapped = cfg.pkgs.sway-unwrapped.overrideAttrs (old: {
-    # prePatch : sources encore vierges, avant les patchs nixpkgs et le nôtre.
-    prePatch = (old.prePatch or "") + ''
-      if ! sha256sum --check --quiet <<'EOF'
-      ${swayPatchedFiles}
-      EOF
-      then
-        echo "sway-smooth-lock.patch : les fichiers ci-dessus ont changé dans sway ''${version}." >&2
-        echo "Relire et retester le patch, puis mettre à jour swayPatchedFiles" >&2
-        echo "(modules/system/window-manager/sway/default.nix)." >&2
-        exit 1
-      fi
-    '';
-    patches = (old.patches or [ ]) ++ [ ./sway-smooth-lock.patch ];
-  });
-
+  # sway-unwrapped est déjà le patché de overlays/sway.nix (fondu de
+  # verrouillage sans flash noir) : cfg.pkgs vaut pkgs-stable par défaut,
+  # seul jeu de paquets qui porte l'overlay.
   swayBase = cfg.pkgs.sway.override {
-    sway-unwrapped = swayUnwrapped;
     withGtkWrapper = true; # = programs.sway.wrapperFeatures.gtk
     isNixOS = true;
     extraSessionCommands = cleanupSession;
@@ -156,6 +115,21 @@ in
         type = lib.types.pkgs;
         default = pkgs-stable;
         description = "Pkgs to use";
+      };
+      sessionVariables = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        readOnly = true;
+        default = [
+          "WAYLAND_DISPLAY"
+          "XDG_CURRENT_DESKTOP"
+          "XDG_SESSION_TYPE"
+          "SWAYSOCK"
+        ];
+        description = ''
+          Variables importées dans le gestionnaire systemd user + D-Bus au
+          démarrage de sway (config.template du module user) et retirées à sa
+          sortie (cleanupSession) : une seule liste pour les deux.
+        '';
       };
     };
   };
