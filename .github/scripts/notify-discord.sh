@@ -43,10 +43,9 @@ content="${mention}${emoji} weekly-update (${status})"
 # ci-dessous sont des affectations : sur un JSON partiel, `set -e` tuerait le
 # script — donc justement l'alerte Discord d'échec, au moment où elle sert.
 if [ -n "${FACTS_FILE:-}" ] && [ -s "$FACTS_FILE" ]; then
-    kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$FACTS_FILE" 2>/dev/null || echo false)
-    if [ "$kernel_changed" = "true" ]; then
-        kernel_line=$(jq -r '.flakeInputs[] | select(.kernelChanged == true) |
-          "noyau: \(.oldKernelVersion) → \(.newKernelVersion)"' "$FACTS_FILE")
+    kernel_count=$(jq '.kernelChanges // [] | length' "$FACTS_FILE" 2>/dev/null || echo 0)
+    if [ "$kernel_count" -gt 0 ]; then
+        kernel_line=$(jq -r '.kernelChanges[] | "noyau: \(.from) → \(.to)"' "$FACTS_FILE")
         content="${content}
 ⚠️ ${kernel_line}"
     fi

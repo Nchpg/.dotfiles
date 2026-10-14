@@ -46,6 +46,26 @@ mapfile -t hits < <(
 
 [ ${#hits[@]} -eq 0 ] && exit 0
 
+# Conditions `option:` de TOUS les marqueurs, vérifiées en UNE éval du flake
+# (~30 s chacune, autant n'en payer qu'une) : objet JSON chemin -> booléen.
+# `|| echo {}` : une éval cassée ne doit pas faire tomber la PR, les chemins
+# absents de l'objet sortent en « invérifiable ».
+opt_paths="$(printf '%s\n' "${hits[@]}" | sed -nE 's/.*EXPIRE\(option:([^)]+)\).*/\1/p' | sort -u)"
+opt_state='{}'
+if [ -n "$opt_paths" ]; then
+    opt_state="$(
+        EXPIRE_OPTION_PATHS="$opt_paths" nix eval --impure --json --no-warn-dirty --expr '
+          let
+            f = builtins.getFlake (toString ./.);
+            lib = f.inputs.nixpkgs-stable.lib;
+            o = (builtins.head (builtins.attrValues f.nixosConfigurations)).options;
+            paths = lib.filter (p: p != "") (lib.splitString "\n" (builtins.getEnv "EXPIRE_OPTION_PATHS"));
+          in
+          lib.genAttrs paths (p: lib.hasAttrByPath (lib.splitString "." p) o)
+        ' 2>/dev/null || echo '{}'
+    )"
+fi
+
 echo "## Contournements temporaires"
 echo
 
@@ -68,19 +88,7 @@ for hit in "${hits[@]}"; do
     # Condition explicite « (option:<chemin>) » collée au marqueur.
     opt_path="$(echo "$text" | sed -nE 's/.*EXPIRE\(option:([^)]+)\).*/\1/p')"
     if [ -n "$opt_path" ]; then
-        # Une éval complète par marqueur (~30 s). Acceptable : ces marqueurs se
-        # comptent sur les doigts d'une main et on ne tourne qu'une fois par
-        # semaine. `|| echo ?` : une éval cassée ne doit pas faire tomber la PR.
-        exists="$(
-            EXPIRE_OPTION_PATH="$opt_path" nix eval --impure --json --no-warn-dirty --expr '
-              let
-                f = builtins.getFlake (toString ./.);
-                lib = f.inputs.nixpkgs-stable.lib;
-                o = (builtins.head (builtins.attrValues f.nixosConfigurations)).options;
-              in
-              lib.hasAttrByPath (lib.splitString "." (builtins.getEnv "EXPIRE_OPTION_PATH")) o
-            ' 2>/dev/null || echo '?'
-        )"
+        exists="$(jq -r --arg p "$opt_path" 'if has($p) then .[$p] else "?" end' <<<"$opt_state")"
         case "$exists" in
         true) verdict=" — ✅ **\`$opt_path\` existe désormais, le contournement peut sauter**" ;;
         false) verdict=" — \`$opt_path\` toujours absent" ;;

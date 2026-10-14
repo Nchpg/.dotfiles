@@ -1,0 +1,44 @@
+name: setup-nix
+description: >
+  Nix sur le runner self-hosted, avec un jeton GitHub frais et les caches
+  binaires du dépôt. Commun à check.yml et update.yml. Le checkout reste dans
+  chaque job : une action locale ne se lit qu'une fois le dépôt extrait.
+
+runs:
+  using: composite
+  steps:
+    # NIX_CONFIG via $GITHUB_ENV : vaut pour toutes les étapes suivantes du
+    # job, l'installeur compris.
+    #
+    # Token GitHub frais à chaque run. Sans ça, Nix réutilise
+    # l'`access-tokens` que l'installeur a gravé dans le nix.conf PERSISTANT
+    # du runner self-hosted : un GITHUB_TOKEN qui expire au bout d'une heure.
+    # Les résolutions d'inputs `github:` partent alors avec un token mort (401
+    # « Bad credentials »), et `nix flake update` retombe en silence sur
+    # « using cached version ». Symptôme observé : job vert, PR créée, et zéro
+    # input réellement bumpé pendant plus d'une semaine. NIX_CONFIG a priorité
+    # sur les fichiers de conf.
+    #
+    # Les caches binaires sont posés ICI, et pas en `nixConfig` dans
+    # flake.nix : ce runner est la SEULE machine qui en manque. Sur une
+    # machine switchée ils viennent déjà de nix.settings
+    # (modules/system/configuration.nix), où ils restent la source de vérité
+    # — garder les deux listes alignées. Un `nixConfig` côté flake serait de
+    # toute façon ignoré hors trusted-users, et imposerait d'élargir
+    # trusted-users pour un gain nul sur la machine.
+    #
+    # Format nix.conf : une ligne par réglage, valeurs séparées par des espaces.
+    - name: NIX_CONFIG
+      shell: bash
+      env:
+        TOKEN: ${{ github.token }}
+      run: |
+        {
+          echo "NIX_CONFIG<<NIX_CONFIG_EOF"
+          echo "access-tokens = github.com=$TOKEN"
+          echo "extra-substituters = https://claude-code.cachix.org https://ros.cachix.org"
+          echo "extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="
+          echo "NIX_CONFIG_EOF"
+        } >> "$GITHUB_ENV"
+
+    - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22

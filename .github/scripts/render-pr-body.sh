@@ -15,12 +15,11 @@ flake_count=$(jq '.flakeInputs | length' "$facts_file")
 pinned_count=$(jq '.pinnedUpdates | length' "$facts_file")
 ext_count=$(jq '.vscodeExtensions | length' "$facts_file")
 
-kernel_changed=$(jq '[.flakeInputs[] | select(.kernelChanged == true)] | length > 0' "$facts_file")
-if [ "$kernel_changed" = "true" ]; then
+if [ "$(jq '.kernelChanges | length' "$facts_file")" -gt 0 ]; then
     echo "## ⚠️ Changement de version du noyau"
     echo
-    jq -r '.flakeInputs[] | select(.kernelChanged == true) |
-      "Le noyau Linux passe de **\(.oldKernelVersion)** à **\(.newKernelVersion)** (via \(.name))."
+    jq -r '.kernelChanges[] |
+      "Le noyau Linux passe de **\(.from)** à **\(.to)** (via \(.via))."
     ' "$facts_file"
     echo
 fi

@@ -21,6 +21,10 @@
 # anonyme trop bas pour ~8 inputs).
 set -euo pipefail
 
+# owner/repo et nombre de commits : mêmes règles que la commande `update`.
+# shellcheck source=scripts/lib/flake-lock.sh
+. scripts/lib/flake-lock.sh
+
 # Contenu d'un fichier à HEAD, ou vide s'il n'existait pas encore.
 at_head() {
     git show "HEAD:$1" 2>/dev/null || true
@@ -28,29 +32,6 @@ at_head() {
 
 new_lock="flake.lock"
 old_lock_content=$(at_head "$new_lock")
-
-gh_api() {
-    curl -sf -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" "$@"
-}
-
-# owner/repo d'un node "locked" : direct si type=github, sinon extrait de
-# l'URL si c'est un type=git pointant vers github.com (ex. claude-code-nix).
-locked_owner_repo() {
-    local locked="$1"
-    local type owner repo url
-    type=$(jq -r '.type // empty' <<<"$locked")
-    if [ "$type" = "github" ]; then
-        owner=$(jq -r '.owner // empty' <<<"$locked")
-        repo=$(jq -r '.repo // empty' <<<"$locked")
-    elif [ "$type" = "git" ]; then
-        url=$(jq -r '.url // empty' <<<"$locked")
-        if [[ "$url" =~ ^https://github\.com/([^/]+)/([^/.]+)(\.git)?/?$ ]]; then
-            owner="${BASH_REMATCH[1]}"
-            repo="${BASH_REMATCH[2]}"
-        fi
-    fi
-    jq -n --arg owner "${owner:-}" --arg repo "${repo:-}" '{owner: $owner, repo: $repo}'
-}
 
 root_inputs=$(jq -r '.nodes.root.inputs | keys[]' "$new_lock")
 
@@ -74,14 +55,11 @@ for name in $root_inputs; do
         --arg oldDate "$old_date" --arg newDate "$new_date" \
         '{name: $name, oldRev: $oldRev, newRev: $newRev, oldDate: $oldDate, newDate: $newDate, compareUrl: null, commitCount: null}')
 
-    or=$(locked_owner_repo "$new_locked")
-    owner=$(jq -r '.owner' <<<"$or")
-    repo=$(jq -r '.repo' <<<"$or")
+    slug=$(fl_owner_repo <<<"$new_locked")
 
-    if [ -n "$owner" ] && [ -n "$repo" ] && [ -n "$old_rev" ] && [ -n "$new_rev" ]; then
-        compare_url="https://github.com/${owner}/${repo}/compare/${old_rev}...${new_rev}"
-        if compare_json=$(gh_api "https://api.github.com/repos/${owner}/${repo}/compare/${old_rev}...${new_rev}" 2>/dev/null); then
-            ahead_by=$(jq -r '.ahead_by // 0' <<<"$compare_json")
+    if [ -n "$slug" ] && [ -n "$old_rev" ] && [ -n "$new_rev" ]; then
+        compare_url="https://github.com/${slug}/compare/${old_rev}...${new_rev}"
+        if ahead_by=$(fl_commit_count "$slug" "$old_rev" "$new_rev"); then
             entry=$(jq --arg compareUrl "$compare_url" --argjson commitCount "$ahead_by" \
                 '. + {compareUrl: $compareUrl, commitCount: $commitCount}' <<<"$entry")
         else
@@ -145,7 +123,8 @@ while IFS= read -r -d '' pinned_file; do
 # Pas de -maxdepth : il valait 4 et sautait dev/vercel-cli/claude-plugin/pinned.json
 # (un cran plus profond), dont le bump était donc APPLIQUÉ par update.yml mais
 # jamais décrit dans le corps de la PR. Borner la profondeur couple ce script à
-# l'arborescence des modules — cf. la même correction dans update.yml/rebuild.sh.
+# l'arborescence des modules — cf. la même règle pour les update.sh,
+# fl_module_updaters (scripts/lib/flake-lock.sh).
 done < <(find modules -name 'pinned.json' -print0 | sort -z)
 
 pinned_facts=$(diff_version_map "$old_pinned_map" "$new_pinned_map" | jq 'map({module: .key, oldVersion, newVersion})')
@@ -163,6 +142,9 @@ if [ -n "${1:-}" ] && [ -s "$1" ]; then
     skipped_ext=$(cat "$1")
 fi
 
+# kernelChanges : les changements de noyau, calculés une fois ici pour le
+# corps de la PR et la notification Discord.
 jq -n --argjson flakeInputs "$flake_facts" --argjson pinnedUpdates "$pinned_facts" \
     --argjson vscodeExtensions "$vscode_facts" --argjson skippedExtensions "$skipped_ext" \
-    '{flakeInputs: $flakeInputs, pinnedUpdates: $pinnedUpdates, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions}'
+    '{flakeInputs: $flakeInputs, pinnedUpdates: $pinnedUpdates, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions,
+      kernelChanges: [$flakeInputs[] | select(.kernelChanged == true) | {via: .name, from: .oldKernelVersion, to: .newKernelVersion}]}'

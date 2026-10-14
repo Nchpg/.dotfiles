@@ -1,9 +1,9 @@
 name: weekly-update
 
-# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus) + de tout
-# module ayant un `update.sh` (auto-découvert, cf. rebuild.sh — même
-# mécanisme : kimi-code, vscode, et tout futur module du même moule sans
-# qu'il faille toucher ce fichier), puis ouverture d'une PR listant, par
+# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus, `secrets`
+# excepté) + de tout module ayant un `update.sh` (auto-découvert, même
+# découverte que la commande `update`, cf. scripts/lib/flake-lock.sh : tout
+# futur module du même moule sans qu'il faille toucher ce fichier), puis ouverture d'une PR listant, par
 # input, les dates avant/après, le nombre de commits et un lien de
 # comparaison GitHub, avec alerte si la version du noyau change. Rendu 100%
 # déterministe (pas de LLM) : aucun contenu de commit n'est résumé ni
@@ -42,21 +42,6 @@ concurrency:
 env:
   LC_ALL: C.UTF-8
 
-  # Token GitHub frais à chaque run. Sans ça, Nix réutilise l'`access-tokens`
-  # que l'installeur a gravé dans le nix.conf PERSISTANT du runner
-  # self-hosted : un GITHUB_TOKEN qui expire au bout d'une heure. Tous les
-  # runs suivants envoient donc un token mort → 401 sur api.github.com, et
-  # `nix flake update` retombe en silence sur « using cached version ».
-  # Symptôme observé : job vert, PR créée, et zéro input réellement bumpé
-  # pendant plus d'une semaine. NIX_CONFIG a priorité sur les fichiers de conf.
-  #
-  # Caches binaires ajoutés ici pour la même raison que dans check.yml (ce
-  # runner ne les a pas dans son nix.conf) — voir le commentaire là-bas.
-  NIX_CONFIG: |
-    access-tokens = github.com=${{ github.token }}
-    extra-substituters = https://claude-code.cachix.org https://ros.cachix.org
-    extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo=
-
 permissions:
   contents: write
   pull-requests: write
@@ -67,7 +52,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      # Jeton frais et caches binaires, cf. l'action (même montage que check.yml).
+      - uses: ./.github/actions/setup-nix
 
       # `nix flake update` traite un échec de résolution d'input en WARNING :
       # il retombe sur « using cached version », n'écrit rien, et sort en 0.
@@ -76,36 +62,26 @@ jobs:
       # `set -o pipefail` indispensable : sans lui le code de retour serait
       # celui de `tee`, et un vrai échec de `nix flake update` serait masqué.
       #
-      # Tous les inputs SAUF `secrets`, comme update.sh : le lock des secrets ne
-      # bouge que par un commit explicite (`secrets sync`), et le jeton de ce
-      # job ne voit de toute façon pas le dépôt privé (404 → échec ci-dessous).
-      # Les `follows` (tableaux) sont exclus, il n'y a rien à bumper.
+      # Mêmes inputs que la commande `update` (sans `secrets` ni les
+      # `follows`, cf. fl_bumpable_inputs) : une seule définition.
       - name: bump des inputs flake
         run: |
           set -o pipefail
-          # shellcheck disable=SC2016 # ${n} est du Nix, pas du shell
-          inputs=$(nix eval --impure --raw --expr '
-            let i = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes.root.inputs;
-            in builtins.concatStringsSep " " (builtins.filter (n: n != "secrets" && builtins.isString i.${n}) (builtins.attrNames i))')
-          # shellcheck disable=SC2086 # liste de noms d'inputs, découpage voulu
-          nix flake update $inputs 2>&1 | tee "${RUNNER_TEMP}"/update.log
+          . scripts/lib/flake-lock.sh
+          mapfile -t inputs < <(fl_bumpable_inputs flake.lock)
+          nix flake update "${inputs[@]}" 2>&1 | tee "${RUNNER_TEMP}"/update.log
           if grep -q "unable to download" "${RUNNER_TEMP}"/update.log; then
             echo "::error::résolution d'input échouée — le lock n'a peut-être pas été mis à jour"
             exit 1
           fi
 
-      # Auto-discovery : tout module avec un `update.sh` à sa racine (kimi-code,
-      # vscode, ...) est lancé ici — même mécanisme que `rebuild -u`, cf.
-      # rebuild.sh. Un échec reste local au module (API tierce down, offline,
-      # ...) et n'interrompt jamais les autres ni la création de la PR.
+      # Auto-discovery : tout module avec un `update.sh` (kimi-code, vscode,
+      # ...) est lancé ici — même découverte que `update` / `rebuild -u`, cf.
+      # fl_module_updaters. Un échec reste local au module (API tierce down,
+      # offline, ...) et n'interrompt jamais les autres ni la création de la PR.
       # VSCODE_SKIPPED_FILE : liste des extensions que vscode/update.sh n'a
       # pas pu vérifier (API Marketplace en erreur, téléchargement échoué).
       # Reprise plus bas dans les faits, pour apparaître dans le corps de la PR.
-      # Pas de -maxdepth : il valait 4 et sautait silencieusement
-      # dev/vercel-cli/claude-plugin/update.sh (un cran plus profond), dont
-      # l'épingle n'a donc jamais été bumpée. Borner la profondeur couple ce
-      # workflow à l'arborescence des modules — un déplacement de dossier
-      # désactive une mise à jour sans le moindre message.
       - name: bump des modules (update.sh auto-découverts)
         # Lu par les update.sh qui interrogent l'API GitHub (artcraft...) :
         # sans jeton, 60 requêtes/h par IP.
@@ -114,10 +90,11 @@ jobs:
         run: |
           export MY_FLAKE="$PWD"
           export VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json
+          . scripts/lib/flake-lock.sh
           while IFS= read -r -d '' script; do
             echo "⬆️  Running $script..."
             "$script" || echo "::warning::$script en échec — état précédent conservé."
-          done < <(find modules -name update.sh -print0 | sort -z)
+          done < <(fl_module_updaters)
 
       - name: rassembler les faits (rev + nombre de commits par input)
         id: facts

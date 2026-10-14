@@ -23,28 +23,8 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  # Token GitHub frais à chaque run : le runner self-hosted garde dans son
-  # nix.conf l'`access-tokens` gravé par l'installeur, un GITHUB_TOKEN qui
-  # expire en une heure. Sans ce reset, les résolutions d'inputs `github:`
-  # partent avec un token mort (401 « Bad credentials »). NIX_CONFIG a
-  # priorité sur les fichiers de conf.
-  #
-  # Les caches binaires sont posés ICI, et pas en `nixConfig` dans flake.nix :
-  # ce runner est la SEULE machine qui en manque. Sur une machine switchée ils
-  # viennent déjà de nix.settings (modules/system/configuration.nix), où ils
-  # restent la source de vérité — garder les deux listes alignées. Un
-  # `nixConfig` côté flake serait de toute façon ignoré hors trusted-users, et
-  # imposerait d'élargir trusted-users pour un gain nul sur la machine.
-  #
-  # Format nix.conf : une ligne par réglage, valeurs séparées par des espaces.
-  NIX_CONFIG: |
-    access-tokens = github.com=${{ github.token }}
-    extra-substituters = https://claude-code.cachix.org https://ros.cachix.org
-    extra-trusted-public-keys = claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo=
-
-# Runner SELF-HOSTED sur un dépôt PUBLIC : le `if:` présent sur chaque job
-# est un garde de sécurité, pas une optimisation. Sans lui, n'importe qui peut
+# Runner SELF-HOSTED sur un dépôt PUBLIC : le job `trusted`, dont dépendent
+# tous les autres, est un garde de sécurité, pas une optimisation. Sans lui, n'importe qui peut
 # forker, glisser du Nix arbitraire (preBuild, import d'un dérivé malveillant…)
 # dans une PR, et le faire exécuter sur la machine perso — celle qui porte les
 # deux identités age qui ouvrent le dépôt de secrets, dont celle de compte, en
@@ -54,14 +34,24 @@ env:
 # et doivent être relues à la main avant d'être poussées sur une branche
 # interne. Ne retire ce garde qu'en basculant les jobs sur un runner jetable
 # (ubuntu-latest).
+#
+# Un seul `if:`, sur `trusted`, au lieu d'une copie par job : un job dont une
+# dépendance est sautée est sauté aussi. `trusted` tourne sur un runner GitHub
+# jetable et n'extrait rien : il ne fait que porter la condition.
 jobs:
+  trusted:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - run: echo "code interne au dépôt, jobs self-hosted autorisés"
+
   fmt:
     runs-on: self-hosted
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: ./.github/actions/setup-nix
 
       # Vérifie que tout est passé par `nix fmt` (le hook pre-commit le fait
       # en local, ceci rattrape les commits faits avec --no-verify).
@@ -73,11 +63,11 @@ jobs:
 
   lint:
     runs-on: self-hosted
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: ./.github/actions/setup-nix
 
       # Anti-patterns Nix (lints désactivés : voir statix.toml, qui n'était
       # jusqu'ici exécuté nulle part).
@@ -133,7 +123,7 @@ jobs:
 
   security:
     runs-on: self-hosted
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -141,7 +131,7 @@ jobs:
           # seulement le dernier (un secret committé puis retiré fuit quand même).
           fetch-depth: 0
 
-      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: ./.github/actions/setup-nix
 
       # Détection de secrets en clair (les secrets sops chiffrés ne le
       # déclenchent pas — vérifié).
@@ -159,11 +149,11 @@ jobs:
 
   flake-check:
     runs-on: self-hosted
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      - uses: ./.github/actions/setup-nix
 
       - name: nix flake check
         run: nix flake check --no-build
