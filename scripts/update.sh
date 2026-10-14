@@ -499,22 +499,35 @@ if [ ${#m_sel[@]} -gt 0 ]; then
 
     frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
     n=${#m_sel[@]}
+    # Seules les lignes qui changent sont réécrites (une terminée reste telle
+    # quelle, sinon elle clignote à chaque frame), et tout part en une seule
+    # écriture, effacement en fin de ligne plutôt qu'avant.
+    rendered=()
     render() {
-        local frame="$1" id rc
+        local frame="$1" id rc line out="" i=0
         for id in "${m_sel[@]}"; do
-            printf '\033[2K'
             if [ -f "$tmp/${JOB[$id]}.done" ]; then
                 rc=$(cat "$tmp/${JOB[$id]}.done")
                 if [ "$rc" = 0 ]; then
-                    printf '  %s✓%s  %-*s  %s%s%s\n' "$OK" "$R" "$width" "${NAME[$id]}" "$OK" "${LAT[$id]}" "$R"
+                    printf -v line '  %s✓%s  %-*s  %s%s%s' "$OK" "$R" "$width" "${NAME[$id]}" "$OK" "${LAT[$id]}" "$R"
                 else
-                    printf '  %s✗%s  %-*s  %séchec, état précédent conservé%s\n' "$ERR" "$R" "$width" "${NAME[$id]}" "$ERR" "$R"
+                    printf -v line '  %s✗%s  %-*s  %séchec, état précédent conservé%s' "$ERR" "$R" "$width" "${NAME[$id]}" "$ERR" "$R"
                 fi
             else
-                printf '  %s%s%s  %-*s  %s%s → %s…%s\n' "$ACC" "$frame" "$R" "$width" "${NAME[$id]}" \
+                printf -v line '  %s%s%s  %-*s  %s%s → %s…%s' "$ACC" "$frame" "$R" "$width" "${NAME[$id]}" \
                     "$DIM" "${CUR[$id]}" "${LAT[$id]}" "$R"
             fi
+            if [ ! -t 1 ]; then
+                out+="$line"$'\n'
+            elif [ "${rendered[$i]-}" = "$line" ]; then
+                out+=$'\033[1B'
+            else
+                out+="$line"$'\033[K\n'
+            fi
+            rendered[i]="$line"
+            i=$((i + 1))
         done
+        printf '%s' "$out"
     }
     all_done() {
         local job
