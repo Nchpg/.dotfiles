@@ -2,6 +2,7 @@
   lib,
   config,
   pkgs-stable,
+  myLib,
   ...
 }:
 
@@ -11,130 +12,15 @@
 # propres arguments. `dots <commande> …` relaie tel quel, `dots help` liste
 # tout avec les exemples.
 #
-# Le catalogue ci-dessous n'est QUE de la doc : chaque commande garde son
-# propre parsing et son `--help`. Une commande absente de ce système (`theme`
-# sans Stylix) est masquée à l'exécution, pas ici.
+# Le catalogue est déclaré par les commandes elles-mêmes (option
+# systemSettings.commands, cf. ../default.nix) : une commande absente de ce
+# système (`theme` sans Stylix) n'y est simplement pas.
 let
-  # `<…>` dans un exemple = valeur demandée à l'exécution (gum input).
-  commands = [
-    {
-      name = "rebuild";
-      desc = "reconstruit et active le système";
-      examples = [
-        [
-          "rebuild"
-          "rebuild de la cible de ce système"
-        ]
-        [
-          "rebuild -u"
-          "update (au choix) puis rebuild"
-        ]
-        [
-          "rebuild -y"
-          "sans confirmation (working tree sale…)"
-        ]
-        [
-          "rebuild -V <dark|light>"
-          "rebuild dans une variante de thème"
-        ]
-      ];
-    }
-    {
-      name = "update";
-      desc = "met à jour modules et inputs du flake (sans rebuild)";
-      examples = [
-        [
-          "update -c"
-          "liste ce qui a une mise à jour, ne modifie rien"
-        ]
-        [
-          "update"
-          "vérifie tout, puis coche quoi mettre à jour"
-        ]
-        [
-          "update -y"
-          "applique la sélection par défaut sans question"
-        ]
-        [
-          "update <nom>"
-          "restreint aux modules/inputs contenant ce nom"
-        ]
-      ];
-    }
-    {
-      name = "theme";
-      desc = "change de thème ou de variante dark/light";
-      examples = [
-        [
-          "theme"
-          "ouvre la galerie des thèmes dans le navigateur"
-        ]
-        [
-          "theme toggle"
-          "bascule dark ↔ light puis rebuild"
-        ]
-        [
-          "theme dark"
-          "passe en sombre puis rebuild"
-        ]
-        [
-          "theme light"
-          "passe en clair puis rebuild"
-        ]
-      ];
-    }
-    {
-      name = "genclean";
-      desc = "nettoie les générations, GC, optimise le store";
-      examples = [
-        [
-          "genclean"
-          "choix des étapes d'avance, puis tout s'enchaîne"
-        ]
-      ];
-    }
-    {
-      name = "secrets";
-      desc = "édite et audite les secrets sops (dépôt privé)";
-      examples = [
-        [
-          "secrets list"
-          "liste les secrets (aucun déchiffrement)"
-        ]
-        [
-          "secrets show <clé>"
-          "affiche une valeur, ex. gh/token"
-        ]
-        [
-          "secrets edit <clé>"
-          "édite ou crée un secret, puis synchronise"
-        ]
-        [
-          "secrets policy"
-          "régénère les règles sops, rescelle, synchronise"
-        ]
-        [
-          "secrets status"
-          "dépôt privé en phase avec le lock ?"
-        ]
-        [
-          "secrets sync"
-          "commit + push du dépôt privé, mise à jour du lock"
-        ]
-      ];
-    }
-    {
-      # Pas une commande du PATH : le script du dépôt, ~/.dotfiles/init.sh.
-      name = "init";
-      desc = "prépare cette machine : clés, secrets, hooks, inscription";
-      examples = [
-        [
-          "init"
-          "vérifie et rattrape ce qui manque (sans risque si déjà prête)"
-        ]
-      ];
-    }
-  ];
+  # Le catalogue : ce que chaque module de commande a déclaré (cf.
+  # ../default.nix), dans l'ordre de `order`.
+  commands = lib.sort (a: b: a.order < b.order) (
+    lib.mapAttrsToList (name: c: c // { inherit name; }) config.systemSettings.commands
+  );
 
   # Une ligne par entrée, champs séparés par des tabulations :
   #   cmd  <nom>  <description>
@@ -146,46 +32,21 @@ let
       e: "ex\t${c.name}\t${builtins.elemAt e 0}\t${builtins.elemAt e 1}\n"
     ) c.examples
   ) commands;
-
-  # Palette des questions gum, les rôles de `update` : la palette Stylix quand
-  # le thème est actif, sinon les numéros de couleur du terminal (même rôles,
-  # 4 = bleu, 2 = vert…). Jamais les couleurs par défaut de gum, y compris sur
-  # l'écran Oui/Non (`gum confirm`), qui les gardait.
-  palette =
-    if config.stylix.enable then
-      let
-        c = config.lib.stylix.colors;
-      in
-      {
-        accent = "#${c.base0D}";
-        ok = "#${c.base0B}";
-        warn = "#${c.base0A}";
-        dim = "#${c.base03}";
-        text = "#${c.base05}";
-        base = "#${c.base00}";
-      }
-    else
-      {
-        accent = "4";
-        ok = "2";
-        warn = "3";
-        dim = "8";
-        text = "7";
-        base = "0";
-      };
-
-  colors = with palette; ''
-    export GUM_CHOOSE_CURSOR_FOREGROUND="${accent}" GUM_CHOOSE_HEADER_FOREGROUND="${dim}"
-    export GUM_CHOOSE_SELECTED_FOREGROUND="${ok}" GUM_CHOOSE_ITEM_FOREGROUND="${text}"
-    export GUM_INPUT_PROMPT_FOREGROUND="${accent}" GUM_INPUT_HEADER_FOREGROUND="${dim}"
-    export GUM_INPUT_CURSOR_FOREGROUND="${accent}" GUM_INPUT_PLACEHOLDER_FOREGROUND="${dim}"
-    export GUM_CONFIRM_PROMPT_FOREGROUND="${accent}"
-    export GUM_CONFIRM_SELECTED_BACKGROUND="${accent}" GUM_CONFIRM_SELECTED_FOREGROUND="${base}"
-    export GUM_CONFIRM_UNSELECTED_BACKGROUND="${dim}" GUM_CONFIRM_UNSELECTED_FOREGROUND="${text}"
-    export DOTS_OK="${ok}" DOTS_WARN="${warn}"
-  '';
 in
 {
+  # Pas une commande du PATH : le script du dépôt, ~/.dotfiles/init.sh. Inscrit
+  # ici, faute de module à lui.
+  systemSettings.commands.init = {
+    desc = "prépare cette machine : clés, secrets, hooks, inscription";
+    order = 6;
+    examples = [
+      [
+        "init"
+        "vérifie et rattrape ce qui manque (sans risque si déjà prête)"
+      ]
+    ];
+  };
+
   environment.systemPackages = [
     (pkgs-stable.writeShellApplication {
       name = "dots";
@@ -194,23 +55,34 @@ in
         pkgs-stable.git
       ];
       text = ''
-        ${colors}
+        # Palette gum, la même que `update` & co (cf. lib/mk-gum-env.nix).
+        ${myLib.mkGumEnv {
+          colors = if config.stylix.enable then config.lib.stylix.colors else null;
+        }}
         catalog=$(cat <<'CATALOG'
         ${catalog}CATALOG
         )
 
-        flake="''${MY_FLAKE:-$HOME/.dotfiles}"
+        ${myLib.flakeVar}
 
-        # Commandes réellement disponibles ici, dans l'ordre du catalogue.
-        # `init` n'est pas dans le PATH : c'est le script du dépôt.
+        # Couleurs, confirm et hooks git : les bibliothèques du dépôt
+        # (scripts/lib), une seule implémentation avec rebuild.sh et init.sh.
+        # Sans clone, rien de tout ça n'a d'objet : hooks ignorés.
+        hooks=0
+        if [ -f "$flake/scripts/lib/hooks.sh" ]; then
+          # shellcheck source=/dev/null
+          . "$flake/scripts/lib/ui.sh"
+          # shellcheck source=/dev/null
+          . "$flake/scripts/lib/hooks.sh"
+          if hooks_present "$flake"; then hooks=1; fi
+        fi
+
+        # Commandes du catalogue, dans son ordre. `init` n'est pas dans le
+        # PATH : c'est le script du dépôt, proposé seulement s'il est là.
         names=()
         while IFS=$'\t' read -r kind name _; do
           [ "$kind" = cmd ] || continue
-          if [ "$name" = init ]; then
-            if [ -x "$flake/init.sh" ]; then names+=(init); fi
-          elif command -v "$name" > /dev/null; then
-            names+=("$name")
-          fi
+          if [ "$name" != init ] || [ -x "$flake/init.sh" ]; then names+=("$name"); fi
         done <<< "$catalog"
 
         # Lance une commande du catalogue (init -> le script du dépôt).
@@ -220,20 +92,6 @@ in
             exec "$flake/init.sh" "$@"
           fi
           exec "$@"
-        }
-
-        # LES HOOKS GIT du dépôt de config (.githooks) : ce sont eux qui tiennent
-        # le dépôt de secrets en phase au pull et au push. Actifs seulement si
-        # le clone le demande (core.hooksPath, réglage local, jamais poussé) :
-        # un clone fait à la main sans ./init.sh les a donc éteints.
-        hooksOn() { [ "$(git -C "$flake" config --get core.hooksPath 2> /dev/null)" = .githooks ]; }
-        hooksStatus() {
-          [ -d "$flake/.githooks" ] || return 0
-          if hooksOn; then
-            echo "✓ hooks git actifs : secrets synchronisés au pull et au push"
-          else
-            echo "⚠ hooks git INACTIFS dans $flake : secrets non synchronisés au pull/push"
-          fi
         }
 
         # printf compte les octets : « <clé> » décalait la colonne. ''${#} compte
@@ -260,10 +118,12 @@ in
           done <<< "$catalog"
           echo
           echo "Chaque commande a aussi son propre --help (theme : sans argument = galerie)."
-          echo
-          hooksStatus
-          if [ -d "$flake/.githooks" ] && ! hooksOn; then
-            echo "  pour les activer : git -C $flake config core.hooksPath .githooks"
+          if [ "$hooks" = 1 ]; then
+            echo
+            hooks_status "$flake"
+            if ! hooks_on "$flake"; then
+              echo "  pour les activer : git -C $flake config core.hooksPath .githooks"
+            fi
           fi
         }
 
@@ -294,16 +154,8 @@ in
         # 0. Les hooks : l'état en une ligne, et l'activation proposée s'ils
         # sont éteints (Oui par défaut : sans eux, push et pull ne
         # s'occupent plus des secrets).
-        if [ -d "$flake/.githooks" ]; then
-          if hooksOn; then
-            gum style --foreground "''${DOTS_OK:-2}" "$(hooksStatus)"
-          else
-            gum style --foreground "''${DOTS_WARN:-3}" "$(hooksStatus)"
-            if gum confirm "Activer les hooks git maintenant ?"; then
-              git -C "$flake" config core.hooksPath .githooks
-              gum style --foreground "''${DOTS_OK:-2}" "$(hooksStatus)"
-            fi
-          fi
+        if [ "$hooks" = 1 ]; then
+          if hooks_on "$flake"; then hooks_status "$flake"; else hooks_offer "$flake"; fi
           echo
         fi
 

@@ -25,11 +25,8 @@ let
     text = ''
       SYS=/sys/devices/platform/lg-laptop
 
-      # Thème Stylix pour les menus gum.
-      export GUM_CHOOSE_HEADER_FOREGROUND="${c.base0A}"
-      export GUM_CHOOSE_CURSOR_FOREGROUND="${c.base0D}"
-      export GUM_CHOOSE_SELECTED_FOREGROUND="${c.base0D}"
-      export GUM_CHOOSE_ITEM_FOREGROUND="${c.base05}"
+      # Palette du thème pour les menus gum (cf. lib/mk-gum-env.nix).
+      ${myLib.mkGumEnv { colors = myLib.schemeColors { inherit config themes; }; }}
 
       fan_label() {
         case "$1" in

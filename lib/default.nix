@@ -25,7 +25,7 @@ lib:
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
   editorLspPackages = import ./editor-lsp-packages.nix;
   fetchPinned = import ./fetch-pinned.nix lib;
-  mkFlakeGuard = import ./mk-flake-guard.nix;
+  inherit (import ./mk-flake-guard.nix) flakeVar mkFlakeGuard;
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
   mkIcon = import ./mk-icon.nix lib;
@@ -37,7 +37,8 @@ lib:
   mkThemedIcon = import ./mk-themed-icon.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
   mkTlsVhost = import ./mk-tls-vhost.nix;
-  mkUpdateEnv = import ./mk-update-env.nix;
+  mkGumEnv = import ./mk-gum-env.nix;
+  mkRepoCommand = import ./mk-repo-command.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
   schemeColors = import ./scheme-colors.nix;

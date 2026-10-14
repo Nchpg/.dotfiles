@@ -31,11 +31,7 @@ let
       cfg.pkgs.coreutils
     ];
     text = ''
-      export GUM_CHOOSE_HEADER_FOREGROUND="${c.base0A}"
-      export GUM_CHOOSE_CURSOR_FOREGROUND="${c.base0D}"
-      export GUM_CHOOSE_SELECTED_FOREGROUND="${c.base0D}"
-      export GUM_CHOOSE_ITEM_FOREGROUND="${c.base05}"
-      export GUM_CONFIRM_SELECTED_FOREGROUND="${c.base0D}"
+      ${myLib.mkGumEnv { colors = config.lib.stylix.colors; }}
 
       state_dir="''${XDG_RUNTIME_DIR:-$HOME/.cache}"
       pid_file="$state_dir/bt-combine.pid"

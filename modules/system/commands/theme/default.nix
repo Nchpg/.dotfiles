@@ -20,14 +20,34 @@ let
   # Versionnés dans le dépôt, écrits par le serveur de galerie ; pas dans la
   # config construite (sélection personnelle, pas état système).
   favoritesFile = "themes/gallery/favorites.json";
-
-  flakeGuard = myLib.mkFlakeGuard {
-    name = "theme";
-    scriptName = "scripts/rebuild.sh";
-  };
 in
 {
   config = lib.mkIf cfg.enable {
+    # Entrée du catalogue de `dots` (cf. ../default.nix) : seulement avec
+    # Stylix, comme la commande elle-même.
+    systemSettings.commands.theme = {
+      desc = "change de thème ou de variante dark/light";
+      order = 3;
+      examples = [
+        [
+          "theme"
+          "ouvre la galerie des thèmes dans le navigateur"
+        ]
+        [
+          "theme toggle"
+          "bascule dark ↔ light puis rebuild"
+        ]
+        [
+          "theme dark"
+          "passe en sombre puis rebuild"
+        ]
+        [
+          "theme light"
+          "passe en clair puis rebuild"
+        ]
+      ];
+    };
+
     environment.systemPackages = [
       (cfg.pkgs.writeShellScriptBin "theme" ''
         set -euo pipefail
@@ -38,7 +58,10 @@ in
         # Sans argument : galerie servie en local (pas file://) pour que le
         # bouton "appliquer" puisse réécrire le profil.
         if [ -z "$want" ]; then
-          ${flakeGuard}
+          # Pas de mkFlakeGuard : aucun script du dépôt n'est exécuté ici, ce
+          # sont ces deux fichiers qu'il faut pouvoir écrire (contrôlés juste
+          # en dessous).
+          ${myLib.flakeVar}
           profile="$flake/${profileFile}"
           favorites="$flake/${favoritesFile}"
           for f in "$profile" "$favorites"; do
