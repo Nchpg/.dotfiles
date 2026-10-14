@@ -6,10 +6,14 @@ Configuration NixOS + home-manager en flake, multi-hosts et multi-profils.
 
 ```
 flake.nix          Entrée : inputs, produit cartésien profils×hosts×variantes, devshells
-hosts/             Un dossier par machine (hardware + réglages liés au matériel)
-  gram/            LG Gram 2024 (hardware-configuration.nix généré + choix manuels)
-profiles/          Un dossier par usage (personal, work, …) : quels modules
-  personal/        sont activés, pour quels users, avec quels réglages
+hosts/             Un dossier par machine (hardware + réglages liés au matériel) ;
+                   default.nix dit quelle machine fait tourner quel profil
+  gram/            LG Gram 2024 (portable, profil personal)
+  think/           serveur maison (profil server)
+profiles/          Un dossier par usage : quels modules sont activés, pour
+                   quels users, avec quels réglages
+  personal/        poste de travail (bureau sway, apps, dev)
+  server/          services auto-hébergés (nginx, Authelia, Nextcloud…)
     home/<user>/   userSettings de chaque user du profil
 modules/
   system/          Modules NixOS, gatés par des options systemSettings.*
@@ -20,7 +24,7 @@ overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
 docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi)
 devshells/         `nix develop .#python|c|xpu`
 init.sh            Mise en place d'une machine neuve : host, matériel, clés age, SSH GitHub, clone des secrets, hooks, inscription
-scripts/           Scripts derrière les commandes `rebuild`, `update`, `genclean`
+scripts/           Scripts derrière les commandes `rebuild`, `update`, `genclean` (lib/ : bash partagé, CI comprise)
 formatter.nix      `nix fmt` (nixfmt sur les fichiers trackés)
 statix.toml        Config du linter statix
 ```
