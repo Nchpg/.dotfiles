@@ -1,7 +1,7 @@
-# Bloc bash partagé par les commandes qui lancent update.sh (`update`, et
-# `rebuild` pour `-u`) : met gum dans le PATH et passe la palette Stylix
-# (UPDATE_COLOR_*), pour le même rendu par les deux chemins. Sans Stylix
-# (serveur), update.sh garde ses couleurs par défaut.
+# Bloc bash partagé par les commandes à menus gum (`update`, `rebuild` pour
+# `-u`, `genclean`) : met gum dans le PATH et passe la palette Stylix
+# (UPDATE_COLOR_*), pour le même rendu partout. Sans Stylix (serveur), les
+# scripts gardent leurs couleurs par défaut.
 {
   lib,
   config,

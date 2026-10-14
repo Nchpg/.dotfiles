@@ -89,7 +89,7 @@ let
       examples = [
         [
           "genclean"
-          "nettoyage interactif (chaque étape est demandée)"
+          "choix des étapes d'avance, puis tout s'enchaîne"
         ]
       ];
     }
