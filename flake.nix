@@ -103,12 +103,12 @@
       # à trois profondeurs différentes.
       themes = import ./themes lib inputs;
 
-      # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
-      # HM). Chacun ajoute ensuite ses args propres.
       # Empreinte du contenu de la config, gravée dans chaque système pour
       # `dotstate` (cf. lib/content-hash.nix) : calculée ici une seule fois.
       dotfilesContent = myLib.contentHash inputs.self.outPath;
 
+      # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
+      # HM). Chacun ajoute ensuite ses args propres.
       commonArgs = {
         inherit
           pkgs-stable
@@ -139,10 +139,8 @@
         variant = variants;
       };
 
-      targetName =
-        target:
-        "${target.profile}-${target.host}"
-        + lib.optionalString (target.variant != "dark") "-${target.variant}";
+      # Cf. lib/target-name.nix (partagé avec network, la politique sops…).
+      targetName = myLib.targetName.full;
 
       # Un host se terminant par "-light"/"-dark" collisionne avec une autre
       # cible (host "x-light" en dark == host "x" en light) : listToAttrs
@@ -199,8 +197,14 @@
                 home-manager.sharedModules = [ { manual.manpages.enable = false; } ];
               }
             ];
+            # `target.name` (personal-gram-light) et `target.machine`
+            # (personal-gram, le hostname) : calculés une fois ici plutôt que
+            # recomposés par chaque module.
             specialArgs = commonArgs // {
-              inherit target;
+              target = target // {
+                inherit name;
+                machine = myLib.targetName.machine target;
+              };
             };
           };
         }) targetNames targets
@@ -227,7 +231,9 @@
       packages.${system} = {
         sops-policy = pkgs-stable.writeShellScriptBin "sops-policy" ''
           cat ${
-            pkgs-stable.writeText "creation-rules.yaml" (myLib.sopsPolicy { inherit nixosConfigurations; })
+            pkgs-stable.writeText "creation-rules.yaml" (
+              myLib.sopsPolicy.generate { inherit nixosConfigurations; }
+            )
           }
         '';
 
@@ -248,85 +254,21 @@
       # `${system}` en est un.
       checks.${system} = {
         # La politique de ce dépôt-ci et le .sops.yaml du dépôt PRIVÉ disent la
-        # même chose, et jusqu'ici rien ne le vérifiait — le commentaire de
-        # lib/sops-policy.nix annonçait pourtant ce contrôle.
-        #
-        # Ce que son absence laissait passer n'est pas anodin, et c'est exactement
-        # le mode de panne contre lequel tout le montage est écrit : une audience
-        # qui RÉTRÉCIT. Un host retiré de `deployments`, un peer supprimé, un
-        # secret qui cesse d'être déclaré par un profil — le .sops.yaml garde ses
-        # anciens destinataires, rien ne rescelle selon un .sops.yaml périmé, le
-        # rebuild réussit, et le rayon d'explosion reste large sans un mot.
-        # Sur-sceller n'a jamais produit d'erreur nulle part.
-        #
-        # À l'ÉVAL, comme option-paths juste en dessous, et c'est obligatoire :
-        # `nix flake check --no-build` évalue les checks sans construire leurs
-        # dérivations, donc un contrôle écrit dans un `runCommand` ne tournerait
-        # jamais en CI.
-        #
-        # On compare le SUFFIXE du fichier à partir de son marqueur : ce qui
-        # précède, ce sont les ancres de clés du dépôt privé, qui s'éditent à la
-        # main et ne regardent pas ce dépôt-ci.
-        sops-policy =
-          let
-            expected = myLib.sopsPolicy { inherit nixosConfigurations; };
+        # même chose (cf. lib/check-sops-policy.nix). À l'ÉVAL, comme
+        # option-paths juste en dessous (cf. lib/mk-eval-check.nix).
+        sops-policy = myLib.mkEvalCheck {
+          pkgs = pkgs-stable;
+          name = "check-sops-policy";
+          check = myLib.checkSopsPolicy {
+            expected = myLib.sopsPolicy.generate { inherit nixosConfigurations; };
+            inherit (myLib.sopsPolicy) marker;
             file = "${inputs.secrets}/.sops.yaml";
-            marker = "# ATTENTION : bloc GÉNÉRÉ";
-
-            parts = lib.splitString marker (builtins.readFile file);
-            found = lib.length parts > 1;
-            block = marker + lib.concatStringsSep marker (lib.tail parts);
-
-            # Ancres définies (avant le marqueur) et citées (par la politique) :
-            # une ancre citée mais absente rend le fichier illisible pour sops
-            # (« unknown anchor »), alors que le bloc, lui, serait conforme.
-            namesIn =
-              re: text:
-              lib.unique (
-                lib.concatMap (l: lib.optionals (builtins.match re l != null) (builtins.match re l)) (
-                  lib.splitString "\n" text
-                )
-              );
-            defined = namesIn "[[:space:]]*-[[:space:]]+&([A-Za-z0-9_-]+)[[:space:]]+age1.*" (
-              builtins.head parts
-            );
-            cited = namesIn "[[:space:]]*-[[:space:]]+[*]([A-Za-z0-9_-]+).*" expected;
-            missingAnchors = lib.subtractLists defined cited;
-
-            problem =
-              if !(builtins.pathExists file) then
-                "le dépôt de secrets ne contient pas de .sops.yaml."
-              else if !found then
-                "le .sops.yaml du dépôt de secrets ne contient pas le bloc généré (marqueur « ${marker} » absent)."
-              else if missingAnchors != [ ] then
-                "la politique cite des ancres que le .sops.yaml ne définit pas : ${lib.concatStringsSep ", " missingAnchors} (machine dans deployments pas encore inscrite ?)."
-              else if block != expected then
-                "le bloc généré du .sops.yaml ne correspond plus à ce que les configurations déclarent."
-              else
-                null;
-          in
-          lib.throwIf (problem != null)
-            ''
-              sops-policy : ${toString problem}
-
-              Les destinataires déployés ne sont donc plus ceux que ce dépôt calcule, et
-              une audience trop LARGE ne se signalerait par aucune autre erreur.
-
-                secrets policy
-
-              depuis une machine qui peut encore ouvrir ces fichiers : elle remplace le bloc
-              généré du .sops.yaml du dépôt privé, rescelle si besoin et synchronise.
-            ''
-            (
-              pkgs-stable.runCommand "check-sops-policy" { } ''
-                echo "politique sops conforme au .sops.yaml du dépôt de secrets"
-                touch $out
-              ''
-            );
+          };
+        };
 
         # Miroir dossier <-> chemin d'option (cf. lib/check-option-paths.nix).
-        # Échoue à l'ÉVAL et pas au build : `nix flake check --no-build` en CI
-        # l'attrape sans rien construire.
+        # Échoue à l'ÉVAL et pas au build (cf. lib/mk-eval-check.nix) : `nix
+        # flake check --no-build` en CI l'attrape sans rien construire.
         #
         # N'importe quelle cible / n'importe quel user fait l'affaire : les
         # `options` sont déclarées HORS des `mkIf`, elles existent donc même
@@ -362,14 +304,15 @@
               exceptions = [ "home-manager" ];
             };
 
-            report = "${sys.report}\n${usr.report}";
           in
-          lib.throwIf (!(sys.ok && usr.ok)) report (
-            pkgs-stable.runCommand "check-option-paths" { } ''
-              echo ${lib.escapeShellArg report}
-              touch $out
-            ''
-          );
+          myLib.mkEvalCheck {
+            pkgs = pkgs-stable;
+            name = "check-option-paths";
+            check = {
+              ok = sys.ok && usr.ok;
+              report = "${sys.report}\n${usr.report}";
+            };
+          };
       };
 
       # `nix fmt` → formate le repo. Voir formatter.nix pour le comportement.

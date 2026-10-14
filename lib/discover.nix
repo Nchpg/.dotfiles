@@ -1,6 +1,6 @@
 # Auto-découverte du contenu d'un dossier, utilisé par flake.nix pour énumérer
 # profiles/ et hosts/ (sous-dossiers) et devshells/ (fichiers .nix) sans liste
-# à maintenir. Usage : discover = import ./lib/discover.nix lib;
+# à maintenir. Exposé par lib/default.nix : myLib.dirNames, myLib.nixFileNames.
 lib: {
   # Noms des sous-dossiers d'un dossier (profils, hosts).
   dirNames =

@@ -3,20 +3,12 @@
   lib,
   inputs,
   target,
+  myLib,
   ...
 }:
 
 let
   cfg = config.systemSettings.sops;
-
-  # Machines qui font tourner au moins un des profils donnés. C'est LA
-  # traduction que rien d'autre ne peut faire : les modules raisonnent en rôles,
-  # sops ne connaît que des clés de machines.
-  hostsFor =
-    profiles:
-    lib.attrNames (
-      lib.filterAttrs (_host: runs: lib.any (p: lib.elem p profiles) runs) cfg.deployments
-    );
 
   # UN SECRET = UN FICHIER, nommé d'après sa clé. Le nom n'est donc jamais à
   # choisir, et surtout il n'y a plus de « dans quel fichier je le range ? » —
@@ -40,9 +32,12 @@ let
   # Le générateur de politique évalue TOUTES les cibles déployées et fait
   # l'UNION (cf. lib/sops-policy.nix). Un secret déclaré des deux côtés d'un
   # tunnel — la clé pré-partagée, par le serveur et par le client — va donc aux
-  # deux, sans qu'aucun des deux modules connaisse l'autre.
-  audience =
-    name: if cfg.secretProfiles ? ${name} then hostsFor cfg.secretProfiles.${name} else [ target.host ];
+  # deux, sans qu'aucun des deux modules connaisse l'autre. Même calcul des
+  # deux côtés, cf. lib/sops-audience.nix.
+  audience = myLib.sopsAudience.audience {
+    inherit (cfg) deployments secretProfiles;
+    inherit (target) host;
+  };
 
   # Cette cible est-elle une machine réelle, ou une des combinaisons que le
   # produit cartésien de flake.nix fabrique et que personne n'active ?
@@ -186,7 +181,7 @@ in
         "systemSettings.sops.deployments ne mentionne pas ${target.host} : aucun secret ne sera scellé pour cette machine. C'est normal pour une cible qu'on ne fait que construire."
       ++
         lib.optional (!deployedHere && unreadable != [ ])
-          "systemSettings.sops : ${target.profile}-${target.host} n'est pas une cible déployée et déclare des secrets qu'elle ne pourrait pas déchiffrer (${lib.concatStringsSep ", " unreadable}). Sans conséquence tant qu'on ne fait que la construire.";
+          "systemSettings.sops : ${target.machine} n'est pas une cible déployée et déclare des secrets qu'elle ne pourrait pas déchiffrer (${lib.concatStringsSep ", " unreadable}). Sans conséquence tant qu'on ne fait que la construire.";
 
     # Pendant SYSTÈME de modules/user/sops (même fichier), pour les secrets que
     # consomme un service et non un utilisateur : une unité systemd ne lit pas

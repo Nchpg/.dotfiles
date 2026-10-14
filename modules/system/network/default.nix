@@ -8,7 +8,7 @@
 let
   cfg = config.systemSettings.network;
   static = cfg.staticIPv4;
-  hostName = "${target.profile}-${target.host}";
+  hostName = target.machine; # profil-host, cf. lib/target-name.nix
 in
 {
   options = {

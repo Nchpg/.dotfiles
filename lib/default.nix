@@ -20,9 +20,11 @@ lib:
 
   assertSopsAvailable = import ./assert-sops-available.nix;
   checkOptionPaths = import ./check-option-paths.nix lib;
+  checkSopsPolicy = import ./check-sops-policy.nix lib;
   contentHash = import ./content-hash.nix lib;
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
   mkFlakeGuard = import ./mk-flake-guard.nix;
+  mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
   mkIcon = import ./mk-icon.nix lib;
   mkInternalPorts = import ./mk-internal-ports.nix lib;
@@ -34,5 +36,7 @@ lib:
   mkUpdateEnv = import ./mk-update-env.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
+  sopsAudience = import ./sops-audience.nix lib;
   sopsPolicy = import ./sops-policy.nix lib;
+  targetName = import ./target-name.nix lib;
 }
