@@ -24,29 +24,33 @@
 # finit en le disant.
 set -euo pipefail
 
-GREEN='\033[0;32m'; YELLOW='\033[0;33m'; RED='\033[0;31m'; NC='\033[0m'
-ok()   { echo -e "${GREEN}✓${NC} $*"; }
-skip() { echo -e "${YELLOW}·${NC} $*"; }
-die()  { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
+flake="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Couleurs, ok/die, confirm, palette gum : cf. scripts/lib/ui.sh ; hooks git :
+# scripts/lib/hooks.sh ; ancres du .sops.yaml : scripts/lib/sops-anchors.sh.
+# Sourcés depuis le clone, ce script n'existe que là.
+# shellcheck source=scripts/lib/ui.sh
+. "$flake/scripts/lib/ui.sh"
+# shellcheck source=scripts/lib/hooks.sh
+. "$flake/scripts/lib/hooks.sh"
+# shellcheck source=scripts/lib/sops-anchors.sh
+. "$flake/scripts/lib/sops-anchors.sh"
+
+skip() { echo "${WARN}·${R} $*"; }
 # LES QUESTIONS, par gum. Échap ou Ctrl-C y rendent un code non nul, que
 # l'appelant transforme en abandon : `… || die "abandon."` À L'APPEL, et pas
 # dans ces fonctions, qui tournent souvent dans un `$(…)` dont un `exit` ne
 # quitterait que le sous-shell.
 #   input   <titre> [valeur] [exemple]          -> texte saisi
 #   choose  <titre> <libellé présélectionné> <libellé<TAB>valeur>…  -> valeur
-#   confirm <question> yes|no                   -> 0 oui, 1 non (abandon sur Échap)
+#   confirm <question> yes|no                   -> 0 oui, 1 non (abandon sur Échap),
+#                                                  cf. scripts/lib/ui.sh
 #   secret  <titre>                             -> texte saisi, masqué
 input() { gum input --header "$1" --value "${2:-}" --placeholder "${3:-}"; }
 choose() {
   local title="$1" sel="$2"
   shift 2
   gum choose --header "$title" --label-delimiter=$'\t' ${sel:+--selected "$sel"} "$@"
-}
-confirm() {
-  local rc=0
-  gum confirm "$1" --default="$([ "$2" = yes ] && echo true || echo false)" || rc=$?
-  [ "$rc" -le 1 ] || die "abandon."
-  return "$rc"
 }
 secret() { gum input --password --header "$1"; }
 # Nom de host ou de profil (RFC 1123, comme l'assertion de
@@ -64,7 +68,6 @@ validHost() {
 # Absent d'une installation NixOS neuve, et requis par presque chaque étape.
 command -v git > /dev/null || die "git absent : nix-shell -p git --run ./init.sh"
 
-flake="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$flake/flake.nix" ] || die "$flake ne ressemble pas au dépôt (pas de flake.nix)."
 
 # EMPLACEMENT IMPOSÉ : home-manager fige MY_FLAKE sur ~/.dotfiles
@@ -90,19 +93,10 @@ nixPkg() {
 }
 [ -t 0 ] && [ -t 1 ] || die "à lancer dans un terminal : le script pose des questions."
 
-# COULEURS : les rôles de `update` (accent, succès, texte, atténué), mais en
-# numéros de couleur du TERMINAL plutôt qu'en codes hexadécimaux. Ce script
-# tourne avant le premier rebuild, sans accès à la palette Stylix ; or Stylix
-# colore justement le terminal avec elle (4 = base0D, 2 = base0B, 7 = base05,
-# 8 = base03). Résultat : les couleurs du thème sur une machine configurée,
-# celles du terminal par défaut sur une machine neuve, jamais le rose de gum.
-export GUM_CHOOSE_CURSOR_FOREGROUND=4 GUM_CHOOSE_HEADER_FOREGROUND=4 \
-  GUM_CHOOSE_SELECTED_FOREGROUND=2 GUM_CHOOSE_ITEM_FOREGROUND=7 GUM_CHOOSE_CURSOR="› " \
-  GUM_INPUT_HEADER_FOREGROUND=4 GUM_INPUT_PROMPT_FOREGROUND=4 GUM_INPUT_CURSOR_FOREGROUND=4 \
-  GUM_INPUT_PLACEHOLDER_FOREGROUND=8 \
-  GUM_CONFIRM_PROMPT_FOREGROUND=4 GUM_CONFIRM_SELECTED_BACKGROUND=4 \
-  GUM_CONFIRM_SELECTED_FOREGROUND=0 GUM_CONFIRM_UNSELECTED_BACKGROUND=8 \
-  GUM_CONFIRM_UNSELECTED_FOREGROUND=7
+# COULEURS : celles de scripts/lib/ui.sh, en numéros de couleur du TERMINAL
+# ici (ce script tourne avant le premier rebuild, sans la palette Stylix, que
+# Stylix pose justement sur le terminal une fois en place).
+export GUM_CHOOSE_CURSOR="› "
 if ! command -v gum > /dev/null; then
   gumPkg="$(nixPkg gum)" || die "impossible de récupérer gum depuis nixpkgs (réseau ?)."
   PATH="$gumPkg/bin:$PATH"
@@ -183,7 +177,7 @@ thisMachine() {
   command -v age-keygen > /dev/null && [ -f "$HOME/.config/sops/age/keys.txt" ] \
     && [ -f "$secretsRepo/.sops.yaml" ] || return 1
   pub="$(age-keygen -y "$HOME/.config/sops/age/keys.txt" 2> /dev/null | grep '^age1pq1' | head -1 || true)"
-  [ -n "$pub" ] && grep -qE "&$host-user[[:space:]]+$pub([[:space:]]|\$)" "$secretsRepo/.sops.yaml"
+  [ -n "$pub" ] && anchors "$secretsRepo/.sops.yaml" | grep -qxF "$host-user"$'\t'"$pub"
 }
 if [ -z "$detected" ] && [ -d "$flake/hosts/$host" ] \
   && git -C "$flake" cat-file -e "@{u}:hosts/$host" 2> /dev/null && ! thisMachine; then
@@ -192,12 +186,15 @@ if [ -z "$detected" ] && [ -d "$flake/hosts/$host" ] \
   confirm "Réinstallation de « $host » ?" no \
     || die "abandon : choisis « nouvelle machine » pour un nouveau PC."
 fi
+# L'entrée de deployments, de `<host> = [` jusqu'au `]` (nixfmt l'éclate sur
+# plusieurs lignes dès deux profils), lue sur l'entrée standard.
+entryOf() { awk -v h="$host" '$0 ~ "^[[:space:]]*" h " = \\[" {f=1} f {print} f && /\]/ {exit}'; }
+
 # Profil proposé : celui que la machine tourne (déduit du hostname), sinon,
 # pour un host déjà inscrit (réinstallation), le premier de son entrée dans
 # deployments, sinon personal.
 if [ -z "$profile" ]; then
-  profile="$(awk -v h="$host" '$0 ~ "^[[:space:]]*" h " = \\[" {f=1} f {print} f && /\]/ {exit}' "$flake/hosts/default.nix" \
-    | grep -oE '"[a-z0-9-]+"' | head -1 | tr -d '"' || true)"
+  profile="$(entryOf < "$flake/hosts/default.nix" | grep -oE '"[a-z0-9-]+"' | head -1 | tr -d '"' || true)"
 fi
 profile="${profile:-personal}"
 opts=() selLabel=""
@@ -230,20 +227,29 @@ hwFile="$flake/hosts/$host/hardware-configuration.nix"
 # vidé à la place de l'ancien.
 # Le trap retire les fichiers temporaires (et le dossier du host s'il est resté
 # vide) aussi sur Ctrl-C, sinon ils traînaient en « ?? » à côté des vrais.
-hwTmp="" editTmp=""
+editTmp=""
 cleanup() {
-  rm -f "$hwTmp" "$editTmp"
+  rm -f "$editTmp"
   rmdir "$(dirname "$hwFile")" 2> /dev/null || true
 }
 trap cleanup EXIT
+# rewrite <fichier> <commande…> : remplace le fichier par la sortie de la
+# commande, d'un bloc (fichier temporaire puis renommage), droits gardés
+# (644 pour un fichier neuf). Code non nul, fichier intact, si la commande
+# échoue.
+rewrite() {
+  local file="$1"
+  shift
+  editTmp="$(mktemp "$file.XXXXXX")"
+  "$@" > "$editTmp" || { rm -f "$editTmp"; editTmp=""; return 1; }
+  if [ -e "$file" ]; then chmod --reference="$file" "$editTmp"; else chmod 644 "$editTmp"; fi
+  mv "$editTmp" "$file"
+  editTmp=""
+}
 writeHw() {
   mkdir -p "$(dirname "$hwFile")"
-  hwTmp="$(mktemp "$hwFile.XXXXXX")"
-  nixos-generate-config --show-hardware-config > "$hwTmp" \
+  rewrite "$hwFile" nixos-generate-config --show-hardware-config \
     || die "nixos-generate-config a échoué (cf. message ci-dessus)."
-  chmod 644 "$hwTmp"
-  mv "$hwTmp" "$hwFile"
-  hwTmp=""
   git -C "$flake" add "$hwFile"
 }
 # Et hosts/<host>/configuration.nix, pour un nouveau host : la stateVersion,
@@ -279,7 +285,7 @@ else
   if [ ${#missing[@]} -eq 0 ]; then
     skip "$hwFile : tous ses disques sont présents"
   else
-    echo -e "${YELLOW}·${NC} $hwFile cite des disques absents de cette machine :"
+    skip "$hwFile cite des disques absents de cette machine :"
     printf '     %s\n' "${missing[@]}"
     # Non par défaut : un disque externe débranché tombe aussi dans ce cas, et
     # régénérer le ferait disparaître du fichier. L'ancien reste dans git.
@@ -448,21 +454,18 @@ if [ -d "$secretsRepo/.git" ]; then
 elif git clone "$secretsUrl" "$secretsRepo"; then
   ok "dépôt de secrets cloné dans $secretsRepo"
 else
-  echo -e "${YELLOW}·${NC} clone échoué — sans lui, la commande \`secrets\` ne trouvera rien."
+  skip "clone échoué — sans lui, la commande \`secrets\` ne trouvera rien."
   echo "   À refaire : git clone $secretsUrl $secretsRepo"
 fi
 
 # ── 8. Hooks git du dépôt de config ─────────────────────────────────────────
 #
-# Formatage au commit, et surtout les deux dépôts tenus en phase : pull de la
-# config = pull des secrets, push de la config = push des secrets d'abord (cf.
-# `secrets git-hook`). Réglage local au clone, d'où sa place ici : sans lui, un
-# push depuis cette machine pourrait publier un lock que le serveur ne sait pas
-# récupérer.
-if [ "$(git -C "$flake" config --get core.hooksPath || true)" = .githooks ]; then
+# Cf. scripts/lib/hooks.sh. Réglage local au clone, d'où sa place ici, et sans
+# question : c'est l'objet même de ce script.
+if hooks_on "$flake"; then
   skip "hooks git déjà actifs"
 else
-  git -C "$flake" config core.hooksPath .githooks
+  hooks_enable "$flake"
   ok "hooks git actifs (core.hooksPath = .githooks)"
 fi
 
@@ -497,12 +500,12 @@ name="$(git -C "$flake" config user.name || git -C "$flake" log -1 --format=%an)
 email="$(git -C "$flake" config user.email || git -C "$flake" log -1 --format=%ae)"
 g() { git -C "$1" -c user.name="$name" -c user.email="$email" "${@:2}"; }
 
-# L'entrée de deployments, de `<host> = [` jusqu'au `]` (nixfmt l'éclate sur
-# plusieurs lignes dès deux profils), lue sur l'entrée standard.
-entryOf() { awk -v h="$host" '$0 ~ "^[[:space:]]*" h " = \\[" {f=1} f {print} f && /\]/ {exit}'; }
+# Les deux ancres de cette machine, avec ses clés, dans le .sops.yaml lu sur
+# l'entrée standard.
 hasAnchors() {
-  grep -qE "&$host-sys[[:space:]]+$sysPub([[:space:]]|\$)" \
-    && grep -qE "&$host-user[[:space:]]+$userPub([[:space:]]|\$)" "$sopsYaml"
+  local a
+  a="$(anchors)"
+  grep -qxF "$host-sys"$'\t'"$sysPub" <<< "$a" && grep -qxF "$host-user"$'\t'"$userPub" <<< "$a"
 }
 
 # CE QUI COMPTE, C'EST CE QUI EST SUR GITHUB : la machine autorisée ne voit
@@ -573,26 +576,23 @@ resync() {
 # dernière ancre de la liste, à la même indentation. Droits du fichier gardés.
 writeAnchor() {
   local n="$1" k="$2" last
-  last="$(grep -nE '^[[:space:]]*- &[A-Za-z0-9_-]+[[:space:]]+age1' "$sopsYaml" | tail -1 | cut -d: -f1 || true)"
+  last="$(grep -nE "$ANCHOR_RE" "$sopsYaml" | tail -1 | cut -d: -f1 || true)"
   [ -n "$last" ] || die "aucune ancre dans $sopsYaml : impossible de situer la liste keys:."
-  editTmp="$(mktemp "$sopsYaml.XXXXXX")"
-  awk -v n="$n" -v k="$k" -v last="$last" '
+  # shellcheck disable=SC2016 # programme awk, pas du shell
+  rewrite "$sopsYaml" awk -v n="$n" -v k="$k" -v last="$last" '
     $0 ~ "^[[:space:]]*- &" n "[[:space:]]" { match($0, /^[[:space:]]*/); print substr($0, 1, RLENGTH) "- &" n " " k; done = 1; next }
     NR == last { match($0, /^[[:space:]]*/); ind = substr($0, 1, RLENGTH) }
     { print }
     NR == last && !done { print ind "- &" n " " k; done = 1 }
-  ' "$sopsYaml" > "$editTmp"
-  chmod --reference="$sopsYaml" "$editTmp"
-  mv "$editTmp" "$sopsYaml"
-  editTmp=""
+  ' "$sopsYaml"
 }
 
 # Profil ajouté à deployments : à la liste du host si elle existe (une ligne
 # ou plusieurs), sinon une entrée neuve avant l'accolade fermante du bloc.
 # nixfmt repasse derrière (hook pre-commit).
 addDeployment() {
-  editTmp="$(mktemp "$deployFile.XXXXXX")"
-  awk -v h="$host" -v p="$profile" '
+  # shellcheck disable=SC2016 # programme awk, pas du shell
+  rewrite "$deployFile" awk -v h="$host" -v p="$profile" '
     $0 ~ "^[[:space:]]*systemSettings\\.sops\\.deployments = \\{" { inblock = 1 }
     inblock && $0 ~ "^[[:space:]]*" h " = \\[" {
       found = 1
@@ -607,10 +607,7 @@ addDeployment() {
       inblock = 0
     }
     { print }
-  ' "$deployFile" > "$editTmp"
-  chmod --reference="$deployFile" "$editTmp"
-  mv "$editTmp" "$deployFile"
-  editTmp=""
+  ' "$deployFile"
 }
 
 if enrolled; then
@@ -621,7 +618,7 @@ else
   echo
   echo "   Inscription de $host ($profile) :"
   if ! anchorsPushed; then
-    if grep -qE "&$host-(sys|user)[[:space:]]" "$sopsYaml" && ! anchorsOk; then
+    if anchors "$sopsYaml" | cut -f1 | grep -qxE "$host-(sys|user)" && ! anchorsOk; then
       echo "     - ses deux clés publiques REMPLACENT les anciennes ($host-sys, $host-user) dans $sopsYaml"
     else
       echo "     - ses deux clés publiques dans $sopsYaml (ancres $host-sys, $host-user)"
@@ -702,12 +699,17 @@ if [ "$github" = 1 ] && [ -d "$secretsRepo/.git" ] \
   && [ -z "$(git -C "$secretsRepo" status --porcelain --untracked-files=no)" ]; then
   git -C "$secretsRepo" pull -q --ff-only 2> /dev/null || true
 fi
+# Première ligne du bloc généré du .sops.yaml : la même chaîne que `marker`
+# dans lib/sops-policy.nix, qui la définit (ce script tourne sans évaluer le
+# flake, d'où la copie, unique ici).
+sopsMarker="# ATTENTION : bloc GÉNÉRÉ"
+
 # Fichiers qui doivent s'ouvrir pour cette machine (leur règle cite une de
 # ses ancres) et qui ne la citent pas encore : rescellement à faire.
 pendingSeal() {
   local re kind f rel key
-  awk -v h="$host" '
-    /^# ATTENTION : bloc GÉNÉRÉ/ { gen = 1 }
+  awk -v h="$host" -v marker="$sopsMarker" '
+    index($0, marker) == 1 { gen = 1 }
     gen && /^[[:space:]]*- path_regex:/ { re = $3; next }
     gen && re != "" && $0 ~ "[*]" h "-sys([[:space:]]|$)" { print re "\tsys" }
     gen && re != "" && $0 ~ "[*]" h "-user([[:space:]]|$)" { print re "\tuser" }
@@ -725,7 +727,7 @@ pendingSeal() {
 # policy` n'est pas passé sur une machine autorisée — et alors « rien à
 # resceller » ne voudrait rien dire.
 citedRules() {
-  sed -n '/^# ATTENTION : bloc GÉNÉRÉ/,$p' "$sopsYaml" | grep -cE "[*]$host-(sys|user)([[:space:]]|\$)" || true
+  sed -n "/^$sopsMarker/,\$p" "$sopsYaml" | grep -cE "[*]$host-(sys|user)([[:space:]]|\$)" || true
 }
 
 echo

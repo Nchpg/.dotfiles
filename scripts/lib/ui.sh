@@ -1,0 +1,101 @@
+# shellcheck shell=bash disable=SC2034 # couleurs : lues par les scripts qui sourcent ce fichier
+# Interface commune des scripts du dépôt (update, genclean, rebuild, init) :
+# couleurs, messages, question oui/non, liens. Sourcé en tête :
+#
+#   # shellcheck source=scripts/lib/ui.sh
+#   . "$(dirname "$0")/lib/ui.sh"
+#
+# UNE palette, par rôles (accent, succès, avertissement, erreur, atténué,
+# texte, fond) : celle de Stylix quand la commande du PATH l'a posée
+# (UPDATE_COLOR_*, cf. lib/mk-gum-env.nix), sinon les numéros de couleur du
+# TERMINAL (4 = bleu, 2 = vert…). Pas de couleurs hexadécimales en dur : sur
+# une machine neuve (init.sh, avant le premier rebuild) ou sans Stylix, ce
+# sont les couleurs du terminal, que Stylix colore justement avec sa palette
+# une fois en place. Jamais le rose par défaut de gum.
+C_ACCENT="${UPDATE_COLOR_ACCENT:-4}"
+C_OK="${UPDATE_COLOR_OK:-2}"
+C_WARN="${UPDATE_COLOR_WARN:-3}"
+C_ERR="${UPDATE_COLOR_ERR:-1}"
+C_DIM="${UPDATE_COLOR_DIM:-8}"
+C_TEXT="${UPDATE_COLOR_TEXT:-7}"
+C_BASE="${UPDATE_COLOR_BASE:-0}"
+
+# Mêmes rôles pour gum, sauf si l'appelant les a déjà posés (mkGumEnv).
+: "${GUM_CHOOSE_CURSOR_FOREGROUND:=$C_ACCENT}" "${GUM_CHOOSE_HEADER_FOREGROUND:=$C_ACCENT}"
+: "${GUM_CHOOSE_SELECTED_FOREGROUND:=$C_OK}" "${GUM_CHOOSE_ITEM_FOREGROUND:=$C_TEXT}"
+: "${GUM_INPUT_PROMPT_FOREGROUND:=$C_ACCENT}" "${GUM_INPUT_HEADER_FOREGROUND:=$C_ACCENT}"
+: "${GUM_INPUT_CURSOR_FOREGROUND:=$C_ACCENT}" "${GUM_INPUT_PLACEHOLDER_FOREGROUND:=$C_DIM}"
+: "${GUM_CONFIRM_PROMPT_FOREGROUND:=$C_ACCENT}"
+: "${GUM_CONFIRM_SELECTED_BACKGROUND:=$C_ACCENT}" "${GUM_CONFIRM_SELECTED_FOREGROUND:=$C_BASE}"
+: "${GUM_CONFIRM_UNSELECTED_BACKGROUND:=$C_DIM}" "${GUM_CONFIRM_UNSELECTED_FOREGROUND:=$C_TEXT}"
+: "${GUM_SPIN_SPINNER_FOREGROUND:=$C_ACCENT}"
+export GUM_CHOOSE_CURSOR_FOREGROUND GUM_CHOOSE_HEADER_FOREGROUND GUM_CHOOSE_SELECTED_FOREGROUND \
+    GUM_CHOOSE_ITEM_FOREGROUND GUM_INPUT_PROMPT_FOREGROUND GUM_INPUT_HEADER_FOREGROUND \
+    GUM_INPUT_CURSOR_FOREGROUND GUM_INPUT_PLACEHOLDER_FOREGROUND GUM_CONFIRM_PROMPT_FOREGROUND \
+    GUM_CONFIRM_SELECTED_BACKGROUND GUM_CONFIRM_SELECTED_FOREGROUND \
+    GUM_CONFIRM_UNSELECTED_BACKGROUND GUM_CONFIRM_UNSELECTED_FOREGROUND GUM_SPIN_SPINNER_FOREGROUND
+
+# Couleur (hex « #rrggbb » ou numéro de couleur du terminal) -> séquence ANSI.
+fg() {
+    case "$1" in
+        \#*)
+            local h="${1#\#}"
+            printf '\033[38;2;%d;%d;%dm' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
+            ;;
+        *) printf '\033[38;5;%sm' "$1" ;;
+    esac
+}
+
+# Couleurs seulement vers un terminal (pas dans un pipe ou un log).
+if [ -t 1 ]; then
+    R=$'\033[0m'
+    B=$'\033[1m'
+    OK="$(fg "$C_OK")" WARN="$(fg "$C_WARN")" ERR="$(fg "$C_ERR")"
+    DIM="$(fg "$C_DIM")" ACC="$(fg "$C_ACCENT")" TXT="$(fg "$C_TEXT")"
+else
+    R="" B="" OK="" WARN="" ERR="" DIM="" ACC="" TXT=""
+fi
+
+ok()   { printf '%s✓%s %s\n' "$OK" "$R" "$*"; }
+warn() { printf '%s%s%s\n' "$WARN" "$*" "$R" >&2; }
+err()  { printf '%s%s%s\n' "$ERR" "$*" "$R" >&2; }
+die()  { printf '%s✗%s %s\n' "$ERR" "$R" "$*" >&2; exit 1; }
+
+# Lien cliquable (OSC 8, kitty & co ; ignoré ailleurs).
+link() {
+    if [ -n "$2" ] && [ -t 1 ]; then
+        # shellcheck disable=SC1003 # ESC \ (fin de séquence OSC), pas un échappement de quote
+        printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$2" "$1"
+    else
+        printf '%s' "$1"
+    fi
+}
+
+# Menus gum possibles : terminal des deux côtés et gum dans le PATH. Une
+# fonction et pas une variable : init.sh ne récupère gum qu'après avoir
+# sourcé ce fichier.
+ui_fancy() {
+    [ -t 0 ] && [ -t 1 ] && command -v gum >/dev/null 2>&1
+}
+
+# confirm <question> [yes|no] : 0 oui, 1 non ; défaut « no ». Par gum quand
+# c'est possible, sinon une touche (y/o pour oui). Échap ou Ctrl-C dans gum :
+# abandon du script — à cet endroit, et pas à l'appel, parce qu'un
+# `confirm … || …` ne distinguerait plus « non » d'« abandon ».
+confirm() {
+    local question="$1" default="${2:-no}" rc=0 reply
+    if ui_fancy; then
+        gum confirm "$question" --default="$([ "$default" = yes ] && echo true || echo false)" || rc=$?
+        [ "$rc" -le 1 ] || die "abandon."
+        return "$rc"
+    fi
+    if [ "$default" = yes ]; then
+        read -r -n 1 -p "$question [Y/n] " reply || reply=""
+        echo
+        [[ ! "$reply" =~ ^[Nn]$ ]]
+    else
+        read -r -n 1 -p "$question [y/N] " reply || reply=""
+        echo
+        [[ "$reply" =~ ^[YyOo]$ ]]
+    fi
+}

@@ -2,35 +2,51 @@
 
 set -euo pipefail
 
-HOST=""
-PROFILE=""
-VARIANT="dark"
+# Défauts : posés par la commande `rebuild` (cf. modules/system/commands/rebuild)
+# avec la cible qui a construit ce système. Appel direct du script : aucun,
+# --host et --profile sont alors obligatoires.
+PROFILE="${REBUILD_DEFAULT_PROFILE:-}"
+HOST="${REBUILD_DEFAULT_HOST:-}"
+VARIANT="${REBUILD_DEFAULT_VARIANT:-dark}"
 UPDATE=0
 YES=0
 
-# Parsing simple des arguments.
+usage() {
+    echo "usage: rebuild [-p PROFILE] [-H HOST] [-V dark|light] [-u|--update] [-y|--yes]"
+    if [[ -n "${REBUILD_DEFAULT_PROFILE:-}" ]]; then
+        echo "  défaut (cible de ce système) : --profile $REBUILD_DEFAULT_PROFILE --host $REBUILD_DEFAULT_HOST --variant $VARIANT"
+    else
+        echo "  -p/--profile et -H/--host obligatoires (pas de cible par défaut hors de la commande \`rebuild\`)"
+    fi
+    echo "  -V : variante de thème (la commande \`theme\` s'en sert pour toggler)"
+    echo "  -u : lance \`update\` (modules à update.sh + inputs du flake, au"
+    echo "       choix) avant le rebuild"
+    echo "  -y : aucune confirmation (working tree sale, modules -u) ; ne"
+    echo "       touche JAMAIS au lock des secrets (avertit seulement)"
+}
+
+# Un seul parsing, formes courtes et longues : la commande `rebuild` ne fait
+# que poser les défauts et relayer les arguments tels quels.
 # need_value : sous `set -u`, un `--host` sans valeur mourait sur un
-# « $2: unbound variable » au lieu du message d'usage juste en dessous.
+# « $2: unbound variable » au lieu d'un message clair.
 need_value() {
-    [[ $# -ge 2 ]] || { echo "Option $1 : valeur manquante" >&2; exit 1; }
+    [[ $# -ge 2 ]] || { echo "rebuild : option $1 sans valeur" >&2; exit 1; }
 }
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --host)    need_value "$@"; HOST="$2";    shift 2 ;;
-        --profile) need_value "$@"; PROFILE="$2"; shift 2 ;;
-        --variant) need_value "$@"; VARIANT="$2"; shift 2 ;;
-        --update)  UPDATE=1;     shift ;;
-        --yes)     YES=1;        shift ;;
-        *) echo "Argument inconnu : $1" >&2; exit 1 ;;
+        -p|--profile) need_value "$@"; PROFILE="$2"; shift 2 ;;
+        -H|--host)    need_value "$@"; HOST="$2";    shift 2 ;;
+        -V|--variant) need_value "$@"; VARIANT="$2"; shift 2 ;;
+        -u|--update)  UPDATE=1; shift ;;
+        -y|--yes)     YES=1;    shift ;;
+        -h|--help)    usage; exit 0 ;;
+        *) echo "argument inconnu : $1" >&2; exit 1 ;;
     esac
 done
 
 # Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
-    echo "Usage: $0 --host <host> --profile <profile> [--variant dark|light] [--update] [--yes]" >&2
-    echo "  --update : lance update.sh (modules à update.sh + inputs du flake, au choix)" >&2
-    echo "  --yes    : pas de confirmation (working tree sale, ni bump de module) ;" >&2
-    echo "             le lock des secrets n'est alors jamais modifié (avertissement seul)" >&2
+    usage >&2
     exit 1
 fi
 
@@ -40,18 +56,20 @@ case "$VARIANT" in
 esac
 
 # Nom de la cible du flake : la variante dark garde le nom historique
-# (personal-gram), light suffixe (personal-gram-light) — cf. flake.nix.
+# (personal-gram), light suffixe (personal-gram-light) — même calcul que
+# lib/target-name.nix (`full`), qui nomme les nixosConfigurations.
 ATTR="$PROFILE-$HOST"
 if [[ "$VARIANT" != "dark" ]]; then
     ATTR="$ATTR-$VARIANT"
 fi
 
-YELLOW='\033[1;33m'
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m' # No Color
-
 cd "$(dirname "$0")/.."
+
+# Couleurs et questions : cf. lib/ui.sh ; hooks git : cf. lib/hooks.sh.
+# shellcheck source=scripts/lib/ui.sh
+. scripts/lib/ui.sh
+# shellcheck source=scripts/lib/hooks.sh
+. scripts/lib/hooks.sh
 
 # Mises à jour seulement sur demande (--update / rebuild -u) : les faire à
 # chaque rebuild salissait flake.lock (→ warning git systématique). Délégué à
@@ -79,18 +97,18 @@ fi
 echo "🔎 Checking Git status before rebuild..."
 
 if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-    echo -e "${RED}Error: Not a Git repository. Cannot check for uncommitted changes.${NC}" >&2
+    err "Error: Not a Git repository. Cannot check for uncommitted changes."
     exit 1
 fi
 
 if [ -n "$(git status --porcelain)" ]; then
-    echo -e "${YELLOW}Warning: uncommitted changes or untracked files in the working tree.${NC}"
+    echo "${WARN}Warning: uncommitted changes or untracked files in the working tree.${R}"
     echo "------------------------------------------------------------------"
     git status --short
     echo "------------------------------------------------------------------"
     # Rappel du comportement flake : les modifs des fichiers TRACKÉS sont bien
     # incluses même non commitées ; seuls les fichiers NON TRACKÉS sont ignorés.
-    echo -e "Note: modified tracked files ${GREEN}ARE included${NC} in the build; ${RED}untracked files are NOT${NC} (git add them first)."
+    echo "Note: modified tracked files ${OK}ARE included${R} in the build; ${ERR}untracked files are NOT${R} (git add them first)."
     echo
     # --yes : pas de confirmation (utilisé par genclean pour son rebuild final
     # automatique ; `theme` ne modifie plus aucun fichier depuis que la
@@ -98,15 +116,13 @@ if [ -n "$(git status --porcelain)" ]; then
     if [[ "$YES" -eq 1 ]]; then
         echo "(--yes) Continuing without confirmation."
     else
-        read -p "Continue anyway? [y/N] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "${RED}Rebuild aborted by user.${NC}"
+        if ! confirm "Continue anyway?" no; then
+            echo "${ERR}Rebuild aborted by user.${R}"
             exit 1
         fi
     fi
 else
-    echo -e "${GREEN}✅ Git status is clean.${NC}"
+    echo "${OK}✅ Git status is clean.${R}"
 fi
 
 # ── Cohérence du dépôt de secrets ────────────────────────────────────────────
@@ -135,26 +151,24 @@ if command -v secrets > /dev/null && [[ "$(secrets help 2>&1)" == *"secrets stat
     if [[ "$secrets_rc" -eq 2 ]]; then
         # `sync` refuserait (dépôt en retard) : rien à proposer ici, le détail
         # et la marche à suivre viennent d'être affichés.
-        echo -e "${YELLOW}Modifications de secrets non déployables avant un pull du dépôt privé ; poursuite avec la révision épinglée.${NC}"
+        echo "${WARN}Modifications de secrets non déployables avant un pull du dépôt privé ; poursuite avec la révision épinglée.${R}"
     elif [[ "$secrets_rc" -ne 0 ]]; then
-        echo -e "  Rebuild en l'état = ${RED}déploiement de l'ANCIENNE valeur${NC}."
+        echo "  Rebuild en l'état = ${ERR}déploiement de l'ANCIENNE valeur${R}."
         echo
         # --yes (genclean) ne bouge JAMAIS ce lock : une maintenance
         # de générations n'a pas à déployer de nouvelles valeurs de secrets
         # sans qu'on l'ait demandé. Avertissement seul, révision épinglée.
         if [[ "$YES" -eq 1 ]]; then
-            echo -e "${YELLOW}(--yes) Lock non modifié, poursuite avec la révision épinglée.${NC}"
+            echo "${WARN}(--yes) Lock non modifié, poursuite avec la révision épinglée.${R}"
             echo "  Pour déployer la nouvelle : \`secrets sync\`, ou rebuild sans --yes."
         else
-            read -p "Synchroniser maintenant (secrets sync) ? [Y/n] " -n 1 -r
-            echo
-            if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+            if confirm "Synchroniser maintenant (secrets sync) ?" yes; then
                 secrets sync || {
-                    echo -e "${RED}Synchronisation des secrets échouée.${NC}" >&2
+                    err "Synchronisation des secrets échouée."
                     exit 1
                 }
             else
-                echo -e "${YELLOW}Poursuite avec la révision épinglée.${NC}"
+                echo "${WARN}Poursuite avec la révision épinglée.${R}"
             fi
         fi
     fi
@@ -220,31 +234,19 @@ if sudo NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
         systemctl --user try-restart waybar.service 2>/dev/null || true
     fi
 else
-    echo -e "${RED}❌ System rebuild failed. Please check the errors above.${NC}" >&2
+    err "❌ System rebuild failed. Please check the errors above."
     exit 1
 fi
 
 # ── Hooks git du dépôt ───────────────────────────────────────────────────────
 #
-# Ce sont eux qui tiennent le dépôt de secrets en phase au pull et au push
-# (cf. .githooks et `secrets git-hook`). Actifs seulement si ce clone le
-# demande (core.hooksPath, réglage local jamais poussé) : un clone fait sans
-# ./init.sh les a éteints. Après un rebuild, la commande `secrets` qu'ils
-# appellent est à jour : c'est le bon moment pour le rattraper.
-#
-# --yes ne décide pas à ta place : avertissement seul.
-if [ -d .githooks ] && [ "$(git config --get core.hooksPath || true)" != .githooks ]; then
-    echo -e "${YELLOW}⚠ Hooks git inactifs dans $PWD : secrets non synchronisés au pull/push.${NC}"
-    if [[ "$YES" -eq 1 ]] || [ ! -t 0 ]; then
-        echo "  Pour les activer : git -C $PWD config core.hooksPath .githooks"
-    else
-        read -p "Les activer maintenant ? [Y/n] " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-            git config core.hooksPath .githooks
-            echo -e "${GREEN}✓ Hooks git actifs.${NC}"
-        fi
-    fi
+# Cf. lib/hooks.sh. Après un rebuild, la commande `secrets` qu'ils appellent
+# est à jour : c'est le bon moment pour rattraper un clone fait sans
+# ./init.sh. --yes ne décide pas à ta place : avertissement seul.
+if [[ "$YES" -eq 1 ]]; then
+    hooks_offer "$PWD" --no-ask
+else
+    hooks_offer "$PWD"
 fi
 
 echo "All done."

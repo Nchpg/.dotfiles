@@ -28,61 +28,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 flake="$PWD"
 
-# ── Couleurs ─────────────────────────────────────────────────────────────────
-# Fournies par la commande `update` (palette Stylix) ; valeurs par défaut sinon
-# (appel direct du script).
-C_ACCENT="${UPDATE_COLOR_ACCENT:-#7aa2f7}"
-C_OK="${UPDATE_COLOR_OK:-#9ece6a}"
-C_WARN="${UPDATE_COLOR_WARN:-#e0af68}"
-C_ERR="${UPDATE_COLOR_ERR:-#f7768e}"
-C_DIM="${UPDATE_COLOR_DIM:-#565f89}"
-C_TEXT="${UPDATE_COLOR_TEXT:-#c0caf5}"
-export GUM_CHOOSE_CURSOR_FOREGROUND="$C_ACCENT"
-export GUM_CHOOSE_SELECTED_FOREGROUND="$C_OK"
-export GUM_CHOOSE_HEADER_FOREGROUND="$C_ACCENT"
-export GUM_CHOOSE_ITEM_FOREGROUND="$C_TEXT"
-export GUM_SPIN_SPINNER_FOREGROUND="$C_ACCENT"
-
-# Hex -> séquence ANSI truecolor.
-fg() {
-    local h="${1#\#}"
-    printf '\033[38;2;%d;%d;%dm' "0x${h:0:2}" "0x${h:2:2}" "0x${h:4:2}"
-}
-# Couleurs seulement vers un terminal (pas dans un pipe ou un log).
-if [ -t 1 ]; then
-    R=$'\033[0m'
-    B=$'\033[1m'
-    OK="$(fg "$C_OK")" WARN="$(fg "$C_WARN")" ERR="$(fg "$C_ERR")"
-    DIM="$(fg "$C_DIM")" ACC="$(fg "$C_ACCENT")" TXT="$(fg "$C_TEXT")"
-else
-    R="" B="" OK="" WARN="" ERR="" DIM="" ACC="" TXT=""
-fi
-
-# Lien cliquable (OSC 8, kitty & co ; ignoré ailleurs).
-link() {
-    if [ -n "$2" ] && [ -t 1 ]; then
-        # shellcheck disable=SC1003 # ESC \ (fin de séquence OSC), pas un échappement de quote
-        printf '\033]8;;%s\033\\%s\033]8;;\033\\' "$2" "$1"
-    else
-        printf '%s' "$1"
-    fi
-}
+# Couleurs, liens, palette gum : cf. lib/ui.sh. Découverte des modules et
+# lecture du lock, communes avec la CI : cf. lib/flake-lock.sh.
+# shellcheck source=scripts/lib/ui.sh
+. "$flake/scripts/lib/ui.sh"
+# shellcheck source=scripts/lib/flake-lock.sh
+. "$flake/scripts/lib/flake-lock.sh"
 
 # ── Vérifications (appelé par le script lui-même, en parallèle) ─────────────
 # Un input -> JSON {name, current, latest, url, available} sur stdout.
 check_input() {
-    local name="$1" node type owner repo ref url rev date remote pattern new
-    node=$(jq -r --arg n "$name" '.nodes.root.inputs[$n]' flake.lock)
-    type=$(jq -r --arg n "$node" '.nodes[$n].original.type' flake.lock)
-    owner=$(jq -r --arg n "$node" '.nodes[$n].original.owner // empty' flake.lock)
-    repo=$(jq -r --arg n "$node" '.nodes[$n].original.repo // empty' flake.lock)
-    ref=$(jq -r --arg n "$node" '.nodes[$n].original.ref // empty' flake.lock)
-    url=$(jq -r --arg n "$node" '.nodes[$n].original.url // empty' flake.lock)
-    rev=$(jq -r --arg n "$node" '.nodes[$n].locked.rev // empty' flake.lock)
-    date=$(jq -r --arg n "$node" '.nodes[$n].locked.lastModified // 0 | strftime("%d/%m")' flake.lock)
+    local name="$1" type slug ref url rev date remote pattern new
+    IFS=$'\x1f' read -r type slug ref url rev date < <(fl_input_fields flake.lock "$name")
 
     case "$type" in
-        github) remote="https://github.com/$owner/$repo.git" ;;
+        github) remote="https://github.com/$slug.git" ;;
         git) remote="$url" ;;
         *) echo "type d'input non géré : $type" >&2; return 1 ;;
     esac
@@ -92,12 +52,13 @@ check_input() {
     [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
     new=""
     # API GitHub d'abord : ~0,4 s, contre ~7 s pour un ls-remote sur nixpkgs
-    # (des dizaines de milliers de refs). ls-remote en secours (limite de
-    # l'API atteinte, dépôt non GitHub), sans invite de mot de passe pour un
-    # dépôt privé : échec net à la place.
-    if [ "$type" = github ]; then
+    # (des dizaines de milliers de refs). Aussi pour un type=git hébergé sur
+    # GitHub (claude-code). ls-remote en secours (limite de l'API atteinte,
+    # dépôt non GitHub), sans invite de mot de passe pour un dépôt privé :
+    # échec net à la place.
+    if [ -n "$slug" ]; then
         new=$(curl -fsSL --max-time 5 "${auth[@]}" -H "Accept: application/vnd.github.sha" \
-            "https://api.github.com/repos/$owner/$repo/commits/$pattern" 2>/dev/null || true)
+            "https://api.github.com/repos/$slug/commits/$pattern" 2>/dev/null || true)
         [[ "$new" =~ ^[0-9a-f]{40}$ ]] || new=""
     fi
     if [ -z "$new" ]; then
@@ -109,14 +70,11 @@ check_input() {
     fi
 
     local latest="${new:0:7}" compare=""
-    if [ "$type" = github ] && [ "$new" != "$rev" ]; then
-        compare="https://github.com/$owner/$repo/compare/$rev...$new"
+    if [ -n "$slug" ] && [ "$new" != "$rev" ]; then
+        compare="https://github.com/$slug/compare/$rev...$new"
         # Nombre de commits d'écart, au mieux (API GitHub limitée sans jeton).
-        # per_page=1 : seul le compteur sert, pas la liste des commits.
         local ahead
-        if ahead=$(curl -fsSL --max-time 5 "${auth[@]}" \
-            "https://api.github.com/repos/$owner/$repo/compare/$rev...$new?per_page=1" 2>/dev/null \
-            | jq -er '.ahead_by'); then
+        if ahead=$(fl_commit_count "$slug" "$rev" "$new"); then
             latest="$latest (+$ahead commits)"
         fi
     fi
@@ -175,9 +133,7 @@ if [ "$YES" -eq 0 ] && [ "$CHECK" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
     interactive=1
 fi
 fancy=0
-if [ -t 1 ] && command -v gum >/dev/null 2>&1; then
-    fancy=1
-fi
+ui_fancy && fancy=1
 if [ "$interactive" -eq 1 ] && [ "$fancy" -eq 0 ]; then
     echo "update : gum introuvable (fourni par la commande \`update\` après un rebuild)." >&2
     exit 1
@@ -208,8 +164,8 @@ cleanup() {
 trap cleanup EXIT
 
 # ── Plan : modules + inputs ─────────────────────────────────────────────────
-# Même découverte que la CI : pas de -maxdepth (cf. rebuild.sh pour l'historique).
-mapfile -d '' -t scripts < <(find modules -name update.sh -print0 | sort -z)
+# Même découverte que la CI (cf. lib/flake-lock.sh).
+mapfile -d '' -t scripts < <(fl_module_updaters)
 m_ids=()
 for i in "${!scripts[@]}"; do
     s="${scripts[$i]}"
@@ -218,12 +174,10 @@ for i in "${!scripts[@]}"; do
     printf 'm\tm%s\t%s\n' "$i" "$flake/$s" >>"$tmp/plan"
 done
 
-# `follows` (tableaux) exclus : ils suivent un autre input, rien à bumper.
-mapfile -t inputs < <(jq -r '.nodes.root.inputs | to_entries[]
-    | select(.value | type == "string") | .key' flake.lock | sort)
+# Sans les `follows` ni `secrets`, comme la CI (cf. lib/flake-lock.sh).
+mapfile -t inputs < <(fl_bumpable_inputs flake.lock)
 f_ids=()
 for i in "${!inputs[@]}"; do
-    [ "${inputs[$i]}" = secrets ] && continue
     matches "${inputs[$i]}" || continue
     f_ids+=("$i")
     printf 'f\tf%s\t%s\n' "$i" "${inputs[$i]}" >>"$tmp/plan"

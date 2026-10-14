@@ -32,33 +32,15 @@ SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 # que soit le répertoire d'appel.
 cd "$(dirname "$0")/.."
 
-RED='\033[0;31m'
-ORANGE='\033[1;33m'
-NC='\033[0m'
-
-err()  { echo -e "${RED}$*${NC}" >&2; }      # erreurs (rouge)
-warn() { echo -e "${ORANGE}$*${NC}" >&2; }   # avertissements (orange)
-
-# Palette : fournie par la commande `genclean` (Stylix, cf. lib/mk-update-env.nix),
-# valeurs par défaut sinon. gum seulement vers un terminal ; sans lui (appel
-# direct du script hors rebuild), questions en read classiques.
-C_ACCENT="${UPDATE_COLOR_ACCENT:-#7aa2f7}"
-C_OK="${UPDATE_COLOR_OK:-#9ece6a}"
-C_TEXT="${UPDATE_COLOR_TEXT:-#c0caf5}"
-export GUM_CHOOSE_CURSOR_FOREGROUND="$C_ACCENT"
-export GUM_CHOOSE_SELECTED_FOREGROUND="$C_OK"
-export GUM_CHOOSE_HEADER_FOREGROUND="$C_ACCENT"
-export GUM_CHOOSE_ITEM_FOREGROUND="$C_TEXT"
-export GUM_INPUT_CURSOR_FOREGROUND="$C_ACCENT"
-export GUM_INPUT_PROMPT_FOREGROUND="$C_ACCENT"
-export GUM_INPUT_HEADER_FOREGROUND="$C_ACCENT"
-export GUM_CONFIRM_PROMPT_FOREGROUND="$C_ACCENT"
-export GUM_CONFIRM_SELECTED_BACKGROUND="$C_ACCENT"
+# Couleurs, err/warn, confirm et palette gum (Stylix via la commande
+# `genclean`, cf. lib/mk-gum-env.nix) : cf. lib/ui.sh. gum seulement vers un
+# terminal ; sans lui (appel direct du script hors rebuild), questions en read
+# classiques.
+# shellcheck source=scripts/lib/ui.sh
+. scripts/lib/ui.sh
 
 fancy=0
-if [ -t 0 ] && [ -t 1 ] && command -v gum >/dev/null 2>&1; then
-    fancy=1
-fi
+ui_fancy && fancy=1
 
 # Ctrl+C / Échap dans un menu gum : on abandonne tout, rien n'a encore été fait.
 abort() { echo "Annulé, rien n'a été modifié." >&2; exit 130; }
@@ -73,14 +55,6 @@ run_as() {
     else
         sudo -u "$user" -H "$@"
     fi
-}
-
-# Pose une question oui/non (défaut : non). Renvoie 0 si oui. (Repli sans gum.)
-ask_yn() {
-    local reply
-    read -p "$1 [y/N] " -n 1 -r reply
-    echo
-    [[ "$reply" =~ ^[YyOo]$ ]]
 }
 
 # Demande un entier ≥ 1, redemande tant qu'il est invalide. ^[1-9] et pas
@@ -144,7 +118,7 @@ if [ "$fancy" -eq 1 ]; then
     while IFS= read -r l; do [ -n "$l" ] && STEP["$l"]=1; done <<<"$picked"
 else
     for s in "$S_PROFILES" "$S_HMBACKUP" "$S_GC" "$S_OPTIMISE"; do
-        ask_yn "$s ?" && STEP["$s"]=1
+        confirm "$s ?" && STEP["$s"]=1
     done
 fi
 has_rebuild=0
@@ -262,7 +236,7 @@ else
 fi
 
 # --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
-# La commande `rebuild` vient de modules/system/rebuild : absente si le module
+# La commande `rebuild` vient de modules/system/commands/rebuild : absente si le module
 # n'a pas encore été switché (repo fraîchement cloné) — on prévient au lieu
 # d'échouer sur la dernière étape.
 if [ "$has_rebuild" -eq 1 ]; then
