@@ -1,19 +1,25 @@
-# Lance un programme dans le terminal par défaut, fenêtre titrée (matchée
-# par un for_window sway). alacritty exige `-e`, kitty/foot l'acceptent tel quel.
+# Lance un programme dans le terminal par défaut de l'utilisateur
+# (userSettings.terminal.default, lu ici une fois pour tous les appelants).
+# alacritty exige `-e`, kitty/foot l'acceptent tel quel.
+#
+# `title` est facultatif : il ne sert que si un for_window sway doit matcher
+# la fenêtre (TUIs flottants, cf. mk-floating-tui-launcher.nix). Le tmux de
+# Ctrl+Entrée ou le btop du clic waybar s'en passent.
+lib:
 {
-  lib,
-  term, # config.userSettings.terminal.default
-  title, # titre de fenêtre passé à --title
+  config,
   exec, # programme (+ arguments) à lancer
+  title ? null, # titre de fenêtre passé à --title ; null = aucun
   kittyExtraOpts ? "", # options kitty seulement (ex. kittyQuit, padding) ; "" = aucune
 }:
 let
+  term = config.userSettings.terminal.default;
   extra = lib.optionalString (term == "kitty" && kittyExtraOpts != "") "${kittyExtraOpts} ";
   # Échappé par défense : tous les appels actuels passent un titre sans
   # espace, mais rien ne garantit que ça reste vrai.
-  safeTitle = lib.escapeShellArg title;
+  titleOpt = lib.optionalString (title != null) "--title ${lib.escapeShellArg title} ";
 in
 if term == "alacritty" then
-  "${term} --title ${safeTitle} -e ${exec}"
+  "${term} ${titleOpt}-e ${exec}"
 else
-  "${term} ${extra}--title ${safeTitle} ${exec}"
+  "${term} ${extra}${titleOpt}${exec}"

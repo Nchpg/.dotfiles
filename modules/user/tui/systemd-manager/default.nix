@@ -7,7 +7,6 @@
 
 let
   cfg = config.userSettings.tui.systemdManager;
-  term = config.userSettings.terminal.default;
 
   # En amont, seul Ctrl+C quitte l'app (touches en dur). Patché pour quitter
   # aussi avec q/Esc, mais UNIQUEMENT sur l'écran liste hors édition du
@@ -27,12 +26,6 @@ let
             }"
     '';
   });
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "systemd-manager-tui";
-    exec = "${systemd-manager-tui}/bin/systemd-manager-tui";
-  };
 in
 {
   options.userSettings.tui.systemdManager = {
@@ -45,7 +38,8 @@ in
       (myLib.mkFloatingTuiLauncher {
         name = "systemd-manager";
         confName = "systemd-manager-tui";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = "${systemd-manager-tui}/bin/systemd-manager-tui";
         keybind = "$mod+m";
         title = "systemd-manager-tui";
         width = 1200;

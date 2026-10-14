@@ -7,13 +7,6 @@
 
 let
   cfg = config.userSettings.windowManager.sway.pickers.bluetooth;
-  term = config.userSettings.terminal.default;
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "bluetui";
-    exec = "bluetui";
-  };
 in
 {
   options.userSettings.windowManager.sway.pickers.bluetooth = {
@@ -29,7 +22,8 @@ in
       (myLib.mkFloatingTuiLauncher {
         name = "bluetooth";
         confName = "bluetooth-picker";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = lib.getExe cfg.pkgs.bluetui;
         keybind = "$mod+b";
         title = "bluetui";
         width = 1200;

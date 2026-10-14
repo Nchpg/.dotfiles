@@ -8,13 +8,6 @@
 let
   cfg = config.userSettings.tui.task;
   py = cfg.pkgs.python3Packages;
-  term = config.userSettings.terminal.default;
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "tasks-tui";
-    exec = "tasks-tui";
-  };
 
   # Version + hash épinglés automatiquement par update.sh
   pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
@@ -75,7 +68,8 @@ in
       (myLib.mkFloatingTuiLauncher {
         name = "tasks";
         confName = "task-tui";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = "tasks-tui";
         keybind = "$mod+t";
         title = "tasks-tui";
         width = 1200;

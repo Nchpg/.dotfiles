@@ -8,15 +8,8 @@
 
 let
   cfg = config.userSettings.tui.calendar;
-  term = config.userSettings.terminal.default;
   c = (myLib.schemeColors { inherit config themes; }).withHashtag;
   inherit (lib) concatStringsSep mapAttrsToList;
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "calendar-tui";
-    exec = "ikhal";
-  };
 
   vdirsyncerBin = "${cfg.pkgs.vdirsyncer}/bin/vdirsyncer";
   syncCmd = ''
@@ -140,7 +133,9 @@ in
       (myLib.mkFloatingTuiLauncher {
         name = "calendar";
         confName = "calendar-tui";
-        scriptBody = ''
+        inherit config;
+        exec = "ikhal";
+        preamble = ''
           set -eu
 
           # XDG_RUNTIME_DIR (privé) ou $HOME en repli, jamais /tmp partagé.
@@ -150,7 +145,7 @@ in
             } >"''${XDG_RUNTIME_DIR:-$HOME/.cache}/calendar-tui-vdirsyncer.log" 2>&1 || true
           fi
 
-          exec ${termCmd}'';
+        '';
         keybind = "$mod+c";
         title = "calendar-tui";
         width = 1500;

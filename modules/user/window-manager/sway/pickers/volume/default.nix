@@ -7,14 +7,6 @@
 
 let
   cfg = config.userSettings.windowManager.sway.pickers.volume;
-  term = config.userSettings.terminal.default;
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "ncpamixer";
-    exec = "ncpamixer";
-    kittyExtraOpts = "-o window_padding_width=20";
-  };
 in
 {
   options.userSettings.windowManager.sway.pickers.volume = {
@@ -29,7 +21,9 @@ in
     lib.mkMerge [
       (myLib.mkFloatingTuiLauncher {
         name = "volume-mixer";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = lib.getExe cfg.pkgs.ncpamixer;
+        kittyExtraOpts = "-o window_padding_width=20";
         keybind = "$mod+p";
         title = "ncpamixer";
         width = 1200;

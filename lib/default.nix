@@ -27,7 +27,7 @@ lib:
   fetchPinned = import ./fetch-pinned.nix lib;
   inherit (import ./mk-flake-guard.nix) flakeVar mkFlakeGuard;
   mkEvalCheck = import ./mk-eval-check.nix lib;
-  mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
+  mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix lib;
   mkGuardedPatch = import ./mk-guarded-patch.nix lib;
   mkIcon = import ./mk-icon.nix lib;
   mkInternalPorts = import ./mk-internal-ports.nix lib;
@@ -36,7 +36,7 @@ lib:
   mkPkgsOption = import ./mk-pkgs-option.nix;
   mkSecretEnvWrapper = import ./mk-secret-env-wrapper.nix lib;
   mkThemedIcon = import ./mk-themed-icon.nix;
-  mkTerminalCmd = import ./mk-terminal-cmd.nix;
+  mkTerminalCmd = import ./mk-terminal-cmd.nix lib;
   mkTlsVhost = import ./mk-tls-vhost.nix;
   mkGumEnv = import ./mk-gum-env.nix;
   mkRepoCommand = import ./mk-repo-command.nix;

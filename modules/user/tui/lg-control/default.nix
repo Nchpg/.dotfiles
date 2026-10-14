@@ -8,7 +8,6 @@
 
 let
   cfg = config.userSettings.tui.lgControl;
-  term = config.userSettings.terminal.default;
   c = (myLib.schemeColors { inherit config themes; }).withHashtag;
 
   # Ventilateur + profil d'alimentation via menu gum. Écriture de fan_mode
@@ -85,12 +84,6 @@ let
   # gum ne quitte qu'avec Esc/Ctrl-C/"Quitter", jamais q : mappé côté kitty
   # pour unifier la sortie de tous les TUIs.
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "lg-control";
-    exec = "${lg-control}/bin/lg-control";
-    kittyExtraOpts = kittyQuit;
-  };
 in
 {
   options.userSettings.tui.lgControl = {
@@ -102,7 +95,9 @@ in
     lib.mkMerge [
       (myLib.mkFloatingTuiLauncher {
         name = "lg-control";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = "${lg-control}/bin/lg-control";
+        kittyExtraOpts = kittyQuit;
         keybind = "$mod+Shift+p";
         title = "lg-control";
         width = 900;

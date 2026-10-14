@@ -8,12 +8,10 @@
 
 let
   cfg = config.userSettings.windowManager.sway.pickers.wifi;
-  term = config.userSettings.terminal.default;
 
   # Thème sombre pour nmtui via NEWT_COLORS.
   newtColors =
-    "NEWT_COLORS="
-    + "root=white,black:"
+    "root=white,black:"
     + "border=blue,black:"
     + "title=blue,black:"
     + "roottext=white,black:"
@@ -33,13 +31,6 @@ let
   # nmtui ne quitte nativement qu'avec Esc : q mappé côté kitty pour unifier
   # la sortie des TUIs. Effet de bord : plus de "q" littéral tapable (mdp wifi).
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "nmtui-wifi";
-    exec = "${cfg.pkgs.networkmanager}/bin/nmtui";
-    kittyExtraOpts = kittyQuit;
-  };
-
 in
 {
   options.userSettings.windowManager.sway.pickers.wifi = {
@@ -55,7 +46,10 @@ in
       (myLib.mkFloatingTuiLauncher {
         name = "wifi";
         confName = "wifi-picker";
-        scriptBody = "${newtColors} exec ${termCmd}";
+        inherit config;
+        exec = "${cfg.pkgs.networkmanager}/bin/nmtui";
+        env.NEWT_COLORS = newtColors;
+        kittyExtraOpts = kittyQuit;
         keybind = "$mod+w";
         title = "nmtui-wifi";
         width = 1200;

@@ -7,7 +7,6 @@
 
 let
   cfg = config.userSettings.windowManager.sway.pickers.bluetooth.combine;
-  term = config.userSettings.terminal.default;
   c = config.lib.stylix.colors.withHashtag;
 
   # PipeWire n'a pas d'équivalent déclaratif simple à une sortie combinée
@@ -164,12 +163,6 @@ let
       pause
     '';
   };
-
-  termCmd = myLib.mkTerminalCmd {
-    inherit lib term;
-    title = "bt-combine";
-    exec = "${bt-combine}/bin/bt-combine";
-  };
 in
 {
   options.userSettings.windowManager.sway.pickers.bluetooth.combine = {
@@ -186,7 +179,8 @@ in
     lib.mkMerge [
       (myLib.mkFloatingTuiLauncher {
         name = "bt-combine";
-        scriptBody = "exec ${termCmd}";
+        inherit config;
+        exec = "${bt-combine}/bin/bt-combine";
         keybind = "$mod+Shift+b";
         title = "bt-combine";
         width = 900;
