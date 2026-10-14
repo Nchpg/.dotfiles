@@ -14,7 +14,14 @@ in
 {
   options = {
     userSettings.stylix = {
-      enable = lib.mkEnableOption "Enable stylix theming";
+      # Défaut true : tous les users sont thémés. Même sur un serveur, stylix
+      # thémise neovim/tmux/bat, dont les couleurs sont écrites en dur dans leur
+      # config — la palette ANSI, elle, vient du terminal client — et sans lui
+      # le `colorscheme base16-stylix` du module vim n'existe pas (E185). Les
+      # targets GTK/Qt/GNOME restent hors du store sans systemSettings.desktop.
+      enable = lib.mkEnableOption "Enable stylix theming" // {
+        default = true;
+      };
       theme = lib.mkOption {
         # Suit le thème système par défaut : basculer le système flippe aussi
         # la session (root/guest surchargent le leur).

@@ -1,22 +1,14 @@
-{ pkgs-stable, ... }:
-
 {
+
   config = {
 
     userSettings = {
-      defaultPkgs = pkgs-stable;
-
-      stylix.enable = true;
-
       windowManager.sway.enable = false;
 
       editors.vim.enable = true;
 
-      git = {
-        enable = true;
-        userName = "nathan.champagne";
-        userEmailSops = "git/email";
-      };
+      # Identité (nom + email sops) : défaut du module git.
+      git.enable = true;
 
       shell = {
         zsh.enable = true;

@@ -1,19 +1,10 @@
-{
-  pkgs-stable,
-  pkgs-unstable,
-  ...
-}:
+{ pkgs-unstable, ... }:
 
 {
   config = {
 
     userSettings = {
-      defaultPkgs = pkgs-stable;
-
-      stylix = {
-        enable = true;
-        wallpaper = "custom-kyoto";
-      };
+      stylix.wallpaper = "custom-kyoto";
 
       windowManager.sway = {
         waybar.enable = true;
@@ -42,10 +33,9 @@
         };
       };
 
+      # Identité (nom + email sops) : défaut du module git.
       git = {
         enable = true;
-        userName = "nathan.champagne";
-        userEmailSops = "git/email";
 
         gh.enable = true;
 

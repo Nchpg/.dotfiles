@@ -14,9 +14,13 @@ in
       enable = lib.mkEnableOption "Enable git";
 
       pkgs = myLib.mkPkgsOption { inherit lib config; };
+      # Identité par défaut : celle du détenteur de la clé sops, pour les users
+      # qui y ont accès (le keyOwner, et root qui agit pour lui). Les autres
+      # (guest) n'ont pas d'identité, et de toute façon pas l'accès au secret.
       userName = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = null;
+        default = if config.userSettings.sops.available then "nathan.champagne" else null;
+        defaultText = lib.literalExpression ''if config.userSettings.sops.available then "nathan.champagne" else null'';
         description = "Nom d'utilisateur pour les commits git.";
         example = "John Doe";
       };
@@ -30,7 +34,8 @@ in
 
       userEmailSops = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = null;
+        default = if config.userSettings.sops.available then "git/email" else null;
+        defaultText = lib.literalExpression ''if config.userSettings.sops.available then "git/email" else null'';
         description = ''
           Nom du secret sops contenant l'email git. Si défini, l'email est injecté
           via un include gitconfig généré par sops (jamais en clair dans le repo)
@@ -52,7 +57,7 @@ in
           enable = true;
           package = cfg.pkgs.git;
           # HM 26.05 : user.* n'accepte plus null -> défini seulement si renseigné
-          # (profils guest/root le laissent vide).
+          # (guest n'a pas d'identité).
           settings = {
             user.name = lib.mkIf (cfg.userName != null) cfg.userName;
             user.email = lib.mkIf (cfg.userEmail != null && cfg.userEmailSops == null) cfg.userEmail;

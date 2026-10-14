@@ -1,5 +1,3 @@
-{ pkgs-stable, ... }:
-
 # Session d'administration distante : shell, éditeur, git. Rien de graphique
 # (pas de terminal : sans écran, il ne ferait que tirer la pile GUI dans le
 # store).
@@ -7,25 +5,16 @@
   config = {
 
     userSettings = {
-      defaultPkgs = pkgs-stable;
-
-      # Thémise neovim/tmux/bat, dont les couleurs sont écrites en dur dans
-      # leur config côté serveur — la palette ANSI, elle, vient du terminal
-      # client. Sans ça, le `colorscheme base16-stylix` du module vim n'existe
-      # pas et vim s'ouvre sur un E185. Les targets GTK/Qt/GNOME restent hors
-      # du store : ils suivent systemSettings.desktop.enable, faux ici.
-      stylix.enable = true;
+      # stylix : actif par défaut (cf. modules/user/stylix), y compris ici
+      # pour neovim/tmux/bat.
 
       # neovim et pas vim : c'est le même éditeur que sur gram (mêmes
       # raccourcis, mêmes LSP), et `vimAlias` garde `vim` fonctionnel — donc
       # le EDITOR=vim de modules/user/home-manager ouvre bien nvim.
       editors.neovim.enable = true;
 
-      git = {
-        enable = true;
-        userName = "nathan.champagne";
-        userEmailSops = "git/email";
-      };
+      # Identité (nom + email sops) : défaut du module git.
+      git.enable = true;
 
       agents = {
         claude = {

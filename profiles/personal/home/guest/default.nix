@@ -1,17 +1,9 @@
-{
-  pkgs-stable,
-  pkgs-unstable,
-  ...
-}:
+{ pkgs-unstable, ... }:
 
 {
   config = {
 
     userSettings = {
-      defaultPkgs = pkgs-stable;
-
-      stylix.enable = true;
-
       editors = {
         vim.enable = true;
         vscode = {
