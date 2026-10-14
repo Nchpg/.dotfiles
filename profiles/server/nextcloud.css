@@ -1,0 +1,64 @@
+/* Menu contacts de la barre supérieure. */
+#contactsmenu,
+.header-right .contactsmenu {
+  display: none !important;
+}
+
+/* Le fondu haut-bas des icônes de la barre vient d'un MASQUE alpha,
+   pas d'une opacité. Neutraliser la variable plutôt que le
+   sélecteur, celui-ci portant une empreinte Vue ([data-v-…]) qui
+   change à chaque version de Nextcloud.
+
+   `body` ET les sélecteurs de thème, pas seulement `:root`, et c'est
+   tout le sujet. Nextcloud pose ses variables sur `<body>` — vérifié
+   dans le HTML servi, `<body data-themes="">` — alors que `:root`
+   désigne `<html>`. Or `!important` ne franchit PAS l'héritage : il
+   départage des déclarations portant sur le MÊME élément, et un
+   `<body>` qui a la sienne, même non importante, l'emporte pour lui
+   et tous ses descendants. Le header étant dans le corps, il
+   héritait du dégradé quoi qu'on écrive sur `<html>`.
+
+   Le défaut ne se voyait qu'en thème CLAIR : le dégradé se calcule
+   depuis `--color-background-plain-text`, donc sur fond sombre il
+   est invisible. Il était bien là aussi. */
+:root,
+body,
+[data-theme-default],
+[data-theme-light],
+[data-theme-dark],
+[data-theme-light-highcontrast],
+[data-theme-dark-highcontrast] {
+  --header-menu-icon-mask: none !important;
+}
+
+/* Encart promotionnel en bas des informations personnelles :
+   licence, réseaux sociaux, blog, infolettre. */
+.section.development-notice {
+  display: none !important;
+}
+
+/* Champs de profil public et réseaux sociaux, sans objet pour un
+   stockage familial. L'application `profile` est déjà désactivée,
+   mais ces champs restent affichés par le panneau lui-même.
+   Conservés à dessein : avatar, nom affiché, adresse électronique
+   (indispensable à la réinitialisation de mot de passe), langue,
+   format régional, fuseau horaire et récapitulatif de quota.
+   NE PAS cibler les `#vue-…-section` du gabarit PHP : Vue remplace
+   ces points de montage et leur identifiant disparaît du DOM. On
+   vise donc la boîte parente d'après l'identifiant de son champ de
+   saisie, stable car issu des constantes
+   IAccountManager::PROPERTY_*. */
+.personal-settings-setting-box:has(#account-property-phone),
+.personal-settings-setting-box:has(#account-property-address),
+.personal-settings-setting-box:has(#account-property-birthdate),
+.personal-settings-setting-box:has(#account-property-website),
+.personal-settings-setting-box:has(#account-property-twitter),
+.personal-settings-setting-box:has(#account-property-bluesky),
+.personal-settings-setting-box:has(#account-property-fediverse),
+.personal-settings-setting-box:has(#account-property-organisation),
+.personal-settings-setting-box:has(#account-property-role),
+.personal-settings-setting-box:has(#account-property-headline),
+.personal-settings-setting-box:has(#account-property-biography),
+.personal-settings-setting-box:has(#account-property-pronouns) {
+  display: none !important;
+}

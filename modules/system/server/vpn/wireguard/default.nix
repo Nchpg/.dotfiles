@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  myLib,
   pkgs-stable,
   ...
 }:
@@ -46,25 +47,8 @@ let
     restartUnits = [ "systemd-networkd.service" ];
   };
 
-  # Destinations que le tunnel ne relaie JAMAIS, quelle que soit l'option : tout
-  # ce qui n'est pas de l'internet public. Sans cette liste, « sortie internet »
-  # voudrait dire « accès au LAN » dès que la destination est privée, et le
-  # filtrage ne servirait à rien. Les adresses de ce host restent joignables :
-  # elles sont délivrées localement et ne traversent pas la chaîne de forward.
-  nonRoutable = [
-    "10.0.0.0/8"
-    "172.16.0.0/12"
-    "192.168.0.0/16"
-    "169.254.0.0/16"
-    "127.0.0.0/8"
-    "100.64.0.0/10"
-    "224.0.0.0/4"
-    "240.0.0.0/4"
-  ];
-
   # Fabrique une configuration cliente complète, QR compris, sans jamais écrire
-  # la clé privée où que ce soit : elle ne traverse que la sortie du terminal.
-  # C'est le remplaçant direct de l'interface d'appairage.
+  # la clé privée où que ce soit (cf. wg-new-peer.sh, à côté).
   #
   # La clé publique du serveur est DÉRIVÉE de sa clé privée à l'exécution plutôt
   # que déclarée en double dans le dépôt : une copie finirait par diverger, et
@@ -77,78 +61,16 @@ let
       pkgs-stable.qrencode
     ];
     text = ''
-      if [ $# -lt 2 ]; then
-        cat >&2 <<'USAGE'
-      usage: wg-new-peer <nom> <adresse-dans-le-tunnel>
-
-        wg-new-peer telephone-nathan 10.8.0.2
-
-      Affiche la configuration cliente et son QR code, puis l'extrait Nix à
-      coller dans le profil. La clé privée n'est écrite nulle part : copie-la
-      depuis ce terminal, ou scanne le QR, et referme.
-
-      À lancer en root : la clé publique du serveur est dérivée de sa clé privée.
-      USAGE
-        exit 2
-      fi
-
-      name=$1
-      address=$2
-
-      if [ ! -r ${privateKeyPath} ]; then
-        echo "impossible de lire ${privateKeyPath} — relance en root" >&2
-        exit 1
-      fi
-
-      server_public=$(wg pubkey < ${privateKeyPath})
-      private=$(wg genkey)
-      public=$(printf '%s' "$private" | wg pubkey)
-      psk=$(wg genpsk)
-
-      conf=$(cat <<EOF
-      [Interface]
-      PrivateKey = $private
-      Address = $address/32
-      ${lib.optionalString (cfg.dns != [ ]) "DNS = ${lib.concatStringsSep ", " cfg.dns}"}
-
-      [Peer]
-      PublicKey = $server_public
-      PresharedKey = $psk
-      Endpoint = ${toString cfg.host}:${toString cfg.port}
-      AllowedIPs = ${lib.concatStringsSep ", " cfg.allowedIPs}
-      # Les clients mobiles passent derrière un NAT opérateur qui ferme les
-      # associations UDP inactives en ~30 s : sans keepalive, le tunnel semble
-      # « mort » jusqu'à ce que le téléphone émette de lui-même.
-      PersistentKeepalive = 25
-      EOF
-      )
-
-      printf '%s\n' "$conf"
-      echo
-      echo "── QR (à scanner depuis l'application WireGuard) ──"
-      printf '%s' "$conf" | qrencode -t ansiutf8
-      echo
-      echo "── 1. à ranger dans les secrets SYSTÈME ──"
-      echo "     secrets edit wireguard/''${name}_preshared_key"
-      cat <<EOF
-      wireguard:
-        ''${name}_preshared_key: $psk
-      EOF
-      echo
-      echo "── 2. à ajouter dans profiles/server, puis nixos-rebuild switch ──"
-      cat <<EOF
-      {
-        name = "$name";
-        publicKey = "$public";
-        address = "$address";
-        presharedKeyKey = "wireguard/''${name}_preshared_key";
+      private_key_path=${lib.escapeShellArg privateKeyPath}
+      dns_line=${
+        lib.escapeShellArg (
+          lib.optionalString (cfg.dns != [ ]) "DNS = ${lib.concatStringsSep ", " cfg.dns}"
+        )
       }
-      EOF
-      echo
-      echo "L'ORDRE COMPTE : le secret sops doit exister AVANT le rebuild, sinon"
-      echo "l'activation échoue faute de pouvoir déchiffrer la clé pré-partagée."
-      echo "Tant que le rebuild n'est pas fait, ce peer n'est pas autorisé."
-    '';
+      endpoint=${lib.escapeShellArg "${toString cfg.host}:${toString cfg.port}"}
+      allowed_ips=${lib.escapeShellArg (lib.concatStringsSep ", " cfg.allowedIPs)}
+    ''
+    + builtins.readFile ./wg-new-peer.sh;
   };
 in
 {
@@ -188,7 +110,7 @@ in
         la maison.
 
         C'est cette plage que les autres modules autorisent pour reconnaître
-        « vient du VPN » — cf. les règles d'Authelia dans profiles/server.
+        « vient du VPN » — cf. les règles d'Authelia de modules/system/server/nextcloud.
       '';
     };
 
@@ -322,6 +244,21 @@ in
                 message plus précis que « handshake did not complete ».
               '';
             };
+
+            trusted = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Appareil de CONFIANCE : il figure dans `trustedSources`, la liste
+                des sources admises sur les services réservés à l'administrateur
+                (le coffre, par exemple), et pas seulement dans le tunnel.
+
+                Faux par défaut : un téléphone de la famille entre dans le tunnel
+                sans entrer partout. Porté par le peer lui-même plutôt que par une
+                liste de noms ailleurs, pour qu'un peer renommé ne perde pas son
+                accès en silence.
+              '';
+            };
           };
         }
       );
@@ -341,6 +278,36 @@ in
 
         Les destinations privées restent exclues quoi qu'il arrive, cf.
         `peerLanAccess`.
+      '';
+    };
+
+    trustedSources = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      readOnly = true;
+      default = map (p: "${p.address}/32") (lib.filter (p: p.trusted) cfg.peers);
+      defaultText = lib.literalExpression "les adresses en /32 des peers `trusted`";
+      description = ''
+        Adresses des appareils de confiance (`peers.*.trusted`), en notation
+        CIDR, à reprendre dans un `allowedNetworks`. Dérivé : l'autorisation
+        suit l'adresse le jour où elle change.
+      '';
+    };
+
+    selfSource = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      readOnly = true;
+      default = if static != null then "${static.address}/32" else null;
+      defaultText = lib.literalExpression "l'adresse du LAN de ce host, en /32";
+      description = ''
+        Source sous laquelle ce host SE VOIT lui-même quand il vise sa propre
+        adresse de tunnel, à admettre là où une sonde locale doit passer.
+
+        Ce n'est PAS `serverAddress` : le masquerade posé par `networking.nat`
+        (cf. plus bas) réécrit la source de tout paquet émis depuis la plage du
+        tunnel, y compris ceux que ce host s'envoie à lui-même. nginx et
+        Authelia voient donc l'adresse du LAN. Admettre cette source est sans
+        danger : pour se présenter sous elle, il faut la détenir — une source
+        falsifiée n'établit pas de poignée de main TCP.
       '';
     };
 
@@ -499,32 +466,18 @@ in
     # `oifname != "wg0"` isole aussi les peers ENTRE EUX : un appareil compromis
     # ne voit pas les autres.
     #
-    # `mkForce` et pas une définition qui s'ajoute, et c'est le point à ne pas
-    # rater : dès que `filterForward` est vrai, `networking.nat` écrit lui-même
-    # dans cette option un `ip saddr { <internalIPs> } accept` sans aucune
-    # restriction de destination. Il rouvre donc EXACTEMENT ce qu'on ferme ici,
-    # et comme l'ordre des définitions d'une option `lines` n'est pas garanti,
-    # on ne peut pas se contenter de mettre une règle plus stricte avant. Vérifié
-    # sur le ruleset produit : sans ce mkForce, la règle du module amont est bien
-    # là et les peers atteignent tout le LAN.
-    #
-    # Conséquence à connaître : un autre module qui poserait ses propres règles
-    # de traversée SANS forcer les verrait écartées sans bruit. C'est arrivé —
-    # `modules/system/server/apps` a besoin d'autoriser le trafic entre
-    # conteneurs, et sa règle disparaissait purement et simplement.
-    #
-    # La convention est donc : QUI ÉCRIT DANS CETTE OPTION FORCE. Deux
-    # définitions de même priorité fusionnent entre elles, tout en continuant
-    # d'exclure celle du module `nat` restée en priorité normale. Vérifier le
-    # ruleset produit après coup, jamais l'intention.
-    networking.firewall.extraForwardRules = lib.mkForce (
+    # Par `forwardRules` et non `networking.firewall.extraForwardRules` : la
+    # règle sans restriction de destination que `networking.nat` écrit dans
+    # cette dernière rouvrirait EXACTEMENT ce qu'on ferme ici. Le module réseau
+    # l'écarte en rendant `forwardRules` par un `mkForce` unique — cf. la
+    # description de l'option.
+    systemSettings.network.forwardRules =
       lib.optionalString cfg.peerInternetAccess ''
-        iifname "wg0" oifname != "wg0" ip daddr != { ${lib.concatStringsSep ", " nonRoutable} } accept comment "peers vers internet"
+        iifname "wg0" oifname != "wg0" ip daddr != { ${lib.concatStringsSep ", " myLib.nonRoutableIPv4} } accept comment "peers vers internet"
       ''
       + lib.optionalString (cfg.peerLanAccess != [ ]) ''
         iifname "wg0" ip daddr { ${lib.concatStringsSep ", " cfg.peerLanAccess} } accept comment "peers vers le LAN, liste explicite"
-      ''
-    );
+      '';
 
     # Masquerade vers l'extérieur, pour que le tunnel complet sorte par la maison
     # et que les autres appareils du LAN n'aient pas besoin d'une route de retour

@@ -34,6 +34,17 @@ let
   # `hasSuffix` accepterait `malexemple.fr` sous `exemple.fr`.
   isUnder = domain: host: host == domain || lib.hasSuffix ".${domain}" host;
 
+  # En-têtes transmis à Authelia, À LA MAIN, par le point de contrôle comme par
+  # le vhost du portail : `recommendedProxySettings` est coupé aux deux endroits
+  # (cf. plus bas pour pourquoi). Mêmes valeurs que la liste recommandée, moins
+  # `X-Forwarded-For`, que chacun pose lui-même à `$remote_addr`.
+  forwardedHeaders = ''
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $host;
+  '';
+
   # Point de contrôle interrogé par nginx avant de servir. Chaque en-tête ci-
   # dessous porte une décision de sécurité, et le bloc est identique pour tous
   # les services protégés : il vit ici plutôt que recopié dans chaque module.
@@ -72,11 +83,7 @@ let
       # mêmes valeurs : sans `Host`, nginx annoncerait `127.0.0.1:9091` à
       # Authelia. Aucun des trois ne décide de quoi que ce soit ici, la décision
       # se joue sur X-Original-URL et X-Forwarded-For.
-      proxy_set_header Host $host;
-      proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header X-Forwarded-Host $host;
-
+      ${forwardedHeaders}
       proxy_set_header X-Original-Method $request_method;
       proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
 
@@ -333,30 +340,20 @@ in
             default_type text/html;
 
             if ($auth_status = 403) {
-              return 403 '<!doctype html>
-            <html lang="fr"><head><meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <title>Accès refusé</title>
-            <style>
-            :root{color-scheme:light dark}
-            body{margin:0;min-height:100vh;display:grid;place-items:center;padding:2rem;
-              font:16px/1.6 system-ui,-apple-system,sans-serif;background:#fafafa;color:#1a1a1a}
-            main{max-width:30rem;text-align:center}
-            h1{font-size:1.4rem;margin:0 0 1rem;font-weight:600}
-            p{margin:0 0 .75rem;color:#5a5a5a}
-            a{color:#3f7078}
-            @media(prefers-color-scheme:dark){
-              body{background:#171717;color:#ededed}p{color:#a3a3a3}a{color:#7fb3bb}}
-            </style></head><body><main>
-            <h1>Accès refusé</h1>
-            <p>Ton compte est bien authentifié, mais il n&rsquo;est pas autorisé à
-            ouvrir ce service.</p>
-            <p>Si tu penses que c&rsquo;est une erreur, demande à
-            l&rsquo;administrateur.</p>
-            ${lib.optionalString (
-              cfg.portalHost != null
-            ) ''<p><a href="https://${cfg.portalHost}/logout">Se déconnecter et changer de compte</a></p>''}
-            </main></body></html>';
+              return 403 '${
+                myLib.mkErrorPage {
+                  title = "Accès refusé";
+                  withLinks = true;
+                  body = ''
+                    <p>Ton compte est bien authentifié, mais il n&rsquo;est pas autorisé à
+                    ouvrir ce service.</p>
+                    <p>Si tu penses que c&rsquo;est une erreur, demande à
+                    l&rsquo;administrateur.</p>
+                    ${lib.optionalString (
+                      cfg.portalHost != null
+                    ) ''<p><a href="https://${cfg.portalHost}/logout">Se déconnecter et changer de compte</a></p>''}'';
+                }
+              }';
             }
 
             return 403;
@@ -409,8 +406,18 @@ in
     # redémarrer. Ajouter un utilisateur restait alors sans effet et le portail
     # répondait « user not found » sur un compte pourtant présent dans sops.
     sops.secrets =
-      let
-        forAuthelia = {
+      lib.genAttrs
+        [
+          "authelia/jwt_secret"
+          "authelia/storage_key"
+          # Chiffre le contenu des sessions, que Redis ne voit alors que comme des
+          # octets opaques. Requis dès lors qu'elles y sont stockées (ci-dessous).
+          "authelia/session_secret"
+          # Fichier d'utilisateurs au format Authelia (mots de passe hachés en
+          # argon2id, générés par `authelia crypto hash generate argon2`).
+          "authelia/users"
+        ]
+        (_: {
           owner = "authelia-main";
           # Le semeur figure ici aussi : sans lui, ajouter un compte dans sops
           # ne le recopierait pas dans le fichier vivant.
@@ -418,18 +425,7 @@ in
             "authelia-main.service"
           ]
           ++ lib.optional cfg.mutableUsers "authelia-seed-users.service";
-        };
-      in
-      {
-        "authelia/jwt_secret" = forAuthelia;
-        "authelia/storage_key" = forAuthelia;
-        # Chiffre le contenu des sessions, que Redis ne voit alors que comme des
-        # octets opaques. Requis dès lors qu'elles y sont stockées (ci-dessous).
-        "authelia/session_secret" = forAuthelia;
-        # Fichier d'utilisateurs au format Authelia (mots de passe hachés en
-        # argon2id, générés par `authelia crypto hash generate argon2`).
-        "authelia/users" = forAuthelia;
-      };
+        });
 
     # Instance Redis DÉDIÉE, et pas celle de Nextcloud : deux services qui
     # partagent un Redis lisent et écrivent les clés l'un de l'autre, donc une
@@ -468,38 +464,12 @@ in
         User = "authelia-main";
         StateDirectory = "authelia-main";
       };
+      # Chemins posés en tête, le corps vit à côté (seed-users.sh).
       script = ''
-        set -euo pipefail
-
-        tmp=$(mktemp)
-        trap 'rm -f "$tmp"' EXIT
-
-        if [ -e ${liveUsers} ]; then
-          # L'ordre de fusion est significatif : l'opérande de DROITE gagne,
-          # d'où le fichier vivant en second.
-          yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
-            ${seedUsers} ${liveUsers} > "$tmp"
-        else
-          cp ${seedUsers} "$tmp"
-        fi
-
-        # Tout compte déclaré SANS mot de passe reçoit ici le haché d'un aléa que
-        # personne ne lit, pas même ce script. La personne entre par « mot de
-        # passe oublié » et pose le sien, qui survivra aux rebuilds grâce à la
-        # fusion ci-dessus. Ça retire les mots de passe de sops, où l'on ne
-        # déclare plus qu'une identité.
-        for user in $(yq -r '(.users // {}) | keys | .[]' "$tmp"); do
-          current=$(yq -r ".users.\"$user\".password // \"\"" "$tmp")
-          if [ -z "$current" ] || [ "$current" = "null" ]; then
-            digest=$(authelia crypto hash generate argon2 --random \
-              | sed -n 's/^Digest: //p')
-            yq -i ".users.\"$user\".password = \"$digest\"" "$tmp"
-            echo "compte '$user' : mot de passe initial aléatoire, à poser via « mot de passe oublié »"
-          fi
-        done
-
-        install -m 0600 "$tmp" ${liveUsers}
-      '';
+        live=${lib.escapeShellArg liveUsers}
+        seed=${lib.escapeShellArg seedUsers}
+      ''
+      + builtins.readFile ./seed-users.sh;
     };
 
     services.authelia.instances.main = {
@@ -603,6 +573,23 @@ in
       };
     };
 
+    # Le portail est publié par le tunnel : la redirection d'authentification
+    # se joue dans le navigateur du visiteur, qui doit pouvoir l'atteindre
+    # depuis l'extérieur. Raccourci du LAN aussi (`lanShortcut` suit `public`) :
+    # sans lui, s'authentifier depuis la maison fait sortir la requête jusqu'à
+    # l'edge pour redescendre par le tunnel, et une panne de box suffit à rendre
+    # le portail injoignable sur place.
+    #
+    # La sonde vise le point de santé d'Authelia, servi sans authentification
+    # par ce vhost. Il tombe si Redis ou le fichier d'utilisateurs sont
+    # inaccessibles — deux pannes qui ferment l'accès à TOUT le reste.
+    systemSettings.proxy.sites = lib.optionalAttrs (cfg.portalHost != null) {
+      ${cfg.portalHost} = {
+        public = true;
+        probes.authelia.path = "/api/health";
+      };
+    };
+
     services.nginx.virtualHosts.${cfg.portalHost} = myLib.mkTlsVhost {
       # Journal à l'adresse réelle plutôt qu'à celle de la connexion TCP. Le
       # portail est la porte d'entrée publique, donc l'endroit où arrivent les
@@ -637,11 +624,7 @@ in
         extraConfig = ''
           proxy_http_version 1.1;
           proxy_set_header Connection "";
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-Proto $scheme;
-          proxy_set_header X-Forwarded-Host $host;
-          proxy_set_header X-Forwarded-For $remote_addr;
+          ${forwardedHeaders}proxy_set_header X-Forwarded-For $remote_addr;
         '';
       };
     };
