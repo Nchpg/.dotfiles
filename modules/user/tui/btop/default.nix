@@ -18,14 +18,17 @@ let
   # EXPIRE: override btop, cf. https://github.com/aristocratos/btop/pull/1457
   # Base = btop unstable 1.4.6, celle sur laquelle la PR est basée (évite un
   # mismatch packaging/source en greffant sur la stable 1.4.4).
-  # Commit de la PR épinglé par update.sh, qui suit la tête de la branche et
-  # signale le merge (moment de retirer cet override).
+  # Dépôt et commit de la branche de la PR épinglés par update.sh, qui suit
+  # sa tête et signale le merge (moment de retirer cet override).
   pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
   btopXe = pkgs-unstable.btop.overrideAttrs (_old: {
     src = pkgs-unstable.fetchFromGitHub {
-      owner = "deveworld";
-      repo = "btop";
-      inherit (pinned) rev hash;
+      inherit (pinned)
+        owner
+        repo
+        rev
+        hash
+        ;
     };
 
     # versionCheckPhase échoue (binaire 1.4.6 != 1.4.7 attendu du paquet amont).

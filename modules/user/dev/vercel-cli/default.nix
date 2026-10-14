@@ -10,33 +10,20 @@ let
   inherit (config.home) homeDirectory;
   cfg = config.userSettings.dev.vercelCli;
 
-  # Version + hash épinglés automatiquement par update.sh
-  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
-
   # Tarball npm vérifié par Nix (FOD) : pas de package "vercel" dans nixpkgs.
-  vercelTarball = cfg.pkgs.fetchurl {
-    url = "https://registry.npmjs.org/vercel/-/vercel-${pinned.version}.tgz";
-    sha256 = pinned.sha256;
-  };
+  # URL + hash épinglés automatiquement par update.sh.
+  vercelTarball = myLib.fetchPinned cfg.pkgs ./pinned.json;
 
-  # VERCEL_TOKEN lu par le CLI lui-même (confirmé dans son bundle JS) : le
-  # secret n'est jamais dans le store, seul le chemin déchiffré par sops-nix
-  # (re-déchiffré à chaque activation) l'est.
-  vercelTokenPath = config.sops.secrets.${cfg.tokenSops}.path;
-
+  # VERCEL_TOKEN lu par le CLI lui-même (confirmé dans son bundle JS).
   # npx + Node.js nixpkgs, même technique que kimi-code : file:// requis, un
   # chemin nu fait échouer npx (tente de l'exécuter direct).
-  # writeShellApplication : `set -euo pipefail` obligatoire ici, cf. le même
-  # commentaire dans dev/cloudflare-cli — sans lui, un secret non déchiffré
-  # donne un token vide et un CLI qui part non authentifié en silence.
-  vercel-wrapper = cfg.pkgs.writeShellApplication {
+  vercel-wrapper = myLib.mkSecretEnvWrapper {
+    inherit config;
+    pkgs = cfg.pkgs;
     name = "vercel";
-    runtimeInputs = [ cfg.pkgs.coreutils ];
-    text = ''
-      VERCEL_TOKEN="$(cat ${vercelTokenPath})"
-      export VERCEL_TOKEN
-      exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${vercelTarball} "$@"
-    '';
+    secret = cfg.tokenSops;
+    envVar = "VERCEL_TOKEN";
+    exec = "${cfg.pkgs.nodejs_22}/bin/npx --yes file://${vercelTarball}";
   };
 
   # Plugin Claude Code officiel (slash commands + subagents Vercel), épinglé
@@ -48,8 +35,7 @@ let
   vercelPluginSrc = cfg.pkgs.fetchFromGitHub {
     owner = "vercel";
     repo = "vercel-plugin";
-    rev = pluginPinned.rev;
-    sha256 = pluginPinned.sha256;
+    inherit (pluginPinned) rev hash;
   };
 in
 {

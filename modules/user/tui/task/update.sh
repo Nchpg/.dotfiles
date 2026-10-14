@@ -2,59 +2,28 @@
 # Vérifie la dernière version de tasks-tui-app sur PyPI et met à jour
 # pinned.json avec le hash SRI du sdist. Pas de téléchargement : PyPI publie
 # le sha256 du fichier, converti tel quel au format attendu par fetchPypi.
-# Lancé par update.sh (commande `update`, ou `rebuild -u`).
+# Protocole : cf. scripts/lib/update-module.sh.
 set -euo pipefail
-
-# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
-# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
-# choisir ; le reste des messages part alors sur stderr.
-check=0
-if [ "${1:-}" = "--check" ]; then
-    check=1
-    exec 3>&1 1>&2
-fi
-
-flake="${MY_FLAKE:-$HOME/.dotfiles}"
-dir="$flake/modules/user/tui/task"
-pinned_file="$dir/pinned.json"
+# shellcheck source=scripts/lib/update-module.sh
+. "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
+um_init "$@"
 
 echo "🔎 Checking latest tasks-tui-app version (PyPI)..."
-if ! version=$(curl -fsSL "https://pypi.org/pypi/tasks-tui-app/json" | jq -er '.info.version // empty') \
-    || [ -z "$version" ]; then
-    echo "⚠️ Error: Could not read latest tasks-tui-app version" >&2
-    exit 1
-fi
+version=$(um_latest_pypi tasks-tui-app)
 echo "Latest version: $version"
 
-if [ "$check" -eq 1 ]; then
-    current=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || true)
-    jq -nc --arg name "tasks-tui" --arg current "$current" --arg latest "$version" \
-        --arg url "https://pypi.org/project/tasks-tui-app/$version/" '{$name, $current, $latest, $url}' >&3
-    exit 0
-fi
-
-if [ -f "$pinned_file" ]; then
-    current_version=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || echo "")
-    if [ "$current_version" = "$version" ]; then
-        echo "✓ tasks-tui-app is already up to date ($version)"
-        exit 0
-    fi
-fi
+current=$(um_pinned version)
+[ "$UM_CHECK" -eq 1 ] && um_check "tasks-tui" "$current" "$version" \
+    "https://pypi.org/project/tasks-tui-app/$version/"
+um_skip_if_current "tasks-tui-app" "$current" "$version"
 
 # Le sdist, celui que fetchPypi télécharge (pas la wheel).
 echo "🔎 Reading sdist hash for $version..."
-if ! hex=$(curl -fsSL "https://pypi.org/pypi/tasks-tui-app/${version}/json" \
+if ! hex=$(um_curl "https://pypi.org/pypi/tasks-tui-app/${version}/json" \
     | jq -er '[.urls[] | select(.packagetype == "sdist")][0].digests.sha256') \
     || ! hash=$(nix hash convert --hash-algo sha256 --to sri "$hex"); then
-    echo "⚠️ Error: Could not retrieve sdist hash for tasks-tui-app" >&2
-    exit 1
+    um_die "Could not retrieve sdist hash for tasks-tui-app"
 fi
-
-cat <<EOT > "$pinned_file"
-{
-  "version": "$version",
-  "hash": "$hash"
-}
-EOT
+um_write_pinned version="$version" hash="$hash"
 
 echo "⬆️ Updated tasks-tui-app to version $version"

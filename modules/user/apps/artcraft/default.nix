@@ -20,17 +20,14 @@
 let
   cfg = config.userSettings.apps.artcraft;
 
-  # Version + hash épinglés automatiquement par update.sh
-  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
+  # Version, URL + hash épinglés automatiquement par update.sh
+  pinned = lib.importJSON ./pinned.json;
 
   pname = "artcraft-launcher";
   # Préfixe des .desktop, icônes et unités dans l'AppImage.
   appId = "ai.storyteller.artcraft-launcher";
 
-  src = cfg.pkgs.fetchurl {
-    url = "https://github.com/storytold/craft-launcher/releases/download/v${pinned.version}/artcraft-launcher-${pinned.version}-linux-x86_64.AppImage";
-    hash = pinned.sha256;
-  };
+  src = myLib.fetchPinned cfg.pkgs ./pinned.json;
 
   extracted = cfg.pkgs.appimageTools.extract {
     inherit pname src;

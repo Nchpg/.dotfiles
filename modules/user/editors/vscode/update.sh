@@ -1,35 +1,24 @@
 #!/usr/bin/env bash
 # Vérifie la dernière version publiée de chaque extension marketplace de
-# extensions.json (API du VS Code Marketplace), et bump version + sha256 (via
-# `nix store prefetch-file`) pour celles qui ont bougé.
+# extensions.json (API du VS Code Marketplace), et bump version + hash (via
+# `nix store prefetch-file`) pour celles qui ont bougé. Protocole (--check,
+# --only KEY...) : cf. scripts/lib/update-module.sh.
 #
-# Ramassé automatiquement par `rebuild -u` et par la CI hebdo (cf. boucle
-# `find modules -name update.sh` dans rebuild.sh / update.yml) : ce nom est
-# une convention, pas un hasard. L'API Marketplace n'étant ni officielle ni
-# garantie stable, un échec ici est TOUJOURS non bloquant (cf. note_skip
-# plus bas) — le coût accepté est un rebuild local parfois plus lent/flaky.
+# Ramassé automatiquement par la commande `update` et par la CI hebdo (cf.
+# `find modules -name update.sh` dans scripts/update.sh / update.yml) : ce nom
+# est une convention, pas un hasard. L'API Marketplace n'étant ni officielle
+# ni garantie stable, un échec ici est TOUJOURS non bloquant (cf. note_skip
+# plus bas) — le coût accepté est une mise à jour parfois plus lente/flaky.
+#
+# `arch` (facultatif, ex. "linux-x64") : VSIX propre à une plateforme, la
+# même clé que lit vscode-utils de nixpkgs (?targetPlatform= dans l'URL). La
+# version et le hash suivent alors cette plateforme-là.
 set -euo pipefail
+# shellcheck source=scripts/lib/update-module.sh
+. "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
+um_init "$@"
 
-# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
-# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
-# choisir ; le reste des messages part alors sur stderr.
-check=0
-if [ "${1:-}" = "--check" ]; then
-    check=1
-    exec 3>&1 1>&2
-fi
-
-flake="${MY_FLAKE:-$HOME/.dotfiles}"
-file="$flake/modules/user/editors/vscode/extensions.json"
-
-# --only KEY... : ne traite que ces extensions (clés publisher.name), pour
-# que update.sh puisse les proposer une par une. Sans option : toutes.
-only=()
-if [ "${1:-}" = "--only" ]; then
-    shift
-    only=("$@")
-fi
-
+file="$UM_DIR/extensions.json"
 if [ ! -f "$file" ]; then
     echo "Fichier introuvable : $file" >&2
     exit 1
@@ -48,20 +37,22 @@ fi
 # jq` qui échoue interrompt tout le script AVANT que l'appelant puisse tester
 # le résultat — la garde « ignoré » plus bas n'était jamais atteinte.
 query_latest_version() {
-    local publisher="$1" name="$2" response body
+    local publisher="$1" name="$2" arch="$3" response body
     body=$(jq -n --arg v "${publisher}.${name}" \
         '{filters: [{criteria: [{filterType: 7, value: $v}]}], flags: 103}')
     response=$(curl -sf -X POST "https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json;api-version=3.0-preview.1" \
         -d "$body") || return 1
-    printf '%s' "$response" | jq -r '.results[0].extensions[0].versions[0].version // empty' 2>/dev/null || return 1
+    printf '%s' "$response" | jq -r --arg a "$arch" \
+        '[.results[0].extensions[0].versions[] | select($a == "" or .targetPlatform == $a)][0].version // empty' \
+        2>/dev/null || return 1
 }
 
 # --check : versions seulement, sans télécharger les vsix. La détection d'un
 # contenu republié à version égale (cf. plus bas) exige le téléchargement :
 # elle n'a lieu qu'en mise à jour réelle.
-if [ "$check" -eq 1 ]; then
+if [ "$UM_CHECK" -eq 1 ]; then
     changes="[]"
     failed=0
     # Requêtes en parallèle (une par extension) : en série, ~6 s.
@@ -70,7 +61,8 @@ if [ "$check" -eq 1 ]; then
     for key in $(jq -r 'keys[]' "$file"); do
         publisher=$(jq -r ".\"$key\".publisher" "$file")
         name=$(jq -r ".\"$key\".name" "$file")
-        (query_latest_version "$publisher" "$name" >"$results/$key" 2>/dev/null || true) &
+        arch=$(jq -r ".\"$key\".arch // empty" "$file")
+        (query_latest_version "$publisher" "$name" "$arch" >"$results/$key" 2>/dev/null || true) &
     done
     wait
     for key in $(jq -r 'keys[]' "$file"); do
@@ -115,21 +107,22 @@ note_skip() {
 }
 
 for key in $(jq -r 'keys[]' "$file"); do
-    if [ ${#only[@]} -gt 0 ] && ! printf '%s\n' "${only[@]}" | grep -qxF "$key"; then
+    if [ ${#UM_ONLY[@]} -gt 0 ] && ! printf '%s\n' "${UM_ONLY[@]}" | grep -qxF "$key"; then
         continue
     fi
     publisher=$(jq -r ".\"$key\".publisher" "$file")
     name=$(jq -r ".\"$key\".name" "$file")
     current=$(jq -r ".\"$key\".version" "$file")
+    arch=$(jq -r ".\"$key\".arch // empty" "$file")
 
-    latest=$(query_latest_version "$publisher" "$name") || latest=""
+    latest=$(query_latest_version "$publisher" "$name" "$arch") || latest=""
     if [ -z "$latest" ]; then
         echo "⚠️  $key : impossible de récupérer la dernière version (API Marketplace), ignoré." >&2
         note_skip "$key" "API Marketplace injoignable ou réponse invalide"
         continue
     fi
 
-    url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${latest}/vspackage"
+    url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${latest}/vspackage${arch:+?targetPlatform=$arch}"
     # --json donne directement le hash au format SRI (sha256-...), attendu tel
     # quel par extensionsFromVscodeMarketplace : pas de conversion à faire.
     if ! prefetch=$(nix store prefetch-file --json "$url" 2>/dev/null) \
@@ -138,7 +131,7 @@ for key in $(jq -r 'keys[]' "$file"); do
         note_skip "$key" "téléchargement du vsix $latest échoué"
         continue
     fi
-    current_hash=$(jq -r ".\"$key\".sha256" "$file")
+    current_hash=$(jq -r ".\"$key\".hash" "$file")
 
     # On télécharge TOUJOURS, même à version identique, et on compare le
     # contenu : le Marketplace republie parfois une même version avec des
@@ -157,10 +150,9 @@ for key in $(jq -r 'keys[]' "$file"); do
         echo "⬆️  $key : $current -> $latest"
     fi
 
-    tmp=$(mktemp)
-    jq --arg k "$key" --arg v "$latest" --arg h "$hash" \
-        '.[$k].version = $v | .[$k].sha256 = $h' "$file" > "$tmp"
-    mv "$tmp" "$file"
+    # shellcheck disable=SC2016 # $k, $v, $h : variables jq
+    um_replace "$file" jq --arg k "$key" --arg v "$latest" --arg h "$hash" \
+        '.[$k].version = $v | .[$k].hash = $h' "$file"
     updated=$((updated + 1))
 done
 

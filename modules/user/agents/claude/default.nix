@@ -41,7 +41,7 @@ in
         };
 
         home.packages = [
-          # Flake dédié, toujours à jour (bump via `rebuild -u`).
+          # Flake dédié, toujours à jour (bump via `update`, coché par défaut).
           inputs.claude-code.packages.${cfg.pkgs.stdenv.hostPlatform.system}.default
           cfg.pkgs.poppler-utils # pdftoppm/pdftotext, lecture de PDF
         ];

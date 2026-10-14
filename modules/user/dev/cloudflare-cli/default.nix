@@ -9,26 +9,15 @@ let
   cfg = config.userSettings.dev.cloudflareCli;
 
   # CLOUDFLARE_API_TOKEN lu par wrangler lui-même (confirmé dans son bundle
-  # JS) : le secret n'est jamais dans le store, seul le chemin déchiffré par
-  # sops-nix (re-déchiffré à chaque activation) l'est.
-  cloudflareTokenPath = config.sops.secrets.${cfg.tokenSops}.path;
-
-  # writeShellApplication et pas writeShellScriptBin : il pose
-  # `set -euo pipefail`, sans quoi un `cat` en échec (secret non déchiffré —
-  # sops pas encore activé, user sans clé) laisse le token VIDE et wrangler
-  # part NON AUTHENTIFIÉ, avec une erreur d'API trompeuse à l'arrivée. Bonus :
-  # shellcheck passe dessus au build, ce que la CI ne fait que sur les *.sh.
-  wrangler-wrapper = cfg.pkgs.writeShellApplication {
+  # JS).
+  wrangler-wrapper = myLib.mkSecretEnvWrapper {
+    inherit config;
+    pkgs = cfg.pkgs;
     name = "wrangler";
-    runtimeInputs = [ cfg.pkgs.coreutils ];
-    text = ''
-      CLOUDFLARE_API_TOKEN="$(cat ${cloudflareTokenPath})"
-      export CLOUDFLARE_API_TOKEN
-      ${lib.optionalString (
-        cfg.accountId != null
-      ) "export CLOUDFLARE_ACCOUNT_ID=${lib.escapeShellArg cfg.accountId}"}
-      exec ${cfg.pkgs.wrangler}/bin/wrangler "$@"
-    '';
+    secret = cfg.tokenSops;
+    envVar = "CLOUDFLARE_API_TOKEN";
+    env = lib.optionalAttrs (cfg.accountId != null) { CLOUDFLARE_ACCOUNT_ID = cfg.accountId; };
+    exec = "${cfg.pkgs.wrangler}/bin/wrangler";
   };
 in
 {

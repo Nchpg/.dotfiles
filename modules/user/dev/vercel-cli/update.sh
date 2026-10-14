@@ -1,60 +1,26 @@
 #!/usr/bin/env bash
 # Vérifie la dernière version publiée de Vercel CLI sur le registre npm (celui
 # qu'utilise réellement `npx`, cf. default.nix) et met à jour pinned.json avec
-# le hash SRI du tarball, calculé via `nix store prefetch-file` — même
-# technique que kimi-code/update.sh, pour que le hash corresponde à
-# l'artefact effectivement exécuté.
-# Lancé par update.sh (commande `update`, ou `rebuild -u`).
+# l'URL et le hash SRI du tarball, calculé via `nix store prefetch-file` pour
+# que le hash corresponde à l'artefact effectivement exécuté. Protocole : cf.
+# scripts/lib/update-module.sh.
 set -euo pipefail
-
-# --check : affiche {name, current, latest, url} en JSON sur stdout, sans rien
-# télécharger ni modifier. Utilisé par update.sh pour tout lister avant de
-# choisir ; le reste des messages part alors sur stderr.
-check=0
-if [ "${1:-}" = "--check" ]; then
-    check=1
-    exec 3>&1 1>&2
-fi
-
-flake="${MY_FLAKE:-$HOME/.dotfiles}"
-dir="$flake/modules/user/dev/vercel-cli"
-pinned_file="$dir/pinned.json"
+# shellcheck source=scripts/lib/update-module.sh
+. "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
+um_init "$@"
 
 echo "🔎 Checking latest Vercel CLI version (npm registry)..."
-version=$(curl -fsSL "https://registry.npmjs.org/vercel" | jq -r '."dist-tags".latest')
+version=$(um_latest_npm vercel)
 echo "Latest version: $version"
 
-if [ "$check" -eq 1 ]; then
-    current=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || true)
-    jq -nc --arg name "Vercel CLI" --arg current "$current" --arg latest "$version" \
-        --arg url "https://www.npmjs.com/package/vercel/v/$version" '{$name, $current, $latest, $url}' >&3
-    exit 0
-fi
+current=$(um_pinned version)
+[ "$UM_CHECK" -eq 1 ] && um_check "Vercel CLI" "$current" "$version" \
+    "https://www.npmjs.com/package/vercel/v/$version"
+um_skip_if_current "Vercel CLI" "$current" "$version"
 
-if [ -f "$pinned_file" ]; then
-    current_version=$(jq -r '.version // empty' "$pinned_file" 2>/dev/null || echo "")
-    if [ "$current_version" = "$version" ]; then
-        echo "✓ Vercel CLI is already up to date ($version)"
-        exit 0
-    fi
-fi
-
-tarball_url="https://registry.npmjs.org/vercel/-/vercel-${version}.tgz"
+url="https://registry.npmjs.org/vercel/-/vercel-${version}.tgz"
 echo "🔎 Fetching + hashing tarball for $version..."
-# --json donne directement le hash au format SRI (sha256-...), attendu tel
-# quel par fetchurl dans default.nix : pas de conversion à faire.
-if ! prefetch=$(nix store prefetch-file --json "$tarball_url" 2>/dev/null) \
-    || ! sha256=$(printf '%s' "$prefetch" | jq -er '.hash' 2>/dev/null); then
-    echo "⚠️ Error: Could not retrieve sha256 for vercel tarball" >&2
-    exit 1
-fi
-
-cat <<EOF > "$pinned_file"
-{
-  "version": "$version",
-  "sha256": "$sha256"
-}
-EOF
-
+hash=$(um_prefetch_url "$url")
+um_write_pinned version="$version" url="$url" hash="$hash"
 
 echo "⬆️ Updated Vercel CLI to version $version"

@@ -3,67 +3,67 @@
     "publisher": "anthropic",
     "name": "claude-code",
     "version": "2.1.299",
-    "sha256": "sha256-xHdvUhZoETUnYiponm8Dzipnd5Hu85eHmW96kxbDQ9Q=",
-    "targetPlatform": "linux-x64"
+    "hash": "sha256-xHdvUhZoETUnYiponm8Dzipnd5Hu85eHmW96kxbDQ9Q=",
+    "arch": "linux-x64"
   },
   "ahgood.shift-shift": {
     "publisher": "ahgood",
     "name": "shift-shift",
     "version": "0.0.5",
-    "sha256": "sha256-r6qzsQTQrTbZiloFdyH5XtT2P2Mf3uOV70iCNuJa6HQ="
+    "hash": "sha256-r6qzsQTQrTbZiloFdyH5XtT2P2Mf3uOV70iCNuJa6HQ="
   },
   "ms-azuretools.vscode-containers": {
     "publisher": "ms-azuretools",
     "name": "vscode-containers",
     "version": "2.5.2",
-    "sha256": "sha256-ERpwIOxLZxelWPRFYwsaEcbnOxW3cC3vGOKIkg92ztw="
+    "hash": "sha256-ERpwIOxLZxelWPRFYwsaEcbnOxW3cC3vGOKIkg92ztw="
   },
   "ms-vscode.remote-explorer": {
     "publisher": "ms-vscode",
     "name": "remote-explorer",
     "version": "0.6.2026100809",
-    "sha256": "sha256-hJD0P4itirXntOylYME+lcikQbo1huwgNuS4V41uwAk="
+    "hash": "sha256-hJD0P4itirXntOylYME+lcikQbo1huwgNuS4V41uwAk="
   },
   "cweijan.vscode-postgresql-client2": {
     "publisher": "cweijan",
     "name": "vscode-postgresql-client2",
     "version": "9.0.2",
-    "sha256": "sha256-BmcVzL8DV3E+oZ/ciIwChbzT/1kdXkovZ60nii09jfw="
+    "hash": "sha256-BmcVzL8DV3E+oZ/ciIwChbzT/1kdXkovZ60nii09jfw="
   },
   "ms-vscode.cpptools-themes": {
     "publisher": "ms-vscode",
     "name": "cpptools-themes",
     "version": "2.0.0",
-    "sha256": "sha256-YWA5UsA+cgvI66uB9d9smwghmsqf3vZPFNpSCK+DJxc="
+    "hash": "sha256-YWA5UsA+cgvI66uB9d9smwghmsqf3vZPFNpSCK+DJxc="
   },
   "william-voyek.vscode-nginx": {
     "publisher": "william-voyek",
     "name": "vscode-nginx",
     "version": "0.7.2",
-    "sha256": "sha256-mAmncewwAeagVqwWWrmYosMyw2AT3W0sx8jl2mCeimg="
+    "hash": "sha256-mAmncewwAeagVqwWWrmYosMyw2AT3W0sx8jl2mCeimg="
   },
   "github.copilot-chat": {
     "publisher": "github",
     "name": "copilot-chat",
     "version": "0.48.1",
-    "sha256": "sha256-eFLfYMFxvgtZtmwLsxfneMjD4jOg8/Uk0Eu/6+A6odY="
+    "hash": "sha256-eFLfYMFxvgtZtmwLsxfneMjD4jOg8/Uk0Eu/6+A6odY="
   },
   "github.copilot": {
     "publisher": "github",
     "name": "copilot",
     "version": "1.388.0",
-    "sha256": "sha256-7RjK8+PNI+rIuRQfCwpvswAiz991dacRO2qYhcv1vhk="
+    "hash": "sha256-7RjK8+PNI+rIuRQfCwpvswAiz991dacRO2qYhcv1vhk="
   },
   "jonathanharty.gruvbox-material-icon-theme": {
     "publisher": "jonathanharty",
     "name": "gruvbox-material-icon-theme",
     "version": "1.1.5",
-    "sha256": "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY="
+    "hash": "sha256-86UWUuWKT6adx4hw4OJw3cSZxWZKLH4uLTO+Ssg75gY="
   },
   "jakeboone02.cypher-query-language": {
     "publisher": "jakeboone02",
     "name": "cypher-query-language",
     "version": "2.0.0",
-    "sha256": "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc="
+    "hash": "sha256-oNjXfW7ndWDsc4GWb8p9QwoXAmW2IVIyUwCxY1qTQSc="
   }
 }

@@ -9,14 +9,9 @@
 let
   cfg = config.userSettings.agents.kimiCode;
 
-  # Version + hash épinglés automatiquement par update.sh
-  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
-
   # Tarball npm vérifié par Nix (FOD) : un hash mismatch fait échouer l'éval.
-  kimiTarball = cfg.pkgs.fetchurl {
-    url = "https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-${pinned.version}.tgz";
-    sha256 = pinned.sha256;
-  };
+  # URL + hash épinglés automatiquement par update.sh.
+  kimiTarball = myLib.fetchPinned cfg.pkgs ./pinned.json;
 
   # npx + Node.js nixpkgs plutôt que le binaire SEA précompilé upstream, dont
   # le runtime Node embarqué crashe en SIGILL sur CPU hybride (Meteor Lake).
@@ -25,8 +20,10 @@ let
     exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
   '';
 
-  kimi-code-wrapper = cfg.pkgs.writeShellScriptBin "kimi-code" ''
-    exec ${cfg.pkgs.nodejs_22}/bin/npx --yes file://${kimiTarball} "$@"
+  # `kimi-code` : même commande sous l'autre nom, simple lien vers `kimi`.
+  kimi-code-link = cfg.pkgs.runCommand "kimi-code" { } ''
+    mkdir -p $out/bin
+    ln -s ${kimi-wrapper}/bin/kimi $out/bin/kimi-code
   '';
 in
 {
@@ -41,7 +38,7 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [
       kimi-wrapper
-      kimi-code-wrapper
+      kimi-code-link
     ];
   };
 }

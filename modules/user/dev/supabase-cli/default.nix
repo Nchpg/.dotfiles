@@ -8,22 +8,14 @@
 let
   cfg = config.userSettings.dev.supabaseCli;
 
-  # SUPABASE_ACCESS_TOKEN lu par le CLI lui-même (confirmé dans son binaire) :
-  # le secret n'est jamais dans le store, seul le chemin déchiffré par
-  # sops-nix (re-déchiffré à chaque activation) l'est.
-  supabaseTokenPath = config.sops.secrets.${cfg.tokenSops}.path;
-
-  # writeShellApplication : `set -euo pipefail` obligatoire ici, cf. le même
-  # commentaire dans dev/cloudflare-cli — sans lui, un secret non déchiffré
-  # donne un token vide et un CLI qui part non authentifié en silence.
-  supabase-wrapper = cfg.pkgs.writeShellApplication {
+  # SUPABASE_ACCESS_TOKEN lu par le CLI lui-même (confirmé dans son binaire).
+  supabase-wrapper = myLib.mkSecretEnvWrapper {
+    inherit config;
+    pkgs = cfg.pkgs;
     name = "supabase";
-    runtimeInputs = [ cfg.pkgs.coreutils ];
-    text = ''
-      SUPABASE_ACCESS_TOKEN="$(cat ${supabaseTokenPath})"
-      export SUPABASE_ACCESS_TOKEN
-      exec ${cfg.pkgs.supabase-cli}/bin/supabase "$@"
-    '';
+    secret = cfg.tokenSops;
+    envVar = "SUPABASE_ACCESS_TOKEN";
+    exec = "${cfg.pkgs.supabase-cli}/bin/supabase";
   };
 in
 {

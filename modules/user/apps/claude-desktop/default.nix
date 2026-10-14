@@ -15,17 +15,14 @@
 let
   cfg = config.userSettings.apps.claudeDesktop;
 
-  # Version + hash épinglés automatiquement par update.sh
-  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
+  # Version, URL + hash épinglés automatiquement par update.sh
+  pinned = lib.importJSON ./pinned.json;
 
   pname = "claude-desktop";
   # Préfixe du .desktop et du type MIME dans le .deb.
   appId = "com.anthropic.Claude";
 
-  src = cfg.pkgs.fetchurl {
-    url = "https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_${pinned.version}_amd64.deb";
-    hash = pinned.sha256;
-  };
+  src = myLib.fetchPinned cfg.pkgs ./pinned.json;
 
   # Arborescence /usr du .deb, sans patchelf : c'est le FHS qui fournit les
   # bibliothèques.

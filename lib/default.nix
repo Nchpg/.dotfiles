@@ -23,6 +23,7 @@ lib:
   checkSopsPolicy = import ./check-sops-policy.nix lib;
   contentHash = import ./content-hash.nix lib;
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
+  fetchPinned = import ./fetch-pinned.nix lib;
   mkFlakeGuard = import ./mk-flake-guard.nix;
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix;
@@ -30,6 +31,7 @@ lib:
   mkInternalPorts = import ./mk-internal-ports.nix lib;
   optionEnabled = import ./option-enabled.nix lib;
   mkPkgsOption = import ./mk-pkgs-option.nix;
+  mkSecretEnvWrapper = import ./mk-secret-env-wrapper.nix lib;
   mkThemedIcon = import ./mk-themed-icon.nix;
   mkTerminalCmd = import ./mk-terminal-cmd.nix;
   mkTlsVhost = import ./mk-tls-vhost.nix;

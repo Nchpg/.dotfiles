@@ -9,8 +9,8 @@
 let
   cfg = config.userSettings.agents.mammouthCode;
 
-  # Version + hash épinglés automatiquement par update.sh
-  pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
+  # Version, URL + hash épinglés automatiquement par update.sh
+  pinned = lib.importJSON ./pinned.json;
 
   # Binaire précompilé (fork d'OpenCode) en release GitHub, pas npm/nixpkgs :
   # autoPatchelfHook patche l'interpréteur ELF vers le glibc de nixpkgs.
@@ -18,10 +18,7 @@ let
     pname = "mammouth-code";
     version = pinned.version;
 
-    src = cfg.pkgs.fetchurl {
-      url = "https://github.com/mammouth-ai/code/releases/download/v${pinned.version}/mammouth-linux-x64.tar.gz";
-      sha256 = pinned.sha256;
-    };
+    src = myLib.fetchPinned cfg.pkgs ./pinned.json;
 
     nativeBuildInputs = [ cfg.pkgs.autoPatchelfHook ];
     dontBuild = true;
