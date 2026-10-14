@@ -32,98 +32,98 @@ let
       coreutils
     ];
     text = ''
-      unit=''${1:-}
-      [ -n "$unit" ] || { echo "notify-failure : unite manquante" >&2; exit 1; }
+            unit=''${1:-}
+            [ -n "$unit" ] || { echo "notify-failure : unite manquante" >&2; exit 1; }
 
-      # Le webhook arrive par les credentials systemd, jamais par
-      # l'environnement : /proc/<pid>/environ se lit, et une URL de webhook
-      # laisse ecrire dans le salon a qui la detient.
-      webhook=$(cat "$CREDENTIALS_DIRECTORY/webhook")
+            # Le webhook arrive par les credentials systemd, jamais par
+            # l'environnement : /proc/<pid>/environ se lit, et une URL de webhook
+            # laisse ecrire dans le salon a qui la detient.
+            webhook=$(cat "$CREDENTIALS_DIRECTORY/webhook")
 
-      # `systemctl show` ne distingue pas « cette unite va bien » de « cette
-      # unite n'existe pas » : sur un nom inconnu il rend les valeurs par
-      # defaut, Result=success et ExecMainStatus=0. Une alerte qui annonce
-      # « success » est precisement ce qui apprend a ne plus les lire, donc on
-      # interroge d'abord LoadState et on le dit quand il n'est pas `loaded`.
-      # Constate au premier test de fumee, sur `notify-failure@test.service`.
-      load=$(systemctl show -p LoadState --value "$unit" 2> /dev/null || echo inconnu)
+            # `systemctl show` ne distingue pas « cette unite va bien » de « cette
+            # unite n'existe pas » : sur un nom inconnu il rend les valeurs par
+            # defaut, Result=success et ExecMainStatus=0. Une alerte qui annonce
+            # « success » est precisement ce qui apprend a ne plus les lire, donc on
+            # interroge d'abord LoadState et on le dit quand il n'est pas `loaded`.
+            # Constate au premier test de fumee, sur `notify-failure@test.service`.
+            load=$(systemctl show -p LoadState --value "$unit" 2> /dev/null || echo inconnu)
 
-      if [ "$load" = "loaded" ]; then
-        result=$(systemctl show -p Result --value "$unit" 2> /dev/null || echo inconnu)
-        code=$(systemctl show -p ExecMainStatus --value "$unit" 2> /dev/null || echo "?")
-      else
-        result="unite introuvable (LoadState=$load)"
-        code="-"
-      fi
+            if [ "$load" = "loaded" ]; then
+              result=$(systemctl show -p Result --value "$unit" 2> /dev/null || echo inconnu)
+              code=$(systemctl show -p ExecMainStatus --value "$unit" 2> /dev/null || echo "?")
+            else
+              result="unite introuvable (LoadState=$load)"
+              code="-"
+            fi
 
-      # COURSE ENTRE `OnFailure=` ET `Restart=`, et elle se perd systematiquement
-      # sur un service qui se releve vite. systemd declenche cette unite-ci puis
-      # replanifie le service ; le temps qu'on demarre et qu'on interroge, il est
-      # deja reparti. `systemctl show` decrit alors la tentative REUSSIE, et le
-      # message annonce un echec en affirmant « Result=success, code 0 ».
-      #
-      # Constate au redemarrage du 16 aout : cloudflared a echoue faute de DNS,
-      # s'est relance une seconde plus tard, et l'alerte disait l'inverse de ce
-      # qui venait de se produire.
-      #
-      # On ne peut pas remonter l'etat qui a declenche l'alerte — systemd ne le
-      # passe pas au gestionnaire — donc on decrit la situation telle qu'elle est
-      # AU MOMENT DE L'ENVOI. Un service revenu tout seul reste digne d'interet :
-      # `NRestarts` dit s'il bat la chamade ou s'il s'agissait d'un hoquet unique.
-      etat=""
-      if [ "$load" = "loaded" ]; then
-        active=$(systemctl show -p ActiveState --value "$unit" 2> /dev/null || echo inconnu)
-        restarts=$(systemctl show -p NRestarts --value "$unit" 2> /dev/null || echo "?")
+            # COURSE ENTRE `OnFailure=` ET `Restart=`, et elle se perd systematiquement
+            # sur un service qui se releve vite. systemd declenche cette unite-ci puis
+            # replanifie le service ; le temps qu'on demarre et qu'on interroge, il est
+            # deja reparti. `systemctl show` decrit alors la tentative REUSSIE, et le
+            # message annonce un echec en affirmant « Result=success, code 0 ».
+            #
+            # Constate au redemarrage du 16 aout : cloudflared a echoue faute de DNS,
+            # s'est relance une seconde plus tard, et l'alerte disait l'inverse de ce
+            # qui venait de se produire.
+            #
+            # On ne peut pas remonter l'etat qui a declenche l'alerte — systemd ne le
+            # passe pas au gestionnaire — donc on decrit la situation telle qu'elle est
+            # AU MOMENT DE L'ENVOI. Un service revenu tout seul reste digne d'interet :
+            # `NRestarts` dit s'il bat la chamade ou s'il s'agissait d'un hoquet unique.
+            etat=""
+            if [ "$load" = "loaded" ]; then
+              active=$(systemctl show -p ActiveState --value "$unit" 2> /dev/null || echo inconnu)
+              restarts=$(systemctl show -p NRestarts --value "$unit" 2> /dev/null || echo "?")
 
-        if [ "$active" = "active" ]; then
-          etat="
+              if [ "$active" = "active" ]; then
+                etat="
 
-✅ l'unité est **repartie toute seule** depuis (redémarrages : \`$restarts\`). L'échec a bien eu lieu, mais il n'a pas duré."
-        else
-          etat="
+      ✅ l'unité est **repartie toute seule** depuis (redémarrages : \`$restarts\`). L'échec a bien eu lieu, mais il n'a pas duré."
+              else
+                etat="
 
-état actuel : \`$active\` (redémarrages : \`$restarts\`)"
-        fi
-      fi
+      état actuel : \`$active\` (redémarrages : \`$restarts\`)"
+              fi
+            fi
 
-      umask 077
-      conf=$(mktemp)
-      body=$(mktemp)
-      trap 'rm -f "$conf" "$body"' EXIT
+            umask 077
+            conf=$(mktemp)
+            body=$(mktemp)
+            trap 'rm -f "$conf" "$body"' EXIT
 
-      # L'URL passe par un fichier de configuration curl et non par argv : la
-      # ligne de commande d'un processus est lisible par tous les utilisateurs
-      # de la machine le temps que la requete dure.
-      printf 'url = "%s"\n' "$webhook" > "$conf"
+            # L'URL passe par un fichier de configuration curl et non par argv : la
+            # ligne de commande d'un processus est lisible par tous les utilisateurs
+            # de la machine le temps que la requete dure.
+            printf 'url = "%s"\n' "$webhook" > "$conf"
 
-      # AUCUN extrait de journal dans le message, a dessein. Discord est un
-      # tiers, et le journal d'une unite qui manipule des secrets peut en
-      # recracher un bout dans une trace d'erreur. Le nom, la cause et le code
-      # suffisent a savoir qu'il faut aller regarder ; la commande pour le faire
-      # est jointe.
-      #
-      # LA DIRECTIVE CI-DESSOUS N'EST PAS COSMETIQUE. `\($host)` est de
-      # l'interpolation jq, pas du shell, donc les apostrophes simples sont
-      # exactement ce qu'il faut ; shellcheck y voit un `$` non expanse et leve
-      # SC2016. Et un avertissement sur cette ligne-la suffit a tuer la
-      # construction : shellcheck tourne dans un bac a sable en locale C, il
-      # meurt en tentant de reafficher une ligne qui porte un accent ou un
-      # emoji (« commitBuffer: invalid argument »), sur un message qui ne parle
-      # pas du vrai probleme. Constate.
-      # shellcheck disable=SC2016
-      jq -n \
-        --arg host "$(uname -n)" \
-        --arg unit "$unit" \
-        --arg result "$result" \
-        --arg code "$code" \
-        --arg etat "$etat" \
-        '{ content: "⚠️ **\($host)** : unité `\($unit)` en échec.\nrésultat : `\($result)`, code de sortie : `\($code)`\($etat)\n\n`journalctl -u \($unit) -n 50 --no-pager`" }' \
-        > "$body"
+            # AUCUN extrait de journal dans le message, a dessein. Discord est un
+            # tiers, et le journal d'une unite qui manipule des secrets peut en
+            # recracher un bout dans une trace d'erreur. Le nom, la cause et le code
+            # suffisent a savoir qu'il faut aller regarder ; la commande pour le faire
+            # est jointe.
+            #
+            # LA DIRECTIVE CI-DESSOUS N'EST PAS COSMETIQUE. `\($host)` est de
+            # l'interpolation jq, pas du shell, donc les apostrophes simples sont
+            # exactement ce qu'il faut ; shellcheck y voit un `$` non expanse et leve
+            # SC2016. Et un avertissement sur cette ligne-la suffit a tuer la
+            # construction : shellcheck tourne dans un bac a sable en locale C, il
+            # meurt en tentant de reafficher une ligne qui porte un accent ou un
+            # emoji (« commitBuffer: invalid argument »), sur un message qui ne parle
+            # pas du vrai probleme. Constate.
+            # shellcheck disable=SC2016
+            jq -n \
+              --arg host "$(uname -n)" \
+              --arg unit "$unit" \
+              --arg result "$result" \
+              --arg code "$code" \
+              --arg etat "$etat" \
+              '{ content: "⚠️ **\($host)** : unité `\($unit)` en échec.\nrésultat : `\($result)`, code de sortie : `\($code)`\($etat)\n\n`journalctl -u \($unit) -n 50 --no-pager`" }' \
+              > "$body"
 
-      curl --silent --show-error --max-time 20 \
-        --config "$conf" \
-        --header 'Content-Type: application/json' \
-        --data "@$body" > /dev/null
+            curl --silent --show-error --max-time 20 \
+              --config "$conf" \
+              --header 'Content-Type: application/json' \
+              --data "@$body" > /dev/null
     '';
   };
 in
@@ -141,6 +141,18 @@ in
 
         C'est un identifiant à part entière : qui la détient peut écrire dans le
         salon. Elle n'a rien à faire dans le dépôt public.
+      '';
+    };
+
+    units = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "vaultwarden" ];
+      description = ''
+        Services systemd (sans le suffixe `.service`) dont l'échec est signalé.
+        Chaque module y ajoute les siens sans condition : la liste se fusionne,
+        et elle n'a d'effet que si `enable` est vrai. Équivaut à fusionner
+        `onFailure` (ci-dessous) dans chacune de ces unités.
       '';
     };
 
@@ -167,47 +179,52 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    sops.secrets.${cfg.webhookKey} = {
-      mode = "0400";
-    };
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      { systemd.services = lib.genAttrs cfg.units (_: cfg.onFailure); }
+      {
+        sops.secrets.${cfg.webhookKey} = {
+          mode = "0400";
+        };
 
-    # Gabarit : une instance par unité défaillante, `%i` portant son nom.
-    #
-    # PAS de `onFailure` sur celle-ci, et ce n'est pas un oubli : une
-    # notification qui échoue déclencherait sa propre notification, laquelle
-    # échouerait pour la même raison. Un réseau coupé suffirait à lancer la
-    # boucle.
-    systemd.services."notify-failure@" = {
-      description = "Signale sur Discord l'échec de %i";
-      after = [ "network-online.target" ];
-      wants = [ "network-online.target" ];
+        # Gabarit : une instance par unité défaillante, `%i` portant son nom.
+        #
+        # PAS de `onFailure` sur celle-ci, et ce n'est pas un oubli : une
+        # notification qui échoue déclencherait sa propre notification, laquelle
+        # échouerait pour la même raison. Un réseau coupé suffirait à lancer la
+        # boucle.
+        systemd.services."notify-failure@" = {
+          description = "Signale sur Discord l'échec de %i";
+          after = [ "network-online.target" ];
+          wants = [ "network-online.target" ];
 
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${lib.getExe notifier} %i";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${lib.getExe notifier} %i";
 
-        # Lu par systemd en root AVANT l'abaissement de privilèges, puis exposé
-        # dans $CREDENTIALS_DIRECTORY en lecture seule pour ce service seul.
-        LoadCredential = "webhook:${config.sops.secrets.${cfg.webhookKey}.path}";
+            # Lu par systemd en root AVANT l'abaissement de privilèges, puis exposé
+            # dans $CREDENTIALS_DIRECTORY en lecture seule pour ce service seul.
+            LoadCredential = "webhook:${config.sops.secrets.${cfg.webhookKey}.path}";
 
-        # Compte jetable : ce service n'a besoin d'aucune identité persistante,
-        # et rien de ce qu'il touche ne lui survit.
-        DynamicUser = true;
-        NoNewPrivileges = true;
-        ProtectHome = true;
-        PrivateDevices = true;
-        # `AF_UNIX` n'est PAS décoratif malgré les apparences : c'est par une
-        # socket unix que glibc interroge systemd-resolved et que le service
-        # écrit au journal. Sans lui, la résolution de discord.com échoue et
-        # l'erreur elle-même se perd, ce qui donne une notification muette qui
-        # échoue en silence — exactement ce que ce module existe pour éviter.
-        RestrictAddressFamilies = [
-          "AF_UNIX"
-          "AF_INET"
-          "AF_INET6"
-        ];
-      };
-    };
-  };
+            # Compte jetable : ce service n'a besoin d'aucune identité persistante,
+            # et rien de ce qu'il touche ne lui survit.
+            DynamicUser = true;
+            NoNewPrivileges = true;
+            ProtectHome = true;
+            PrivateDevices = true;
+            # `AF_UNIX` n'est PAS décoratif malgré les apparences : c'est par une
+            # socket unix que glibc interroge systemd-resolved et que le service
+            # écrit au journal. Sans lui, la résolution de discord.com échoue et
+            # l'erreur elle-même se perd, ce qui donne une notification muette qui
+            # échoue en silence — exactement ce que ce module existe pour éviter.
+            RestrictAddressFamilies = [
+              "AF_UNIX"
+              "AF_INET"
+              "AF_INET6"
+            ];
+          };
+        };
+      }
+    ]
+  );
 }
