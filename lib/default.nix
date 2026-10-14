@@ -43,6 +43,9 @@ lib:
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
   schemeColors = import ./scheme-colors.nix;
   sopsAudience = import ./sops-audience.nix lib;
+  # Fonction bash anchors() (ancres de clés d'un .sops.yaml), partagée avec
+  # init.sh qui la source depuis le clone ; embarquée au build par `secrets`.
+  sopsAnchorsSh = builtins.readFile ../scripts/lib/sops-anchors.sh;
   sopsPolicy = import ./sops-policy.nix lib;
   targetName = import ./target-name.nix lib;
 }
