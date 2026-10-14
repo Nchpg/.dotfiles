@@ -6,19 +6,12 @@
   ...
 }:
 
-let
-  cfg = config.userSettings.agents.codex;
-in
-{
-  options.userSettings.agents.codex = {
-    enable = lib.mkEnableOption "Codex CLI";
-    pkgs = myLib.mkPkgsOption {
-      inherit lib config;
-      default = pkgs-unstable;
-    };
-  };
-
-  config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.codex ];
-  };
+myLib.mkPackageModule {
+  inherit config lib;
+  path = [
+    "agents"
+    "codex"
+  ];
+  description = "Codex CLI";
+  defaultPkgs = pkgs-unstable;
 }

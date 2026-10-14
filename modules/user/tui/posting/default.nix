@@ -2,12 +2,13 @@
   config,
   lib,
   myLib,
+  themes,
   ...
 }:
 
 let
   cfg = config.userSettings.tui.posting;
-  c = config.lib.stylix.colors.withHashtag;
+  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
 in
 {
   options.userSettings.tui.posting = {

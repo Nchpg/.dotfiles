@@ -3,6 +3,7 @@
   lib,
   inputs,
   myLib,
+  themes,
   ...
 }:
 
@@ -13,7 +14,7 @@ let
   spicePkgs = inputs.spicetify-nix.legacyPackages.${cfg.pkgs.stdenv.hostPlatform.system};
 
   # base16 renvoie du hex sans '#', format attendu par color.ini.
-  c = config.lib.stylix.colors;
+  c = myLib.schemeColors { inherit config themes; };
   stylixColorScheme = {
     text = c.base05;
     subtext = c.base04;

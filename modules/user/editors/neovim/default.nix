@@ -1,8 +1,8 @@
 {
   config,
   lib,
-  pkgs-stable,
   myLib,
+  themes,
   ...
 }:
 
@@ -11,6 +11,7 @@ let
 
   # init.lua séparé (coloration syntaxique à l'édition) : valeurs dynamiques
   # injectées via placeholders @stylix_baseXX@.
+  colors = myLib.schemeColors { inherit config themes; };
   stylixColorNames = [
     "base00"
     "base01"
@@ -21,7 +22,7 @@ let
     "base0D"
   ];
   initLuaContent = lib.replaceStrings (map (name: "@stylix_${name}@") stylixColorNames) (map (
-    name: config.lib.stylix.colors.${name}
+    name: colors.${name}
   ) stylixColorNames) (builtins.readFile ./init.lua);
 in
 {
@@ -83,21 +84,19 @@ in
         # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
         ++ lib.optional config.userSettings.editors.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
-      extraPackages = with pkgs-stable; [
-        nil # nix
-        nixfmt # formateur de `nix fmt` et du hook pre-commit, pas nixpkgs-fmt
-        clang-tools # c/cpp
-        pyright # python
-        gopls # go
-        lua-language-server
-        ripgrep # telescope live grep
-        fd
-        # image.nvim : rendu + rasterisation PDF/EPS (poppler-utils déclaré
-        # ici et pas seulement via claude, sinon perdu sans ce module).
-        imagemagick
-        ghostscript
-        poppler-utils
-      ];
+      extraPackages =
+        myLib.editorLspPackages cfg.pkgs
+        ++ (with cfg.pkgs; [
+          gopls # go
+          lua-language-server
+          ripgrep # telescope live grep
+          fd
+          # image.nvim : rendu + rasterisation PDF/EPS (poppler-utils déclaré
+          # ici et pas seulement via claude, sinon perdu sans ce module).
+          imagemagick
+          ghostscript
+          poppler-utils
+        ]);
 
       # Rock lua `magick` : extraLuaPackages matche la version de Neovim,
       # pas de conflit luajit.

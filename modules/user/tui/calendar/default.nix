@@ -2,13 +2,14 @@
   config,
   lib,
   myLib,
+  themes,
   ...
 }:
 
 let
   cfg = config.userSettings.tui.calendar;
   term = config.userSettings.terminal.default;
-  c = config.lib.stylix.colors.withHashtag;
+  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
   inherit (lib) concatStringsSep mapAttrsToList;
 
   termCmd = myLib.mkTerminalCmd {

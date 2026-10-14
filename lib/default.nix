@@ -23,6 +23,7 @@ lib:
   checkSopsPolicy = import ./check-sops-policy.nix lib;
   contentHash = import ./content-hash.nix lib;
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
+  editorLspPackages = import ./editor-lsp-packages.nix;
   fetchPinned = import ./fetch-pinned.nix lib;
   mkFlakeGuard = import ./mk-flake-guard.nix;
   mkEvalCheck = import ./mk-eval-check.nix lib;
@@ -30,6 +31,7 @@ lib:
   mkIcon = import ./mk-icon.nix lib;
   mkInternalPorts = import ./mk-internal-ports.nix lib;
   optionEnabled = import ./option-enabled.nix lib;
+  mkPackageModule = import ./mk-package-module.nix;
   mkPkgsOption = import ./mk-pkgs-option.nix;
   mkSecretEnvWrapper = import ./mk-secret-env-wrapper.nix lib;
   mkThemedIcon = import ./mk-themed-icon.nix;
@@ -38,6 +40,7 @@ lib:
   mkUpdateEnv = import ./mk-update-env.nix;
   mkTerminalShellBin = import ./mk-terminal-shell-bin.nix;
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
+  schemeColors = import ./scheme-colors.nix;
   sopsAudience = import ./sops-audience.nix lib;
   sopsPolicy = import ./sops-policy.nix lib;
   targetName = import ./target-name.nix lib;

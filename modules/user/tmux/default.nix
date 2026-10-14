@@ -7,6 +7,7 @@
 
 let
   cfg = config.userSettings.tmux;
+  shell = config.userSettings.shell.default;
 in
 {
   options = {
@@ -24,7 +25,11 @@ in
 
     programs.tmux = {
       enable = true;
-      shell = "${cfg.pkgs.${config.userSettings.shell.default}}/bin/${config.userSettings.shell.default}";
+      # Même binaire que celui installé par le module du shell (son `pkgs`).
+      shell = myLib.mkTerminalShellBin {
+        inherit (config.userSettings.shell.${shell}) pkgs;
+        inherit shell;
+      };
       terminal = "tmux-256color";
       historyLimit = 100000;
       escapeTime = 10; # latence Esc minimale (utile pour vim/neovim)

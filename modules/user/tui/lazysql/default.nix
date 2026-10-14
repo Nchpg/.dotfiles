@@ -5,17 +5,11 @@
   ...
 }:
 
-let
-  cfg = config.userSettings.tui.lazysql;
-in
-{
-  options.userSettings.tui.lazysql = {
-    enable = lib.mkEnableOption "lazysql (TUI client SQL)";
-
-    pkgs = myLib.mkPkgsOption { inherit lib config; };
-  };
-
-  config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.pkgs.lazysql ];
-  };
+myLib.mkPackageModule {
+  inherit config lib;
+  path = [
+    "tui"
+    "lazysql"
+  ];
+  description = "lazysql (TUI client SQL)";
 }

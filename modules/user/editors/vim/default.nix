@@ -65,25 +65,17 @@ in
 
     };
 
-    home.packages = with cfg.pkgs; [
-      # for coc-nvim
-      nodejs
+    home.packages =
+      with cfg.pkgs;
+      [
+        # for coc-nvim
+        nodejs
 
-      # font for vim-airline
-      powerline-fonts
-
-      ### language servers
-
-      # c
-      clang-tools
-
-      #python
-      pyright
-
-      # nix
-      nil
-      nixfmt # formateur de `nix fmt` et du hook pre-commit, pas nixpkgs-fmt
-    ];
+        # font for vim-airline
+        powerline-fonts
+      ]
+      # language servers (communs avec neovim)
+      ++ myLib.editorLspPackages cfg.pkgs;
 
     home.file = {
       ".vim/airline/autoload/airline/themes/powerline.vim".source = ./vim-config/powerline.vim;

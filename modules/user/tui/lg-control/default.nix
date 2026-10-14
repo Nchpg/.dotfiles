@@ -2,13 +2,14 @@
   config,
   lib,
   myLib,
+  themes,
   ...
 }:
 
 let
   cfg = config.userSettings.tui.lgControl;
   term = config.userSettings.terminal.default;
-  c = config.lib.stylix.colors.withHashtag;
+  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
 
   # Ventilateur + profil d'alimentation via menu gum. Écriture de fan_mode
   # sans root grâce à la règle udev du module système lg-laptop. Limite
