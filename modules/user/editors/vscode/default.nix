@@ -1,8 +1,6 @@
 {
   config,
   lib,
-  pkgs-unstable,
-  inputs,
   myLib,
   themes,
   ...
@@ -13,7 +11,8 @@ let
   cfg = config.userSettings.editors.vscode;
 
   # Extensions marketplace (hors nixpkgs) : dans extensions.json, lisible et
-  # réinscriptible par update.sh / vscode-update-extensions plus bas.
+  # réinscriptible par update.sh (commande `update`). `arch` : VSIX propre à
+  # une plateforme (?targetPlatform=, cf. mktplcRefAttrList de vscode-utils).
   marketplaceExtensions = cfg.pkgs.vscode-utils.extensionsFromVscodeMarketplace (
     builtins.attrValues (builtins.fromJSON (builtins.readFile ./extensions.json))
   );
@@ -47,7 +46,7 @@ let
       # git
       eamodio.gitlens
 
-      # latex (compile + preview pdf auto)
+      # latex (compile + preview pdf auto ; TeX : userSettings.dev.latex)
       james-yu.latex-workshop
 
       # outils
@@ -71,14 +70,6 @@ let
     ++ marketplaceExtensions
     ++ lib.optional config.userSettings.editors.wakatime.enable cfg.pkgs.vscode-extensions.wakatime.vscode-wakatime;
 
-  # Contourne le binaire macOS arm64 embarqué dans le VSIX linux-x64 :
-  # l'extension appelle `wrapper <binaire_inutilisable> [flags...]`, on skip
-  # ce binaire et forward le reste au claude système.
-  claudeWrapper = pkgs-unstable.writeShellScript "claude-vscode-wrapper" ''
-    shift
-    exec ${inputs.claude-code.packages.x86_64-linux.default}/bin/claude "$@"
-  '';
-
   vscodePkg = cfg.pkgs.vscode-with-extensions.override {
     vscode = cfg.pkgs.vscode-fhs;
     vscodeExtensions = allVscodeExtensions;
@@ -87,7 +78,7 @@ let
   # Masque les warnings cosmétiques stderr des flags Wayland injectés par
   # NIXOS_OZONE_WL (fonctionnent quand même, seul le validateur d'arguments
   # de VS Code râle). Ne filtre QUE ces lignes, les vraies erreurs passent.
-  codeWrapper = pkgs-unstable.writeShellScriptBin "code" ''
+  codeWrapper = cfg.pkgs.writeShellScriptBin "code" ''
     # SHLVL : le terminal intégré VS Code repart d'un niveau bas (le prompt
     # fish soustrait 1 quand TERM_PROGRAM=vscode).
     unset SHLVL
@@ -106,32 +97,21 @@ let
     }
     .${themes.polarity config.userSettings.stylix.theme};
 
-  # /!\ doit rester du JSON STRICT (pas de commentaires JSONC : le
-  # deep-merge ci-dessous passe par jq).
-  settingsTemplateContent = builtins.readFile ./vscode-config/settings.json;
-  finalConfigContent =
-    lib.replaceStrings
-      [ "@shell@" "@claudeWrapper@" "@colorTheme@" ]
-      [ config.userSettings.shell.default "${claudeWrapper}" colorTheme ]
-      settingsTemplateContent;
-
-  # Validé par jq au build : un commentaire dans le template fait échouer le
-  # rebuild au lieu de casser silencieusement le merge à l'activation.
-  settingsFile = cfg.pkgs.runCommand "vscode-settings.json" { } ''
-    ${cfg.pkgs.jq}/bin/jq . ${cfg.pkgs.writeText "vscode-settings-raw.json" finalConfigContent} > $out
-  '';
-
-  # Bump version+sha256 des extensions qui ont bougé (API marketplace). Ramassée
-  # automatiquement par `rebuild -u` et la CI hebdo (cf. update.sh).
-  updateExtensionsCmd = cfg.pkgs.writeShellApplication {
-    name = "vscode-update-extensions";
-    runtimeInputs = with cfg.pkgs; [
-      curl
-      jq
-      nix
-    ];
-    text = builtins.readFile ./update.sh;
+  # /!\ settings.json doit rester du JSON STRICT (pas de commentaires
+  # JSONC) : lu par importJSON, une erreur fait échouer l'éval au lieu de
+  # casser silencieusement le merge à l'activation. Seules les valeurs qui
+  # dépendent de la config sont posées ici.
+  settings = lib.recursiveUpdate (lib.importJSON ./vscode-config/settings.json) {
+    "workbench.colorTheme" = colorTheme;
+    "terminal.integrated.defaultProfile.linux" = config.userSettings.shell.default;
+    # Le VSIX linux-x64 (`arch`) embarque un claude ELF x86-64 (glibc
+    # seule), qui tourne tel quel dans vscode-fhs : plus de wrapper. Vide plutôt
+    # qu'absent : le merge à l'activation ne retire jamais une clé, l'ancien
+    # chemin du wrapper resterait sinon dans settings.json (et vide = non
+    # défini pour l'extension).
+    "claudeCode.claudeProcessWrapper" = "";
   };
+  settingsFile = cfg.pkgs.writeText "vscode-settings.json" (builtins.toJSON settings);
 
 in
 {
@@ -145,16 +125,6 @@ in
     home.packages = [
       vscodePkg
       (lib.hiPrio codeWrapper) # l'emporte sur bin/code du paquet dans le PATH
-      # LaTeX Workshop + paquets manquants utilisés par le CV
-      (cfg.pkgs.texliveMedium.withPackages (
-        ps: with ps; [
-          enumitem
-          titlesec
-          eurosym
-          parskip
-        ]
-      ))
-      updateExtensionsCmd
     ];
 
     home.file = {

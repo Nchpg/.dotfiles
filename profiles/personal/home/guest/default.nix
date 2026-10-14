@@ -20,6 +20,11 @@
         };
       };
 
+      dev.latex = {
+        enable = true;
+        pkgs = pkgs-unstable;
+      };
+
       git.enable = true;
 
       browsers.firefox.enable = true;

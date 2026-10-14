@@ -116,6 +116,10 @@
       dev = {
         python.enable = true;
         direnv.enable = true;
+        latex = {
+          enable = true;
+          pkgs = pkgs-unstable;
+        };
         vercelCli = {
           enable = true;
           claudePlugin.enable = true;
