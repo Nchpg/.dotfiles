@@ -9,7 +9,7 @@
   options = {
     systemSettings = {
       users = lib.mkOption {
-        description = "List of desktop users to create on the system";
+        description = "List of users to create on the system";
         type = lib.types.listOf (
           lib.types.submodule {
             options = {
@@ -77,14 +77,11 @@
     # Rien d'autre que l'admin n'appelle sudo (ni service, ni CI).
     security.sudo.execWheelOnly = true;
 
+    # Couvre aussi la liste vide : `lib.any` y vaut false.
     assertions = [
       {
         assertion = lib.any (user: user.isAdmin) config.systemSettings.users;
         message = "Erreur : il faut au moins un utilisateur avec isAdmin = true (wheel) !";
-      }
-      {
-        assertion = lib.length config.systemSettings.users > 0;
-        message = "Erreur : la liste des utilisateurs ne peut pas être vide !";
       }
     ];
 

@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  myLib,
   pkgs-stable,
   ...
 }:
@@ -12,6 +13,10 @@ in
   options = {
     systemSettings.windowManager.gnome = {
       enable = lib.mkEnableOption "Enable gnome window manager";
+      pkgs = myLib.mkPkgsOption {
+        inherit lib config;
+        default = pkgs-stable;
+      };
     };
   };
 
@@ -20,7 +25,7 @@ in
 
     # Session de secours (la principale est sway) : suite d'apps retirée,
     # remplacée par équivalent home-manager. Garde nautilus/console/settings.
-    environment.gnome.excludePackages = with pkgs-stable; [
+    environment.gnome.excludePackages = with cfg.pkgs; [
       epiphany # navigateur (firefox/chrome via home-manager)
       geary # client mail
       gnome-tour

@@ -23,8 +23,7 @@ in
     enable = lib.mkEnableOption "client WireGuard (tunnel vers la maison)";
 
     address = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
+      type = lib.types.str;
       example = "10.8.0.3/32";
       description = ''
         Adresse de CET appareil dans le tunnel, avec son préfixe.
@@ -40,8 +39,7 @@ in
     };
 
     endpoint = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
+      type = lib.types.str;
       example = "vpn.exemple.fr:51820";
       description = ''
         Point de terminaison public du serveur, hôte et port. Résolu par le
@@ -51,8 +49,7 @@ in
     };
 
     serverPublicKey = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
+      type = lib.types.str;
       description = ''
         Clé PUBLIQUE du serveur. Publique, donc elle vit en clair dans le dépôt.
 
@@ -63,8 +60,7 @@ in
     };
 
     privateKeyKey = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
+      type = lib.types.str;
       example = "wireguard/gram_private_key";
       description = ''
         Clé sops de la clé privée de CET appareil. Contenu brut, tel que produit
@@ -179,17 +175,10 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion =
-          cfg.address != null
-          && cfg.endpoint != null
-          && cfg.serverPublicKey != null
-          && cfg.privateKeyKey != null;
-        message = "systemSettings.vpn.client : address, endpoint, serverPublicKey et privateKeyKey sont requis. La clé publique du serveur se lit avec `sudo wg show wg0 public-key`.";
-      }
-      {
-        # Séparée de l'assertion ci-dessus : une liste vide n'est pas un oubli de
-        # la même nature qu'une clé manquante. Le tunnel monterait sans erreur et
-        # ne transporterait rien, ce qui se diagnostique mal — poignée de main
+        # address, endpoint, serverPublicKey et privateKeyKey n'ont pas de
+        # défaut : un oubli y est une erreur d'évaluation qui nomme l'option.
+        # Une liste vide, elle, serait acceptée sans erreur et le tunnel ne
+        # transporterait rien, ce qui se diagnostique mal — poignée de main
         # réussie, aucun paquet.
         assertion = cfg.allowedIPs != [ ];
         message = "systemSettings.vpn.client.allowedIPs est vide : le tunnel monterait sans router quoi que ce soit dedans. Mets-y le sous-réseau du tunnel (10.8.0.0/24), pas 0.0.0.0/0 — cf. la description de l'option.";
@@ -224,8 +213,7 @@ in
         (
           {
             publicKey = cfg.serverPublicKey;
-            inherit (cfg) allowedIPs;
-            endpoint = cfg.endpoint;
+            inherit (cfg) allowedIPs endpoint;
             # Le client est derrière un NAT qui ferme les associations UDP
             # inactives : sans keepalive, le tunnel semble mort jusqu'à ce que la
             # machine émette d'elle-même. C'est au CLIENT de l'entretenir, le

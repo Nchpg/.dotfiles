@@ -1,6 +1,7 @@
 {
   lib,
   config,
+  myLib,
   pkgs-stable,
   inputs,
   themes,
@@ -69,10 +70,9 @@ in
         '';
       };
 
-      pkgs = lib.mkOption {
-        type = lib.types.pkgs;
+      pkgs = myLib.mkPkgsOption {
+        inherit lib config;
         default = pkgs-stable;
-        description = "Pkgs to use";
       };
     };
   };
