@@ -24,9 +24,7 @@ in
         "ignorespace"
       ];
       bashrcExtra = builtins.concatStringsSep "\n" [
-        (builtins.readFile ../common)
         (builtins.readFile ../common-posix)
-        config.userSettings.shell.devShellAliases
         (builtins.readFile ./.bashrc)
       ];
     };

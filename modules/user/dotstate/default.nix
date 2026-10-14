@@ -12,7 +12,7 @@
 # Affiché à l'ouverture d'un shell, et seulement s'il y a un écart : donc aussi
 # en SSH, où chaque machine montre le sien. Rien dans le prompt.
 let
-  cfg = config.userSettings.shell.dotstate;
+  cfg = config.userSettings.dotstate;
   shells = config.userSettings.shell;
 
   dotstate = pkgs-stable.writeShellApplication {
@@ -30,19 +30,17 @@ let
   };
 
   # Seulement dans un shell de premier niveau : pas à chaque `nix develop` ou
-  # shell imbriqué. VS Code ouvre son terminal un niveau plus bas, comme le
-  # compte déjà le prompt.
+  # shell imbriqué. SHELL_DEPTH est calculée par le rc de chaque shell
+  # (modules/user/shell/common-posix, …/shell/fish/.fish), injecté avant ce
+  # bloc (mkAfter).
   greetPosix = ''
-    __dotstate_depth=$SHLVL
-    [ "$TERM_PROGRAM" = vscode ] && __dotstate_depth=$((SHLVL - 1))
-    if [ "''${__dotstate_depth:-1}" -le 1 ] && command -v dotstate > /dev/null; then
+    if [ "''${SHELL_DEPTH:-1}" -le 1 ] && command -v dotstate > /dev/null; then
       dotstate greet
     fi
-    unset __dotstate_depth
   '';
 in
 {
-  options.userSettings.shell.dotstate.enable = lib.mkOption {
+  options.userSettings.dotstate.enable = lib.mkOption {
     type = lib.types.bool;
     default = shells.fish.enable || shells.bash.enable || shells.zsh.enable;
     defaultText = lib.literalExpression "fish, bash ou zsh activé";
@@ -55,9 +53,7 @@ in
     # fish : remplace le fish_greeting vide de la config fish (mkAfter).
     programs.fish.interactiveShellInit = lib.mkAfter ''
       function fish_greeting
-          set -l depth $SHLVL
-          test "$TERM_PROGRAM" = vscode; and set depth (math $depth - 1)
-          test "$depth" -le 1; or return
+          test "$SHELL_DEPTH" -le 1; or return
           command -q dotstate; and dotstate greet
       end
     '';
@@ -71,7 +67,8 @@ in
       Unit.Description = "Mise à jour depuis GitHub pour dotstate";
       Service = {
         Type = "oneshot";
-        Environment = [ "MY_FLAKE=${config.home.homeDirectory}/.dotfiles" ];
+        # Le service ne voit pas les home.sessionVariables : même valeur, même source.
+        Environment = [ "MY_FLAKE=${config.home.sessionVariables.MY_FLAKE}" ];
         ExecStart = "${lib.getExe dotstate} fetch";
       };
     };

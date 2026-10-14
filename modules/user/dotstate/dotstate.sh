@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # dotstate : l'état de cette machine face à sa configuration.
 #
 #   dotstate         met à jour depuis GitHub, puis affiche l'état complet
@@ -10,7 +11,10 @@
 # modules/system/revision), le DÉPÔT local, et GITHUB (au dernier fetch). Plus
 # les secrets (`secrets status`) et un redémarrage en attente.
 
-flake="${MY_FLAKE:-$HOME/.dotfiles}"
+# MY_FLAKE : posé par home.sessionVariables (modules/user/home-manager), et
+# repassé explicitement au timer systemd (cf. default.nix). Absent, il n'y a
+# rien à suivre : traité plus bas comme « pas de dépôt ici ».
+flake="${MY_FLAKE:-}"
 stateDir="${XDG_RUNTIME_DIR:-/tmp/dotstate-$(id -u)}/dotstate"
 # Système actif et système démarré. Remplaçables pour les tests uniquement
 # (DOTSTATE_CURRENT, DOTSTATE_BOOTED) : on ne peut pas fabriquer un faux
@@ -193,9 +197,9 @@ showLines() {
   printf '  · %s\n' "${lines[@]}"
 }
 
-# Pas de dépôt ici (autre utilisateur, root) : rien à suivre, en silence pour
-# les usages automatiques.
-if [ ! -d "$flake/.git" ]; then
+# Pas de dépôt ici (autre utilisateur, root, MY_FLAKE absent) : rien à
+# suivre, en silence pour les usages automatiques.
+if [ -z "$flake" ] || [ ! -d "$flake/.git" ]; then
   case "${1:-}" in
     greet | fetch) exit 0 ;;
     -h | --help | help) usage; exit 0 ;;

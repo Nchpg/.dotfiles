@@ -1,7 +1,7 @@
 { inputs, dotfilesContent, ... }:
 
 # Ce dont ce système est construit, gravé dans le système, pour que `dotstate`
-# (modules/user/shell/dotstate) dise sans rien réévaluer si ce qui tourne
+# (modules/user/dotstate) dise sans rien réévaluer si ce qui tourne
 # correspond à ce qu'il y a dans le dépôt.
 #
 #   - le COMMIT, que rend `nixos-version --configuration-revision` ;

@@ -18,8 +18,8 @@ setopt NO_BEEP
 
 export SH=zsh
 
-# FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé avec bash,
-# injecté par shell/zsh/default.nix).
+# SHELL_DEPTH, FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé
+# avec bash, injecté par shell/zsh/default.nix).
 
 # On interroge git plutôt que de lire $PWD/.git/HEAD : ce dernier n'existe
 # qu'à la racine du dépôt (aucune branche affichée dans un sous-dossier) et
@@ -74,53 +74,19 @@ build_prompt() {
 
   FIRST_PROMPT=0
 
-  if [ "$TERM_PROGRAM" = "vscode" ]; then
-    SHELL_DEPTH=$((SHLVL - 1))
-  else
-    SHELL_DEPTH="$SHLVL"
-  fi
-
-  if [ "$SHELL_DEPTH" -le 1 ]; then
-    SHELL_DEPTH=""
-  fi
+  # Profondeur (cf. ../common-posix), affichée seulement au-delà de 1.
+  local depth=""
+  (( SHELL_DEPTH > 1 )) && depth=$SHELL_DEPTH
 
   # Prompt principal (deux lignes)
   PROMPT="${new_line}${left_prompt}
-${status_prompt}%F{green}$SHELL_DEPTH❯%f "
+${status_prompt}%F{green}$depth❯%f "
 }
 
 # Lancer la construction du prompt avant chaque commande
 precmd_functions+=(build_prompt)
 
-nix-shell() {
-    local has_run=0
-    for arg in "$@"; do
-        if [ "$arg" = "--run" ]; then
-            has_run=1
-            break
-        fi
-    done
-
-    if [ $has_run -eq 1 ]; then
-        command nix-shell "$@"
-    else
-        command nix-shell "$@" --run "exec zsh"
-    fi
-}
-
-nix() {
-  if [[ "$1" == "develop" ]]; then
-    # `-c` est l'abréviation de `--command` : sans ce test, `nix develop -c cmd`
-    # se voyait ajouter un second `--command zsh` et échouait.
-    if [[ " $* " == *" --command "* || " $* " == *" -c "* ]]; then
-      command nix "$@"
-    else
-      command nix develop "${@:2}" --command zsh
-    fi
-  else
-    command nix "$@"
-  fi
-}
+# nix / nix-shell : wrappers communs aux trois shells, cf. shell/default.nix.
 
 # Complétions fournies par un devshell (ex. rmkernel dans devshells/python.nix).
 # Équivalent de NIX_DEVSHELL_FISH_COMPLETIONS côté fish.
@@ -132,5 +98,4 @@ if [[ -n "$NIX_DEVSHELL_ZSH_COMPLETIONS" ]]; then
   done
 fi
 
-# bindkey '^?' delete-char
 bindkey '^[[3~' delete-char

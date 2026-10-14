@@ -19,10 +19,10 @@ shopt -s checkwinsize
 
 export SH=bash
 
-# FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé avec zsh,
-# injecté par shell/bash/default.nix).
+# SHELL_DEPTH, FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé
+# avec zsh, injecté par shell/bash/default.nix).
 
-# Fonction pour construire le prompt avec l'heure alignée à droite
+# Construit le prompt (deux lignes) avant chaque commande.
 set_bash_prompt() {
     local last_status=$?
     local user_host="\[\e[0;36m\]\u@\h\[\e[0m\]"
@@ -54,7 +54,6 @@ set_bash_prompt() {
     # dès qu'un venv est actif.
     venv_name="\[\e[33m\]$venv_name\[\e[0m\]"
 
-    
     if [ "$FIRST_PROMPT" -eq 1 ]; then
         NEW_LINE=""
         FIRST_PROMPT=0
@@ -62,45 +61,14 @@ set_bash_prompt() {
         NEW_LINE="\n"
     fi
 
-    if [ "$TERM_PROGRAM" = "vscode" ]; then
-        SHELL_DEPTH=$((SHLVL - 1))
-    else
-        SHELL_DEPTH="$SHLVL"
-    fi
-
-    if [ "$SHELL_DEPTH" -le 1 ]; then
-        SHELL_DEPTH=""
-    fi
+    # Profondeur (cf. ../common-posix), affichée seulement au-delà de 1.
+    local depth=""
+    [ "$SHELL_DEPTH" -gt 1 ] && depth=$SHELL_DEPTH
 
     # Construire la ligne finale
-    PS1="$NEW_LINE$user_host $cwd $venv_name$git_branch\n$status\[\e[0;32m\]$SHELL_DEPTH❯ \[\e[0m\]"
+    PS1="$NEW_LINE$user_host $cwd $venv_name$git_branch\n$status\[\e[0;32m\]$depth❯ \[\e[0m\]"
 }
 
-nix-shell() {
-    for arg in "$@"; do
-        if [ "$arg" = "--run" ]; then
-            command nix-shell "$@"
-            return
-        fi
-    done
-
-    command nix-shell "$@" --run "exec $SHELL"
-}
-
-nix() {
-    if [ "$1" = "develop" ]; then
-        # `-c` est l'abréviation de `--command` : sans ce test, `nix develop -c
-        # cmd` se voyait ajouter un second `--command bash` et échouait.
-        for arg in "$@"; do
-            if [ "$arg" = "--command" ] || [ "$arg" = "-c" ]; then
-                command nix "$@"
-                return
-            fi
-        done
-        command nix develop "${@:2}" --command bash
-    else
-        command nix "$@"
-    fi
-}
+# nix / nix-shell : wrappers communs aux trois shells, cf. shell/default.nix.
 
 PROMPT_COMMAND=set_bash_prompt

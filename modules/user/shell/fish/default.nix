@@ -57,8 +57,6 @@ in
       '';
 
       interactiveShellInit = builtins.concatStringsSep "\n" [
-        (builtins.readFile ../common)
-        config.userSettings.shell.devShellAliases
         "set -g __bat_preview_theme ${batPreviewTheme}"
         colorsFish
         (builtins.readFile ./fzf_wrapper.fish)

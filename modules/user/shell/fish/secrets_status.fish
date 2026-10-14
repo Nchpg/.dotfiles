@@ -48,9 +48,9 @@ function __secrets_after_git_status --on-event fish_postexec
     end
 
     set -l top (command git -C $dir rev-parse --show-toplevel 2>/dev/null); or return
-    set -l flake $HOME/.dotfiles
-    set -q MY_FLAKE; and set flake $MY_FLAKE
-    test (path resolve $top) = (path resolve $flake); or return
+    # MY_FLAKE : home.sessionVariables (modules/user/home-manager).
+    set -q MY_FLAKE; or return
+    test (path resolve $top) = (path resolve $MY_FLAKE); or return
 
     set -l out (secrets status)
     if set -q out[1]

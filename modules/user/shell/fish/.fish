@@ -37,13 +37,31 @@ function git_branch
     end
 end
 
-    
-if test "$SHLVL" -eq 1
+# Équivalent fish de ../common-posix. Profondeur d'imbrication du shell,
+# calculée une fois : affichée dans le prompt au-delà de 1, et lue par
+# dotstate (modules/user/dotstate) pour ne saluer que les shells de premier
+# niveau. VS Code ouvre son terminal un niveau plus bas.
+set -g SHELL_DEPTH $SHLVL
+test "$TERM_PROGRAM" = vscode; and set SHELL_DEPTH (math $SHELL_DEPTH - 1)
+
+# Premier prompt d'un shell de premier niveau : pas de saut de ligne avant.
+if test "$SHELL_DEPTH" -le 1
     set -g __fish_first_prompt 1
-    set -g __fish_nb_prompt 0
 else
     set -g __fish_first_prompt 0
-    set -g __fish_nb_prompt 10000000
+end
+
+# Le saut de ligne se décide sur l'ÉVÉNEMENT fish_prompt, émis une fois par
+# nouveau prompt : la FONCTION fish_prompt, elle, est réexécutée à chaque
+# rafraîchissement (raccourcis fzf, searchf, man…), qui doit redessiner le
+# même prompt sans ajouter de ligne.
+function __fish_prompt_new_line --on-event fish_prompt
+    if test "$__fish_first_prompt" = 1
+        set -g __fish_prompt_new_line 0
+        set -g __fish_first_prompt 0
+    else
+        set -g __fish_prompt_new_line 1
+    end
 end
 
 set -g VIRTUAL_ENV_DISABLE_PROMPT 1
@@ -51,12 +69,7 @@ set -g VIRTUAL_ENV_DISABLE_PROMPT 1
 function fish_prompt
     set -l last_status $status
 
-    if test "$__fish_first_prompt" = "0" && test "$__fish_nb_prompt" != "0"
-        echo ""
-    else
-        set -g __fish_first_prompt 0
-    end
-    set -g __fish_nb_prompt (math $__fish_nb_prompt + 1)
+    test "$__fish_prompt_new_line" = 1; and echo ""
     set_color cyan
     echo -n (whoami)@(hostname -s)" "
     set_color blue
@@ -103,21 +116,7 @@ function fish_prompt
     end
 
     set_color green
-
-    set -l shlvl_display $SHLVL
-
-    if test "$TERM_PROGRAM" = "vscode"
-        set shlvl_display (math "$shlvl_display" - 1)
-    end
-
-    # si vide -> 0
-    if test -z "$shlvl_display"
-        set shlvl_display 0
-    end
-
-    if test "$shlvl_display" -gt 1
-        echo -n "$shlvl_display"
-    end
+    test "$SHELL_DEPTH" -gt 1; and echo -n $SHELL_DEPTH
 
     echo -n "❯ "
     set_color normal
@@ -126,38 +125,10 @@ end
 set -g fish_greeting ""
 set -g fish_term24bit 1
 
-function nix-shell
-    set has_run 0
-    for arg in $argv
-        if test "$arg" = "--run"
-            set has_run 1
-            break
-        end
-    end
-
-    if test $has_run -eq 1
-        command nix-shell $argv
-    else
-        command nix-shell $argv --run "exec fish"
-    end
-end
-
-function nix
-  if test (count $argv) -gt 0; and test "$argv[1]" = "develop"
-    if contains -- "--command" $argv; or contains -- "-c" $argv
-      command nix $argv
-    else
-      command nix develop $argv[2..-1] --command fish
-    end
-  else
-    command nix $argv
-  end
-end
-
+# nix / nix-shell : wrappers communs aux trois shells, cf. shell/default.nix.
 
 function clear
     set -g __fish_first_prompt 1
-    set -g __fish_nb_prompt 0
     command clear
 end
 
@@ -165,21 +136,6 @@ function setdev
       echo "use flake \"\$MY_FLAKE#$argv[1]\"" > .envrc
       direnv allow
 end
-
-function fanstatus
-    set val (sudo ec_probe read 0xCF | awk '{print $2}')
-    switch $val
-        case "(00)"
-            echo "Fan Mode: Optimal"
-        case "(11)"
-            echo "Fan Mode: Silent"
-        case "(22)"
-            echo "Fan Mode: Performance"
-        case '*'
-            echo "Fan Mode: N/A"
-    end
-end
-
 
 fzf_configure_bindings \
 --directory=\e\cf \

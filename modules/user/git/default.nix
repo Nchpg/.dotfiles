@@ -44,10 +44,9 @@ in
     lib.mkMerge [
       {
 
-        home.packages = with cfg.pkgs; [
-          git-graph
-          delta # référencé par core.pager/diffFilter, module autonome de shell
-        ];
+        # delta (core.pager/diffFilter plus bas) : fourni par le socle de
+        # modules/user/shell, toujours actif.
+        home.packages = [ cfg.pkgs.git-graph ];
 
         programs.git = {
           enable = true;
@@ -82,6 +81,7 @@ in
             core.pager = "delta";
             interactive.diffFilter = "delta --color-only";
 
+            # Lu aussi par l'alias `diff` (delta seul, cf. modules/user/shell).
             delta = {
               navigate = true;
               side-by-side = true;

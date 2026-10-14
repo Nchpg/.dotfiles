@@ -6,7 +6,7 @@
 # l'arbre de travail, et même d'une lecture de l'arbre à l'autre (vérifié).
 #
 # Gravée dans chaque système (modules/system/revision) ; `dotstate`
-# (modules/user/shell/dotstate/dotstate.sh, contentOf) refait EXACTEMENT ce
+# (modules/user/dotstate/dotstate.sh, contentOf) refait EXACTEMENT ce
 # calcul sur un commit pour comparer. Toute modification de l'un doit se
 # reporter dans l'autre.
 #

@@ -7,36 +7,14 @@ function searchf --description "Search files and their content using fzf"
     set -f token (commandline --current-token)
     set -f unescaped_exp_token (string replace -r '^~' -- $HOME $token)
 
+    # Toutes les lignes de tous les fichiers texte sous le dossier courant,
+    # « fichier:ligne:contenu » ; fzf ne cherche que dans le contenu (--nth 3..).
+    # rg saute d'office les binaires, les fichiers cachés et ceux ignorés par
+    # git, comme le faisait le couple fd + `file` d'avant.
     set results (
-        bash -c "
-            set -o pipefail
-            fd -t f | while IFS= read -r line; do
-                dirname=\"\$(dirname \"\$line\")\"
-                basename=\"\$(basename \"\$line\")\"
-
-                colored_path=\"\"
-                if [ \"\$dirname\" = \".\" ]; then
-                    colored_path=\"\$(echo -e \"\e[32m\$basename\e[0m\")\"
-                else
-                    colored_path=\"\$(echo -e \"\e[34m\$dirname/\e[90m\e[32m\$basename\e[0m\")\"
-                fi
-
-                # \$line est déjà le chemin réel non coloré (colored_path n'est
-                # qu'un ré-assemblage de dirname/basename pour l'affichage) :
-                # pas besoin de repasser par un aller-retour echo/sed pour le
-                # retrouver.
-                raw_file=\"\$line\"
-
-                if [ -f \"\$raw_file\" ]; then
-                    if file \"\$raw_file\" | grep \"text\" > /dev/null 2>&1; then
-                        awk -v filename=\"\$colored_path\" \\
-                            -v color_line_num=\"\033[95m\" \\
-                            -v reset_color=\"\033[0m\" \\
-                            '{print filename \":\" color_line_num NR reset_color \":\" \$0}' \"\$raw_file\" || break # Ajout de || break ici
-                    fi
-                fi
-            done
-        " | fzf --ansi \
+        rg --line-number --no-heading --with-filename --color=always \
+            --colors path:fg:green --colors line:fg:magenta --colors line:style:intense \
+            '' | fzf --ansi \
                  --multi \
                  --layout=reverse \
                  --preview "bash -c 'header=\$(echo \"\$1\" | cut -d: -f1-2); \
@@ -70,7 +48,6 @@ function searchf --description "Search files and their content using fzf"
             vim +$lineno "$file"
         end
     end
-    set -g __fish_nb_prompt (math $__fish_nb_prompt - 1)
     commandline --function repaint
 end
 
@@ -86,18 +63,13 @@ function fzf_custom_bindings --description "Bind keys to searchf"
     for mode in default insert
         bind --mode $mode $key_sequence $function
     end
-
-    function unbind_searchf --inherit-variable key_sequence
-        bind --erase -- $key_sequence
-        bind --erase --mode insert -- $key_sequence
-    end
 end
 
 
 function man
-      # BAT_THEME est posé par le module Nix (cf. shell/fish/default.nix) : dans
-      # une preview fzf, bat n'a pas de tty, ne peut pas détecter la polarité du
-      # terminal et retomberait sur Monokai au lieu du thème gruvbox.
+      # BAT_THEME=$__bat_preview_theme dans la preview (posé par
+      # shell/fish/default.nix) : sans tty, bat ne peut pas détecter la
+      # polarité du terminal et retomberait sur Monokai au lieu de gruvbox.
       set MAN_ARGS $argv
       if test (count $argv) -eq 0;
           set selected_page (command man -k . | sort | fzf --ansi --multi --delimiter=" - " --border --prompt='Manual > ' --height=90% --reverse -e --preview="bash -c '
@@ -109,15 +81,14 @@ function man
           if test -z "$selected_page"
             return
           end
-          set -l selected_page_unaliased (echo "$selected_page" | string split -f 1 ',' | string trim)
-          for line in (echo "$selected_page_unaliased" | string split '\n')
-              if string match -r '^(.*?) *\(([0-9a-zA-Z ]+)\).*' "$line" > /dev/null
-                  set -l matched_parts (string match -r '^(.*?) *\(([0-9a-zA-Z ]+)\).*' --groups "$line")
-
-                  set -l page_name (echo "$matched_parts[1]" | string trim)
-                  set -l section_name (echo "$matched_parts[2]" | string trim)
-                  set -a MAN_ARGS "$section_name" "$page_name"
-              end
+          # Une ligne par page choisie (--multi), « nom[, alias…] (section) - … » :
+          # on garde le premier nom et sa section, passés sous la forme
+          # `nom(section)` (`man 1 ls 3 printf` ne lirait que la première).
+          for line in $selected_page
+              set -l parts (string match -r --groups-only '^(.*?) *\(([0-9a-zA-Z ]+)\)' -- $line)
+              or continue
+              set -l name (string split -f 1 ',' -- $parts[1] | string trim)
+              set -a MAN_ARGS "$name("(string trim -- $parts[2])")"
           end
       end
       command man $MAN_ARGS 2> /dev/null | bat --paging=always --language=man --style=plain --color=always
@@ -125,6 +96,5 @@ function man
 
 function man_wrapper
     man $argv
-    set -g __fish_nb_prompt (math $__fish_nb_prompt - 1)
     commandline --function repaint
 end

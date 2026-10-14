@@ -1,11 +1,21 @@
-# Fragments POSIX partagés par bash ET zsh (sourcés après ../common par les
+# Fragments POSIX partagés par bash ET zsh (injectés en tête du rc par les
 # modules shell/bash et shell/zsh) — avant, ces blocs étaient dupliqués au
 # caractère près dans .bashrc et .zshrc. fish a ses propres équivalents
-# (syntaxe incompatible, cf. shell/fish).
+# (syntaxe incompatible, cf. shell/fish/.fish). Les alias communs aux trois
+# shells sont dans home.shellAliases (cf. shell/default.nix).
 
-# Premier prompt de la session : pas de saut de ligne avant (consommé par les
-# fonctions de prompt de chaque shell).
-if [ "$SHLVL" -eq 1 ]; then
+# Profondeur d'imbrication du shell, calculée une fois : affichée dans le
+# prompt au-delà de 1, et lue par dotstate (modules/user/dotstate) pour ne
+# saluer que les shells de premier niveau. VS Code ouvre son terminal un
+# niveau plus bas.
+SHELL_DEPTH=${SHLVL:-1}
+if [ "$TERM_PROGRAM" = vscode ]; then
+    SHELL_DEPTH=$((SHELL_DEPTH - 1))
+fi
+
+# Premier prompt d'un shell de premier niveau : pas de saut de ligne avant
+# (consommé par les fonctions de prompt de chaque shell).
+if [ "$SHELL_DEPTH" -le 1 ]; then
     FIRST_PROMPT=1
 else
     FIRST_PROMPT=0
