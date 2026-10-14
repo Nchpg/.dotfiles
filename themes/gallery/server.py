@@ -86,17 +86,26 @@ def read_favorites(favorites_path):
     return [str(x) for x in data] if isinstance(data, list) else []
 
 
+def atomic_write(path, content):
+    """Écriture atomique (fichier temporaire puis renommage) : un rebuild
+    concurrent ne doit jamais voir un fichier .nix tronqué, ni git un JSON à
+    moitié écrit."""
+    tmp = path + ".theme-tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(content)
+    os.replace(tmp, path)
+
+
 def write_favorites(favorites_path, names):
     """Réécrit le fichier de favoris (trié, une entrée par ligne).
 
     Trié pour que le diff git soit stable : sans ça, l'ordre de clic
     produirait des diffs illisibles à chaque session.
     """
-    payload = json.dumps(sorted(set(names)), indent=2, ensure_ascii=False) + "\n"
-    tmp = favorites_path + ".theme-tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(payload)
-    os.replace(tmp, favorites_path)
+    atomic_write(
+        favorites_path,
+        json.dumps(sorted(set(names)), indent=2, ensure_ascii=False) + "\n",
+    )
 
 
 def apply_to_profile(profile_path, slot, name):
@@ -123,13 +132,7 @@ def apply_to_profile(profile_path, slot, name):
         return previous, name
 
     updated = pattern.sub(lambda m: m.group(1) + name + m.group(3), content, count=1)
-
-    # Écriture atomique : un rebuild concurrent ne doit jamais voir un
-    # fichier .nix tronqué.
-    tmp = profile_path + ".theme-tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(updated)
-    os.replace(tmp, profile_path)
+    atomic_write(profile_path, updated)
     return previous, name
 
 
@@ -139,13 +142,15 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
         def log_message(self, format, *args):  # noqa: A002 (signature imposée)
             pass
 
-        def _json(self, code, payload):
-            body = json.dumps(payload).encode("utf-8")
+        def _send(self, code, body, content_type):
             self.send_response(code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Type", f"{content_type}; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+
+        def _json(self, code, payload):
+            self._send(code, json.dumps(payload).encode("utf-8"), "application/json")
 
         def do_GET(self):
             if self.path.split("?")[0] not in ("/", "/index.html"):
@@ -159,16 +164,43 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             ).replace(
                 "__THEME_FAVORITES__", js_string_body(read_favorites(favorites_path))
             )
-            body = page.encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
+            self._send(200, page.encode("utf-8"), "text/html")
 
-        def _read_json_body(self):
-            length = int(self.headers.get("Content-Length", "0"))
-            return json.loads(self.rfile.read(length) or b"{}")
+        def _auth(self, presented):
+            """Vérifie le jeton de session ; répond 403 et rend False sinon.
+
+            compare_digest : évite de laisser fuir la longueur du préfixe
+            correct par le temps de comparaison.
+            """
+            if secrets.compare_digest(str(presented), token):
+                return True
+            self._json(403, {"error": "jeton invalide"})
+            return False
+
+        def _read_payload(self):
+            """Corps JSON authentifié, ou None (la réponse d'erreur est partie)."""
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length) or b"{}")
+            except (ValueError, json.JSONDecodeError):
+                self._json(400, {"error": "requête illisible"})
+                return None
+            if not self._auth(payload.get("token", "")):
+                return None
+            return payload
+
+        def _valid_name(self, payload):
+            """Nom de thème du corps, ou None (400 envoyé).
+
+            On ne fait JAMAIS confiance au nom envoyé : il doit venir du
+            manifeste, sinon on écrirait une chaîne arbitraire dans un fichier
+            versionné (.nix du profil ou favoris).
+            """
+            name = str(payload.get("name", ""))
+            if name in valid_names:
+                return name
+            self._json(400, {"error": f"thème inconnu : {name}"})
+            return None
 
         def do_POST(self):
             if self.path == "/favorite":
@@ -177,26 +209,13 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             if self.path != "/apply":
                 self.send_error(404)
                 return
-            try:
-                length = int(self.headers.get("Content-Length", "0"))
-                payload = json.loads(self.rfile.read(length) or b"{}")
-            except (ValueError, json.JSONDecodeError):
-                self._json(400, {"error": "requête illisible"})
+            payload = self._read_payload()
+            if payload is None:
                 return
-
-            # compare_digest : évite de laisser fuir la longueur du préfixe
-            # correct par le temps de comparaison.
-            if not secrets.compare_digest(str(payload.get("token", "")), token):
-                self._json(403, {"error": "jeton invalide"})
+            name = self._valid_name(payload)
+            if name is None:
                 return
-
-            name = str(payload.get("name", ""))
             slot = str(payload.get("slot", ""))
-            # On ne fait JAMAIS confiance au nom envoyé : il doit venir du
-            # manifeste, sinon on écrirait une chaîne arbitraire dans un .nix.
-            if name not in valid_names:
-                self._json(400, {"error": f"thème inconnu : {name}"})
-                return
             if slot not in SLOTS:
                 self._json(400, {"error": f"slot inconnu : {slot}"})
                 return
@@ -221,21 +240,11 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             self._json(200, {"message": message})
 
         def _handle_favorite(self):
-            try:
-                payload = self._read_json_body()
-            except (ValueError, json.JSONDecodeError):
-                self._json(400, {"error": "requête illisible"})
+            payload = self._read_payload()
+            if payload is None:
                 return
-
-            if not secrets.compare_digest(str(payload.get("token", "")), token):
-                self._json(403, {"error": "jeton invalide"})
-                return
-
-            name = str(payload.get("name", ""))
-            # Même règle que pour /apply : le nom doit venir du manifeste,
-            # sinon on écrirait n'importe quoi dans un fichier versionné.
-            if name not in valid_names:
-                self._json(400, {"error": f"thème inconnu : {name}"})
+            name = self._valid_name(payload)
+            if name is None:
                 return
 
             favorites = read_favorites(favorites_path)
@@ -260,9 +269,7 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             if self.path != "/session":
                 self.send_error(404)
                 return
-            token_header = self.headers.get("X-Theme-Token", "")
-            if not secrets.compare_digest(token_header, token):
-                self._json(403, {"error": "jeton invalide"})
+            if not self._auth(self.headers.get("X-Theme-Token", "")):
                 return
             self._json(200, {"message": "session terminée"})
             # Laisse la réponse partir avant de couper le serveur.
@@ -317,7 +324,12 @@ def main():
             flush=True,
         )
 
-        threading.Timer(IDLE_TIMEOUT_SECONDS, httpd.shutdown).start()
+        # daemon : un Timer ordinaire garde le processus en vie jusqu'à son
+        # échéance, donc `theme` restait bloqué quinze minutes après
+        # « terminer ». Annulé en sortie par la même occasion.
+        idle = threading.Timer(IDLE_TIMEOUT_SECONDS, httpd.shutdown)
+        idle.daemon = True
+        idle.start()
 
         # $THEME_BROWSER : navigateur épinglé par la commande `theme` (chemin
         # du store), pour ne pas dépendre du PATH ni de $BROWSER. Repli sur
@@ -342,6 +354,8 @@ def main():
             httpd.serve_forever()
         except KeyboardInterrupt:
             print()
+        finally:
+            idle.cancel()
 
     favorites_touched = result.pop("favorites_touched", False)
     # Ne garde que les slots réellement changés : appliquer un thème puis

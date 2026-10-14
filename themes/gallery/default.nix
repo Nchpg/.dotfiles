@@ -24,7 +24,7 @@ let
         nativeBuildInputs = [ python ];
       }
       ''
-        python3 ${./render.py} ${manifest} "$out"
+        python3 ${./render.py} ${manifest} "$out" ${./gallery.css} ${./gallery.js}
       '';
 
   # $1 = profil, $2 = favoris : chemins DANS le clone (réécrits par le
