@@ -1,0 +1,54 @@
+if !exists(._SYSTEMD_UNIT) {
+  ._SYSTEMD_UNIT = "noyau"
+}
+if !exists(.SYSLOG_IDENTIFIER) {
+  .SYSLOG_IDENTIFIER = "-"
+}
+if !exists(.PRIORITY) {
+  .PRIORITY = "6"
+}
+
+# Gravité en MOT plutôt que le chiffre syslog : c'est ce que Grafana
+# sait colorer, et « error » se cherche mieux que « 3 ».
+priorite = to_int(.PRIORITY) ?? 6
+.level = "info"
+if priorite <= 3 {
+  .level = "error"
+} else if priorite == 4 {
+  .level = "warn"
+} else if priorite >= 7 {
+  .level = "debug"
+}
+
+# GRAVITÉ CORRIGÉE, PAS LIGNE MASQUÉE, et la nuance est tout le
+# sujet : rien n'est jeté, la ligne reste intégralement cherchable
+# par `{identifier="dbus-broker-launch"}`. Seul son classement
+# change, parce qu'il est faux à la source.
+#
+# dbus-broker consigne en `error` une condition STRUCTURELLE sur
+# NixOS et sans la moindre conséquence. systemd expose quatre de ses
+# noms (`systemd1`, `machine1`, `import1`, `portable1`) dans son
+# propre paquet ; celui-ci étant dans `environment.systemPackages`,
+# ils se retrouvent dans `system-path` — que le module dbus de
+# nixpkgs inscrit EN DUR comme répertoire de services
+# (`services.dbus.packages = [ … config.system.path ]`). Le bus de
+# session voit donc un nom que `systemd --user` possède déjà, garde
+# la première déclaration, et signale la seconde.
+#
+# Aucune configuration ne peut l'empêcher : il faudrait patcher le
+# module amont, ou retirer systemd des paquets système. Ce sont
+# quatre lignes à chaque ouverture de session et à chaque activation.
+#
+# POURQUOI ÇA MÉRITE UNE RÈGLE plutôt que de vivre avec : le panneau
+# « erreurs et avertissements » ne vaut que par le fait qu'on le lit.
+# Quatre fausses erreurs par rebuild — et il y en a un par nuit avec
+# autoUpgrade — suffisent à en faire un panneau qu'on survole. La
+# prochaine vraie erreur passerait avec elles.
+#
+# CIBLAGE ÉTROIT À DESSEIN : l'émetteur ET le texte exact. Une règle
+# sur le seul émetteur ferait taire dbus-broker le jour où il aurait
+# quelque chose de vrai à dire.
+msg = to_string(.message) ?? ""
+if .SYSLOG_IDENTIFIER == "dbus-broker-launch" && contains(msg, "Ignoring duplicate name") {
+  .level = "info"
+}

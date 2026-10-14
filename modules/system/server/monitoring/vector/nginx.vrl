@@ -1,0 +1,141 @@
+msg = to_string(.message) ?? ""
+
+# HORODATER DEPUIS LA LIGNE, ET NON DEPUIS SA LECTURE. La source
+# `file` de Vector estampille l'événement à l'instant où elle le
+# LIT, ce qui est faux dès que la lecture n'est pas immédiate — et
+# elle ne l'est jamais au premier démarrage, qui rattrape le fichier
+# entier d'un coup.
+#
+# Constaté à la mise en service, le 19 août 2026 : des lignes
+# d'accès datées de 20 h 19 apparaissaient dans Loki à 20 h 47, et
+# les quelques milliers de lignes rattrapées se sont toutes empilées
+# sur la même minute. Ça vide de son sens la seule raison d'avoir
+# ces journaux ici — les recoller à une courbe. Un pic de requêtes à
+# 12 h 45 ne se serait retrouvé nulle part.
+#
+# Deux formats, parce que nginx en emploie deux :
+#
+#   - le journal d'ACCÈS porte son décalage (`+0200`), donc il se
+#     lit sans rien supposer ;
+#   - le journal d'ERREURS n'a que l'heure locale, d'où le fuseau
+#     passé en troisième argument. Il vient de `time.timeZone`, et
+#     `parse_timestamp` s'appuie sur la base tz — donc juste aussi
+#     au changement d'heure, ce qu'un décalage fixe ne serait pas.
+#
+# Un format qui ne correspond pas laisse `.timestamp` intact plutôt
+# que de tout casser : on retombe alors sur l'heure de lecture, qui
+# est fausse mais proche en régime établi.
+acces = parse_regex(msg, r'\[(?P<t>\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4})\]') ?? {}
+quand = parse_timestamp(to_string(acces.t), "%d/%b/%Y:%H:%M:%S %z") ?? null
+
+if quand == null {
+  erreurs = parse_regex(msg, r'^(?P<t>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})') ?? {}
+  quand = parse_timestamp(to_string(erreurs.t), "%Y/%m/%d %H:%M:%S", "@TZ@") ?? null
+}
+
+if quand != null {
+  .timestamp = quand
+}
+
+# Les mêmes champs que le journal, pour que le puits ci-dessous
+# étiquette les deux flux sans avoir à les distinguer.
+._SYSTEMD_UNIT = "nginx"
+.SYSLOG_IDENTIFIER = if ends_with(to_string(.file) ?? "", "error.log") {
+  "nginx-error"
+} else {
+  "nginx-access"
+}
+.host = get_hostname!()
+
+.level = "info"
+
+# Journal d'accès : le code est le premier nombre à trois chiffres
+# qui suit la requête entre guillemets.
+trouve = parse_regex(msg, r'" (?P<code>\d{3}) ') ?? {}
+code = to_int(trouve.code) ?? 0
+if code >= 500 {
+  .level = "error"
+}
+
+# LES 502 DE RECONNEXION DE GRAFANA, reclassés et non supprimés.
+#
+# Un onglet Grafana laissé ouvert interroge `/api/live/ws` — le
+# websocket de Grafana Live — toutes les une à deux secondes, et
+# `/api/login/ping` en boucle. Pendant les deux ou trois secondes où
+# Grafana redémarre, nginx n'a plus d'amont et répond 502. Corrélation
+# vérifiée à la seconde près sur six redémarrages du 19 août 2026 :
+# aucun de ces 502 hors de la fenêtre d'arrêt, aucun arrêt sans eux.
+#
+# POURQUOI C'EST LÉGITIME DE LES TAIRE, alors qu'un 5xx est bien une
+# erreur serveur : parce que l'événement qu'ils signalent — Grafana
+# absent — est déjà couvert deux fois, et mieux. Un ARRÊT PROPRE
+# (rebuild) n'est pas une panne et n'a rien à signaler ; une PANNE
+# RÉELLE fait échouer l'unité, donc `notify.discord` prévient sur
+# Discord, et la cible de collecte tombe, donc `CibleInjoignable`
+# alerte. Ces lignes-là sont le signal le plus faible des trois, et
+# le seul qui parle aussi quand tout va bien.
+#
+# LE CIBLAGE EST ÉTROIT À DESSEIN : le code 502 ET le chemin exact,
+# extrait de la requête et non cherché dans la ligne entière — sans
+# quoi une URL de `referer` suffirait à faire taire autre chose. Tout
+# autre 502, sur tout autre chemin, reste une erreur.
+#
+# Rien n'est perdu : `{identifier="nginx-access"} |= " 502 "` les
+# retrouve toutes.
+# `to_string` SANS `??` : il accepte `null` et rend une chaîne vide,
+# donc il ne peut pas échouer. Le coalescing serait refusé par le
+# compilateur VRL (« unnecessary error coalescing operation »).
+# `[^ ?]+` ET NON `\S+`, qui était écrit ici et qui rendait la moitié
+# de cette règle inopérante : `\S+` avale la CHAÎNE DE REQUÊTE avec le
+# chemin, si bien que `/api/ds/query?ds_type=prometheus&requestId=SQR239`
+# ne pouvait être égal à rien de comparable — chaque requête portant
+# un identifiant différent, aucune égalité n'était possible.
+#
+# Ça n'a pas fait de bruit tant que les deux seuls chemins visés
+# étaient dépourvus de paramètres. Constaté le 20 août 2026 : un
+# rebuild à 12 h 42 a produit dix-huit 502, dont treize correctement
+# tus et quatre restés en `error` faute de cette coupure.
+requete = parse_regex(msg, r'"\w+ (?P<chemin>[^ ?]+)') ?? {}
+chemin = to_string(requete.chemin)
+
+# LES QUATRE CHEMINS QU'UN ONGLET LAISSÉ OUVERT INTERROGE EN BOUCLE,
+# et c'est la liste entière du problème : le websocket de Grafana
+# Live, le ping de session, la requête de données que déclenche le
+# rafraîchissement automatique, et celle des annotations qui
+# l'accompagne depuis que le tableau en porte.
+#
+# Les deux derniers manquaient parce qu'ils n'existaient pas encore
+# quand cette règle a été écrite — `/api/ds/query` n'apparaît qu'avec
+# un `refresh` actif, `/api/annotations` qu'avec des annotations
+# déclarées.
+#
+# RIEN D'AUTRE, et surtout pas tous les 502 de ce vhost : les
+# requêtes d'OUVERTURE de page ne sont pas ici, parce qu'un 502
+# devant quelqu'un qui vient de cliquer est une erreur qu'il voit et
+# sur laquelle il agit. Ce qu'on tait, c'est le bruit de fond d'un
+# onglet que personne ne regarde.
+# UNE LISTE ET `includes()`, ET LA FORME N'EST PAS UN GOÛT : une
+# condition `if` dont les `||` sont répartis sur plusieurs lignes ne
+# S'ANALYSE PAS en VRL, qui referme l'expression au premier saut de
+# ligne et bute ensuite sur la parenthèse. Écrite ainsi, elle a fait
+# échouer le démarrage de Vector en « status=78/CONFIG ».
+#
+# Le tableau, lui, s'écrit sur plusieurs lignes sans difficulté, et
+# il se relit mieux qu'une condition d'une centaine de colonnes.
+sondes_de_fond = [
+  "/api/live/ws",
+  "/api/login/ping",
+  "/api/ds/query",
+  "/api/annotations"
+]
+
+if code == 502 && includes(sondes_de_fond, chemin) {
+  .level = "info"
+}
+
+# Journal d'erreurs : la gravité y est écrite entre crochets.
+if contains(msg, "[error]") || contains(msg, "[crit]") || contains(msg, "[alert]") {
+  .level = "error"
+} else if contains(msg, "[warn]") {
+  .level = "warn"
+}

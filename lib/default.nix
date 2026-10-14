@@ -25,6 +25,7 @@ lib:
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
   editorLspPackages = import ./editor-lsp-packages.nix;
   fetchPinned = import ./fetch-pinned.nix lib;
+  grafana = import ./grafana.nix lib;
   inherit (import ./mk-flake-guard.nix) flakeVar mkFlakeGuard;
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix lib;
