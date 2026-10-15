@@ -92,8 +92,8 @@
       # D3100), sinon nix-prefetch-url manuel sur chaque host. Overlay sway :
       # sway-unwrapped patché (verrouillage sans flash noir, cf. le fichier).
       pkgs-stable = mkPkgs inputs.nixpkgs-stable [
-        (import ./overlays/displaylink.nix)
-        (import ./overlays/sway.nix myLib)
+        (import ./overlays/displaylink)
+        (import ./overlays/sway myLib)
       ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
 

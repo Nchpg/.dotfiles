@@ -37,7 +37,7 @@ let
   # remplacé plus bas, et genFinalPackage ne réapplique wrapperFeatures/
   # extraSessionCommands que sur un paquet encore overridable (pas un
   # symlinkJoin) — les options seraient silencieusement ignorées sinon.
-  # sway-unwrapped est déjà le patché de overlays/sway.nix (fondu de
+  # sway-unwrapped est déjà le patché de overlays/sway (fondu de
   # verrouillage sans flash noir) : cfg.pkgs vaut pkgs-stable par défaut,
   # seul jeu de paquets qui porte l'overlay.
   swayBase = cfg.pkgs.sway.override {

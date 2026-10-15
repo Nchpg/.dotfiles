@@ -1,6 +1,6 @@
 # Applique un patch local à un paquet SEULEMENT si les fichiers qu'il modifie
 # sont EXACTEMENT ceux contre lesquels il a été écrit et testé (empreintes
-# sha256 des sources non patchées). Utilisé pour sway (overlays/sway.nix) et
+# sha256 des sources non patchées). Utilisé pour sway (overlays/sway) et
 # swaylock-effects (modules/user/window-manager/sway/lock).
 #
 # Un bump qui ne touche pas ces fichiers passe sans rien demander ; un bump qui

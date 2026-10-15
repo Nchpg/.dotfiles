@@ -3,7 +3,7 @@
 # Dock USB DisplayLink (Dell D3100) : vidéo compressée côté PC, décodée par
 # la puce du dock (driver propriétaire + module kernel evdi). Le zip du
 # driver (licence Synaptics) est téléchargé automatiquement via
-# overlays/displaylink.nix. Spécifique au matériel -> activé par le host.
+# overlays/displaylink. Spécifique au matériel -> activé par le host.
 let
   cfg = config.systemSettings.hardware.displaylink;
 in

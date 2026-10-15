@@ -20,7 +20,7 @@ modules/
   user/            Modules home-manager, gatés par des options userSettings.*
 themes/            Thèmes base16 (schemes/*.yaml) + wallpapers + fonts + galerie
 lib/               Helpers injectés en `myLib` (import-all, discover, mk-*, checks)
-overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
+overlays/          Overlays nixpkgs, un dossier par sujet (displaylink : fetch auto du driver ; sway : patch du verrouillage)
 docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi)
 devshells/         `nix develop .#python|c|xpu`
 init.sh            Mise en place d'une machine neuve : host, matériel, clés age, SSH GitHub, clone des secrets, hooks, inscription

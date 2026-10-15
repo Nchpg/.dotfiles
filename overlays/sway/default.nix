@@ -1,5 +1,5 @@
 # sway-unwrapped patché (./sway-smooth-lock.patch). Appliqué sur pkgs-stable
-# dans flake.nix, comme displaylink.nix : TOUT sway de ce jeu de paquets en
+# dans flake.nix, comme displaylink : TOUT sway de ce jeu de paquets en
 # hérite — le wrapper du module système (modules/system/window-manager/sway)
 # comme le swaymsg tiré côté user —, donc une seule compilation de sway et
 # plus de second sway non patché à côté. Vit hors de modules/ :
@@ -31,6 +31,6 @@ myLib: _final: prev: {
       "sway/lock.c" = "d147eebafe77eb2986a49dffa7a12f88d50e8793e158aa1a28192771a70a10f5";
       "include/sway/server.h" = "80af1b5ae13164f4d09851201a931d8aea7a3838b093391fc94e8337e4c1d3e5";
     };
-    where = "overlays/sway.nix";
+    where = "overlays/sway/default.nix";
   };
 }

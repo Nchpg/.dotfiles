@@ -13,7 +13,7 @@ let
   cfg = config.userSettings.windowManager.sway.lock;
   inherit (cfg) pkgs;
 
-  # swaymsg du sway système (patché, cf. overlays/sway.nix) : pas un second
+  # swaymsg du sway système (patché, cf. overlays/sway) : pas un second
   # sway tiré de pkgs à côté.
   swaymsgBin = "${osConfig.programs.sway.package}/bin/swaymsg";
 
@@ -54,7 +54,7 @@ let
   # Le bref noir (~66 ms) qui précédait le fondu venait de sway, pas de
   # swaylock : fond opaque posé dès la demande de verrouillage, jusqu'à la
   # première image du client. Supprimé par un patch de sway, cf.
-  # overlays/sway.nix (sway-smooth-lock.patch). Un
+  # overlays/sway (sway-smooth-lock.patch). Un
   # assombrissement préalable (chayang) avait été essayé avant : pire, le
   # bureau revient en pleine luminosité pendant la capture + le flou.
   # Délai de grâce (n'importe quel input déverrouille) pour le SEUL verrou
