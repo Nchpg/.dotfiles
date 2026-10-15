@@ -24,7 +24,7 @@ let
   # autre chose. La dépendance va dans le mauvais sens.
   #
   # Pourquoi c'est toléré : le seul secret que root tire d'ici est `git/email`
-  # (défaut de modules/user/git pour un user qui a accès), une adresse que le keyOwner détient déjà
+  # (cf. profiles/personal/home/root), une adresse que le keyOwner détient déjà
   # puisque c'est SA clé. Substituer le fichier ne révèle donc rien de neuf, le
   # pire effet est de faire échouer l'activation de root — une gêne, pas une
   # élévation.

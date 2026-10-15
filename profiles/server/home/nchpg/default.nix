@@ -13,8 +13,11 @@
       # le EDITOR=vim de modules/user/home-manager ouvre bien nvim.
       editors.neovim.enable = true;
 
-      # Identité (nom + email sops) : défaut du module git.
-      git.enable = true;
+      git = {
+        enable = true;
+        userName = "nathan.champagne";
+        userEmailSops = "git/email";
+      };
 
       agents = {
         claude = {

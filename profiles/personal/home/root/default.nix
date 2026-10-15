@@ -7,8 +7,11 @@
 
       editors.vim.enable = true;
 
-      # Identité (nom + email sops) : défaut du module git.
-      git.enable = true;
+      git = {
+        enable = true;
+        userName = "nathan.champagne";
+        userEmailSops = "git/email";
+      };
 
       shell = {
         zsh.enable = true;
