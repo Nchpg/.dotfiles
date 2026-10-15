@@ -2,8 +2,8 @@
   "anthropic.claude-code": {
     "publisher": "anthropic",
     "name": "claude-code",
-    "version": "2.1.299",
-    "hash": "sha256-xHdvUhZoETUnYiponm8Dzipnd5Hu85eHmW96kxbDQ9Q=",
+    "version": "2.1.300",
+    "hash": "sha256-3L+WKtc4TXpSa/RpJ1AaokNe2jquS6P4/jH6b5l97Wo=",
     "arch": "linux-x64"
   },
   "ahgood.shift-shift": {
