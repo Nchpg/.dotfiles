@@ -7,9 +7,6 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "tui"
-    "broot"
-  ];
+  dir = ./.;
   description = "broot (navigateur d'arborescence)";
 }

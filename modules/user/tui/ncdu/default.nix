@@ -7,9 +7,6 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "tui"
-    "ncdu"
-  ];
+  dir = ./.;
   description = "ncdu (analyseur d'occupation disque)";
 }

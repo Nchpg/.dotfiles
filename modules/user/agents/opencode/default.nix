@@ -8,10 +8,7 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "agents"
-    "opencode"
-  ];
+  dir = ./.;
   description = "OpenCode CLI";
   defaultPkgs = pkgs-unstable;
 }

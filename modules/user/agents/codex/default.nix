@@ -8,10 +8,7 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "agents"
-    "codex"
-  ];
+  dir = ./.;
   description = "Codex CLI";
   defaultPkgs = pkgs-unstable;
 }

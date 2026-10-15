@@ -8,9 +8,12 @@
 #   { config, lib, myLib, ... }:
 #   myLib.mkPackageModule {
 #     inherit config lib;
-#     path = [ "tui" "broot" ];
+#     dir = ./.;
 #     description = "broot (navigateur d'arborescence)";
 #   }
+#
+# Le chemin d'option se déduit du dossier (cf. option-path.nix) : tui/broot
+# -> userSettings.tui.broot, sans le recopier.
 #
 # Dès qu'un module a besoin d'autre chose (wrapper, override, fichier de
 # config), il s'écrit en entier : ce helper ne prend volontairement aucune
@@ -18,15 +21,16 @@
 {
   config,
   lib,
-  # Chemin sous userSettings, = le chemin du dossier sous modules/user.
-  path,
+  # Dossier du module : `./.` dans son default.nix.
+  dir,
   description,
-  # Attribut du paquet dans `pkgs` ; par défaut le nom du module.
-  package ? lib.last path,
+  # Attribut du paquet dans `pkgs` ; par défaut le nom du dossier.
+  package ? baseNameOf (toString dir),
   # Jeu de paquets par défaut (ex. pkgs-unstable pour un outil qui bouge vite).
   defaultPkgs ? config.userSettings.defaultPkgs,
 }:
 let
+  path = (import ./option-path.nix lib).ofUserDir dir;
   cfg = lib.getAttrFromPath path config.userSettings;
 in
 {

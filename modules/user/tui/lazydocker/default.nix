@@ -7,9 +7,6 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "tui"
-    "lazydocker"
-  ];
+  dir = ./.;
   description = "lazydocker (TUI Docker)";
 }

@@ -7,9 +7,6 @@
 
 myLib.mkPackageModule {
   inherit config lib;
-  path = [
-    "tui"
-    "lazysql"
-  ];
+  dir = ./.;
   description = "lazysql (TUI client SQL)";
 }
