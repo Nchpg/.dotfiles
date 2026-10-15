@@ -97,6 +97,12 @@
       ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
 
+      # Commandes du dépôt hors de tout système (apps, packages.commands) : seul
+      # le marqueur sops est connu ici, le reste suit les défauts des scripts.
+      dotsCommands = pkgs-stable.callPackage ./scripts {
+        settings.DOTS_SOPS_MARKER = myLib.sopsPolicy.marker;
+      };
+
       # Helpers du dépôt, agrégés une fois (cf. lib/default.nix) : les modules
       # les reçoivent en argument `myLib` au lieu de remonter jusqu'à lib/ par
       # des `../../../..` que le moindre déplacement de dossier casse.
@@ -233,6 +239,10 @@
       # dépôt, à côté des ancres de clés qui n'ont rien à faire dans celui-ci.
       # Ce qui reste ici, c'est la politique ; ce qui reste là-bas, les clés.
       packages.${system} = {
+        # Les commandes du dépôt sans valeurs propres à un système (cf.
+        # scripts/default.nix) : ce que lancent les apps ci-dessous.
+        commands = dotsCommands;
+
         sops-policy = pkgs-stable.writeShellScriptBin "sops-policy" ''
           cat ${
             pkgs-stable.writeText "creation-rules.yaml" (
@@ -251,6 +261,16 @@
           }) themes.wallpaperNames
         );
       };
+
+      # `nix run .#rebuild -- -p <profil> -H <host>` : les commandes sur une
+      # machine NEUVE, avant le premier rebuild qui les installe — avec leurs
+      # dépendances (gum…), contrairement à ./scripts/<commande>.sh. `secrets`
+      # n'y est pas : elle exige les valeurs figées d'un système construit.
+      apps.${system} = lib.genAttrs [ "rebuild" "update" "genclean" "dots" ] (c: {
+        type = "app";
+        program = "${dotsCommands}/bin/${c}";
+        meta.description = "Commande `${c}` du dépôt (cf. scripts/)";
+      });
 
       # UN SEUL attribut `checks.${system}`, et pas deux chemins qui le
       # partagent : Nix refuse de fusionner deux chemins d'attributs dont un

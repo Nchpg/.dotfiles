@@ -24,7 +24,7 @@ overlays/          Overlays nixpkgs (displaylink : fetch auto du driver)
 docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi)
 devshells/         `nix develop .#python|c|xpu`
 init.sh            Mise en place d'une machine neuve : host, matériel, clés age, SSH GitHub, clone des secrets, hooks, inscription
-scripts/           Scripts derrière les commandes `rebuild`, `update`, `genclean` (lib/ : bash partagé, CI comprise)
+scripts/           Les commandes du dépôt (rebuild, update, genclean, secrets, dots, theme), installées en un paquet (default.nix) ; lib/ : bash partagé, CI comprise
 formatter.nix      `nix fmt` (nixfmt sur les fichiers trackés)
 statix.toml        Config du linter statix
 ```
@@ -71,6 +71,7 @@ pas le hostname).
 | `nix fmt` | Formate le repo (nixfmt-rfc-style) |
 | `git config core.hooksPath .githooks` | Active les hooks (fait par `./init.sh`) : formatage des `.nix` au commit, dépôt de secrets tenu en phase au pull/push |
 | `nix flake check` | Vérifie l'évaluation du flake |
+| `nix run .#rebuild -- -p <profil> -H <host>` | Les commandes (aussi `update`, `genclean`, `dots`) sur une machine pas encore construite, dépendances comprises |
 | `secrets edit\|show\|list\|sync\|status\|policy` | Édite et synchronise les secrets (voir `docs/secrets-guide.md`) |
 
 ## Secrets
