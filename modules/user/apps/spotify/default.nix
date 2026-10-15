@@ -14,7 +14,7 @@ let
   spicePkgs = inputs.spicetify-nix.legacyPackages.${cfg.pkgs.stdenv.hostPlatform.system};
 
   # base16 renvoie du hex sans '#', format attendu par color.ini.
-  c = myLib.schemeColors { inherit config themes; };
+  c = myLib.theme.schemeColors { inherit config themes; };
   stylixColorScheme = {
     text = c.base05;
     subtext = c.base04;

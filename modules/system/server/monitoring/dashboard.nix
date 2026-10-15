@@ -20,7 +20,7 @@
 # pourquoi, section par section : la machine, le stockage, ce qui est publié,
 # les services, les journaux, et pour finir la surveillance elle-même. Chaque
 # panneau porte une DESCRIPTION lisible dans l'interface (cf.
-# `myLib.grafana.mkDescription`) : le raisonnement reste en Nix, la clé de
+# `myLib.server.grafana.mkDescription`) : le raisonnement reste en Nix, la clé de
 # lecture part là-bas.
 #
 # Il reste possible d'importer 1860 à la main depuis l'interface le jour où
@@ -35,7 +35,7 @@
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) panels q;
-  inherit (myLib.grafana) lokiDs promDs placeSections;
+  inherit (myLib.server.grafana) lokiDs promDs placeSections;
 
   # Sections, bandes, et noms des panneaux qui les composent. Un panneau absent
   # (composant coupé) est sauté, une bande vide disparaît, une section sans

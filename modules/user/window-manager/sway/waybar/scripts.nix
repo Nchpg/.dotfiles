@@ -6,7 +6,7 @@
 # connaît que par leur chemin (`cfg.scriptDir`).
 #
 # Module à part entière et pas un simple helper : sous modules/, tout .nix est
-# importé comme module (cf. lib/import-all.nix). Il contribue donc aux MÊMES
+# importé comme module (cf. lib/modules/import-all.nix). Il contribue donc aux MÊMES
 # options que default.nix, dont il partage `enable` et `pkgs`.
 let
   sway = config.userSettings.windowManager.sway;

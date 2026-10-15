@@ -13,7 +13,7 @@ let
   cfg = config.systemSettings.monitoring;
   dns = config.systemSettings.dns;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 in
 {
   config = lib.mkIf (cfg.enable && cfg.apps.enable && dns.enable) {

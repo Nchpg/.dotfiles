@@ -10,7 +10,7 @@
 # shellcheck passe dessus au build, ce que la CI ne fait que sur les *.sh.
 #
 # Le module garde la déclaration du secret (`sops.secrets.<secret> = { }`)
-# et l'assertion myLib.assertSopsAvailable.
+# et l'assertion myLib.sops.assertAvailable.
 lib:
 {
   pkgs,

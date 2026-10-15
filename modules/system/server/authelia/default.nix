@@ -341,7 +341,7 @@ in
 
             if ($auth_status = 403) {
               return 403 '${
-                myLib.mkErrorPage {
+                myLib.server.mkErrorPage {
                   title = "Accès refusé";
                   withLinks = true;
                   body = ''
@@ -590,7 +590,7 @@ in
       };
     };
 
-    services.nginx.virtualHosts.${cfg.portalHost} = myLib.mkTlsVhost {
+    services.nginx.virtualHosts.${cfg.portalHost} = myLib.server.mkTlsVhost {
       # Journal à l'adresse réelle plutôt qu'à celle de la connexion TCP. Le
       # portail est la porte d'entrée publique, donc l'endroit où arrivent les
       # tentatives d'identifiants, et tout y était consigné comme venant de

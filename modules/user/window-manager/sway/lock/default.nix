@@ -75,11 +75,11 @@ let
   # sway le tue, écran rouge sans issue (reboot forcé). Le patch n'acquitte
   # qu'une fois un tampon à la bonne taille attaché, comme swaylock amont.
   #
-  # Même garde-fou que le patch de sway (lib/mk-guarded-patch.nix) : build
+  # Même garde-fou que le patch de sway (lib/packaging/guarded-patch.nix) : build
   # arrêté si un des fichiers patchés change (relire, retester au sway
   # imbriqué avec `swaymsg create_output` pendant le verrou, mettre à jour
   # les empreintes).
-  swaylockPackage = myLib.mkGuardedPatch {
+  swaylockPackage = myLib.packaging.mkGuardedPatch {
     package = pkgs.swaylock-effects;
     patch = ./swaylock-effects-defer-ack.patch;
     files = {
@@ -278,7 +278,7 @@ in
       # Entrée rofi : la tasse en orange (base09), la couleur de l'anneau de ce
       # verrou-là, pour l'associer d'un coup d'œil.
       (lib.mkIf config.userSettings.windowManager.sway.rofi.enable (
-        myLib.mkRofiAction {
+        myLib.desktop.mkRofiAction {
           inherit config;
           name = "awake";
           label = "Awake";

@@ -9,7 +9,7 @@ let
   cfg = config.userSettings.dev.supabaseCli;
 
   # SUPABASE_ACCESS_TOKEN lu par le CLI lui-même (confirmé dans son binaire).
-  supabase-wrapper = myLib.mkSecretEnvWrapper {
+  supabase-wrapper = myLib.sops.mkSecretEnvWrapper {
     inherit config;
     pkgs = cfg.pkgs;
     name = "supabase";
@@ -34,7 +34,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = myLib.assertSopsAvailable {
+    assertions = myLib.sops.assertAvailable {
       inherit config;
       optionName = "userSettings.dev.supabaseCli";
       need = "a besoin du secret sops (token Supabase)";

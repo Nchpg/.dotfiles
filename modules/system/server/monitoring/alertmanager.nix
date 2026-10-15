@@ -165,7 +165,7 @@ in
     # Le webhook est DÉJÀ déclaré par modules/system/notify, mais on le redéclare
     # ici : ce module doit fonctionner même si le signalement d'échec d'unité est
     # coupé, et c'est cette déclaration-là qui fait entrer alertmanager dans
-    # l'audience du secret (cf. lib/sops-policy.nix). Les deux définitions
+    # l'audience du secret (cf. lib/sops/policy.nix). Les deux définitions
     # fusionnent, aucune ne pose `mode` deux fois.
     #
     # `restartUnits` : alertmanager ne relit pas ses credentials, une rotation du

@@ -51,7 +51,7 @@ pas le hostname).
 ## Principes des modules
 
 - Tous les fichiers `.nix` de `modules/system` et `modules/user` sont importés
-  automatiquement (`lib/import-all.nix`) ; chaque module est **inerte tant que
+  automatiquement (`lib/modules/import-all.nix`) ; chaque module est **inerte tant que
   son option `enable` n'est pas activée** par le profil ou le host.
 - Côté home-manager, la config système est accessible via l'argument natif
   `osConfig` (ex. `osConfig.systemSettings.stylix.theme`).

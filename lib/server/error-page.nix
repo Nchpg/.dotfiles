@@ -1,7 +1,7 @@
 # Page d'erreur HTML autonome, en français, servie par nginx sans passer par
 # l'application (`return 404 '…';`) :
 #
-#   return 404 '${myLib.mkErrorPage { title = "Lien introuvable"; body = "<p>…</p>"; }}';
+#   return 404 '${myLib.server.mkErrorPage { title = "Lien introuvable"; body = "<p>…</p>"; }}';
 #
 # Ni marque, ni version, ni nom de produit : une page d'erreur qui trahit ce
 # qui tourne derrière est un renseignement offert à qui balaie internet. Thème

@@ -2,7 +2,7 @@
 # Adwaita ne fournit que des -symbolic en #2e3436, invisibles sur le fond
 # foncé de rofi : glyphe maison d'un seul tracé, coloré au thème.
 #
-#   myLib.mkRofiAction {
+#   myLib.desktop.mkRofiAction {
 #     inherit config;
 #     name = "shutdown"; label = "Shutdown"; comment = "…";
 #     exec = "systemctl poweroff"; color = c.base05; path = "M12 3 v9 …";

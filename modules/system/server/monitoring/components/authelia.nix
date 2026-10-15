@@ -10,7 +10,7 @@ let
   cfg = config.systemSettings.monitoring;
   authelia = config.systemSettings.authelia;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 
   # Refus par minute au-delà desquels `PortailRefusEnRafale` se déclenche,
   # repris par la description du panneau.

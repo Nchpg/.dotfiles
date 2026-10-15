@@ -44,7 +44,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = myLib.assertSopsAvailable {
+    assertions = myLib.sops.assertAvailable {
       inherit config;
       optionName = "userSettings.git.gh";
       need = "a besoin du secret sops (token GitHub)";

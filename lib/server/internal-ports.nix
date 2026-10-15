@@ -1,7 +1,7 @@
 # Ouvre des ports sur les interfaces INTERNES seulement, au lieu de les ouvrir
 # partout :
 #
-#   myLib.mkInternalPorts config { tcp = [ 443 ]; }
+#   myLib.server.mkInternalPorts config { tcp = [ 443 ]; }
 #
 # `networking.firewall.allowedTCPPorts` ouvre sur TOUTES les interfaces,
 # présentes et futures. Sur ce parc ça reste sans conséquence uniquement parce

@@ -11,7 +11,7 @@ let
 
   # init.lua séparé (coloration syntaxique à l'édition) : valeurs dynamiques
   # injectées via placeholders @stylix_baseXX@.
-  colors = myLib.schemeColors { inherit config themes; };
+  colors = myLib.theme.schemeColors { inherit config themes; };
   stylixColorNames = [
     "base00"
     "base01"
@@ -85,7 +85,7 @@ in
         ++ lib.optional config.userSettings.editors.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
       extraPackages =
-        myLib.editorLspPackages cfg.pkgs
+        myLib.packaging.editorLspPackages cfg.pkgs
         ++ (with cfg.pkgs; [
           gopls # go
           lua-language-server

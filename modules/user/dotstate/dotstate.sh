@@ -83,7 +83,7 @@ fetchUpstream() {
 
 # EMPREINTE DU CONTENU d'un commit : une ligne « <chemin> <sha256> » par
 # fichier, triées, puis le sha256 de l'ensemble. EXACTEMENT le calcul de
-# lib/content-hash.nix, gravé au build dans /etc/dotfiles/content : toute
+# lib/flake/content-hash.nix, gravé au build dans /etc/dotfiles/content : toute
 # modification de l'un doit se reporter dans l'autre. Mémorisée pour le
 # dernier commit vu (`content`), le calcul ne se refait qu'à un commit neuf.
 contentOf() {

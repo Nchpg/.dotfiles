@@ -3,7 +3,7 @@
 # alacritty exige `-e`, kitty/foot l'acceptent tel quel.
 #
 # `title` est facultatif : il ne sert que si un for_window sway doit matcher
-# la fenêtre (TUIs flottants, cf. mk-floating-tui-launcher.nix). Le tmux de
+# la fenêtre (TUIs flottants, cf. floating-tui-launcher.nix). Le tmux de
 # Ctrl+Entrée ou le btop du clic waybar s'en passent.
 lib:
 {

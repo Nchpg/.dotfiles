@@ -11,7 +11,7 @@ let
 
   # Tarball npm vérifié par Nix (FOD) : un hash mismatch fait échouer l'éval.
   # URL + hash épinglés automatiquement par update.sh.
-  kimiTarball = myLib.fetchPinned cfg.pkgs ./pinned.json;
+  kimiTarball = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
   # npx + Node.js nixpkgs plutôt que le binaire SEA précompilé upstream, dont
   # le runtime Node embarqué crashe en SIGILL sur CPU hybride (Meteor Lake).

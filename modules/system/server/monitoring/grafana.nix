@@ -211,7 +211,7 @@ in
     # ------------------------------------------------------------- publication
 
     services.nginx.virtualHosts.${cfg.grafana.hostName} = lib.mkMerge [
-      (myLib.mkTlsVhost {
+      (myLib.server.mkTlsVhost {
         # Adresse réelle plutôt que celle de la connexion TCP, comme le portail :
         # tout arrive par cloudflared en 127.0.0.1 quand on vient de l'extérieur.
         extraConfig = ''

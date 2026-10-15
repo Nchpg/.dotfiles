@@ -10,8 +10,8 @@ let
   cfg = config.userSettings.gui.wfRecorder;
 
   # Icônes de notif aux couleurs du thème, repli sans stylix intégré (cf.
-  # lib/notify-icon.nix).
-  icon = myLib.notifyIcon config cfg.pkgs;
+  # lib/desktop/notify-icon.nix).
+  icon = myLib.desktop.notifyIcon config cfg.pkgs;
   iconRec = icon "actions/media-record" (c: c.base08);
   iconDone = icon "actions/object-select" (c: c.base0B);
 

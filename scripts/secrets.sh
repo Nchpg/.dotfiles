@@ -61,7 +61,7 @@ nixBin="$DOTS_NIX"
 # scripts/default.nix.
 editorBin="$DOTS_EDITOR"
 
-# Première ligne du bloc généré du .sops.yaml (lib/sops-policy.nix).
+# Première ligne du bloc généré du .sops.yaml (lib/sops/policy.nix).
 marker="$DOTS_SOPS_MARKER"
 
 # Chemin RÉSOLU : un ~/.secrets lien symbolique n'était pas parcouru par

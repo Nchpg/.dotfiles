@@ -30,7 +30,7 @@ let
       cfg.pkgs.coreutils
     ];
     text = ''
-      ${myLib.mkGumEnv { colors = config.lib.stylix.colors; }}
+      ${myLib.theme.mkGumEnv { colors = config.lib.stylix.colors; }}
 
       state_dir="''${XDG_RUNTIME_DIR:-$HOME/.cache}"
       pid_file="$state_dir/bt-combine.pid"
@@ -177,7 +177,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "bt-combine";
         inherit config;
         exec = "${bt-combine}/bin/bt-combine";

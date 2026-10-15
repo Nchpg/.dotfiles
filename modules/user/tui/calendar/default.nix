@@ -8,7 +8,7 @@
 
 let
   cfg = config.userSettings.tui.calendar;
-  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
+  c = (myLib.theme.schemeColors { inherit config themes; }).withHashtag;
   inherit (lib) concatStringsSep mapAttrsToList;
 
   vdirsyncerBin = "${cfg.pkgs.vdirsyncer}/bin/vdirsyncer";
@@ -130,7 +130,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "calendar";
         confName = "calendar-tui";
         inherit config;
@@ -155,7 +155,7 @@ in
         # Vérifie le DROIT d'accès (keyOwner/root) à l'éval, message clair au
         # lieu d'un échec obscur au déchiffrement. La présence effective de la
         # clé age est vérifiée par sops-nix à l'activation (fichier runtime).
-        assertions = myLib.assertSopsAvailable {
+        assertions = myLib.sops.assertAvailable {
           inherit config;
           optionName = "userSettings.tui.calendar";
           need = "a besoin des secrets sops (Google Agenda)";

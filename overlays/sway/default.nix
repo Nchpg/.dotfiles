@@ -3,7 +3,7 @@
 # hérite — le wrapper du module système (modules/system/window-manager/sway)
 # comme le swaymsg tiré côté user —, donc une seule compilation de sway et
 # plus de second sway non patché à côté. Vit hors de modules/ :
-# lib/import-all.nix chargerait tout .nix de là-bas comme module NixOS.
+# lib/modules/import-all.nix chargerait tout .nix de là-bas comme module NixOS.
 #
 # Patch : au verrouillage, sway pose un fond noir opaque sur chaque sortie
 # AVANT que le locker ait dessiné, d'où un flash noir (~66 ms) avant le
@@ -19,12 +19,12 @@
 # bump, ~1 min), et un bump qui touche sway/lock.c fait échouer le build
 # sur l'application du patch — à rebaser alors, ou à retirer.
 #
-# Garde-fou (cf. lib/mk-guarded-patch.nix) : empreintes des sources de
+# Garde-fou (cf. lib/packaging/guarded-patch.nix) : empreintes des sources de
 # sway 1.12 contre lesquelles le patch a été écrit. Si elles changent :
 # relire le patch, le retester (sway imbriqué : verrou filmé, écran
 # branché/débranché, locker tué), puis mettre à jour les empreintes.
 myLib: _final: prev: {
-  sway-unwrapped = myLib.mkGuardedPatch {
+  sway-unwrapped = myLib.packaging.mkGuardedPatch {
     package = prev.sway-unwrapped;
     patch = ./sway-smooth-lock.patch;
     files = {

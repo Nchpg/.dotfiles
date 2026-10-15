@@ -1,6 +1,6 @@
 # Audience d'un secret : les MACHINES qui doivent pouvoir l'ouvrir. Partagé
 # par modules/system/sops (vue d'une cible : suis-je destinataire de ce que je
-# déclare ?) et lib/sops-policy.nix (union sur toutes les cibles déployées),
+# déclare ?) et lib/sops/policy.nix (union sur toutes les cibles déployées),
 # qui doivent faire exactement le même calcul.
 lib: rec {
   # Machines qui font tourner au moins un des profils donnés. C'est LA

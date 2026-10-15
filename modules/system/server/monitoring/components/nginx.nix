@@ -16,7 +16,7 @@ let
   cfg = config.systemSettings.monitoring;
   proxy = config.systemSettings.proxy;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 in
 {
   config = lib.mkIf (cfg.enable && cfg.apps.enable) (

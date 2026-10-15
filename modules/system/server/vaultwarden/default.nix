@@ -97,7 +97,7 @@ let
   # la base, et le KDF est alors LA dernière barrière devant les mots de passe.
   #
   # Comme la sonde ACME du module proxy, elle ne notifie rien elle-même : elle
-  # SORT EN ERREUR (cf. myLib.mkProbe).
+  # SORT EN ERREUR (cf. myLib.server.mkProbe).
   kdfCheckText = ''
     db=${dataDir}/db.sqlite3
 
@@ -576,7 +576,7 @@ in
 
         # ------------------------------------------------------------- publication
 
-        services.nginx.virtualHosts.${cfg.hostName} = myLib.mkTlsVhost {
+        services.nginx.virtualHosts.${cfg.hostName} = myLib.server.mkTlsVhost {
           # LE FILTRAGE PAR SOURCE, posé au niveau `server` : les locations en
           # héritent, et une location ajoutée plus tard ne peut pas l'oublier.
           #
@@ -586,7 +586,7 @@ in
           # pour les `networks` d'Authelia : une décision d'accès ne s'appuie sur
           # aucun en-tête, fût-il réputé fiable.
           extraConfig = ''
-            ${myLib.nginxAllowOnly cfg.allowedNetworks}
+            ${myLib.server.nginxAllowOnly cfg.allowedNetworks}
 
             # Pièces jointes et « Sends ». Le défaut de nginx est un mégaoctet, ce
             # qui refuse à peu près tout fichier avec un 413 que le client Bitwarden
@@ -693,7 +693,7 @@ in
       }
 
       (lib.mkIf cfg.kdfCheck.enable (
-        myLib.mkProbe pkgs-stable {
+        myLib.server.mkProbe pkgs-stable {
           name = "vaultwarden-kdf-check";
           description = "Vérifie que les comptes du coffre dérivent en Argon2id";
           timerDescription = "Sonde quotidienne du KDF des comptes du coffre";

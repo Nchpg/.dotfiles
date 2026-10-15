@@ -18,7 +18,7 @@ let
     pname = "mammouth-code";
     version = pinned.version;
 
-    src = myLib.fetchPinned cfg.pkgs ./pinned.json;
+    src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
     nativeBuildInputs = [ cfg.pkgs.autoPatchelfHook ];
     dontBuild = true;

@@ -2,7 +2,7 @@
 # échec. Rend un fragment de configuration à fusionner :
 #
 #   config = lib.mkMerge [
-#     (myLib.mkProbe pkgs-stable {
+#     (myLib.server.mkProbe pkgs-stable {
 #       name = "acme-expiry-check";
 #       description = "Vérifie …";
 #       timerDescription = "Sonde quotidienne …";

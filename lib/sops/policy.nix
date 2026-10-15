@@ -47,8 +47,8 @@ let
   # Source unique, réexposée par `marker` ci-dessous.
   marker = "# ATTENTION : bloc GÉNÉRÉ";
 
-  sopsAudience = import ./sops-audience.nix lib;
-  targetName = import ./target-name.nix lib;
+  sopsAudience = import ./audience.nix lib;
+  targetName = import ../flake/target-name.nix lib;
 in
 {
   inherit marker;

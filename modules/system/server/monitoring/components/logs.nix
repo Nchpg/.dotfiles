@@ -18,7 +18,7 @@ let
   cfg = config.systemSettings.monitoring;
   vaultwarden = config.systemSettings.vaultwarden.enable;
   ssh = config.systemSettings.ssh.enable;
-  inherit (myLib.grafana) mkTs mkLogs lokiDs;
+  inherit (myLib.server.grafana) mkTs mkLogs lokiDs;
 
   # Sélections LogQL partagées entre la règle et le panneau qui la montre.
   coffreEchecs = ''{unit="vaultwarden.service"} |= "(login)" |= "400 Bad Request"'';

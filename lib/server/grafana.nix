@@ -1,5 +1,5 @@
 # Constructeurs de panneaux Grafana et mise en page du tableau de bord, pour
-# modules/system/server/monitoring (exposés sous `myLib.grafana`).
+# modules/system/server/monitoring (exposés sous `myLib.server.grafana`).
 #
 # Fonctions PURES : elles ne lisent aucune option. Ce qui dépend de la machine
 # (requêtes, seuils, conditions) reste dans les modules qui les appellent.

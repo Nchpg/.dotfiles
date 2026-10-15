@@ -135,7 +135,7 @@ let
 
   # nvim dans le terminal par défaut : l'entrée nvim.desktop du paquet est en
   # Terminal=true, que xdg-open (mode générique) ignore -> nvim sans terminal.
-  nvimInTerminal = myLib.mkTerminalCmd {
+  nvimInTerminal = myLib.desktop.mkTerminalCmd {
     inherit config;
     title = "nvim";
     exec = "nvim";

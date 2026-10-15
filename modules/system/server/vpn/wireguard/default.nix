@@ -453,7 +453,7 @@ in
     };
 
     # `wg0` compte parmi les interfaces internes : les services du host (443,
-    # 53, SSH) acceptent d'être joints depuis le tunnel, cf. myLib.mkInternalPorts.
+    # 53, SSH) acceptent d'être joints depuis le tunnel, cf. myLib.server.mkInternalPorts.
     systemSettings.network.internalIifnames = [ "wg0" ];
 
     # Ce que les peers ont le droit de TRAVERSER, la chaîne de forward étant en
@@ -473,7 +473,7 @@ in
     # description de l'option.
     systemSettings.network.forwardRules =
       lib.optionalString cfg.peerInternetAccess ''
-        iifname "wg0" oifname != "wg0" ip daddr != { ${lib.concatStringsSep ", " myLib.nonRoutableIPv4} } accept comment "peers vers internet"
+        iifname "wg0" oifname != "wg0" ip daddr != { ${lib.concatStringsSep ", " myLib.server.nonRoutableIPv4} } accept comment "peers vers internet"
       ''
       + lib.optionalString (cfg.peerLanAccess != [ ]) ''
         iifname "wg0" ip daddr { ${lib.concatStringsSep ", " cfg.peerLanAccess} } accept comment "peers vers le LAN, liste explicite"
@@ -521,7 +521,7 @@ in
     # un appareil du LAN, et n'atteint donc que les ports ouverts (443, 53, SSH).
     #
     # Le port du tunnel, lui, s'ouvre GLOBALEMENT et pas par
-    # `myLib.mkInternalPorts` comme le reste : c'est le seul du parc qui doit
+    # `myLib.server.mkInternalPorts` comme le reste : c'est le seul du parc qui doit
     # répondre à un paquet venu d'internet. Il ne trahit rien pour autant,
     # WireGuard ne répondant RIEN à un paquet non authentifié.
     networking.firewall.allowedUDPPorts = [ cfg.port ];

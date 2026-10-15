@@ -13,7 +13,7 @@ let
   postgresql = config.services.postgresql.enable;
   redis = config.systemSettings.authelia.enable;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana)
+  inherit (myLib.server.grafana)
     mkTs
     byName
     thresholdLine

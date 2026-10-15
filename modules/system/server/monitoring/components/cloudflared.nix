@@ -11,7 +11,7 @@
 let
   cfg = config.systemSettings.monitoring;
   cloudflared = config.systemSettings.cloudflared;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 in
 {
   config = lib.mkIf cfg.enable (

@@ -12,7 +12,7 @@ let
   cfg = config.systemSettings.monitoring;
   nextcloud = config.systemSettings.nextcloud;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 in
 {
   # Comme les autres exporteurs applicatifs : `apps` ET le service observé, en

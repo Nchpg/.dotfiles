@@ -12,7 +12,7 @@ let
   # La surface de l'overlay couvre TOUT le layout (tous les écrans), mais
   # flameshot demande lui-même un plein écran sur UN output juste après le
   # map : sway y compresse l'image, et ça écrase un for_window. On attend
-  # cette demande (sway_wait, lib/sway-wait.sh) puis on repasse en
+  # cette demande (sway_wait, lib/desktop/sway-wait.sh) puis on repasse en
   # `fullscreen global` (étalé 1:1).
   flameshotGui = cfg.pkgs.writeShellApplication {
     name = "flameshot-gui";
@@ -21,7 +21,7 @@ let
       osConfig.programs.sway.package # swaymsg
       cfg.pkgs.jq
     ];
-    text = myLib.swayWaitSh + ''
+    text = myLib.desktop.swayWaitSh + ''
       QT_QPA_PLATFORM=wayland QT_QPA_PLATFORMTHEME=xdgdesktopportal flameshot gui &
       sway_wait 40 0.05 '.. | objects | select(.type == "con" and .name == "flameshot" and .fullscreen_mode == 1) | .id' >/dev/null \
         || exit 0

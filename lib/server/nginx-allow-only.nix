@@ -1,7 +1,7 @@
 # Filtrage par source d'un vhost nginx, au format `allow` :
 #
 #   extraConfig = ''
-#     ${myLib.nginxAllowOnly [ "10.8.0.0/24" ]}
+#     ${myLib.server.nginxAllowOnly [ "10.8.0.0/24" ]}
 #   '';
 #
 # donne une ligne `allow` par source puis `deny all;`, sans saut de ligne

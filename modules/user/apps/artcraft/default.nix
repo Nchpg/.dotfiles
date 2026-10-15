@@ -27,7 +27,7 @@ let
   # Préfixe des .desktop, icônes et unités dans l'AppImage.
   appId = "ai.storyteller.artcraft-launcher";
 
-  src = myLib.fetchPinned cfg.pkgs ./pinned.json;
+  src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
   extracted = cfg.pkgs.appimageTools.extract {
     inherit pname src;

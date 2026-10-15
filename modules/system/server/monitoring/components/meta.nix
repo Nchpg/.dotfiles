@@ -10,7 +10,7 @@
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) q;
-  inherit (myLib.grafana)
+  inherit (myLib.server.grafana)
     mkStat
     mkStates
     mkAlertes

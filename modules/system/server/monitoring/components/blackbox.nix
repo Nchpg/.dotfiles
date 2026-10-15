@@ -11,7 +11,7 @@
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) ports helpers q;
-  inherit (myLib.grafana)
+  inherit (myLib.server.grafana)
     mkStat
     mkTs
     steps

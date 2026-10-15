@@ -50,7 +50,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (lib.mkIf cfg.openFirewall (myLib.mkInternalPorts config { tcp = [ cfg.port ]; }))
+      (lib.mkIf cfg.openFirewall (myLib.server.mkInternalPorts config { tcp = [ cfg.port ]; }))
 
       {
         assertions = [

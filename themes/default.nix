@@ -12,7 +12,7 @@
 # (suffixé -base24 si le nom est déjà pris en base16, 43 collisions upstream).
 #
 # NB : pas un module NixOS — vit hors de modules/, hors du périmètre de
-# lib/import-all.nix.
+# lib/modules/import-all.nix.
 lib: inputs:
 
 let

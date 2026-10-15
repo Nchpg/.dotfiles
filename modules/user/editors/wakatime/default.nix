@@ -34,7 +34,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = myLib.assertSopsAvailable {
+    assertions = myLib.sops.assertAvailable {
       inherit config;
       optionName = "userSettings.editors.wakatime";
       need = "a besoin du secret sops (API key)";

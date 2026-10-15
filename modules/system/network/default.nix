@@ -8,7 +8,7 @@
 let
   cfg = config.systemSettings.network;
   static = cfg.staticIPv4;
-  hostName = target.machine; # profil-host, cf. lib/target-name.nix
+  hostName = target.machine; # profil-host, cf. lib/flake/target-name.nix
 in
 {
   options = {
@@ -83,7 +83,7 @@ in
       ];
       description = ''
         Motifs `iifname` (nftables) des interfaces par lesquelles un service
-        interne accepte d'être joint. Consommé par `myLib.mkInternalPorts`, que
+        interne accepte d'être joint. Consommé par `myLib.server.mkInternalPorts`, que
         les modules emploient à la place de
         `networking.firewall.allowedTCPPorts`.
 

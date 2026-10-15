@@ -30,11 +30,11 @@ let
   # qui rend le mécanisme automatique, sans qu'on l'écrive nulle part.
   #
   # Le générateur de politique évalue TOUTES les cibles déployées et fait
-  # l'UNION (cf. lib/sops-policy.nix). Un secret déclaré des deux côtés d'un
+  # l'UNION (cf. lib/sops/policy.nix). Un secret déclaré des deux côtés d'un
   # tunnel — la clé pré-partagée, par le serveur et par le client — va donc aux
   # deux, sans qu'aucun des deux modules connaisse l'autre. Même calcul des
-  # deux côtés, cf. lib/sops-audience.nix.
-  audience = myLib.sopsAudience.audience {
+  # deux côtés, cf. lib/sops/audience.nix.
+  audience = myLib.sops.audience.audience {
     inherit (cfg) deployments secretProfiles;
     inherit (target) host;
   };
@@ -260,7 +260,7 @@ in
     #
     # Aujourd'hui, un fichier par secret : les destinataires se calculent depuis
     # ce que les configurations déclarent (cf. `deployments` plus haut et
-    # lib/sops-policy.nix), donc le rayon d'explosion d'une valeur ne dépend plus
+    # lib/sops/policy.nix), donc le rayon d'explosion d'une valeur ne dépend plus
     # du fichier où quelqu'un l'a rangée un jour.
     #
     # Pas de `defaultSopsFile` : il n'y a plus de défaut qui aurait un sens, et

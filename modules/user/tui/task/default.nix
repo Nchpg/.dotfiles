@@ -65,7 +65,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "tasks";
         confName = "task-tui";
         inherit config;
@@ -76,7 +76,7 @@ in
         height = 850;
       })
       {
-        assertions = myLib.assertSopsAvailable {
+        assertions = myLib.sops.assertAvailable {
           inherit config;
           optionName = "userSettings.tui.task";
           need = "a besoin des secrets sops (Google Tasks)";

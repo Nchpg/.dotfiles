@@ -15,8 +15,8 @@ let
   popupSize = toString (config.stylix.fonts.sizes.popups + 3);
 
   # Icônes de notif aux couleurs du thème, repli sans stylix intégré (cf.
-  # lib/notify-icon.nix).
-  icon = myLib.notifyIcon config cfg.pkgs;
+  # lib/desktop/notify-icon.nix).
+  icon = myLib.desktop.notifyIcon config cfg.pkgs;
 
   swayncStyle = ''
     * {

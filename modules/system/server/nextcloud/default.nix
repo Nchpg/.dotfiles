@@ -40,7 +40,7 @@ let
   # minifié.
   nextcloudPackage =
     if cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkWebUi then
-      myLib.mkNextcloudShareLinkPatch {
+      myLib.server.mkNextcloudShareLinkPatch {
         package = pkgs-stable.nextcloud33;
         inherit (pkgs-stable) perl;
         host = cfg.hostName;

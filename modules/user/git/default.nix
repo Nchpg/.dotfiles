@@ -101,7 +101,7 @@ in
       # Fragment gitconfig généré via sops : l'email n'apparaît ni dans le
       # repo ni dans le store.
       (lib.mkIf (cfg.userEmailSops != null) {
-        assertions = myLib.assertSopsAvailable {
+        assertions = myLib.sops.assertAvailable {
           inherit config;
           optionName = "userSettings.git.userEmailSops";
         };

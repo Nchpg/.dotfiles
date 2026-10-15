@@ -35,7 +35,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "systemd-manager";
         confName = "systemd-manager-tui";
         inherit config;

@@ -10,7 +10,7 @@ let
 
   # CLOUDFLARE_API_TOKEN lu par wrangler lui-même (confirmé dans son bundle
   # JS).
-  wrangler-wrapper = myLib.mkSecretEnvWrapper {
+  wrangler-wrapper = myLib.sops.mkSecretEnvWrapper {
     inherit config;
     pkgs = cfg.pkgs;
     name = "wrangler";
@@ -62,7 +62,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    assertions = myLib.assertSopsAvailable {
+    assertions = myLib.sops.assertAvailable {
       inherit config;
       optionName = "userSettings.dev.cloudflareCli";
       need = "a besoin du secret sops (token API Cloudflare)";

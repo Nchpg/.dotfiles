@@ -19,7 +19,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "volume-mixer";
         inherit config;
         exec = lib.getExe cfg.pkgs.ncpamixer;

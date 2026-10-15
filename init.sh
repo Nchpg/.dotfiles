@@ -700,7 +700,7 @@ if [ "$github" = 1 ] && [ -d "$secretsRepo/.git" ] \
   git -C "$secretsRepo" pull -q --ff-only 2> /dev/null || true
 fi
 # Première ligne du bloc généré du .sops.yaml : la même chaîne que `marker`
-# dans lib/sops-policy.nix, qui la définit (ce script tourne sans évaluer le
+# dans lib/sops/policy.nix, qui la définit (ce script tourne sans évaluer le
 # flake, d'où la copie, unique ici).
 sopsMarker="# ATTENTION : bloc GÉNÉRÉ"
 

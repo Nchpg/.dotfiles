@@ -1,6 +1,6 @@
 # Vhost nginx en TLS, avec son certificat ACME :
 #
-#   services.nginx.virtualHosts."exemple.fr" = myLib.mkTlsVhost {
+#   services.nginx.virtualHosts."exemple.fr" = myLib.server.mkTlsVhost {
 #     locations."/".proxyPass = "http://127.0.0.1:8080";
 #   };
 #

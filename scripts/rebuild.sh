@@ -66,7 +66,7 @@ esac
 
 # Nom de la cible du flake : la variante dark garde le nom historique
 # (personal-gram), light suffixe (personal-gram-light) — même calcul que
-# lib/target-name.nix (`full`), qui nomme les nixosConfigurations.
+# lib/flake/target-name.nix (`full`), qui nomme les nixosConfigurations.
 ATTR="$PROFILE-$HOST"
 if [[ "$VARIANT" != "dark" ]]; then
     ATTR="$ATTR-$VARIANT"

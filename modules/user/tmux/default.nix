@@ -29,7 +29,7 @@ in
     home.file.".config/sway/conf.d/tmux.conf" = lib.mkIf config.userSettings.windowManager.sway.enable {
       text = ''
         bindsym Control+Return exec ${
-          myLib.mkTerminalCmd {
+          myLib.desktop.mkTerminalCmd {
             inherit config;
             exec = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
           }
@@ -40,7 +40,7 @@ in
     programs.tmux = {
       enable = true;
       # Même binaire que celui installé par le module du shell (son `pkgs`).
-      shell = myLib.mkTerminalShellBin {
+      shell = myLib.desktop.mkTerminalShellBin {
         inherit (config.userSettings.shell.${shell}) pkgs;
         inherit shell;
       };

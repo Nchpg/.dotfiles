@@ -11,7 +11,7 @@ let
   cfg = config.systemSettings.monitoring;
   wireguard = config.systemSettings.vpn.wireguard;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 
   # Le nom lisible des pairs WireGuard n'est PAS dans l'interface : `wg show` ne
   # connaît que des clés publiques. L'exporteur sait les traduire, à condition

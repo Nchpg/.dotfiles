@@ -2,7 +2,7 @@
 # `systemSettings.nextcloud.publicSharing.canonicalLinkWebUi` pour le pourquoi
 # et le coût :
 #
-#   myLib.mkNextcloudShareLinkPatch {
+#   myLib.server.mkNextcloudShareLinkPatch {
 #     package = pkgs.nextcloud33;
 #     inherit (pkgs) perl;
 #     host = "cloud.exemple.fr";
@@ -38,7 +38,7 @@ package.overrideAttrs (old: {
     # GARDE. Deux occurrences exécutées (une par bundle) plus une chaîne
     # source embarquée : au moins deux. En dessous, le motif a bougé — build
     # arrêté ici plutôt que de laisser le lien redevenir le nom interne sans
-    # bruit. Réajuster l'ancre dans lib/mk-nextcloud-share-link-patch.nix.
+    # bruit. Réajuster l'ancre dans lib/server/nextcloud-share-link-patch.nix.
     if [ "$total" -lt 2 ]; then
       echo "ERREUR canonicalLinkWebUi : motif du lien de partage introuvable (attendu >=2, obtenu $total). Le bundle Nextcloud a changé de forme ; ajuster le motif." >&2
       exit 1

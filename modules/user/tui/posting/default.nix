@@ -8,7 +8,7 @@
 
 let
   cfg = config.userSettings.tui.posting;
-  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
+  c = (myLib.theme.schemeColors { inherit config themes; }).withHashtag;
 in
 {
   options.userSettings.tui.posting = {

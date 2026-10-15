@@ -36,7 +36,7 @@ in
 {
   options.userSettings = lib.setAttrByPath path {
     enable = lib.mkEnableOption description;
-    pkgs = import ./mk-pkgs-option.nix {
+    pkgs = import ./pkgs-option.nix {
       inherit lib config;
       default = defaultPkgs;
     };

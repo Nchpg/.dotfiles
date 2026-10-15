@@ -7,7 +7,7 @@
 #   - le COMMIT, que rend `nixos-version --configuration-revision` ;
 #     « <commit>-dirty » quand le build part d'un arbre avec des
 #     modifications non commitées ;
-#   - l'EMPREINTE DU CONTENU (lib/content-hash.nix), dans
+#   - l'EMPREINTE DU CONTENU (lib/flake/content-hash.nix), dans
 #     /etc/dotfiles/content. Indispensable au cas « -dirty » : construire, puis
 #     commiter ces mêmes modifications, donne un commit différent pour un
 #     contenu identique. Sans elle, dotstate annonçait des commits « pas encore

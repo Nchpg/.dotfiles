@@ -4,7 +4,7 @@
 # ce dossier, pas une interface pour les profils.
 #
 # POURQUOI DES OPTIONS et non un gros `let` : sous modules/, chaque .nix est un
-# module à part entière (cf. lib/import-all.nix), donc deux fichiers ne
+# module à part entière (cf. lib/modules/import-all.nix), donc deux fichiers ne
 # partagent rien d'autre que `config`. Chaque composant (components/*.nix)
 # DÉPOSE ici ses tâches de collecte, ses règles et ses panneaux ; prometheus.nix,
 # loki.nix et dashboard.nix les RAMASSENT et les mettent en ordre.

@@ -22,7 +22,7 @@ let
   # Préfixe du .desktop et du type MIME dans le .deb.
   appId = "com.anthropic.Claude";
 
-  src = myLib.fetchPinned cfg.pkgs ./pinned.json;
+  src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
   # Arborescence /usr du .deb, sans patchelf : c'est le FHS qui fournit les
   # bibliothèques.

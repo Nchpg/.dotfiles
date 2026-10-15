@@ -12,7 +12,7 @@ let
   cfg = config.systemSettings.monitoring;
   nextcloud = config.systemSettings.nextcloud;
   inherit (cfg.internal) ports helpers;
-  inherit (myLib.grafana) mkTs;
+  inherit (myLib.server.grafana) mkTs;
 in
 {
   config = lib.mkIf (cfg.enable && cfg.apps.enable) (

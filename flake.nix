@@ -100,7 +100,7 @@
       # Commandes du dépôt hors de tout système (apps, packages.commands) : seul
       # le marqueur sops est connu ici, le reste suit les défauts des scripts.
       dotsCommands = pkgs-stable.callPackage ./scripts {
-        settings.DOTS_SOPS_MARKER = myLib.sopsPolicy.marker;
+        settings.DOTS_SOPS_MARKER = myLib.sops.policy.marker;
       };
 
       # Helpers du dépôt, agrégés une fois (cf. lib/default.nix) : les modules
@@ -114,8 +114,8 @@
       themes = import ./themes lib inputs;
 
       # Empreinte du contenu de la config, gravée dans chaque système pour
-      # `dotstate` (cf. lib/content-hash.nix) : calculée ici une seule fois.
-      dotfilesContent = myLib.contentHash inputs.self.outPath;
+      # `dotstate` (cf. lib/flake/content-hash.nix) : calculée ici une seule fois.
+      dotfilesContent = myLib.flake.contentHash inputs.self.outPath;
 
       # Injectés dans TOUS les modules (specialArgs système, extraSpecialArgs
       # HM). Chacun ajoute ensuite ses args propres.
@@ -149,8 +149,8 @@
         variant = variants;
       };
 
-      # Cf. lib/target-name.nix (partagé avec network, la politique sops…).
-      targetName = myLib.targetName.full;
+      # Cf. lib/flake/target-name.nix (partagé avec network, la politique sops…).
+      targetName = myLib.flake.targetName.full;
 
       # Un host se terminant par "-light"/"-dark" collisionne avec une autre
       # cible (host "x-light" en dark == host "x" en light) : listToAttrs
@@ -213,7 +213,7 @@
             specialArgs = commonArgs // {
               target = target // {
                 inherit name;
-                machine = myLib.targetName.machine target;
+                machine = myLib.flake.targetName.machine target;
               };
             };
           };
@@ -232,7 +232,7 @@
 
       # `nix run .#sops-policy` : imprime le bloc `creation_rules` du .sops.yaml
       # du dépôt PRIVÉ (que `secrets policy` y pose et synchronise), déduit de
-      # ce que les cibles DÉPLOYÉES déclarent (cf. lib/sops-policy.nix et
+      # ce que les cibles DÉPLOYÉES déclarent (cf. lib/sops/policy.nix et
       # hosts/default.nix).
       #
       # Un `run` et pas un fichier commité ici : le .sops.yaml vit dans l'autre
@@ -246,7 +246,7 @@
         sops-policy = pkgs-stable.writeShellScriptBin "sops-policy" ''
           cat ${
             pkgs-stable.writeText "creation-rules.yaml" (
-              myLib.sopsPolicy.generate { inherit nixosConfigurations; }
+              myLib.sops.policy.generate { inherit nixosConfigurations; }
             )
           }
         '';
@@ -278,20 +278,20 @@
       # `${system}` en est un.
       checks.${system} = {
         # La politique de ce dépôt-ci et le .sops.yaml du dépôt PRIVÉ disent la
-        # même chose (cf. lib/check-sops-policy.nix). À l'ÉVAL, comme
-        # option-paths juste en dessous (cf. lib/mk-eval-check.nix).
-        sops-policy = myLib.mkEvalCheck {
+        # même chose (cf. lib/sops/check-policy.nix). À l'ÉVAL, comme
+        # option-paths juste en dessous (cf. lib/flake/eval-check.nix).
+        sops-policy = myLib.flake.mkEvalCheck {
           pkgs = pkgs-stable;
           name = "check-sops-policy";
-          check = myLib.checkSopsPolicy {
-            expected = myLib.sopsPolicy.generate { inherit nixosConfigurations; };
-            inherit (myLib.sopsPolicy) marker;
+          check = myLib.sops.checkPolicy {
+            expected = myLib.sops.policy.generate { inherit nixosConfigurations; };
+            inherit (myLib.sops.policy) marker;
             file = "${inputs.secrets}/.sops.yaml";
           };
         };
 
-        # Miroir dossier <-> chemin d'option (cf. lib/check-option-paths.nix).
-        # Échoue à l'ÉVAL et pas au build (cf. lib/mk-eval-check.nix) : `nix
+        # Miroir dossier <-> chemin d'option (cf. lib/flake/check-option-paths.nix).
+        # Échoue à l'ÉVAL et pas au build (cf. lib/flake/eval-check.nix) : `nix
         # flake check --no-build` en CI l'attrape sans rien construire.
         #
         # N'importe quelle cible / n'importe quel user fait l'affaire : les
@@ -305,7 +305,7 @@
 
             # Côté NixOS, `options` est exposé : on part des options déclarées
             # et on remonte au fichier déclarant.
-            sys = myLib.checkOptionPaths.byDeclarations {
+            sys = myLib.flake.checkOptionPaths.byDeclarations {
               options = any.options.systemSettings;
               namespace = "systemSettings";
               tree = "system";
@@ -319,8 +319,8 @@
 
             # Côté home-manager, les options par user ne sont pas introspectables
             # (elles viennent d'un `imports` du sous-module) : on part des
-            # dossiers. Cf. lib/check-option-paths.nix.
-            usr = myLib.checkOptionPaths.byDirectory {
+            # dossiers. Cf. lib/flake/check-option-paths.nix.
+            usr = myLib.flake.checkOptionPaths.byDirectory {
               inherit (anyUser) userSettings;
               root = ./modules/user;
               # Module de base : porte userSettings.user et defaultPkgs, il n'a
@@ -329,7 +329,7 @@
             };
 
           in
-          myLib.mkEvalCheck {
+          myLib.flake.mkEvalCheck {
             pkgs = pkgs-stable;
             name = "check-option-paths";
             check = {

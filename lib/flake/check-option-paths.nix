@@ -27,7 +27,7 @@
 lib:
 
 let
-  inherit (import ./option-path.nix lib) kebabToCamel;
+  inherit (import ../modules/option-path.nix lib) kebabToCamel;
 
   renderPath = segments: lib.concatStringsSep "." segments;
 in

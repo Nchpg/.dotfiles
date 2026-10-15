@@ -143,11 +143,11 @@ in
         '';
       }
 
-      # Actions système dans le lanceur (glyphes maison, cf. lib/mk-rofi-action.nix).
+      # Actions système dans le lanceur (glyphes maison, cf. lib/desktop/rofi-action.nix).
       # systemctl poweroff : pas besoin de sudo (polkit, session graphique
       # active), contrairement à `shutdown now`. L'entrée `awake` vient du
       # module lock.
-      (myLib.mkRofiAction {
+      (myLib.desktop.mkRofiAction {
         inherit config;
         name = "shutdown";
         label = "Shutdown";
@@ -156,7 +156,7 @@ in
         color = c.base05;
         path = "M12 3 v9 M7.05 7.05 a7 7 0 1 0 9.9 0";
       })
-      (myLib.mkRofiAction {
+      (myLib.desktop.mkRofiAction {
         inherit config;
         name = "reboot";
         label = "Reboot";

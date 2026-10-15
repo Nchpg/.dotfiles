@@ -106,7 +106,7 @@ in
           br = cfg.${n}.bridge;
         in
         ''
-          iifname "${br}" oifname != "${br}" ip daddr != { ${lib.concatStringsSep ", " myLib.nonRoutableIPv4} } accept comment "${n} vers internet"
+          iifname "${br}" oifname != "${br}" ip daddr != { ${lib.concatStringsSep ", " myLib.server.nonRoutableIPv4} } accept comment "${n} vers internet"
         ''
       ) egressApps;
   };

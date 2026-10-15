@@ -8,7 +8,7 @@
 
 let
   cfg = config.userSettings.tui.lgControl;
-  c = (myLib.schemeColors { inherit config themes; }).withHashtag;
+  c = (myLib.theme.schemeColors { inherit config themes; }).withHashtag;
 
   # Ventilateur + profil d'alimentation via menu gum. Écriture de fan_mode
   # sans root grâce à la règle udev du module système lg-laptop. Limite
@@ -24,8 +24,8 @@ let
     text = ''
       SYS=/sys/devices/platform/lg-laptop
 
-      # Palette du thème pour les menus gum (cf. lib/mk-gum-env.nix).
-      ${myLib.mkGumEnv { colors = myLib.schemeColors { inherit config themes; }; }}
+      # Palette du thème pour les menus gum (cf. lib/theme/gum-env.nix).
+      ${myLib.theme.mkGumEnv { colors = myLib.theme.schemeColors { inherit config themes; }; }}
 
       fan_label() {
         case "$1" in
@@ -93,7 +93,7 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkFloatingTuiLauncher {
+      (myLib.desktop.mkFloatingTuiLauncher {
         name = "lg-control";
         inherit config;
         exec = "${lg-control}/bin/lg-control";

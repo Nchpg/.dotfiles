@@ -75,7 +75,7 @@ in
         powerline-fonts
       ]
       # language servers (communs avec neovim)
-      ++ myLib.editorLspPackages cfg.pkgs;
+      ++ myLib.packaging.editorLspPackages cfg.pkgs;
 
     home.file = {
       ".vim/airline/autoload/airline/themes/powerline.vim".source = ./vim-config/powerline.vim;

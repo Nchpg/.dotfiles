@@ -21,7 +21,7 @@ in
     userSettings.terminal.kitty = {
       enable = lib.mkEnableOption "Enable kitty terminal";
       pkgs = myLib.mkPkgsOption { inherit lib config; };
-      shell = myLib.mkTerminalShellOption { inherit lib config; };
+      shell = myLib.desktop.mkTerminalShellOption { inherit lib config; };
     };
   };
   config = lib.mkIf cfg.enable (
@@ -33,7 +33,7 @@ in
           package = cfg.pkgs.kitty;
 
           settings = {
-            shell = myLib.mkTerminalShellBin { inherit (cfg) pkgs shell; };
+            shell = myLib.desktop.mkTerminalShellBin { inherit (cfg) pkgs shell; };
             confirm_os_window_close = 0;
             window_padding_width = 4;
             term = "xterm-256color";

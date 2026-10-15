@@ -3,12 +3,12 @@
 # bind ET un éventuel clic waybar) et son bind clavier + règle de fenêtre
 # flottante (~/.config/sway/conf.d/<confName>.conf).
 #
-# La commande terminal est construite ici (mk-terminal-cmd.nix) avec le MÊME
+# La commande terminal est construite ici (terminal-cmd.nix) avec le MÊME
 # titre que celui matché par for_window : un seul paramètre, plus de
 # désaccord possible entre les deux.
 lib:
 let
-  mkTerminalCmd = import ./mk-terminal-cmd.nix lib;
+  mkTerminalCmd = import ./terminal-cmd.nix lib;
 in
 {
   config,
@@ -16,7 +16,7 @@ in
   confName ? name, # nom du fichier conf.d (souvent différent, ex. "bluetooth-picker")
   exec, # programme (+ arguments) lancé dans le terminal, chemin store de préférence
   env ? { }, # variables posées devant `exec` (ex. NEWT_COLORS)
-  kittyExtraOpts ? "", # cf. mk-terminal-cmd.nix
+  kittyExtraOpts ? "", # cf. terminal-cmd.nix
   preamble ? "", # shell exécuté avant le lancement (ex. synchro), "" = aucun
   keybind, # ex. "$mod+b"
   # Titre EXACT matché par for_window (ancré ^…$). Sans ancrage c'est une

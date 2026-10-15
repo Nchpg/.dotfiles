@@ -92,7 +92,7 @@ jobs:
       # (`$flake/modules/user/.../pinned.json`, `modules/.../extensions.json`).
       # Ces chaînes sont invisibles pour Nix, statix, deadnix ET shellcheck :
       # un déplacement de dossier les laisse derrière lui sans le moindre
-      # message — exactement le problème décrit dans lib/option-enabled.nix,
+      # message — exactement le problème décrit dans lib/modules/option-enabled.nix,
       # mais côté shell. Vécu : la réorg des modules a laissé
       # `modules/user/vscode/extensions.json` dans vscode/update.sh (script
       # mort en silence, extensions jamais bumpées) et dans

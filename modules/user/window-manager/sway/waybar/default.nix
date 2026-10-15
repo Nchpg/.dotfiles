@@ -25,14 +25,14 @@ let
   # d'attribut on-click du tout (bloc affiché, clic inactif) : rend la barre
   # composable pour un user minimal (guest).
   # Chemin inexistant = ERREUR d'éval, pas un `false` silencieux, cf.
-  # lib/option-enabled.nix.
+  # lib/modules/option-enabled.nix.
   clickIf =
     modulePath: name:
     lib.optionalAttrs (myLib.optionEnabled config.userSettings modulePath) {
       on-click = launcher name;
     };
 
-  inherit (myLib) mkIcon;
+  inherit (myLib.desktop) mkIcon;
 
   # Icône suivie de l'espacement standard de la barre (3 espaces) avant le texte.
   labeled = hex: text: "${mkIcon hex}   ${text}";
@@ -56,11 +56,11 @@ let
   };
 
   # Menus clic droit : XML + menu-actions tirés d'une même liste (cf.
-  # lib/mk-waybar-menu.nix). Ids GTK = vol<N> / pct<N> (pas de chiffre en
+  # lib/desktop/waybar-menu.nix). Ids GTK = vol<N> / pct<N> (pas de chiffre en
   # tête), une seule source pour les préréglages : volumePresets /
   # backlightPresets.
   menus = {
-    volume = myLib.mkWaybarMenu (
+    volume = myLib.desktop.mkWaybarMenu (
       [
         {
           id = "mute";
@@ -98,7 +98,7 @@ let
 
     # Le choix PERSISTE dans le cache météo (weather-city.sh), survit aux
     # reboots, et sert aussi de lieu au night light.
-    weather = myLib.mkWaybarMenu (
+    weather = myLib.desktop.mkWaybarMenu (
       map (city: {
         id = city;
         label = city;
@@ -108,7 +108,7 @@ let
 
     # Luminosité : la même commande que les touches clavier (module sway),
     # qui rafraîchit elle-même cette case.
-    backlight = myLib.mkWaybarMenu (
+    backlight = myLib.desktop.mkWaybarMenu (
       [
         {
           id = "mode";
@@ -137,7 +137,7 @@ let
       ]
     );
 
-    notifications = myLib.mkWaybarMenu [
+    notifications = myLib.desktop.mkWaybarMenu [
       {
         id = "dnd";
         label = "Ne pas déranger (on/off)";
@@ -373,7 +373,7 @@ in
           # d'interval ; relancé seulement s'il s'arrête.
           restart-interval = 1;
           return-type = "json";
-          on-click = myLib.mkTerminalCmd {
+          on-click = myLib.desktop.mkTerminalCmd {
             inherit config;
             exec = btop;
           };

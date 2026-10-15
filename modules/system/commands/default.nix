@@ -14,7 +14,7 @@
 let
   stylix = config.systemSettings.stylix;
 
-  palette = myLib.uiPalette (if config.stylix.enable then config.lib.stylix.colors else null);
+  palette = myLib.theme.uiPalette (if config.stylix.enable then config.lib.stylix.colors else null);
 
   settings = {
     # Défauts de `rebuild` (et variante actuelle pour `theme`) : la cible qui a
@@ -40,8 +40,8 @@ let
     # frontière posée par modules/system/sops, qui ne vaut rien si cette
     # commande-là la reperce.
     DOTS_EDITOR = "${pkgs-stable.neovim}/bin/nvim --clean";
-    # Première ligne du bloc généré du .sops.yaml (lib/sops-policy.nix).
-    DOTS_SOPS_MARKER = myLib.sopsPolicy.marker;
+    # Première ligne du bloc généré du .sops.yaml (lib/sops/policy.nix).
+    DOTS_SOPS_MARKER = myLib.sops.policy.marker;
   }
   # Palette des menus et messages (cf. scripts/lib/ui.sh) ; sans Stylix, les
   # couleurs du terminal, défaut de ui.sh.

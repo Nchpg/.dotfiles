@@ -37,7 +37,7 @@ let
   # fichier attrape les trois cas d'un coup, puisque c'est ce que voit un client
   # qui compte, pas ce qu'il y a sur le disque.
   #
-  # Elle ne notifie rien elle-même : elle SORT EN ERREUR (cf. myLib.mkProbe).
+  # Elle ne notifie rien elle-même : elle SORT EN ERREUR (cf. myLib.server.mkProbe).
   expiryCheckText = ''
     minDays=${toString cfg.expiryCheck.minDays}
     now=$(date +%s)
@@ -273,10 +273,10 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
-      (myLib.mkInternalPorts config { tcp = [ 443 ]; })
+      (myLib.server.mkInternalPorts config { tcp = [ 443 ]; })
 
       (lib.mkIf cfg.expiryCheck.enable (
-        myLib.mkProbe pkgs-stable {
+        myLib.server.mkProbe pkgs-stable {
           name = "acme-expiry-check";
           description = "Vérifie la date d'expiration des certificats servis";
           timerDescription = "Sonde quotidienne d'expiration des certificats";
@@ -387,7 +387,7 @@ in
           serverTokens = false;
 
           # HSTS pour TOUS les vhosts, posée au niveau http et non dans
-          # myLib.mkTlsVhost : un `add_header` de vhost REMPLACE la liste héritée,
+          # myLib.server.mkTlsVhost : un `add_header` de vhost REMPLACE la liste héritée,
           # donc le vhost Nextcloud — qui pose déjà la sienne, le module amont s'en
           # chargeant quand `https` est vrai — écrase celle-ci au lieu de l'émettre
           # en double. Les autres vhosts — le portail Authelia, et tout service
@@ -460,7 +460,7 @@ in
             #
             # PIÈGE : ce réglage ne suffit pas seul. Un vhost qui active enableACME
             # pose par défaut un `acmeRoot`, ce qui bascule ce certificat-là en
-            # HTTP-01 et ignore ce dnsProvider — d'où myLib.mkTlsVhost.
+            # HTTP-01 et ignore ce dnsProvider — d'où myLib.server.mkTlsVhost.
             dnsProvider = "cloudflare";
 
             # credentialFiles plutôt que environmentFile : lego reçoit le jeton par

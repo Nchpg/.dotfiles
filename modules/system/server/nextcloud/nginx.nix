@@ -120,7 +120,7 @@ in
     # noms supplémentaires. enableACME couvre automatiquement les serverAliases,
     # donc un seul certificat porte l'ensemble.
     services.nginx.virtualHosts.${cfg.hostName} = lib.mkMerge [
-      (myLib.mkTlsVhost { serverAliases = cfg.extraHostNames; })
+      (myLib.server.mkTlsVhost { serverAliases = cfg.extraHostNames; })
 
       # Au niveau du SERVEUR et non d'une location : les chemins concernés sont
       # servis par plusieurs locations du module amont (la générique pour `/s/`,
@@ -291,7 +291,7 @@ in
           # font partie mais leur corps n'est jamais lu par un humain — c'est le
           # cas `/s/` qui compte.
           return 404 '${
-            myLib.mkErrorPage {
+            myLib.server.mkErrorPage {
               title = "Lien introuvable";
               body = ''
                 <p>Ce lien de partage n&rsquo;existe pas, ou il a expir&eacute;.</p>

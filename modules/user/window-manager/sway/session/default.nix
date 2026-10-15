@@ -11,8 +11,8 @@ let
 
   kitty = config.userSettings.terminal.kitty.enable;
   # Icônes de notif aux couleurs du thème, comme batterie et VPN (repli
-  # sans stylix intégré, cf. lib/notify-icon.nix).
-  icon = myLib.notifyIcon config cfg.pkgs;
+  # sans stylix intégré, cf. lib/desktop/notify-icon.nix).
+  icon = myLib.desktop.notifyIcon config cfg.pkgs;
 
   # Sway n'a aucune gestion de session : rien ne retient quelle fenêtre était
   # sur quel workspace. `sway-session save` photographie l'arbre (workspace,

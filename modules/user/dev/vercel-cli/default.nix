@@ -12,12 +12,12 @@ let
 
   # Tarball npm vérifié par Nix (FOD) : pas de package "vercel" dans nixpkgs.
   # URL + hash épinglés automatiquement par update.sh.
-  vercelTarball = myLib.fetchPinned cfg.pkgs ./pinned.json;
+  vercelTarball = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
   # VERCEL_TOKEN lu par le CLI lui-même (confirmé dans son bundle JS).
   # npx + Node.js nixpkgs, même technique que kimi-code : file:// requis, un
   # chemin nu fait échouer npx (tente de l'exécuter direct).
-  vercel-wrapper = myLib.mkSecretEnvWrapper {
+  vercel-wrapper = myLib.sops.mkSecretEnvWrapper {
     inherit config;
     pkgs = cfg.pkgs;
     name = "vercel";
@@ -61,7 +61,7 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-        assertions = myLib.assertSopsAvailable {
+        assertions = myLib.sops.assertAvailable {
           inherit config;
           optionName = "userSettings.dev.vercelCli";
           need = "a besoin du secret sops (token Vercel)";

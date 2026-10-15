@@ -102,7 +102,7 @@ in
       # n'est pas théorique : un résolveur récursif joignable de l'extérieur sert
       # à amplifier des attaques par déni de service, et le seul rempart
       # aujourd'hui est que la box ne redirige pas le port 53.
-      (myLib.mkInternalPorts config {
+      (myLib.server.mkInternalPorts config {
         tcp = [ 53 ];
         udp = [ 53 ];
       })

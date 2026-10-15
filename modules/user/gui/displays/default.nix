@@ -28,7 +28,7 @@ let
   nwg-displays-wrapped = pkgs.writeShellApplication {
     name = "nwg-displays";
     runtimeInputs = scriptDeps;
-    text = myLib.swayWaitSh + ''
+    text = myLib.desktop.swayWaitSh + ''
       # Toggle ouvre/ferme. Pas de `grep -q` : il sortirait au premier match
       # et, sous pipefail, le SIGPIPE de swaymsg ferait échouer le test.
       if swaymsg -t get_tree | grep '"nwg-displays"' >/dev/null; then
@@ -43,7 +43,7 @@ let
       ${pkgs.nwg-displays}/bin/nwg-displays >/dev/null 2>&1 &
 
       # Attend que la largeur×hauteur de la fenêtre se stabilise (cf.
-      # sway_wait_stable, lib/sway-wait.sh). Bornée à 10s (40 x 0,25s) : si
+      # sway_wait_stable, lib/desktop/sway-wait.sh). Bornée à 10s (40 x 0,25s) : si
       # nwg-displays crashe, on prévient au lieu de bloquer indéfiniment.
       if ! sway_wait_stable 40 0.25 '.. | objects | select(.app_id? == "nwg-displays").rect | "\(.width)x\(.height)"' >/dev/null; then
         swaynag -t error -m "nwg-displays : la fenêtre ne s'est pas stabilisée (timeout)."

@@ -55,7 +55,7 @@
 #   - prometheus.nix, alertmanager.nix, loki.nix, vector.nix, grafana.nix : les
 #                      services, qui ramassent ce que les composants déposent ;
 #   - dashboard.nix  : le squelette du tableau de bord (sections, bandes) ;
-#   - lib/grafana.nix (myLib.grafana) : les constructeurs de panneaux.
+#   - lib/server/grafana.nix (myLib.server.grafana) : les constructeurs de panneaux.
 let
   cfg = config.systemSettings.monitoring;
   authelia = config.systemSettings.authelia;

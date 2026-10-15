@@ -98,7 +98,7 @@ in
     # Les destinataires se déduisent des profils qui DÉCLARENT le secret :
     # `git/email` est déclaré par server et par personal, donc part aux deux
     # comptes ; `gh/token` n'est déclaré que sous personal, donc ne quitte plus
-    # gram. Rien à annoter, cf. lib/sops-policy.nix.
+    # gram. Rien à annoter, cf. lib/sops/policy.nix.
     #
     # Et `cloudflare/api_token` ne va plus qu'à `think-sys`. Il a d'abord existé
     # en DOUBLE, un fichier par plan, avec la panne que ça implique — tourner

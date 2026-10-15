@@ -3,6 +3,6 @@
 # endroit (le script qui la calcule), plus de copie à tenir alignée côté Nix.
 # Le reste du fichier (version...) se lit à part par le module.
 #
-#   src = myLib.fetchPinned cfg.pkgs ./pinned.json;
+#   src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 lib: pkgs: file:
 pkgs.fetchurl { inherit (lib.importJSON file) url hash; }

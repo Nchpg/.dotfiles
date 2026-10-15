@@ -81,13 +81,13 @@ in
     services.nginx.virtualHosts = lib.mapAttrs' (
       _: app:
       lib.nameValuePair app.domain (
-        myLib.mkTlsVhost (
+        myLib.server.mkTlsVhost (
           {
             locations = locationsOf app;
           }
           // lib.optionalAttrs (app.allowedNetworks != null) {
             extraConfig = ''
-              ${myLib.nginxAllowOnly app.allowedNetworks}
+              ${myLib.server.nginxAllowOnly app.allowedNetworks}
             '';
           }
         )

@@ -3,7 +3,7 @@
 # qu'à la main des deux côtés, et un id renommé d'un seul côté donnait une
 # entrée muette, sans erreur.
 #
-#   myLib.mkWaybarMenu [
+#   myLib.desktop.mkWaybarMenu [
 #     { id = "mute"; label = "Mute / Unmute"; action = volMute; }
 #     "sep"
 #     { id = "mixer"; label = "Ouvrir le mixer"; action = null; } # entrée sans action
