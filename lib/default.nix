@@ -20,13 +20,15 @@ lib:
 
   assertSopsAvailable = import ./assert-sops-available.nix;
   checkOptionPaths = import ./check-option-paths.nix lib;
+  # Le paquet des commandes du dépôt, à passer à callPackage (cf.
+  # scripts/default.nix).
+  commandsPackage = ../scripts;
   checkSopsPolicy = import ./check-sops-policy.nix lib;
   contentHash = import ./content-hash.nix lib;
   deepMergeJsonActivation = import ./deep-merge-json-activation.nix;
   editorLspPackages = import ./editor-lsp-packages.nix;
   fetchPinned = import ./fetch-pinned.nix lib;
   grafana = import ./grafana.nix lib;
-  inherit (import ./mk-flake-guard.nix) flakeVar mkFlakeGuard;
   mkEvalCheck = import ./mk-eval-check.nix lib;
   mkFloatingTuiLauncher = import ./mk-floating-tui-launcher.nix lib;
   mkGuardedPatch = import ./mk-guarded-patch.nix lib;
@@ -46,7 +48,6 @@ lib:
   mkTerminalCmd = import ./mk-terminal-cmd.nix lib;
   mkTlsVhost = import ./mk-tls-vhost.nix;
   mkGumEnv = import ./mk-gum-env.nix;
-  mkRepoCommand = import ./mk-repo-command.nix;
   mkWaybarMenu = import ./mk-waybar-menu.nix lib;
   notifyIcon = import ./notify-icon.nix;
   # Fonctions bash d'attente d'une fenêtre sway (sway_wait…), à inliner en
@@ -56,9 +57,7 @@ lib:
   mkTerminalShellOption = import ./mk-terminal-shell-option.nix;
   schemeColors = import ./scheme-colors.nix;
   sopsAudience = import ./sops-audience.nix lib;
-  # Fonction bash anchors() (ancres de clés d'un .sops.yaml), partagée avec
-  # init.sh qui la source depuis le clone ; embarquée au build par `secrets`.
-  sopsAnchorsSh = builtins.readFile ../scripts/lib/sops-anchors.sh;
   sopsPolicy = import ./sops-policy.nix lib;
   targetName = import ./target-name.nix lib;
+  uiPalette = import ./ui-palette.nix;
 }

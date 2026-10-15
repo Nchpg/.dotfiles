@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Nettoyage des générations NixOS, puis GC / optimise et rebuild. Lançable de
-# n'importe où via la commande `genclean` (cf. modules/system/commands/genclean).
+# n'importe où via la commande `genclean` (cf. scripts/default.nix).
 #
 # Toutes les questions sont posées d'abord (menus gum), puis tout s'enchaîne
 # sans attendre : on n'est plus bloqué devant une étape longue pour choisir
@@ -28,16 +28,14 @@ esac
 
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 
-# On se place dans le flake pour que `nixos-rebuild --flake .` fonctionne quel
-# que soit le répertoire d'appel.
-cd "$(dirname "$0")/.."
-
-# Couleurs, err/warn, confirm et palette gum (Stylix via la commande
-# `genclean`, cf. lib/mk-gum-env.nix) : cf. lib/ui.sh. gum seulement vers un
-# terminal ; sans lui (appel direct du script hors rebuild), questions en read
-# classiques.
+# Couleurs, err/warn, confirm et palette gum : cf. lib/ui.sh (valeurs de ce
+# système : lib/env.sh). gum seulement vers un terminal ; sans lui, questions
+# en read classiques. Le dépôt n'est pas nécessaire : seul `rebuild` y touche.
+here="$(dirname "$0")"
+# shellcheck source=scripts/lib/env.sh
+. "$here/lib/env.sh"
 # shellcheck source=scripts/lib/ui.sh
-. scripts/lib/ui.sh
+. "$here/lib/ui.sh"
 
 fancy=0
 ui_fancy && fancy=1
@@ -236,9 +234,9 @@ else
 fi
 
 # --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
-# La commande `rebuild` vient de modules/system/commands/rebuild : absente si le module
-# n'a pas encore été switché (repo fraîchement cloné) — on prévient au lieu
-# d'échouer sur la dernière étape.
+# La commande `rebuild` du système, qui connaît la cible : absente si le paquet
+# des commandes n'a pas encore été switché (repo fraîchement cloné) — on
+# prévient au lieu d'échouer sur la dernière étape.
 if [ "$has_rebuild" -eq 1 ]; then
     echo "Rebuild du système via la commande rebuild..."
     rebuild -y

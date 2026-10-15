@@ -1,11 +1,68 @@
-# shellcheck shell=bash disable=SC2154 # flake, sysAnchor, nixBin, editorBin, marker : posés par le préambule Nix
-# Valeurs FIGÉES AU BUILD, posées par le préambule Nix (cf. default.nix) :
-#   flake      le clone de config ($MY_FLAKE, ~/.dotfiles) ;
-#   sysAnchor  l'ancre de la clé système de CETTE machine dans le .sops.yaml ;
-#   nixBin     le nix du système ;
-#   editorBin  l'éditeur lancé par sops, y compris sous root ;
-#   marker     la première ligne du bloc généré du .sops.yaml ;
-# plus la fonction anchors() (scripts/lib/sops-anchors.sh, embarquée).
+#!/usr/bin/env bash
+# Accès aux secrets sops, des deux côtés de la frontière posée par
+# modules/system/sops : les secrets SYSTÈME ne se déchiffrent qu'en root, les
+# tiens avec ta clé age.
+#
+# Raison d'être, en deux temps.
+#
+# L'invocation correcte pour les secrets système est imprononçable : la bonne
+# clé, et surtout des chemins ABSOLUS. `sops` et `nvim` ne sont installés que
+# dans le profil home-manager de l'utilisateur, donc `sudo sops` échoue en
+# « command not found » — root ne les a pas dans son PATH.
+#
+# Ces chemins sont figés AU BUILD (lib/config.sh, généré par le paquet des
+# commandes, cf. scripts/default.nix), jamais résolus depuis ton environnement, et
+# c'est une propriété de sécurité et non de commodité. Tout ce que cette
+# commande passe à sudo s'exécute en root : un binaire choisi à l'exécution via
+# $EDITOR ou via ton PATH rendait root à n'importe quel code tournant sous ton
+# compte, qui n'avait qu'à attendre le prochain `secrets`. Ça annulait toute la
+# frontière que modules/system/sops construit, et dont la raison d'être est
+# précisément qu'un agent ou un prebuild npm ne lise pas les secrets des
+# services.
+#
+# `env` plutôt que `sudo VAR=... commande` : les deux marchent ici, les règles
+# sudo de NixOS accordant SETENV par défaut, mais `env` reste lisible et ne
+# dépend pas de ce réglage.
+#
+# Et depuis que les valeurs vivent dans un dépôt PRIVÉ à part (cf. l'entrée
+# `secrets` de flake.nix), une modification demande DEUX commits : un ici pour
+# la valeur, un là-bas pour bouger le lock. Oublier le second, c'est croire
+# qu'on a fait tourner un secret alors que les machines déploient toujours
+# l'ancien. Cette commande enchaîne les deux.
+set -euo pipefail
+
+here="$(dirname "$0")"
+# shellcheck source=scripts/lib/env.sh
+. "$here/lib/env.sh"
+# shellcheck source=scripts/lib/sops-anchors.sh
+. "$here/lib/sops-anchors.sh"
+
+# Valeurs FIGÉES AU BUILD (lib/config.sh) ; sans elles — script lancé depuis
+# un clone plutôt que par la commande du PATH — on refuse : l'éditeur et nix
+# seraient alors résolus depuis ton environnement, dans des appels à sudo.
+if [ -z "${DOTS_EDITOR:-}" ] || [ -z "${DOTS_NIX:-}" ]; then
+  echo "secrets : à lancer par la commande \`secrets\` du système, pas depuis le clone." >&2
+  exit 1
+fi
+
+# Ancre de la clé système de CETTE machine dans le .sops.yaml : c'est
+# par elle qu'on sait, sans sudo, si root ouvrira un fichier (la clé
+# privée est en 0600 root).
+sysAnchor="$DOTS_HOST-sys"
+
+# `nix` n'est pas pris dans le PATH : le résoudre depuis ton PATH revenait à
+# laisser choisir le binaire que `sudo` allait exécuter dans sync(). Celui du
+# système, pas un autre : c'est lui qui écrit le lock.
+nixBin="$DOTS_NIX"
+
+# ÉDITEUR FIGÉ AU BUILD, jamais lu depuis $EDITOR. C'est sops, lancé par sudo,
+# qui l'exécute : le résoudre à l'exécution suffisait à obtenir root en posant
+# `EDITOR=/tmp/x` dans un fichier de démarrage du shell. Avec `--clean`, cf.
+# scripts/default.nix.
+editorBin="$DOTS_EDITOR"
+
+# Première ligne du bloc généré du .sops.yaml (lib/sops-policy.nix).
+marker="$DOTS_SOPS_MARKER"
 
 # Chemin RÉSOLU : un ~/.secrets lien symbolique n'était pas parcouru par
 # `find` (aucun fichier vu, `policy` déclarait tout conforme), et un
@@ -78,9 +135,9 @@ push de la config = push d'ici d'abord.
 USAGE
 }
 
-# `sops`, `git` et les coreutils viennent de `runtimeInputs`, que
-# writeShellApplication place EN TÊTE du PATH : `command -v` les résout
-# donc dans le store, hors d'atteinte d'un PATH trafiqué.
+# `sops`, `git` et les coreutils viennent des dépendances du paquet, que son
+# enveloppe place EN TÊTE du PATH : `command -v` les résout donc dans le
+# store, hors d'atteinte d'un PATH trafiqué.
 sopsBin="$(command -v sops)"
 
 

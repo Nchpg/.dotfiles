@@ -2,19 +2,29 @@
 
 set -euo pipefail
 
-# Défauts : posés par la commande `rebuild` (cf. modules/system/commands/rebuild)
-# avec la cible qui a construit ce système. Appel direct du script : aucun,
-# --host et --profile sont alors obligatoires.
-PROFILE="${REBUILD_DEFAULT_PROFILE:-}"
-HOST="${REBUILD_DEFAULT_HOST:-}"
-VARIANT="${REBUILD_DEFAULT_VARIANT:-dark}"
+# Dépôt, valeurs de ce système : cf. lib/env.sh. Couleurs et questions : cf.
+# lib/ui.sh ; hooks git : cf. lib/hooks.sh.
+here="$(dirname "$0")"
+# shellcheck source=scripts/lib/env.sh
+. "$here/lib/env.sh"
+# shellcheck source=scripts/lib/ui.sh
+. "$here/lib/ui.sh"
+# shellcheck source=scripts/lib/hooks.sh
+. "$here/lib/hooks.sh"
+
+# Défauts : la cible qui a construit ce système (DOTS_* de lib/config.sh, cf.
+# scripts/default.nix). Lancé depuis un clone : aucun, --host et --profile
+# sont alors obligatoires.
+PROFILE="${DOTS_PROFILE:-}"
+HOST="${DOTS_HOST:-}"
+VARIANT="${DOTS_VARIANT:-dark}"
 UPDATE=0
 YES=0
 
 usage() {
     echo "usage: rebuild [-p PROFILE] [-H HOST] [-V dark|light] [-u|--update] [-y|--yes]"
-    if [[ -n "${REBUILD_DEFAULT_PROFILE:-}" ]]; then
-        echo "  défaut (cible de ce système) : --profile $REBUILD_DEFAULT_PROFILE --host $REBUILD_DEFAULT_HOST --variant $VARIANT"
+    if [[ -n "${DOTS_PROFILE:-}" ]]; then
+        echo "  défaut (cible de ce système) : --profile $DOTS_PROFILE --host $DOTS_HOST --variant $VARIANT"
     else
         echo "  -p/--profile et -H/--host obligatoires (pas de cible par défaut hors de la commande \`rebuild\`)"
     fi
@@ -25,8 +35,7 @@ usage() {
     echo "       touche JAMAIS au lock des secrets (avertit seulement)"
 }
 
-# Un seul parsing, formes courtes et longues : la commande `rebuild` ne fait
-# que poser les défauts et relayer les arguments tels quels.
+# Formes courtes et longues.
 # need_value : sous `set -u`, un `--host` sans valeur mourait sur un
 # « $2: unbound variable » au lieu d'un message clair.
 need_value() {
@@ -63,13 +72,8 @@ if [[ "$VARIANT" != "dark" ]]; then
     ATTR="$ATTR-$VARIANT"
 fi
 
-cd "$(dirname "$0")/.."
-
-# Couleurs et questions : cf. lib/ui.sh ; hooks git : cf. lib/hooks.sh.
-# shellcheck source=scripts/lib/ui.sh
-. scripts/lib/ui.sh
-# shellcheck source=scripts/lib/hooks.sh
-. scripts/lib/hooks.sh
+require_flake rebuild
+cd "$flake"
 
 # Mises à jour seulement sur demande (--update / rebuild -u) : les faire à
 # chaque rebuild salissait flake.lock (→ warning git systématique). Délégué à
@@ -84,7 +88,7 @@ if [[ "$UPDATE" -eq 1 ]]; then
     [[ "$YES" -eq 1 ]] && update_args+=(--yes)
     # Ctrl+C dans la liste (130) : on abandonne aussi le rebuild. Tout autre
     # échec : on reconstruit avec l'état actuel.
-    UPDATE_FROM_REBUILD=1 ./scripts/update.sh "${update_args[@]}" && rc=0 || rc=$?
+    UPDATE_FROM_REBUILD=1 "$here/update.sh" "${update_args[@]}" && rc=0 || rc=$?
     if [[ "$rc" -eq 130 ]]; then
         echo "Rebuild annulé."
         exit 130
@@ -137,15 +141,13 @@ fi
 # deux clés WireGuard désynchronisées en une soirée. On compare donc, ici, au
 # moment qui compte.
 #
-# Tout passe par la commande `secrets` (modules/system/commands/secrets), seule
+# Tout passe par la commande `secrets` (scripts/secrets.sh), seule
 # à lire le lock et à le mettre à jour : `status` sort en 1 quand `sync` a du
 # travail (modifications, commits non poussés, lock en retard sur le dépôt), en
 # 2 quand il en a mais refuserait (dépôt privé en retard : pull d'abord).
 # Sans réseau, donc sans phrase de passe SSH à chaque rebuild. Absente sur une
 # machine neuve avant son premier rebuild, où le clone est de toute façon frais.
-# `secrets help` : une commande antérieure (machine pas encore rebuildée) n'a
-# pas `status`, et son « commande inconnue » passait pour une désynchro.
-if command -v secrets > /dev/null && [[ "$(secrets help 2>&1)" == *"secrets status"* ]]; then
+if command -v secrets > /dev/null; then
     secrets_rc=0
     secrets status || secrets_rc=$?
     if [[ "$secrets_rc" -eq 2 ]]; then

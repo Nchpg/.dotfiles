@@ -1,24 +1,24 @@
 # shellcheck shell=bash disable=SC2034 # couleurs : lues par les scripts qui sourcent ce fichier
-# Interface commune des scripts du dépôt (update, genclean, rebuild, init) :
-# couleurs, messages, question oui/non, liens. Sourcé en tête :
+# Interface commune des scripts du dépôt (les commandes de scripts/, et
+# init.sh) : couleurs, messages, question oui/non, liens. Sourcé en tête :
 #
 #   # shellcheck source=scripts/lib/ui.sh
 #   . "$(dirname "$0")/lib/ui.sh"
 #
 # UNE palette, par rôles (accent, succès, avertissement, erreur, atténué,
-# texte, fond) : celle de Stylix quand la commande du PATH l'a posée
-# (UPDATE_COLOR_*, cf. lib/mk-gum-env.nix), sinon les numéros de couleur du
-# TERMINAL (4 = bleu, 2 = vert…). Pas de couleurs hexadécimales en dur : sur
+# texte, fond) : celle de Stylix quand le paquet des commandes l'a posée
+# (DOTS_COLOR_* dans lib/config.sh, cf. scripts/default.nix), sinon les
+# numéros de couleur du TERMINAL (4 = bleu, 2 = vert…). Pas de couleurs hexadécimales en dur : sur
 # une machine neuve (init.sh, avant le premier rebuild) ou sans Stylix, ce
 # sont les couleurs du terminal, que Stylix colore justement avec sa palette
 # une fois en place. Jamais le rose par défaut de gum.
-C_ACCENT="${UPDATE_COLOR_ACCENT:-4}"
-C_OK="${UPDATE_COLOR_OK:-2}"
-C_WARN="${UPDATE_COLOR_WARN:-3}"
-C_ERR="${UPDATE_COLOR_ERR:-1}"
-C_DIM="${UPDATE_COLOR_DIM:-8}"
-C_TEXT="${UPDATE_COLOR_TEXT:-7}"
-C_BASE="${UPDATE_COLOR_BASE:-0}"
+C_ACCENT="${DOTS_COLOR_ACCENT:-4}"
+C_OK="${DOTS_COLOR_OK:-2}"
+C_WARN="${DOTS_COLOR_WARN:-3}"
+C_ERR="${DOTS_COLOR_ERR:-1}"
+C_DIM="${DOTS_COLOR_DIM:-8}"
+C_TEXT="${DOTS_COLOR_TEXT:-7}"
+C_BASE="${DOTS_COLOR_BASE:-0}"
 
 # Mêmes rôles pour gum, sauf si l'appelant les a déjà posés (mkGumEnv).
 : "${GUM_CHOOSE_CURSOR_FOREGROUND:=$C_ACCENT}" "${GUM_CHOOSE_HEADER_FOREGROUND:=$C_ACCENT}"

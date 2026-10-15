@@ -1,26 +1,40 @@
-# shellcheck shell=bash disable=SC2154 # catalog, flake : posés par le préambule Nix
-# Corps de la commande `dots` (cf. default.nix à côté, qui le précède d'un
-# préambule : palette gum, `catalog` — le catalogue des commandes, une ligne
-# par entrée — et `flake`, le clone du dépôt).
+#!/usr/bin/env bash
+# `dots` : point d'entrée unique pour les commandes du dépôt (rebuild, update,
+# theme, genclean, secrets). Sans argument, un menu gum : on choisit la
+# commande, puis un des usages courants (avec son explication), ou on tape ses
+# propres arguments. `dots <commande> …` relaie tel quel, `dots help` liste
+# tout avec les exemples.
+#
+# Le catalogue est dans commands.tsv, à côté : c'est de la doc, chaque commande
+# garde son propre parsing et son `--help`.
+set -euo pipefail
 
-# Couleurs, confirm et hooks git : les bibliothèques du dépôt
-# (scripts/lib), une seule implémentation avec rebuild.sh et init.sh.
-# Sans clone, rien de tout ça n'a d'objet : hooks ignorés.
+# Dépôt, palette (couleurs, gum), confirm et hooks git : cf. lib/.
+here="$(dirname "$0")"
+# shellcheck source=scripts/lib/env.sh
+. "$here/lib/env.sh"
+# shellcheck source=scripts/lib/ui.sh
+. "$here/lib/ui.sh"
+# shellcheck source=scripts/lib/hooks.sh
+. "$here/lib/hooks.sh"
+
+catalog="$(grep -v '^#' "$here/commands.tsv")"
+
+# Hooks git : seulement s'il y a un clone qui en a.
 hooks=0
-if [ -f "$flake/scripts/lib/hooks.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$flake/scripts/lib/ui.sh"
-  # shellcheck source=/dev/null
-  . "$flake/scripts/lib/hooks.sh"
-  if hooks_present "$flake"; then hooks=1; fi
-fi
+if hooks_present "$flake"; then hooks=1; fi
 
-# Commandes du catalogue, dans son ordre. `init` n'est pas dans le
-# PATH : c'est le script du dépôt, proposé seulement s'il est là.
+# Commandes du catalogue présentes sur ce système, dans son ordre : celles du
+# PATH (`theme` n'est installé qu'avec Stylix), plus `init`, qui n'y est pas
+# — c'est le script du dépôt, proposé seulement s'il est là.
 names=()
 while IFS=$'\t' read -r kind name _; do
   [ "$kind" = cmd ] || continue
-  if [ "$name" != init ] || [ -x "$flake/init.sh" ]; then names+=("$name"); fi
+  if [ "$name" = init ]; then
+    [ -x "$flake/init.sh" ] && names+=("$name")
+  elif command -v "$name" > /dev/null; then
+    names+=("$name")
+  fi
 done <<< "$catalog"
 
 # Lance une commande du catalogue (init -> le script du dépôt).

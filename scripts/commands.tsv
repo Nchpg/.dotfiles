@@ -1,0 +1,33 @@
+# Catalogue de `dots` (menu et `dots help`), une ligne par entrée, champs
+# séparés par des TABULATIONS :
+#   cmd  <nom>  <description>
+#   ex   <nom>  <ligne de commande>  <explication>
+# Dans l'ordre du menu. `<…>` dans une ligne d'exemple = valeur demandée à
+# l'exécution (gum input). Une commande absente du système (`theme` sans
+# Stylix) est masquée par `dots` lui-même.
+cmd	rebuild	reconstruit et active le système
+ex	rebuild	rebuild	rebuild de la cible de ce système
+ex	rebuild	rebuild -u	update (au choix) puis rebuild
+ex	rebuild	rebuild -y	sans confirmation (working tree sale…)
+ex	rebuild	rebuild -V <dark|light>	rebuild dans une variante de thème
+cmd	update	met à jour modules et inputs du flake (sans rebuild)
+ex	update	update -c	liste ce qui a une mise à jour, ne modifie rien
+ex	update	update	vérifie tout, puis coche quoi mettre à jour
+ex	update	update -y	applique la sélection par défaut sans question
+ex	update	update <nom>	restreint aux modules/inputs contenant ce nom
+cmd	theme	change de thème ou de variante dark/light
+ex	theme	theme	ouvre la galerie des thèmes dans le navigateur
+ex	theme	theme toggle	bascule dark ↔ light puis rebuild
+ex	theme	theme dark	passe en sombre puis rebuild
+ex	theme	theme light	passe en clair puis rebuild
+cmd	genclean	nettoie les générations, GC, optimise le store
+ex	genclean	genclean	choix des étapes d'avance, puis tout s'enchaîne
+cmd	secrets	édite et audite les secrets sops (dépôt privé)
+ex	secrets	secrets list	liste les secrets (aucun déchiffrement)
+ex	secrets	secrets show <clé>	affiche une valeur, ex. gh/token
+ex	secrets	secrets edit <clé>	édite ou crée un secret, puis synchronise
+ex	secrets	secrets policy	régénère les règles sops, rescelle, synchronise
+ex	secrets	secrets status	dépôt privé en phase avec le lock ?
+ex	secrets	secrets sync	commit + push du dépôt privé, mise à jour du lock
+cmd	init	prépare cette machine : clés, secrets, hooks, inscription
+ex	init	init	vérifie et rattrape ce qui manque (sans risque si déjà prête)

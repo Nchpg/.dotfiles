@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # Mises à jour des dépendances épinglées, sans rebuild. Lançable de n'importe
-# où via la commande `update` (cf. modules/system/commands/update) ; `rebuild
-# -u` l'appelle avant de reconstruire.
+# où via la commande `update` (cf. scripts/default.nix) ; `rebuild -u`
+# l'appelle avant de reconstruire.
 #
 # Deux catégories, présentées à part :
 #   - les modules épinglés : tout dossier de modules/ qui contient un
@@ -25,15 +25,18 @@
 #   NOM...       : restreint aux modules / inputs dont le nom contient NOM
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
-flake="$PWD"
-
-# Couleurs, liens, palette gum : cf. lib/ui.sh. Découverte des modules et
-# lecture du lock, communes avec la CI : cf. lib/flake-lock.sh.
+# Dépôt et valeurs de ce système : cf. lib/env.sh. Couleurs, liens, palette
+# gum : cf. lib/ui.sh. Découverte des modules et lecture du lock, communes
+# avec la CI : cf. lib/flake-lock.sh.
+here="$(dirname "$0")"
+# shellcheck source=scripts/lib/env.sh
+. "$here/lib/env.sh"
 # shellcheck source=scripts/lib/ui.sh
-. "$flake/scripts/lib/ui.sh"
+. "$here/lib/ui.sh"
 # shellcheck source=scripts/lib/flake-lock.sh
-. "$flake/scripts/lib/flake-lock.sh"
+. "$here/lib/flake-lock.sh"
+require_flake update
+cd "$flake"
 
 # ── Vérifications (appelé par le script lui-même, en parallèle) ─────────────
 # Un input -> JSON {name, current, latest, url, available} sur stdout.
@@ -135,7 +138,7 @@ fi
 fancy=0
 ui_fancy && fancy=1
 if [ "$interactive" -eq 1 ] && [ "$fancy" -eq 0 ]; then
-    echo "update : gum introuvable (fourni par la commande \`update\` après un rebuild)." >&2
+    echo "update : gum introuvable — lance la commande \`update\` (ou nix run .#update), qui le fournit." >&2
     exit 1
 fi
 

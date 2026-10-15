@@ -23,7 +23,7 @@ current="${DOTSTATE_CURRENT:-/run/current-system}"
 booted="${DOTSTATE_BOOTED:-/run/booted-system}"
 host="${HOSTNAME:-$(uname -n)}"
 
-# `secrets` est une commande du système (modules/system/commands/secrets), et
+# `secrets` est une commande du système (scripts/secrets.sh), et
 # le timer tourne avec un PATH réduit.
 export PATH="$PATH:$current/sw/bin"
 

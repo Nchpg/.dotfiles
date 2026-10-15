@@ -86,8 +86,8 @@ in
     }
 
     (lib.mkIf cfg.enable {
-      # La commande `theme` vit dans modules/system/commands/theme (dépend de
-      # cette config, cf. systemSettings.stylix.*).
+      # La commande `theme` (scripts/theme.sh) n'est installée qu'avec Stylix,
+      # cf. modules/system/commands.
       stylix = {
         enable = true;
         autoEnable = false; # on n'active que ce qu'on veut
