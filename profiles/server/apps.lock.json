@@ -10,9 +10,9 @@
     "revision": "8967240bc0b42e4dd895e37e9584523f261a7d12"
   },
   "ghcr.io/nchpg/myetf:main": {
-    "digest": "sha256:4fbfd4c90f69ed23c30644b24a7a920696839453f444a13eb5fa528f18b75115",
+    "digest": "sha256:a14069d63518d88b45df5e9996aa8dfebf2f63bff763091e8021bf90cc6d12cd",
     "port": 3000,
-    "revision": null
+    "revision": "481f826e30c1ce1dd6c84ebf75467e2aadd88994"
   },
   "ghcr.io/nchpg/portfolio:main": {
     "digest": "sha256:a1c84a689aeb13142e83f185499c9fc72d81b0cd7a3feb17d58aee9c16d89c39",
