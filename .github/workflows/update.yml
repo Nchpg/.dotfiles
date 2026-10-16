@@ -39,9 +39,11 @@ jobs:
             exit 1
           fi
 
+      # GHCR_READ_TOKEN facultatif (read:packages) : sans lui, les images privées sont signalées et sautées.
       - name: bump des modules (update.sh auto-découverts)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           export MY_FLAKE="$PWD"
           export VSCODE_SKIPPED_FILE="${RUNNER_TEMP}"/extensions-skipped.json
@@ -58,7 +60,7 @@ jobs:
         run: |
           .github/scripts/gather-update-facts.sh "${RUNNER_TEMP}"/extensions-skipped.json \
             > "${RUNNER_TEMP}"/facts.json
-          changed=$(jq '(.flakeInputs | length) > 0 or (.pinnedUpdates | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
+          changed=$(jq '(.flakeInputs | length) > 0 or (.pinnedUpdates | length) > 0 or (.vscodeExtensions | length) > 0 or (.appImages | length) > 0' "${RUNNER_TEMP}"/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: générer le corps de la PR

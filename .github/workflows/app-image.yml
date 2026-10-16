@@ -1,0 +1,186 @@
+name: app-image
+
+# Workflow partagé des apps servies par think (cf. docs/apps.md). Construit et publie leurs
+# images sur ghcr.io, puis demande à apps-bump.yml d'épingler tous les digests du run en un
+# seul commit : les images d'une même app ne sont jamais déployées à des versions différentes.
+#
+# Appel, dans le dépôt de l'app :
+#   jobs:
+#     image:
+#       uses: Nchpg/.dotfiles/.github/workflows/app-image.yml@main
+#       with:
+#         images: '[{"name": "monapp"}]'
+#       permissions: { contents: read, packages: write, actions: read }
+#       secrets: inherit
+on:
+  workflow_call:
+    inputs:
+      images:
+        description: >
+          JSON [{"name": <package ghcr>, "dockerfile": <défaut <context>/Dockerfile>, "context": <défaut .>}]
+        required: true
+        type: string
+      tag:
+        description: Tag mobile publié et suivi par le lock
+        required: false
+        type: string
+        default: main
+      bump:
+        description: Demander l'épinglage à .dotfiles (false pour une image hors du lock public)
+        required: false
+        type: boolean
+        default: true
+      allow-root:
+        description: Accepter une image qui tourne en root (à éviter ; cf. docs/apps.md)
+        required: false
+        type: boolean
+        default: false
+      dotfiles:
+        description: Dépôt qui porte le lock et apps-bump.yml
+        required: false
+        type: string
+        default: Nchpg/.dotfiles
+    secrets:
+      # PAT fine-grained limité à .dotfiles, permission « Actions: write » seule.
+      DOTFILES_DISPATCH_TOKEN:
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      # Une image en échec annule les autres : le bump n'a lieu que si toutes sont publiées.
+      fail-fast: true
+      matrix:
+        image: ${{ fromJSON(inputs.images) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      # ghcr.io refuse les majuscules (propriétaire `Nchpg`).
+      - name: référence
+        id: ref
+        env:
+          NAME: ${{ matrix.image.name }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${NAME,,}"
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+          echo "ref=$repo:$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Construite et chargée d'abord : l'image n'est publiée qu'après le contrôle.
+      # `scope` par image : sans lui, deux images d'un même dépôt invalident mutuellement leur cache.
+      - name: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.image.context || '.' }}
+          file: ${{ matrix.image.dockerfile || format('{0}/Dockerfile', matrix.image.context || '.') }}
+          load: true
+          tags: ${{ steps.ref.outputs.ref }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}
+
+      # Règles de think (docs/apps.md) : jamais root, port au-dessus de 1024 (pas de droit root à rendre).
+      # Le port de l'`EXPOSE` part dans le lock : think s'en sert comme port du conteneur.
+      - name: contrôle
+        id: check
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          ALLOW_ROOT: ${{ inputs.allow-root }}
+        run: |
+          config=$(docker image inspect "$REF" --format '{{json .Config}}')
+          user=$(jq -r '.User // ""' <<<"$config")
+          port=$(jq '[.ExposedPorts // {} | keys[] | select(endswith("/tcp")) | rtrimstr("/tcp") | tonumber]
+                     | if length == 1 then .[0] else null end' <<<"$config")
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
+          fail=0
+          case "${user%%:*}" in
+            "" | root | 0)
+              if [ "$ALLOW_ROOT" = true ]; then
+                echo "::warning::l'image tourne en root (allow-root)."
+              else
+                echo "::error::l'image tourne en root : ajoute un utilisateur au Dockerfile (ex. \`RUN useradd --uid 1000 app\` puis \`USER app\`), ou \`allow-root: true\`."
+                fail=1
+              fi
+              ;;
+          esac
+          if [ "$port" = null ]; then
+            echo "::warning::aucun EXPOSE unique : il faudra donner son \`port\` au conteneur dans apps.nix."
+          elif [ "$port" -lt 1024 ]; then
+            echo "::error::port $port sous 1024 : il exige un droit root. Écoute sur 8080 ou plus (pour nginx : nginxinc/nginx-unprivileged)."
+            fail=1
+          fi
+          exit "$fail"
+
+      # Même builder : tout vient du cache de l'étape `build`.
+      - id: push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.image.context || '.' }}
+          file: ${{ matrix.image.dockerfile || format('{0}/Dockerfile', matrix.image.context || '.') }}
+          push: true
+          tags: |
+            ${{ steps.ref.outputs.ref }}
+            ${{ steps.ref.outputs.repo }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+
+      - name: digest
+        env:
+          REF: ${{ steps.ref.outputs.ref }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          NAME: ${{ matrix.image.name }}
+          PORT: ${{ steps.check.outputs.port }}
+        run: |
+          mkdir -p digests
+          jq -n --arg ref "$REF" --arg digest "$DIGEST" --arg revision "$GITHUB_SHA" --argjson port "$PORT" \
+            '{$ref, $digest, $revision, $port}' > "digests/$NAME.json"
+          echo "\`$REF\` → \`$DIGEST\`, port \`$PORT\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.image.name }}
+          path: digests/${{ matrix.image.name }}.json
+          retention-days: 1
+
+  bump:
+    needs: build
+    if: inputs.bump
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+
+      # Sans jeton, rien n'est perdu : `dots update apps` et la PR hebdo rattrapent le tag.
+      - name: épinglage dans .dotfiles
+        env:
+          GH_TOKEN: ${{ secrets.DOTFILES_DISPATCH_TOKEN }}
+          DOTFILES: ${{ inputs.dotfiles }}
+        run: |
+          images=$(jq -cs '.' digests/*.json)
+          echo "$images"
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::secret DOTFILES_DISPATCH_TOKEN absent : images publiées mais pas épinglées (cf. docs/apps.md)."
+            exit 0
+          fi
+          gh workflow run apps-bump.yml -R "$DOTFILES" --ref main \
+            -f images="$images" -f source="$GITHUB_REPOSITORY"
+          echo "épinglage demandé à $DOTFILES : https://github.com/$DOTFILES/actions/workflows/apps-bump.yml" >> "$GITHUB_STEP_SUMMARY"

@@ -47,6 +47,18 @@ if [ "$ext_count" -gt 0 ]; then
     echo
 fi
 
+# Rattrapage : d'ordinaire, la CI de l'app épingle elle-même par apps-bump.yml.
+if [ "$(jq '.appImages // [] | length' "$facts_file")" -gt 0 ]; then
+    echo "## Images des apps"
+    echo
+    jq -r '.appImages[] |
+      "- **\(.key)** : \(.oldVersion) → \(.newVersion)"
+    ' "$facts_file"
+    echo
+    echo "Tag publié sans épinglage automatique : jeton DOTFILES_DISPATCH_TOKEN absent ou expiré côté app ?"
+    echo
+fi
+
 skipped_count=$(jq '.skippedExtensions // [] | length' "$facts_file")
 if [ "$skipped_count" -gt 0 ]; then
     echo "## ⚠️ Extensions non vérifiées"

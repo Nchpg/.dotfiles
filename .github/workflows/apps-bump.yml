@@ -1,0 +1,69 @@
+name: apps-bump
+
+# Déclenché par la CI d'une app (app-image.yml) : épingle les digests qu'elle vient de publier,
+# en un seul commit sur main, que comin déploie dans la minute. Pas de `trusted` : un
+# workflow_dispatch exige déjà l'écriture sur ce dépôt.
+# Commit poussé avec le GITHUB_TOKEN : check.yml ne tourne pas dessus, d'où l'évaluation ici.
+on:
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'JSON [{"ref": "ghcr.io/…:main", "digest": "sha256:…", "revision": "<sha>"}]'
+        required: true
+        type: string
+      source:
+        description: Dépôt de l'app appelante (owner/repo)
+        required: false
+        type: string
+
+# Les appels s'enchaînent sans s'annuler : deux apps poussées ensemble donnent deux commits.
+concurrency:
+  group: apps-bump
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: main
+
+      - uses: ./.github/actions/setup-nix
+
+      # Entrées par l'environnement, jamais interpolées dans le script (injection de commande).
+      - name: lock
+        id: lock
+        env:
+          IMAGES: ${{ inputs.images }}
+          SOURCE: ${{ inputs.source }}
+        run: |
+          echo "appel de ${SOURCE:-inconnu}"
+          .github/scripts/apps-bump.sh profiles/server/apps.lock.json >> "$GITHUB_OUTPUT"
+
+      - name: évaluation de server-think
+        if: steps.lock.outputs.subject != ''
+        run: nix eval --raw .#nixosConfigurations.server-think.config.system.build.toplevel.drvPath
+
+      # Rebase et nouvel essai si main a bougé entre-temps (push humain).
+      - name: commit et push
+        if: steps.lock.outputs.subject != ''
+        env:
+          SUBJECT: ${{ steps.lock.outputs.subject }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "$SUBJECT" -- profiles/server/apps.lock.json
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "### $SUBJECT" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::warning::push refusé (essai $attempt), rebase sur main"
+            git pull --rebase origin main
+          done
+          echo "::error::push impossible après trois essais"
+          exit 1

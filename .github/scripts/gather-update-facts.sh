@@ -93,6 +93,15 @@ old_ext_map=$(at_head "$ext_file" | jq -c '. // {}')
 new_ext_map=$(jq -c '.' "$ext_file")
 vscode_facts=$(diff_version_map "$old_ext_map" "$new_ext_map")
 
+# Digest court en guise de version, pour reprendre diff_version_map.
+apps_lock="profiles/server/apps.lock.json"
+as_versions() { jq -c 'map_values({version: .digest[7:19]})'; }
+old_apps_lock=$(at_head "$apps_lock")
+[ -n "$old_apps_lock" ] || old_apps_lock="{}"
+old_apps_map=$(as_versions <<<"$old_apps_lock")
+new_apps_map=$(as_versions < "$apps_lock")
+apps_facts=$(diff_version_map "$old_apps_map" "$new_apps_map")
+
 skipped_ext="[]"
 if [ -n "${1:-}" ] && [ -s "$1" ]; then
     skipped_ext=$(cat "$1")
@@ -100,5 +109,7 @@ fi
 
 jq -n --argjson flakeInputs "$flake_facts" --argjson pinnedUpdates "$pinned_facts" \
     --argjson vscodeExtensions "$vscode_facts" --argjson skippedExtensions "$skipped_ext" \
+    --argjson appImages "$apps_facts" \
     '{flakeInputs: $flakeInputs, pinnedUpdates: $pinnedUpdates, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions,
+      appImages: $appImages,
       kernelChanges: [$flakeInputs[] | select(.kernelChanged == true) | {via: .name, from: .oldKernelVersion, to: .newKernelVersion}]}'
