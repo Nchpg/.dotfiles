@@ -9,6 +9,9 @@ in
     cloudflared = {
       enable = true;
       tunnelId = "4c8a6f06-b1cd-4a64-ba62-021113f68bda";
+
+      # Chaque nom publié reçoit son CNAME : plus de `cloudflared tunnel route dns` à la main.
+      dnsZone = domain;
     };
 
     authelia = {
