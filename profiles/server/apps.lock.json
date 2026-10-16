@@ -35,7 +35,7 @@
     "revision": null
   },
   "ghcr.io/nchpg/yolo-detection:main": {
-    "digest": "sha256:7bce55e4c5397d3540dc38d2526bfe59dece26426a07b86004214c4cb6f8a2a0",
+    "digest": "sha256:0b4115eef5c301e766fbc93c4d3dc8aff8cba7378058d31ae3aca5221abc14f3",
     "port": 8080,
     "revision": null
   }
