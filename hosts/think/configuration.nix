@@ -1,14 +1,6 @@
-{
-  lib,
-  inputs,
-  target,
-  ...
-}:
+{ lib, ... }:
 
 {
-  # Déclare les apps conteneurisées : exige proxy + nftables + pairs WireGuard.
-  imports = lib.optional (target.profile == "server") "${inputs.secrets}/think.nix";
-
   systemSettings.storage.swap = {
     zram.enable = true;
     earlyoom.enable = true;

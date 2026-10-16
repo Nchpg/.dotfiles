@@ -1,4 +1,4 @@
-{ ... }:
+{ config, ... }:
 
 # Applications web servies depuis des images de conteneurs (cf. docs/apps.md).
 # Par défaut, une app est publique sur `<nom>.<domaine>` et sondée sur `/`. Son image
@@ -28,6 +28,16 @@ in
     # Un message Discord par site mis à jour.
     announce = true;
   };
+
+  sops.secrets."stage/gemini_env".restartUnits = [ "podman-stage-web.service" ];
+
+  # Créé avant le conteneur et à son nom : sans CAP_CHOWN, il ne pourrait pas écrire dans un
+  # répertoire que podman aurait créé en root. 0700 : le groupe `users` n'a rien à y lire.
+  systemd.tmpfiles.rules = [
+    "d /var/lib/stage 0700 1000 100 -"
+    "d /var/lib/stage/pdfs 0700 1000 100 -"
+    "d /var/lib/stage/logos 0700 1000 100 -"
+  ];
 
   systemSettings.apps = {
     portfolio = {
@@ -91,6 +101,44 @@ in
     iseg2017.container = {
       image = "iseg-2017:main";
       memory = "128m";
+    };
+
+    # Suivi de candidatures (dépôt privé Nchpg/stage, package ghcr privé).
+    stage = {
+      expose = "vpn";
+      devices = mesAppareils;
+
+      # API Gemini (mise en forme des annonces). Le LAN reste fermé au conteneur.
+      internetAccess = true;
+
+      # La sonde lit le fichier : une app vivante dont le montage a disparu n'est pas disponible.
+      probe.path = "/api/sante";
+
+      container = {
+        image = "stage:main";
+
+        # nchpg:users, pour que le JSON déposé sur le host se lise sans sudo.
+        user = "1000:100";
+
+        # Next au repos tient dans une centaine de Mo ; la marge couvre l'export d'une archive.
+        memory = "512m";
+
+        # Sur le host et pas dans un volume podman : `candidatures.json` se lit et se copie directement.
+        volumes = [
+          {
+            source = "/var/lib/stage";
+            target = "/data";
+            readOnly = false;
+          }
+        ];
+
+        # Ligne complète `GEMINI_API_KEY=…` : podman lit un fichier d'environnement tel quel.
+        environmentFiles = [ config.sops.secrets."stage/gemini_env".path ];
+
+        # 127.0.0.1 et pas localhost : le wget de busybox essaie ::1 d'abord et le serveur
+        # n'écoute qu'en IPv4.
+        healthcheck.command = "wget -qO- http://127.0.0.1:3000/api/sante > /dev/null || exit 1";
+      };
     };
 
     myetf = {
