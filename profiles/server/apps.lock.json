@@ -20,9 +20,9 @@
     "revision": "25d70862a5fd5ee838001a18fcfca15d15636a68"
   },
   "ghcr.io/nchpg/rlkart-backend:main": {
-    "digest": "sha256:939e1f49e41a5b1e3a2fdf298a4d4f1ccd892ae6b92da9f9805e5b6937d7429d",
+    "digest": "sha256:aa50bba568ad24290481a44cc919a475662725dcfbe1d3ea564fb181d123bfb6",
     "port": 8000,
-    "revision": null
+    "revision": "c2ef74f935bdbc93cab7f9e05ef9b2a0663b6e34"
   },
   "ghcr.io/nchpg/rlkart-frontend:main": {
     "digest": "sha256:42ec8abf90f0f35c0b64fa7db668ee475f60da01886dc31b9cf3685d81e3f6a4",
