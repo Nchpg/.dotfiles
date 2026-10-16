@@ -24,6 +24,9 @@ in
 
     # think repère une nouvelle image en une minute et la fait épingler (jeton `github/dispatch_token`).
     watch.enable = true;
+
+    # Un message Discord par site mis à jour.
+    announce = true;
   };
 
   systemSettings.apps = {
