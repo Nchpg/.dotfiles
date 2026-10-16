@@ -15,9 +15,9 @@
     "revision": null
   },
   "ghcr.io/nchpg/portfolio:main": {
-    "digest": "sha256:1bf19ec8da2104d05b862f71d1e8578376ce56b2715957bb3e4a1ad7b794e678",
+    "digest": "sha256:a1c84a689aeb13142e83f185499c9fc72d81b0cd7a3feb17d58aee9c16d89c39",
     "port": 3000,
-    "revision": null
+    "revision": "25d70862a5fd5ee838001a18fcfca15d15636a68"
   },
   "ghcr.io/nchpg/rlkart-backend:main": {
     "digest": "sha256:939e1f49e41a5b1e3a2fdf298a4d4f1ccd892ae6b92da9f9805e5b6937d7429d",
