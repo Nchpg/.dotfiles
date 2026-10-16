@@ -5,6 +5,11 @@
   ...
 }:
 
+let
+  fishUsers = map (user: user.name) (
+    lib.filter (user: user.shell == "fish") config.systemSettings.users
+  );
+in
 {
   options = {
     systemSettings = {
@@ -48,7 +53,7 @@
                   ]
                 );
                 default = null;
-                description = "Shell de login (TTY, SSH). null = bash. Les terminaux graphiques suivent userSettings.shell.default.";
+                description = "Shell de login (TTY, SSH). null = bash. fish : login en bash, fish pour les sessions interactives. Les terminaux graphiques suivent userSettings.shell.default.";
               };
             };
           }
@@ -82,7 +87,7 @@
           ++ lib.optional user.isAdmin "wheel"
           ++ lib.optional user.allowDocker "docker"
           ++ lib.optional user.allowLibvirt "libvirtd";
-          shell = lib.mkIf (user.shell != null) pkgs-stable.${user.shell};
+          shell = lib.mkIf (user.shell != null && user.shell != "fish") pkgs-stable.${user.shell};
           openssh.authorizedKeys.keys = user.sshKeys;
           createHome = true;
           description = user.name;
@@ -90,9 +95,19 @@
       }) config.systemSettings.users
     );
 
-    # Ajoute le shell à /etc/shells (sinon login refusé).
+    # Intégration système du shell (/etc/shells, complétions des paquets).
     programs.fish.enable = lib.any (user: user.shell == "fish") config.systemSettings.users;
     programs.zsh.enable = lib.any (user: user.shell == "zsh") config.systemSettings.users;
+
+    # Un script sh envoyé par SSH (VS Code Remote, outils de déploiement) échoue dans fish :
+    # login en bash, et seul un bash de login interactif passe la main à fish.
+    programs.bash.interactiveShellInit = lib.mkIf (fishUsers != [ ]) ''
+      if shopt -q login_shell && [ -z "''${BASH_EXECUTION_STRING:-}" ]; then
+        case " ${lib.concatStringsSep " " fishUsers} " in
+          *" $USER "*) exec ${lib.getExe config.programs.fish.package} --login ;;
+        esac
+      fi
+    '';
 
     home-manager.users = builtins.listToAttrs (
       map (user: {
