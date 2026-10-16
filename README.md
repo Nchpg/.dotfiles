@@ -21,7 +21,8 @@ modules/
 themes/            Thèmes base16 (schemes/*.yaml) + wallpapers + fonts + galerie
 lib/               Helpers injectés en `myLib` (import-all, discover, mk-*, checks)
 overlays/          Overlays nixpkgs, un dossier par sujet (displaylink : fetch auto du driver ; sway : patch du verrouillage)
-docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi)
+docs/              Documentation (secrets-guide.md : quoi taper ; secrets.md : le pourquoi ;
+                   apps.md : déployer une app sur think)
 devshells/         `nix develop .#python|c|xpu`
 init.sh            Mise en place d'une machine neuve : host, matériel, clés age, SSH GitHub, clone des secrets, hooks, inscription
 scripts/           Les commandes du dépôt (rebuild, update, genclean, secrets, dots, theme), installées en un paquet (default.nix) ; lib/ : bash partagé, CI comprise
