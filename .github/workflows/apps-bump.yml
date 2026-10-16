@@ -1,9 +1,11 @@
 name: apps-bump
 
-# Déclenché par la CI d'une app (app-image.yml) : épingle les digests qu'elle vient de publier,
-# en un seul commit sur main, que comin déploie dans la minute. Pas de `trusted` : un
-# workflow_dispatch exige déjà l'écriture sur ce dépôt.
-# Commit poussé avec le GITHUB_TOKEN : check.yml ne tourne pas dessus, d'où l'évaluation ici.
+# Déclenché par think (apps-watch) quand une image a changé : épingle ses digests en un seul
+# commit sur main, que comin déploie dans la minute. Un workflow_dispatch exige déjà le droit
+# d'écriture sur ce dépôt.
+# Runner GitHub et non self-hosted : il doit passer même machine éteinte. Pas d'évaluation ici
+# (elle demanderait le dépôt de secrets) : apps-bump.sh vérifie chaque entrée, et comin refuse
+# de déployer un commit qui ne s'évalue pas (alerte DeploiementEnEchec).
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +14,7 @@ on:
         required: true
         type: string
       source:
-        description: Dépôt de l'app appelante (owner/repo)
+        description: Origine de la demande (think, ou un dépôt d'app)
         required: false
         type: string
 
@@ -26,13 +28,11 @@ permissions:
 
 jobs:
   bump:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           ref: main
-
-      - uses: ./.github/actions/setup-nix
 
       # Entrées par l'environnement, jamais interpolées dans le script (injection de commande).
       - name: lock
@@ -43,10 +43,6 @@ jobs:
         run: |
           echo "appel de ${SOURCE:-inconnu}"
           .github/scripts/apps-bump.sh profiles/server/apps.lock.json >> "$GITHUB_OUTPUT"
-
-      - name: évaluation de server-think
-        if: steps.lock.outputs.subject != ''
-        run: nix eval --raw .#nixosConfigurations.server-think.config.system.build.toplevel.drvPath
 
       # Rebase et nouvel essai si main a bougé entre-temps (push humain).
       - name: commit et push

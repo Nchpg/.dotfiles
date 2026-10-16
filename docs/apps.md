@@ -11,8 +11,8 @@ push sur l'app
   └─ CI de l'app : app-image.yml (partagé, dans ce dépôt)
        └─ build, contrôle, push ghcr.io/nchpg/<image>:main et :sha-<commit>
             └─ think (apps-watch, toutes les minutes) voit le tag bouger
-                 └─ apps-bump.yml ici : met à jour profiles/server/apps.lock.json,
-                    évalue server-think, commit « chore(apps): bump … » sur main
+                 └─ apps-bump.yml ici (runner GitHub) : met à jour profiles/server/apps.lock.json,
+                    commit « chore(apps): bump … » sur main
                       └─ comin sur think : déployé en moins d'une minute
                            └─ Discord : « 🚀 rlkart mis à jour … répond (200) »
 ```
