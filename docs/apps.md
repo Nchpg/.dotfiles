@@ -78,17 +78,17 @@ bougé.
    (image privée : `GHCR_TOKEN=… dots update apps`).
    Commit, push. Les pushes suivants de l'app passent ensuite tout seuls.
 
-Le nom public reçoit son CNAME tout seul (unité `cloudflared-dns`), il n'y a plus
-de `cloudflared tunnel route dns` à lancer. Un nom sous `.vpn.` n'a besoin de
+Aucun DNS à créer : le joker `*.nathanchampagne.com` mène au tunnel Cloudflare,
+et seule la route du tunnel (posée par le module) décide si le nom est servi. Un nom sous `.vpn.` n'a besoin de
 rien : le joker `*.vpn.nathanchampagne.com` pointe déjà sur le tunnel WireGuard.
 
 ## Qui atteint l'app : `expose`
 
 | `expose` | Accès | Ce que le module pose |
 |---|---|---|
-| `public` (défaut) | tout internet | route dans le tunnel Cloudflare, CNAME |
+| `public` (défaut) | tout internet | route dans le tunnel Cloudflare |
 | `vpn` | les appareils listés dans `devices`, et think | pas de route ; nom `<subdomain>.vpn.nathanchampagne.com` ; nginx refuse les autres sources |
-| `sso` | internet, après connexion Authelia | route, CNAME, `auth_request` sur le vhost, règle Authelia (`sso.policy`, `sso.subject`) |
+| `sso` | internet, après connexion Authelia | route, `auth_request` sur le vhost, règle Authelia (`sso.policy`, `sso.subject`) |
 
 En `vpn`, `devices` est obligatoire et nomme les peers de `profiles/server/vpn.nix` :
 
