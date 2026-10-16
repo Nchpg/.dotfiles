@@ -5,33 +5,17 @@
 }:
 
 let
-  cfg = config.systemSettings.apps;
+  wireguard = config.systemSettings.vpn.wireguard;
 
-  names = lib.attrNames cfg;
+  baseDomain = config.systemSettings.proxy.domain;
 
-  basePort = 8080;
-  explicitPorts = lib.filter (p: p != null) (map (a: a.hostPort) (lib.attrValues cfg));
-  firstFree = p: if lib.elem p explicitPorts then firstFree (p + 1) else p;
-  autoPorts =
-    (lib.foldl'
-      (
-        acc: n:
-        let
-          p = firstFree acc.next;
-        in
-        {
-          next = p + 1;
-          ports = acc.ports // {
-            ${n} = p;
-          };
-        }
-      )
-      {
-        next = basePort;
-        ports = { };
-      }
-      (lib.filter (n: cfg.${n}.hostPort == null) names)
-    ).ports;
+  peerAddress = lib.listToAttrs (map (p: lib.nameValuePair p.name "${p.address}/32") wireguard.peers);
+
+  # Dérivé du nom, donc stable : ajouter une app ne renumérote pas les autres.
+  # Plage sous les ports éphémères du noyau (32768+) et loin des services du host.
+  hashedPort =
+    name:
+    20000 + lib.mod (lib.fromHexString (lib.substring 0 7 (builtins.hashString "sha256" name))) 10000;
 in
 {
   options.systemSettings.apps = lib.mkOption {
@@ -55,25 +39,109 @@ in
         { name, config, ... }:
         {
           options = {
-            domain = lib.mkOption {
+            subdomain = lib.mkOption {
               type = lib.types.str;
-              example = "monapp.exemple.fr";
-              description = "Nom servi. Sous `.lan.` pour une application qui ne doit pas sortir de la maison.";
+              default = name;
+              defaultText = lib.literalExpression "le nom de l'app";
+              example = "etf";
+              description = ''
+                Sous-domaine servi, sous `proxy.domain` (et sous `vpn.` en `expose = "vpn"`).
+                `"@"` : le domaine lui-même.
+              '';
             };
 
+            domain = lib.mkOption {
+              type = lib.types.str;
+              default =
+                let
+                  parent = if config.expose == "vpn" then "vpn.${baseDomain}" else baseDomain;
+                in
+                if baseDomain == null then
+                  config.subdomain
+                else if config.subdomain == "@" then
+                  parent
+                else
+                  "${config.subdomain}.${parent}";
+              defaultText = lib.literalExpression ''"<subdomain>.<proxy.domain>", ou "<subdomain>.vpn.<proxy.domain>" en vpn'';
+              example = "monapp.exemple.fr";
+              description = "Nom complet servi. Se déduit de `subdomain` ; à donner seulement hors de `proxy.domain`.";
+            };
+
+            expose = lib.mkOption {
+              type = lib.types.enum [
+                "public"
+                "vpn"
+                "sso"
+              ];
+              default = if config.public == false then "vpn" else "public";
+              defaultText = lib.literalExpression ''"public"'';
+              description = ''
+                Qui atteint l'application :
+                - `public` : tout internet, par le tunnel ;
+                - `vpn` : mes appareils WireGuard seulement, sans route dans le tunnel
+                  (nom sous `.vpn.`, que le joker DNS résout vers le tunnel WireGuard) ;
+                - `sso` : internet par le tunnel, derrière le portail Authelia.
+              '';
+            };
+
+            # Remplacée par `expose` ; gardée pour les déclarations du dépôt privé.
             public = lib.mkOption {
-              type = lib.types.bool;
-              default = true;
-              description = "Publie l'application par le tunnel. `false` : LAN et VPN seulement, sans route.";
+              type = lib.types.nullOr lib.types.bool;
+              default = null;
+              visible = false;
+              description = "Obsolète : `expose`.";
+            };
+
+            sso = {
+              policy = lib.mkOption {
+                type = lib.types.enum [
+                  "one_factor"
+                  "two_factor"
+                ];
+                default = "two_factor";
+                description = "Politique Authelia de l'application (`expose = \"sso\"`).";
+              };
+
+              subject = lib.mkOption {
+                type = lib.types.nullOr (lib.types.listOf lib.types.str);
+                default = null;
+                example = [ "user:nathan" ];
+                description = ''
+                  Comptes ou groupes Authelia admis (`null` : tout compte authentifié).
+                '';
+              };
+            };
+
+            devices = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              example = [
+                "gram"
+                "xiaomi_17t"
+              ];
+              description = ''
+                Appareils admis en `expose = "vpn"`, par leur nom dans
+                `vpn.wireguard.peers`. think lui-même est toujours admis (ses sondes).
+              '';
             };
 
             allowedNetworks = lib.mkOption {
               type = lib.types.nullOr (lib.types.listOf lib.types.str);
-              default = null;
+              default =
+                if config.devices == null then
+                  null
+                else
+                  map (
+                    d:
+                    peerAddress.${d}
+                      or (throw "systemSettings.apps.${name}.devices : « ${d} » n'est pas un peer de vpn.wireguard.peers (${toString (lib.attrNames peerAddress)}).")
+                  ) config.devices
+                  ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource;
+              defaultText = lib.literalExpression "les adresses des `devices`, plus celle de ce host";
               example = [ "10.8.0.2/32" ];
               description = ''
                 Sources autorisées par nginx (notation `allow`), le reste reçoit
-                403. `null` : aucun filtrage.
+                403. `null` : aucun filtrage. Se déduit de `devices` d'ordinaire.
               '';
             };
 
@@ -137,15 +205,15 @@ in
             hostPort = lib.mkOption {
               type = lib.types.nullOr lib.types.port;
               default = null;
-              example = 8085;
+              example = 20085;
               description = ''
-                Port de bouclage du point d'entrée. `null` : le premier libre à
-                partir de 8080, dans l'ordre alphabétique.
+                Port de bouclage du point d'entrée. `null` : dérivé du nom (20000-29999).
+                À fixer seulement si deux noms tombent sur le même port.
               '';
             };
 
             probe = lib.mkOption {
-              default = null;
+              default = { };
               description = ''
                 Sonde blackbox de l'application, nommée comme elle (`null` : aucune).
               '';
@@ -159,9 +227,12 @@ in
                     };
 
                     module = lib.mkOption {
-                      type = lib.types.str;
-                      default = "http_2xx";
-                      description = "Module blackbox, cf. `monitoring.blackbox.targets`.";
+                      type = lib.types.nullOr lib.types.str;
+                      default = null;
+                      description = ''
+                        Module blackbox, cf. `monitoring.blackbox.targets`. `null` :
+                        `http_authelia` derrière le portail, `http_2xx` sinon.
+                      '';
                     };
                   };
                 }
@@ -215,12 +286,10 @@ in
               type = lib.types.port;
               readOnly = true;
               internal = true;
-              default = if config.hostPort != null then config.hostPort else autoPorts.${name};
-              description = "Port de bouclage retenu : `hostPort`, ou celui attribué automatiquement.";
+              default = if config.hostPort != null then config.hostPort else hashedPort name;
+              description = "Port de bouclage retenu : `hostPort`, ou celui dérivé du nom.";
             };
           };
-
-          config.domain = lib.mkDefault name;
         }
       )
     );

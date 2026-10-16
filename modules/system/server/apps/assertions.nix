@@ -7,6 +7,10 @@
 let
   cfg = config.systemSettings.apps;
 
+  authelia = config.systemSettings.authelia;
+
+  images = config.systemSettings.appImages.helpers;
+
   hostPorts = map (a: a.hostPortEffective) (lib.attrValues cfg);
 
   otherPorts =
@@ -15,18 +19,59 @@ let
 in
 {
   config = lib.mkIf (cfg != { }) {
+    warnings = lib.mapAttrsToList (
+      name: _:
+      "systemSettings.apps.${name}.public est obsolète : `expose = \"public\"`, `\"vpn\"` ou `\"sso\"`."
+    ) (lib.filterAttrs (_: a: a.public != null) cfg);
+
     assertions = [
       {
         assertion = config.systemSettings.proxy.enable;
         message = "systemSettings.apps exige systemSettings.proxy.enable : c'est lui qui porte nginx et l'obtention des certificats.";
       }
       {
-        assertion = lib.all (a: !a.public) (lib.attrValues cfg) || config.systemSettings.cloudflared.enable;
-        message = "systemSettings.apps : une application marquée `public` a besoin de systemSettings.cloudflared.enable pour être routée, aucun port n'étant ouvert sur la box.";
+        assertion =
+          lib.all (a: a.expose == "vpn") (lib.attrValues cfg) || config.systemSettings.cloudflared.enable;
+        message = "systemSettings.apps : une application `expose = \"public\"` ou `\"sso\"` a besoin de systemSettings.cloudflared.enable pour être routée, aucun port n'étant ouvert sur la box.";
       }
       {
-        assertion = lib.all (a: !(a.public && a.allowedNetworks != null)) (lib.attrValues cfg);
-        message = "systemSettings.apps : `allowedNetworks` n'a pas de sens sur une application `public` — tout ce qui vient du tunnel Cloudflare se présente en 127.0.0.1.";
+        assertion = lib.all (a: a.expose == "vpn" || a.allowedNetworks == null) (lib.attrValues cfg);
+        message = "systemSettings.apps : `allowedNetworks` n'a de sens qu'avec `expose = \"vpn\"` — tout ce qui vient du tunnel Cloudflare se présente en 127.0.0.1.";
+      }
+      {
+        # `public` (obsolète) ou `allowedNetworks` explicite : déclarations antérieures, filtrées autrement.
+        assertion = lib.all (
+          a: a.expose != "vpn" || a.devices != null || a.allowedNetworks != null || a.public != null
+        ) (lib.attrValues cfg);
+        message = "systemSettings.apps : une application `expose = \"vpn\"` doit lister ses `devices` (noms de vpn.wireguard.peers) : ${
+          toString (
+            lib.attrNames (
+              lib.filterAttrs (
+                _: a: a.expose == "vpn" && a.devices == null && a.allowedNetworks == null && a.public == null
+              ) cfg
+            )
+          )
+        }.";
+      }
+      {
+        # `vpn.<domaine>` est le point d'entrée WireGuard (enregistrement « DNS only » vers la box).
+        assertion = lib.all (a: !(a.expose == "vpn" && a.subdomain == "@")) (lib.attrValues cfg);
+        message = "systemSettings.apps : `subdomain = \"@\"` est impossible en `expose = \"vpn\"`, ce nom est celui du tunnel WireGuard.";
+      }
+      {
+        assertion = lib.all (a: a.devices == null || a.expose == "vpn") (lib.attrValues cfg);
+        message = "systemSettings.apps : `devices` ne s'applique qu'avec `expose = \"vpn\"`.";
+      }
+      {
+        assertion = lib.all (a: a.expose != "sso") (lib.attrValues cfg) || authelia.enable;
+        message = "systemSettings.apps : `expose = \"sso\"` exige systemSettings.authelia.enable, c'est lui qui tient le portail.";
+      }
+      {
+        # Sinon le cookie de session n'est jamais envoyé : boucle de redirection vers le portail.
+        assertion = lib.all (
+          a: a.expose != "sso" || authelia.domain == null || lib.hasSuffix ".${authelia.domain}" a.domain
+        ) (lib.attrValues cfg);
+        message = "systemSettings.apps : une application `expose = \"sso\"` doit être servie sous systemSettings.authelia.domain (${toString authelia.domain}), sinon le cookie du portail ne la couvre pas.";
       }
       {
         assertion = lib.all (a: a.allowedNetworks != [ ]) (lib.attrValues cfg);
@@ -49,8 +94,14 @@ in
         message = "systemSettings.apps : `entrypoint` doit nommer un conteneur déclaré dans `containers`.";
       }
       {
-        assertion = lib.all (a: a.containers.${a.entrypointName}.port != null) (lib.attrValues cfg);
-        message = "systemSettings.apps : le conteneur désigné par `entrypoint` doit déclarer son `port`, c'est celui que nginx sert.";
+        assertion = lib.all (
+          a:
+          let
+            c = a.containers.${a.entrypointName};
+          in
+          c.port != null || images.port c.image != null
+        ) (lib.attrValues cfg);
+        message = "systemSettings.apps : le conteneur servi par nginx n'a pas de port : son image ne déclare aucun `EXPOSE` unique dans le lock, donne-lui un `port`.";
       }
       {
         assertion = lib.all (a: lib.all (p: lib.hasPrefix "/" p) a.rateLimit.paths) (lib.attrValues cfg);
@@ -117,7 +168,9 @@ in
       }
       {
         assertion = lib.length (lib.unique hostPorts) == lib.length hostPorts;
-        message = "systemSettings.apps : deux applications partagent le même port de bouclage (${lib.concatStringsSep ", " (map toString hostPorts)}). Corrige leurs `hostPort`.";
+        message = "systemSettings.apps : deux applications tombent sur le même port de bouclage (${
+          lib.concatStringsSep ", " (lib.mapAttrsToList (n: a: "${n}=${toString a.hostPortEffective}") cfg)
+        }). Fixe le `hostPort` de l'une d'elles.";
       }
       {
         assertion = lib.intersectLists hostPorts otherPorts == [ ];

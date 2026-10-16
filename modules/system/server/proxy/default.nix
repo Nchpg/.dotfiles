@@ -59,7 +59,8 @@ let
       host: site:
       lib.mapAttrsToList (name: probe: {
         inherit name;
-        value = {
+        # mkDefault : une cible déclarée directement (ex. dépôt privé) l'emporte sur la sonde du site.
+        value = lib.mapAttrs (_: lib.mkDefault) {
           url = "https://${host}${probe.path}";
           inherit (probe) module;
         };
@@ -70,6 +71,16 @@ in
 {
   options.systemSettings.proxy = {
     enable = lib.mkEnableOption "reverse proxy nginx et certificats ACME";
+
+    domain = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "exemple.fr";
+      description = ''
+        Domaine de base des noms servis, d'où les apps tirent leur nom par défaut
+        (`<app>.<domain>`, `<app>.vpn.<domain>`).
+      '';
+    };
 
     acmeEmail = lib.mkOption {
       type = lib.types.nullOr lib.types.str;

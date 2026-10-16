@@ -1,0 +1,37 @@
+{
+  "ghcr.io/nchpg/iseg-2017:main": {
+    "digest": "sha256:e0b54b079669ad0bb7cad2bf9d64baed066de45689ca618c49f36612e3f03aba",
+    "port": 8080,
+    "revision": null
+  },
+  "ghcr.io/nchpg/mnist-cnn-cpp:main": {
+    "digest": "sha256:64d15f30c87fdcb4774aed39f2bb99cedda84fd50c45f559b82ce6f31e9b8dc1",
+    "port": 8080,
+    "revision": null
+  },
+  "ghcr.io/nchpg/myetf:main": {
+    "digest": "sha256:4fbfd4c90f69ed23c30644b24a7a920696839453f444a13eb5fa528f18b75115",
+    "port": 3000,
+    "revision": null
+  },
+  "ghcr.io/nchpg/portfolio:main": {
+    "digest": "sha256:1bf19ec8da2104d05b862f71d1e8578376ce56b2715957bb3e4a1ad7b794e678",
+    "port": 3000,
+    "revision": null
+  },
+  "ghcr.io/nchpg/rlkart-backend:main": {
+    "digest": "sha256:939e1f49e41a5b1e3a2fdf298a4d4f1ccd892ae6b92da9f9805e5b6937d7429d",
+    "port": 8000,
+    "revision": null
+  },
+  "ghcr.io/nchpg/rlkart-frontend:main": {
+    "digest": "sha256:5f7b09c3452b9b1502e2b8c108f48bad28d31ef577b190b691624b1b7f282cb2",
+    "port": 80,
+    "revision": null
+  },
+  "ghcr.io/nchpg/yolo-detection:main": {
+    "digest": "sha256:7bce55e4c5397d3540dc38d2526bfe59dece26426a07b86004214c4cb6f8a2a0",
+    "port": 8080,
+    "revision": null
+  }
+}

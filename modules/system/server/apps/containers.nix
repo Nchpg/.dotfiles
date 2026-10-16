@@ -13,6 +13,8 @@ let
 
   containerKey = appName: containerName: "${appName}-${containerName}";
 
+  images = config.systemSettings.appImages.helpers;
+
   allContainers = lib.concatLists (
     lib.mapAttrsToList (
       appName: app:
@@ -25,6 +27,10 @@ let
           container
           ;
         isEntrypoint = containerName == app.entrypointName;
+
+        image = images.image container.image;
+        port = if container.port != null then container.port else images.port container.image;
+        login = images.login container.image;
       }) app.containers
     ) cfg
   );
@@ -34,9 +40,11 @@ let
   containerOptions = {
     image = lib.mkOption {
       type = lib.types.str;
-      example = "ghcr.io/moi/monsite@sha256:abc123…";
+      example = "portfolio";
       description = ''
-        Image du conteneur, épinglée par digest.
+        Nom court (`portfolio`, préfixé par `appImages.registry`), référence avec tag
+        (`docker.io/library/postgres:17`), toutes deux épinglées par le lock, ou
+        référence `@sha256:…` complète.
       '';
     };
 
@@ -46,6 +54,7 @@ let
       example = 8000;
       description = ''
         Port d'écoute dans le conteneur ; publié pour le seul point d'entrée.
+        `null` : celui que l'image déclare (`EXPOSE`, relevé dans le lock).
         Sous 1024, `CAP_NET_BIND_SERVICE` en est déduite.
       '';
     };
@@ -61,30 +70,6 @@ let
       default = [ ];
       example = lib.literalExpression ''[ config.sops.secrets."monapp/env".path ]'';
       description = "Fichiers d'environnement, pour les secrets (sops).";
-    };
-
-    login = lib.mkOption {
-      default = null;
-      description = ''
-        Identifiants du registre pour une image privée (`null` : tirage anonyme).
-      '';
-      type = lib.types.nullOr (
-        lib.types.submodule {
-          options = {
-            username = lib.mkOption {
-              type = lib.types.str;
-              example = "moi";
-              description = "Compte du registre.";
-            };
-
-            passwordKey = lib.mkOption {
-              type = lib.types.str;
-              example = "ghcr/token";
-              description = "Clé sops du jeton.";
-            };
-          };
-        }
-      );
     };
 
     cmd = lib.mkOption {
@@ -221,22 +206,37 @@ in
 {
   options.systemSettings.apps = lib.mkOption {
     type = lib.types.attrsOf (
-      lib.types.submodule {
-        options.containers = lib.mkOption {
-          description = ''
-            Conteneurs de l'application, sur un réseau propre à celle-ci.
-          '';
-          type = lib.types.attrsOf (lib.types.submodule { options = containerOptions; });
-        };
-      }
+      lib.types.submodule (
+        { config, ... }:
+        {
+          options = {
+            containers = lib.mkOption {
+              description = ''
+                Conteneurs de l'application, sur un réseau propre à celle-ci. Le nom
+                (`frontend`, `api`…) nomme l'unité `podman-<app>-<nom>` et sert de nom
+                d'hôte aux autres conteneurs de l'app.
+              '';
+              type = lib.types.attrsOf (lib.types.submodule { options = containerOptions; });
+            };
+
+            container = lib.mkOption {
+              default = null;
+              description = ''
+                Raccourci d'une app à un seul conteneur, qui devient `containers.web`.
+              '';
+              type = lib.types.nullOr (lib.types.submodule { options = containerOptions; });
+            };
+          };
+
+          config.containers = lib.mkIf (config.container != null) { web = config.container; };
+        }
+      )
     );
   };
 
   config = lib.mkIf (cfg != { }) {
     sops.secrets = lib.listToAttrs (
-      map (c: lib.nameValuePair c.container.login.passwordKey { }) (
-        lib.filter (c: c.container.login != null) allContainers
-      )
+      map (c: lib.nameValuePair c.login.passwordKey { }) (lib.filter (c: c.login != null) allContainers)
     );
 
     # Explicite : le défaut amont dépend de system.stateVersion.
@@ -246,11 +246,8 @@ in
       map (
         c:
         lib.nameValuePair c.key {
-          inherit (c.container)
-            image
-            environmentFiles
-            environment
-            ;
+          inherit (c) image;
+          inherit (c.container) environmentFiles environment;
 
           volumes = map (
             v: "${v.source}:${v.target}${lib.optionalString v.readOnly ":ro"}"
@@ -259,7 +256,7 @@ in
           podman.sdnotify = if c.container.healthcheck.command != null then "healthy" else "conmon";
 
           # Boucle locale seulement : un bind plus large contournerait le pare-feu NixOS.
-          ports = lib.optional c.isEntrypoint "127.0.0.1:${toString c.app.hostPortEffective}:${toString c.container.port}";
+          ports = lib.optional c.isEntrypoint "127.0.0.1:${toString c.app.hostPortEffective}:${toString c.port}";
 
           networks = lib.singleton c.app.network;
 
@@ -267,10 +264,10 @@ in
 
           inherit (c.container) cmd user;
 
-          login = lib.mkIf (c.container.login != null) {
-            registry = registryOf c.container.image;
-            inherit (c.container.login) username;
-            passwordFile = config.sops.secrets.${c.container.login.passwordKey}.path;
+          login = lib.mkIf (c.login != null) {
+            registry = registryOf c.image;
+            inherit (c.login) username;
+            passwordFile = config.sops.secrets.${c.login.passwordKey}.path;
           };
 
           extraOptions = [
@@ -281,7 +278,7 @@ in
             "--pids-limit=${toString c.container.pidsLimit}"
           ]
           ++ lib.optional (c.container.memory != null) "--memory=${c.container.memory}"
-          ++ lib.optional (c.container.port != null && c.container.port < 1024) "--cap-add=NET_BIND_SERVICE"
+          ++ lib.optional (c.port != null && c.port < 1024) "--cap-add=NET_BIND_SERVICE"
 
           ++ map (cap: "--cap-add=${cap}") c.container.capabilities
 
@@ -355,11 +352,12 @@ in
       # À 100 ms (défaut), la limite de démarrage est atteinte en une demi-seconde.
       ++ (map (c: { ${unitOf c.key}.serviceConfig.RestartSec = "10s"; }) allContainers)
 
-      # Les 90 s par défaut ne suffisent pas à une base qui initialise ses données.
+      # oci-containers pose `0` (aucun délai) à la même priorité : sans override, l'évaluation échoue.
+      # Assez long pour une base qui initialise ses données, borné pour qu'une sonde jamais verte finisse en échec.
       ++ (map (
         c:
         lib.optionalAttrs (c.container.healthcheck.command != null) {
-          ${unitOf c.key}.serviceConfig.TimeoutStartSec = "5min";
+          ${unitOf c.key}.serviceConfig.TimeoutStartSec = lib.mkOverride 90 "5min";
         }
       ) allContainers)
     );

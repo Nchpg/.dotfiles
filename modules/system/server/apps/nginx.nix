@@ -8,6 +8,10 @@
 let
   cfg = config.systemSettings.apps;
 
+  authelia = config.systemSettings.authelia;
+
+  ssoApps = lib.filterAttrs (_: app: app.expose == "sso") cfg;
+
   limitedApps = lib.filter (n: cfg.${n}.rateLimit.enable) (lib.attrNames cfg);
 
   locationsOf =
@@ -52,29 +56,57 @@ in
       )
     );
 
+    # Les locations n'ont pas d'`auth_request_set` : elles héritent de celles posées par `nginxProtect`.
     services.nginx.virtualHosts = lib.mapAttrs' (
       _: app:
       lib.nameValuePair app.domain (
         myLib.server.mkTlsVhost (
-          {
-            locations = locationsOf app;
-          }
-          // lib.optionalAttrs (app.allowedNetworks != null) {
-            extraConfig = ''
-              ${myLib.server.nginxAllowOnly app.allowedNetworks}
-            '';
-          }
+          if app.expose == "sso" then
+            {
+              locations = locationsOf app // authelia.nginxProtect.locations;
+              inherit (authelia.nginxProtect) extraConfig;
+            }
+          else
+            {
+              locations = locationsOf app;
+            }
+            // lib.optionalAttrs (app.allowedNetworks != null) {
+              extraConfig = ''
+                ${myLib.server.nginxAllowOnly app.allowedNetworks}
+              '';
+            }
         )
       )
     ) cfg;
+
+    # Authelia refuse par défaut : sans règle, le portail renverrait 403 à tout le monde.
+    systemSettings.authelia.rules = lib.mapAttrsToList (
+      _: app:
+      {
+        inherit (app) domain;
+        inherit (app.sso) policy;
+      }
+      // lib.optionalAttrs (app.sso.subject != null) { inherit (app.sso) subject; }
+    ) ssoApps;
 
     # Pas de `lanShortcut` : la sonde doit traverser l'edge et le tunnel.
     systemSettings.proxy.sites = lib.mapAttrs' (
       name: app:
       lib.nameValuePair app.domain {
-        inherit (app) public;
+        public = app.expose != "vpn";
         lanShortcut = lib.mkDefault false;
-        probes = lib.optionalAttrs (app.probe != null) { ${name} = app.probe; };
+        probes = lib.optionalAttrs (app.probe != null) {
+          ${name} = {
+            inherit (app.probe) path;
+            module =
+              if app.probe.module != null then
+                app.probe.module
+              else if app.expose == "sso" then
+                "http_authelia"
+              else
+                "http_2xx";
+          };
+        };
       }
     ) cfg;
   };
