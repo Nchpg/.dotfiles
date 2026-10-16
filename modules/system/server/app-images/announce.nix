@@ -35,9 +35,15 @@ let
       current=${deployedFile}
       previous="$STATE_DIRECTORY/deployed.json"
 
+      # Copie inscriptible (le fichier du store est en lecture seule), remplacée d'un coup.
+      remember() {
+        install -m 600 "$current" "$previous.new"
+        mv -f "$previous.new" "$previous"
+      }
+
       # Premier passage : on retient l'état sans annoncer toutes les apps.
       if [ ! -f "$previous" ]; then
-        cp "$current" "$previous"
+        remember
         exit 0
       fi
 
@@ -70,13 +76,14 @@ let
           *) state="**ne répond pas** ($code)" icon="⚠️" ;;
         esac
 
-        jq -n --arg c "$icon **$app** $what : https://$domain''${rev:+ · commit \`$rev\`} · $state" '{content: $c}' \
+        # flags 4 : pas d'aperçu du lien sous le message.
+        jq -n --arg c "$icon **$app** $what : https://$domain''${rev:+ · commit \`$rev\`} · $state" '{content: $c, flags: 4}' \
           | curl --silent --show-error --max-time 20 --config "$conf" \
               --header 'Content-Type: application/json' --data @- > /dev/null \
           || echo "$app : envoi Discord en échec" >&2
       done
 
-      cp "$current" "$previous"
+      remember
     '';
   };
 in
@@ -91,10 +98,22 @@ in
       }
     ];
 
-    # Relancée à chaque déploiement qui change une image, après les conteneurs.
+    # Relancé à chaque déploiement qui change une image. Il ne fait que lancer l'annonce sans
+    # l'attendre : le switch ne dépend ni de Discord ni du temps que met une app à répondre.
     systemd.services.apps-announce = {
-      description = "Annonce sur Discord les apps qui ont changé de version";
+      description = "Déclenche l'annonce Discord des apps mises à jour";
       wantedBy = [ "multi-user.target" ];
+      restartTriggers = [ deployedFile ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${lib.getExe' config.systemd.package "systemctl"} start --no-block apps-announce-run.service";
+      };
+    };
+
+    # Après les conteneurs : la file de systemd l'ordonne derrière leurs redémarrages.
+    systemd.services.apps-announce-run = {
+      description = "Annonce sur Discord les apps qui ont changé de version";
       after = [
         "network-online.target"
       ]
@@ -104,10 +123,8 @@ in
         ) config.systemSettings.apps
       );
       wants = [ "network-online.target" ];
-      restartTriggers = [ deployedFile ];
       serviceConfig = {
         Type = "oneshot";
-        RemainAfterExit = true;
         ExecStart = lib.getExe script;
         StateDirectory = "apps-announce";
         LoadCredential = "webhook:${config.sops.secrets.${notify.webhookKey}.path}";
