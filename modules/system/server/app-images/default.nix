@@ -110,6 +110,17 @@ in
       readOnly = true;
       internal = true;
       default = {
+        ref = normalize;
+
+        # Image suivie par le lock et publiée sous `registry` : celles que think surveille.
+        own =
+          image:
+          !lib.hasInfix "@" image
+          && cfg.registry != null
+          && lib.hasPrefix "${cfg.registry}/" (normalize image);
+
+        entry = image: if lib.hasInfix "@" image then null else entryOf image;
+
         image =
           image:
           if lib.hasInfix "@" image then

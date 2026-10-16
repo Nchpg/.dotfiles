@@ -1,8 +1,8 @@
 name: app-image
 
-# Workflow partagé des apps servies par think (cf. docs/apps.md). Construit et publie leurs
-# images sur ghcr.io, puis demande à apps-bump.yml d'épingler tous les digests du run en un
-# seul commit : les images d'une même app ne sont jamais déployées à des versions différentes.
+# Workflow partagé des apps servies par think (cf. docs/apps.md) : construit l'image, la contrôle
+# (jamais root, port >= 1024) et ne la publie sur ghcr.io qu'ensuite. Rien d'autre à faire :
+# think repère le nouveau tag dans la minute et en demande l'épinglage (apps-bump.yml).
 #
 # Appel, dans le dépôt de l'app :
 #   jobs:
@@ -10,8 +10,7 @@ name: app-image
 #       uses: Nchpg/.dotfiles/.github/workflows/app-image.yml@main
 #       with:
 #         images: '[{"name": "monapp"}]'
-#       permissions: { contents: read, packages: write, actions: read }
-#       secrets: inherit
+#       permissions: { contents: read, packages: write }
 on:
   workflow_call:
     inputs:
@@ -21,29 +20,15 @@ on:
         required: true
         type: string
       tag:
-        description: Tag mobile publié et suivi par le lock
+        description: Tag mobile publié, celui que suit think
         required: false
         type: string
         default: main
-      bump:
-        description: Demander l'épinglage à .dotfiles (false pour une image hors du lock public)
-        required: false
-        type: boolean
-        default: true
       allow-root:
         description: Accepter une image qui tourne en root (à éviter ; cf. docs/apps.md)
         required: false
         type: boolean
         default: false
-      dotfiles:
-        description: Dépôt qui porte le lock et apps-bump.yml
-        required: false
-        type: string
-        default: Nchpg/.dotfiles
-    secrets:
-      # PAT fine-grained limité à .dotfiles, permission « Actions: write » seule.
-      DOTFILES_DISPATCH_TOKEN:
-        required: false
 
 jobs:
   build:
@@ -52,8 +37,6 @@ jobs:
       contents: read
       packages: write
     strategy:
-      # Une image en échec annule les autres : le bump n'a lieu que si toutes sont publiées.
-      fail-fast: true
       matrix:
         image: ${{ fromJSON(inputs.images) }}
     steps:
@@ -138,49 +121,11 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=${{ matrix.image.name }}
 
-      - name: digest
+      # Les images d'un dépôt portent le même commit (label `revision`) : think attend qu'elles
+      # soient toutes publiées avant de les épingler ensemble.
+      - name: résumé
         env:
           REF: ${{ steps.ref.outputs.ref }}
           DIGEST: ${{ steps.push.outputs.digest }}
-          NAME: ${{ matrix.image.name }}
           PORT: ${{ steps.check.outputs.port }}
-        run: |
-          mkdir -p digests
-          jq -n --arg ref "$REF" --arg digest "$DIGEST" --arg revision "$GITHUB_SHA" --argjson port "$PORT" \
-            '{$ref, $digest, $revision, $port}' > "digests/$NAME.json"
-          echo "\`$REF\` → \`$DIGEST\`, port \`$PORT\`" >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: digest-${{ matrix.image.name }}
-          path: digests/${{ matrix.image.name }}.json
-          retention-days: 1
-
-  bump:
-    needs: build
-    if: inputs.bump
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: digest-*
-          path: digests
-          merge-multiple: true
-
-      # Sans jeton, rien n'est perdu : `dots update apps` et la PR hebdo rattrapent le tag.
-      - name: épinglage dans .dotfiles
-        env:
-          GH_TOKEN: ${{ secrets.DOTFILES_DISPATCH_TOKEN }}
-          DOTFILES: ${{ inputs.dotfiles }}
-        run: |
-          images=$(jq -cs '.' digests/*.json)
-          echo "$images"
-          if [ -z "$GH_TOKEN" ]; then
-            echo "::warning::secret DOTFILES_DISPATCH_TOKEN absent : images publiées mais pas épinglées (cf. docs/apps.md)."
-            exit 0
-          fi
-          gh workflow run apps-bump.yml -R "$DOTFILES" --ref main \
-            -f images="$images" -f source="$GITHUB_REPOSITORY"
-          echo "épinglage demandé à $DOTFILES : https://github.com/$DOTFILES/actions/workflows/apps-bump.yml" >> "$GITHUB_STEP_SUMMARY"
+        run: echo "\`$REF\` → \`$DIGEST\`, port \`$PORT\`" >> "$GITHUB_STEP_SUMMARY"

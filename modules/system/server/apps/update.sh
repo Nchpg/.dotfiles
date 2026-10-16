@@ -1,100 +1,22 @@
 #!/usr/bin/env bash
 # Suit le tag de chaque image de profiles/server/apps.lock.json et y reporte son digest et son port exposé.
-# Filet de sécurité : d'ordinaire, la CI de l'app déclenche apps-bump.yml (cf. docs/apps.md).
+# Filet de sécurité : d'ordinaire, think repère lui-même une nouvelle image et déclenche apps-bump.yml.
 # Image privée : GHCR_TOKEN (portée read:packages), sinon elle est signalée et laissée telle quelle.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
+# shellcheck source=scripts/lib/registry.sh
+. "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/registry.sh"
 um_init "$@"
 
 lock="$UM_FLAKE/profiles/server/apps.lock.json"
 [ -f "$lock" ] || um_die "lock introuvable : $lock"
 
-# Index multi-architecture d'abord : c'est le digest que tire podman pour un tag.
-accept=(
-    -H "Accept: application/vnd.oci.image.index.v1+json"
-    -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json"
-    -H "Accept: application/vnd.oci.image.manifest.v1+json"
-    -H "Accept: application/vnd.docker.distribution.manifest.v2+json"
-)
-
-# `registre/chemin:tag` -> registre, chemin, tag (Docker Hub implicite pour un nom sans domaine).
-split_ref() {
-    local ref="$1" first rest
-    first="${ref%%/*}"
-    if [[ "$ref" == */* && ( "$first" == *.* || "$first" == *:* || "$first" == localhost ) ]]; then
-        host="$first"
-        rest="${ref#*/}"
-    else
-        host="registry-1.docker.io"
-        rest="$ref"
-        [[ "$rest" == */* ]] || rest="library/$rest"
-    fi
-    [ "$host" = docker.io ] && host="registry-1.docker.io"
-    if [[ "${rest##*/}" == *:* ]]; then
-        tag="${rest##*:}"
-        repo="${rest%:*}"
-    else
-        tag="latest"
-        repo="$rest"
-    fi
-}
-
-# Secrets passés à curl par fichier : un argument est lisible par tous dans /proc.
 umask 077
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-curlrc="$work/curlrc"
-
-# Jeton porteur anonyme, ou authentifié par GHCR_TOKEN sur ghcr.io.
-bearer() {
-    local url="$1" challenge realm service creds=()
-    challenge=$(curl -sS --max-time 15 -o /dev/null -D - -I "${accept[@]}" "$url" \
-        | tr -d '\r' | sed -n 's/^[Ww][Ww][Ww]-[Aa]uthenticate: *[Bb]earer *//p')
-    [ -n "$challenge" ] || return 0
-    realm=$(sed -n 's/.*realm="\([^"]*\)".*/\1/p' <<<"$challenge")
-    service=$(sed -n 's/.*service="\([^"]*\)".*/\1/p' <<<"$challenge")
-    if [ "$host" = ghcr.io ] && [ -n "${GHCR_TOKEN:-}" ]; then
-        printf 'user = "token:%s"\n' "$GHCR_TOKEN" >"$curlrc"
-        creds=(--config "$curlrc")
-    fi
-    curl -fsS --max-time 15 "${creds[@]}" --get \
-        --data-urlencode "service=$service" --data-urlencode "scope=repository:$repo:pull" "$realm" \
-        | jq -er '.token // .access_token'
-}
-
-# `<digest> <port>` du tag ; port `null` si l'image n'expose pas exactement un port TCP.
-# Redirections suivies sans l'en-tête d'autorisation (curl ne le renvoie pas à un autre hôte).
-inspect() {
-    local host repo tag base token auth=() digest manifest platform config port
-    split_ref "$1"
-    base="https://$host/v2/$repo"
-    token=$(bearer "$base/manifests/$tag") || return 1
-    if [ -n "$token" ]; then
-        printf 'header = "Authorization: Bearer %s"\n' "$token" >"$curlrc"
-        auth=(--config "$curlrc")
-    fi
-    curl -fsS --max-time 15 "${accept[@]}" "${auth[@]}" -D "$work/headers" -o "$work/manifest" "$base/manifests/$tag" \
-        || return 1
-    digest=$(tr -d '\r' <"$work/headers" \
-        | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: *\(sha256:[0-9a-f]\{64\}\)$/\1/p')
-    [ -n "$digest" ] || return 1
-
-    manifest="$work/manifest"
-    platform=$(jq -r '[.manifests[]? | select(.platform.os == "linux" and .platform.architecture == "amd64")][0].digest // empty' "$manifest")
-    if [ -n "$platform" ]; then
-        curl -fsS --max-time 15 "${accept[@]}" "${auth[@]}" -o "$work/platform" "$base/manifests/$platform" || return 1
-        manifest="$work/platform"
-    fi
-    config=$(jq -er '.config.digest' "$manifest") || return 1
-    port=$(curl -fsSL --max-time 30 "${auth[@]}" "$base/blobs/$config" \
-        | jq -r '[.config.ExposedPorts // {} | keys[] | select(endswith("/tcp")) | rtrimstr("/tcp") | tonumber]
-                 | if length == 1 then .[0] else null end') || return 1
-    printf '%s %s\n' "$digest" "$port"
-}
+REG_WORK=$(mktemp -d)
+trap 'rm -rf "$REG_WORK"' EXIT
 
 short() { if [ -n "$1" ]; then printf '%s\n' "${1:7:12}"; else echo absente; fi; }
-
 # Le lock, plus les images de la config qui n'y sont pas encore : une nouvelle app y entre ici.
 if wanted=$(nix eval --json "$UM_FLAKE#nixosConfigurations.server-think.config.systemSettings.appImages.wanted" 2>/dev/null); then
     mapfile -t refs < <({ jq -r 'keys[]' "$lock"; jq -r '.[]' <<<"$wanted"; } | sort -u)
@@ -109,9 +31,9 @@ for ref in "${refs[@]}"; do
     if [ ${#UM_ONLY[@]} -gt 0 ] && ! printf '%s\n' "${UM_ONLY[@]}" | grep -qxF "$ref"; then
         continue
     fi
-    if r=$(inspect "$ref" 2>/dev/null); then
-        latest[$ref]="${r% *}"
-        exposed[$ref]="${r#* }"
+    if r=$(reg_inspect "$ref" 2>/dev/null); then
+        latest[$ref]=$(jq -r .digest <<<"$r")
+        exposed[$ref]=$(jq -r .port <<<"$r")
     else
         failed+=("$ref")
     fi
