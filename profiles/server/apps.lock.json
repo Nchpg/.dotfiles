@@ -1,8 +1,8 @@
 {
   "ghcr.io/nchpg/iseg-2017:main": {
-    "digest": "sha256:e0b54b079669ad0bb7cad2bf9d64baed066de45689ca618c49f36612e3f03aba",
+    "digest": "sha256:ae848038130afa6277be463f3e562f8712f27f8a20f2a2f844ba54bcd0aba97c",
     "port": 8080,
-    "revision": null
+    "revision": "de5394cefd019f02b3fa706a60af8be2a354447c"
   },
   "ghcr.io/nchpg/mnist-cnn-cpp:main": {
     "digest": "sha256:64d15f30c87fdcb4774aed39f2bb99cedda84fd50c45f559b82ce6f31e9b8dc1",
