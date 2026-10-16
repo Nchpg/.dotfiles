@@ -23,7 +23,7 @@ jobs:
       - run: echo "code interne au dépôt, jobs self-hosted autorisés"
 
   fmt:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -36,7 +36,7 @@ jobs:
             | xargs -r0 nix fmt -- --check
 
   lint:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -72,7 +72,7 @@ jobs:
           exit $rc
 
   security:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: trusted
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -90,6 +90,7 @@ jobs:
           fail-mode: false
           nixpkgs-keys: nixpkgs-stable,nixpkgs-unstable
 
+  # Seul job sur le runner self-hosted : il évalue les configs, donc lit le dépôt de secrets privé.
   flake-check:
     runs-on: self-hosted
     needs: trusted
