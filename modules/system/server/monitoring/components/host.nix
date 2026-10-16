@@ -28,7 +28,7 @@ let
   fsSelector = ''fstype!~"tmpfs|ramfs|overlay|nsfs|squashfs|fuse.*",mountpoint!="/nix/store"'';
 
   # Timers quotidiens seulement : les hebdomadaires demanderaient un autre seuil.
-  timersSurveilles = ''node_systemd_timer_last_trigger_seconds{name=~"nixos-upgrade.timer|acme-.+"}'';
+  timersSurveilles = ''node_systemd_timer_last_trigger_seconds{name=~"gitops-reboot.timer|acme-.+"}'';
 
   seuilTemperature = "0.9 * node_hwmon_temp_crit_celsius";
 in

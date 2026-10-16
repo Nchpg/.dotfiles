@@ -87,6 +87,28 @@
         "url": "https://github.com/sadjow/claude-code-nix"
       }
     },
+    "comin": {
+      "inputs": {
+        "flake-compat": "flake-compat",
+        "nixpkgs": [
+          "nixpkgs-stable"
+        ],
+        "treefmt-nix": "treefmt-nix"
+      },
+      "locked": {
+        "lastModified": 1791828108,
+        "narHash": "sha256-K8jtZcj51AvvLJNXZJV4hShG7+U/1iwyUwRru5Zt9sQ=",
+        "owner": "nlewo",
+        "repo": "comin",
+        "rev": "aad3bfa91975a31abaabc51a7ccaed3fddd910f3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nlewo",
+        "repo": "comin",
+        "type": "github"
+      }
+    },
     "firefox-gnome-theme": {
       "flake": false,
       "locked": {
@@ -100,6 +122,22 @@
       "original": {
         "owner": "rafaelmardojai",
         "repo": "firefox-gnome-theme",
+        "type": "github"
+      }
+    },
+    "flake-compat": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1765121682,
+        "narHash": "sha256-4VBOP18BFeiPkyhy9o4ssBNQEvfvv1kXkasAYd0+rrA=",
+        "owner": "NixOS",
+        "repo": "flake-compat",
+        "rev": "65f23138d8d09a92e30f1e5c87611b23ef451bf3",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "flake-compat",
         "type": "github"
       }
     },
@@ -246,6 +284,22 @@
         "type": "github"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1770107345,
+        "narHash": "sha256-tbS0Ebx2PiA1FRW8mt8oejR0qMXmziJmPaU1d4kYY9g=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "4533d9293756b63904b7238acb84ac8fe4c8c2c4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "nur": {
       "inputs": {
         "flake-parts": [
@@ -274,6 +328,7 @@
     "root": {
       "inputs": {
         "claude-code": "claude-code",
+        "comin": "comin",
         "home-manager": "home-manager",
         "nix-index-database": "nix-index-database",
         "nixpkgs-stable": "nixpkgs-stable",
@@ -291,11 +346,11 @@
     "secrets": {
       "flake": false,
       "locked": {
-        "lastModified": 1791907226,
-        "narHash": "sha256-t/fq77IHLHvEFrXarUHl9tLmTb5JA0g7xUSjzPHdqm8=",
+        "lastModified": 1792165878,
+        "narHash": "sha256-sPUa8qPMQeKQWYZd/c7tCPwrYZ1KFxzVWAkccnEG1nQ=",
         "owner": "Nchpg",
         "repo": "secrets",
-        "rev": "25bf6746438d918ef718adbb8105b6a033be8b83",
+        "rev": "47bfb08c018b019836f586fab71a346687fc8f50",
         "type": "github"
       },
       "original": {
@@ -485,6 +540,24 @@
       "original": {
         "owner": "tinted-theming",
         "repo": "base16-zed",
+        "type": "github"
+      }
+    },
+    "treefmt-nix": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1770228511,
+        "narHash": "sha256-wQ6NJSuFqAEmIg2VMnLdCnUc0b7vslUohqqGGD+Fyxk=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "337a4fe074be1042a35086f15481d763b8ddc0e7",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
         "type": "github"
       }
     }

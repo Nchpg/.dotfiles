@@ -1,5 +1,8 @@
 { ... }:
 
+let
+  domain = import ./domain.nix;
+in
 {
   imports = [
     ./network.nix
@@ -47,6 +50,7 @@
 
       proxy = {
         enable = true;
+        inherit domain;
         # Pas d'adresse : Let's Encrypt n'envoie plus d'avis d'expiration (juin 2025).
         acmeEmail = null;
       };
@@ -57,10 +61,10 @@
       # sinon l'évaluation échoue.
       datadog.enable = true;
 
-      # URL distante à dessein : le dépôt local de think peut être en retard.
-      autoUpgrade = {
+      # Chaque commit sur main est en production dans la minute ; essai sans persistance : branche `testing-server-think`.
+      gitops = {
         enable = true;
-        flake = "github:Nchpg/.dotfiles#server-think";
+        url = "https://github.com/Nchpg/.dotfiles.git";
       };
     };
   };
