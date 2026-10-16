@@ -5,9 +5,9 @@
     "revision": "de5394cefd019f02b3fa706a60af8be2a354447c"
   },
   "ghcr.io/nchpg/mnist-cnn-cpp:main": {
-    "digest": "sha256:64d15f30c87fdcb4774aed39f2bb99cedda84fd50c45f559b82ce6f31e9b8dc1",
+    "digest": "sha256:29bb9b3f63edf6581d11f4cda5c9bfc06e7486737f745df6f4f9b6d0a59d53b5",
     "port": 8080,
-    "revision": null
+    "revision": "8967240bc0b42e4dd895e37e9584523f261a7d12"
   },
   "ghcr.io/nchpg/myetf:main": {
     "digest": "sha256:4fbfd4c90f69ed23c30644b24a7a920696839453f444a13eb5fa528f18b75115",
