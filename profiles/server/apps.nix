@@ -52,14 +52,6 @@ in
         frontend = {
           image = "rlkart-frontend:main";
           dependsOn = [ "backend" ];
-
-          # Pour l'ancienne image (nginx officiel, root). À retirer une fois épinglée
-          # celle en nginx-unprivileged (8080, sans root).
-          capabilities = [
-            "CHOWN"
-            "SETUID"
-            "SETGID"
-          ];
         };
 
         backend.image = "rlkart-backend:main";
@@ -77,9 +69,6 @@ in
     mnist = {
       container = {
         image = "mnist-cnn-cpp:main";
-        # Pour l'ancienne image, sans utilisateur déclaré. À retirer une fois épinglée
-        # celle qui fait `USER app`.
-        user = "1000:1000";
         memory = "256m";
       };
 
