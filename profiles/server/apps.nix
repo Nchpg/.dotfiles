@@ -106,9 +106,6 @@ in
       container = {
         image = "stage:main";
 
-        # nchpg:users, pour que le JSON déposé sur le host se lise sans sudo.
-        user = "1000:100";
-
         # Next au repos tient dans une centaine de Mo ; la marge couvre l'export d'une archive.
         memory = "512m";
 
