@@ -182,9 +182,11 @@ lundi rattrapent : ils lisent les mêmes tags.
 qu'elle réponde (2 min au plus) puis poste sur le webhook Discord des alertes :
 lien, commit, code HTTP. Une app qui ne répond pas est annoncée avec ⚠️.
 
-## Dépôt privé
+## App privée
 
-Une app déclarée dans `${inputs.secrets}/think.nix` (aujourd'hui `stage`) n'est
-pas dans le lock public, pour ne pas en révéler l'existence. Sa CI publie
-l'image en `:latest` ; think ne la surveille pas, et son digest se reporte à la main dans le
-dépôt de secrets.
+Une app dont le dépôt est privé (stage, MyETF) se déclare comme les autres. Son
+package ghcr reste privé : la CI le crée privé et refuse de publier s'il est passé
+en public. Le lock public n'en montre que le nom et les digests ; l'image ne se
+télécharge qu'avec le jeton `ghcr/token`, que think utilise pour la tirer et la
+surveiller. Domaine, appareils admis et secrets (sops) ne révèlent rien de plus
+que pour les autres apps.
