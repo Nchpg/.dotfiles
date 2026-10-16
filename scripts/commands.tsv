@@ -2,9 +2,6 @@
 # séparés par des TABULATIONS :
 #   cmd  <nom>  <description>
 #   ex   <nom>  <ligne de commande>  <explication>
-# Dans l'ordre du menu. `<…>` dans une ligne d'exemple = valeur demandée à
-# l'exécution (gum input). Une commande absente du système (`theme` sans
-# Stylix) est masquée par `dots` lui-même.
 cmd	rebuild	reconstruit et active le système
 ex	rebuild	rebuild	rebuild de la cible de ce système
 ex	rebuild	rebuild -u	update (au choix) puis rebuild

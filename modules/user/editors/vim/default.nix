@@ -20,7 +20,6 @@ in
     programs.vim = {
       enable = true;
 
-      # Plugins gérés par Nix
       plugins =
         with cfg.pkgs.vimPlugins;
         [
@@ -34,7 +33,6 @@ in
           nerdtree
           coc-nvim
         ]
-        # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
         ++ lib.optional config.userSettings.editors.wakatime.enable vim-wakatime;
 
       extraConfig = ''
@@ -42,9 +40,7 @@ in
         execute 'set runtimepath+=' . expand('~/.vim/airline')
 
         ${
-          # base16-stylix est ÉCRIT par le target stylix : sans stylix dans
-          # cette session, le fichier n'existe pas et vim s'ouvre sur un E185
-          # à chaque lancement. Repli sur le plugin gruvbox, déjà installé.
+          # base16-stylix absent sans stylix (E185) : repli gruvbox.
           if config.userSettings.stylix.enable then
             ''
               colorscheme base16-stylix
@@ -68,13 +64,9 @@ in
     home.packages =
       with cfg.pkgs;
       [
-        # for coc-nvim
         nodejs
-
-        # font for vim-airline
         powerline-fonts
       ]
-      # language servers (communs avec neovim)
       ++ myLib.packaging.editorLspPackages cfg.pkgs;
 
     home.file = {

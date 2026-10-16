@@ -8,8 +8,7 @@
 let
   cfg = config.systemSettings.ollama;
 
-  # Port public (celui que vise le client `ollama` par défaut) tenu par un
-  # socket systemd ; le vrai serveur écoute à côté, lancé au premier appel.
+  # Le socket systemd tient le port public (défaut du client) ; le serveur écoute à côté.
   publicPort = 11434;
   backendPort = 11435;
 in
@@ -26,21 +25,14 @@ in
       port = backendPort;
       package = pkgs-unstable.ollama-vulkan;
       environmentVariables = {
-        # Offload sur l'iGPU Arc via Vulkan. Le driver xe peut geler le compute
-        # (TLB fence timeouts) : si ollama freeze à "warming up", retirer cette
-        # ligne (fallback CPU) ou repasser en i915 (cf. intel-graphics).
+        # Si ollama gèle à "warming up" (driver xe), retirer cette ligne ou repasser en i915.
         OLLAMA_IGPU_ENABLE = "1";
       };
     };
 
-    # Démarré à la demande plutôt qu'au boot : le socket écoute sur le port
-    # public, le proxy lance ollama au premier appel et s'arrête après 15 min
-    # sans connexion, ce qui arrête ollama avec lui (StopWhenUnneeded).
     systemd.services.ollama = {
       wantedBy = lib.mkForce [ ];
       unitConfig.StopWhenUnneeded = true;
-      # Le proxy relaie dès que ollama est « démarré » : attendre que le port
-      # réponde vraiment, sinon la première requête tombe dans le vide.
       serviceConfig.ExecStartPost = pkgs-unstable.writeShellScript "ollama-wait-ready" ''
         for _ in $(seq 1 100); do
           (exec 3<>/dev/tcp/127.0.0.1/${toString backendPort}) 2>/dev/null && exit 0

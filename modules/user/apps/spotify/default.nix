@@ -10,10 +10,8 @@
 let
   cfg = config.userSettings.apps.spotify;
 
-  # Paquets spicetify (extensions / thèmes) pour la plateforme courante.
   spicePkgs = inputs.spicetify-nix.legacyPackages.${cfg.pkgs.stdenv.hostPlatform.system};
 
-  # base16 renvoie du hex sans '#', format attendu par color.ini.
   c = myLib.theme.schemeColors { inherit config themes; };
   stylixColorScheme = {
     text = c.base05;
@@ -33,10 +31,7 @@ let
     notification-error = c.base08;
     misc = c.base03;
   };
-  # Adblock niveau RÉSEAU (LD_PRELOAD), pas dans nixpkgs. Contrairement aux
-  # extensions spicetify qui manipulent le player (et cassaient la lecture de
-  # certaines pistes), il bloque juste les domaines de pub.
-  # Version + hashes épinglés automatiquement par update.sh
+
   adblockPinned = builtins.fromJSON (builtins.readFile ./pinned.json);
   spotifyAdblock = cfg.pkgs.rustPlatform.buildRustPackage {
     pname = "spotify-adblock";
@@ -47,8 +42,7 @@ let
       rev = "v${adblockPinned.version}";
       inherit (adblockPinned) hash;
     };
-    doCheck = false; # pas de tests amont
-    # cdylib -> on installe le .so et la config nous-mêmes.
+    doCheck = false;
     installPhase = ''
       runHook preInstall
       install -Dm644 target/*/release/libspotifyadblock.so $out/lib/libspotifyadblock.so
@@ -124,16 +118,10 @@ in
       '';
     };
 
-    tray.enable = lib.mkEnableOption ''
-      indicateur SNI maison pour Spotify (icône de tray native, visible dans
-      waybar quand Spotify tourne). Contourne l'absence de tray du client
-      officiel via libayatana-appindicator (vrai StatusNotifierItem, contrairement
-      à spotify-tray qui ne fait que du XEmbed invisible sous Sway)'';
+    tray.enable = lib.mkEnableOption "indicateur SNI maison pour Spotify (libayatana-appindicator, visible dans waybar)";
   };
 
   config = lib.mkIf cfg.enable {
-    # La lib d'adblock n'est injectée (LD_PRELOAD) que par le lanceur du tray :
-    # sans lui, sa config est déployée mais Spotify démarre sans bloqueur.
     warnings = lib.optional (cfg.adblock && !cfg.tray.enable) ''
       userSettings.apps.spotify.adblock n'a aucun effet sans
       userSettings.apps.spotify.tray.enable : la bibliothèque n'est chargée
@@ -144,14 +132,13 @@ in
       enable = true;
       spotifyPackage = cfg.pkgs.spotify;
 
-      enabledExtensions = [ ]; # adblock fait par spotify-adblock, pas spicetify
+      enabledExtensions = [ ];
     }
     // lib.optionalAttrs (cfg.theme != "") {
       theme = spicePkgs.themes.${cfg.theme};
       customColorScheme = lib.mkIf cfg.stylixColors stylixColorScheme;
     };
 
-    # Pas de démon au login : lancé à l'ouverture de Spotify (comme Teams).
     home.packages = lib.mkIf cfg.tray.enable [ spotifyTray ];
 
     xdg.desktopEntries = lib.mkIf cfg.tray.enable {

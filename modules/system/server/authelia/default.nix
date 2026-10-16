@@ -6,17 +6,6 @@
   ...
 }:
 
-# Portail d'authentification devant les services publiés par le tunnel :
-# équivalent auto-hébergé de Cloudflare Access. nginx interroge Authelia
-# (`auth_request`) avant de servir quoi que ce soit, et redirige vers le portail
-# si la session manque.
-#
-# À savoir avant de s'y fier : Authelia n'a JAMAIS eu d'audit de sécurité
-# indépendant. Son historique est bon — sept avis depuis 2021, surtout de
-# gravité faible — mais le seul classé High, en 2021, était un contournement
-# d'authentification spécifique à l'intégration nginx. D'où le parti pris de
-# reprendre l'extrait officiel du projet sans rien improviser : la fragilité est
-# là, pas dans Authelia lui-même.
 let
   cfg = config.systemSettings.authelia;
   inherit (cfg) port;
@@ -25,19 +14,12 @@ let
 
   instanceDir = "/var/lib/authelia-main";
 
-  # Fichier d'utilisateurs VIVANT, qu'Authelia peut réécrire, par opposition à
-  # celui de sops qui est en lecture seule.
   liveUsers = "${instanceDir}/users.yml";
   seedUsers = config.sops.secrets."authelia/users".path;
 
-  # Au sens strict : le domaine lui-même ou un de ses sous-domaines. Un simple
-  # `hasSuffix` accepterait `malexemple.fr` sous `exemple.fr`.
+  # Le domaine lui-même ou un sous-domaine (hasSuffix seul accepterait `malexemple.fr`).
   isUnder = domain: host: host == domain || lib.hasSuffix ".${domain}" host;
 
-  # En-têtes transmis à Authelia, À LA MAIN, par le point de contrôle comme par
-  # le vhost du portail : `recommendedProxySettings` est coupé aux deux endroits
-  # (cf. plus bas pour pourquoi). Mêmes valeurs que la liste recommandée, moins
-  # `X-Forwarded-For`, que chacun pose lui-même à `$remote_addr`.
   forwardedHeaders = ''
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
@@ -45,77 +27,29 @@ let
     proxy_set_header X-Forwarded-Host $host;
   '';
 
-  # Point de contrôle interrogé par nginx avant de servir. Chaque en-tête ci-
-  # dessous porte une décision de sécurité, et le bloc est identique pour tous
-  # les services protégés : il vit ici plutôt que recopié dans chaque module.
   authzLocation = {
     proxyPass = "http://127.0.0.1:${toString cfg.port}/api/authz/auth-request";
 
-    # COUPÉ, pour la même raison que sur le vhost du portail plus bas, sauf
-    # qu'ici l'enjeu n'est pas le journal mais la DÉCISION D'ACCÈS.
-    #
-    # La liste recommandée pose `X-Forwarded-For $proxy_add_x_forwarded_for`, et
-    # nginx n'écrase pas un `proxy_set_header` par un autre de même nom : il
-    # émet l'en-tête DEUX FOIS. Authelia lit le premier, donc tout tenait à
-    # l'ordre dans lequel le module nginx de nixpkgs rend la location — il place
-    # `extraConfig` avant l'include, ce qui met par chance la bonne valeur
-    # devant. Vérifié sur la configuration construite.
-    #
-    # C'est un détail cosmétique amont que personne ne garde. S'il s'inverse, la
-    # première entrée devient celle que l'appelant a envoyée, et les règles
-    # `networks:` — donc le contournement du portail depuis le LAN et le VPN —
-    # deviennent forgeables par un simple en-tête à travers le tunnel. On ne
-    # laisse pas une décision d'autorisation reposer là-dessus.
-    #
-    # Les en-têtes que l'include apportait et qui servent encore sont réécrits
-    # ci-dessous. `X-Forwarded-Server` est le seul abandonné : Authelia ne le lit
-    # nulle part.
+    # La liste recommandée ajoute un second X-Forwarded-For, qu'Authelia lirait en premier.
     recommendedProxySettings = false;
 
     extraConfig = ''
       internal;
-      # Sans ça, le point de contrôle s'interrogerait lui-même : la directive
-      # auth_request du bloc server est héritée par toutes les locations,
-      # celle-ci comprise.
+      # Sinon le point de contrôle s'interrogerait lui-même (auth_request est hérité).
       auth_request off;
 
-      # Repris tels quels de la liste recommandée qu'on vient de couper, aux
-      # mêmes valeurs : sans `Host`, nginx annoncerait `127.0.0.1:9091` à
-      # Authelia. Aucun des trois ne décide de quoi que ce soit ici, la décision
-      # se joue sur X-Original-URL et X-Forwarded-For.
       ${forwardedHeaders}
       proxy_set_header X-Original-Method $request_method;
       proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
 
-      # PIÈCE MAÎTRESSE de la distinction local/public : Authelia décide de ses
-      # règles `networks:` d'après cet en-tête, et `$remote_addr` est l'adresse
-      # TCP réelle du pair, que le client ne peut pas fabriquer.
-      #
-      # C'est l'inverse du `$proxy_add_x_forwarded_for` habituel, qui CONCATÈNE
-      # et laisserait n'importe qui annoncer une adresse du LAN pour obtenir le
-      # contournement. Ne pas remplacer l'un par l'autre.
-      #
-      # Et surtout : ne pas laisser un SECOND `proxy_set_header X-Forwarded-For`
-      # apparaître dans cette location. nginx n'écrase pas, il émet l'en-tête
-      # autant de fois qu'il est déclaré, et Authelia lit le premier. C'est
-      # exactement ce que faisait la liste recommandée, d'où le
-      # `recommendedProxySettings = false` plus haut.
+      # Base des règles `networks:` : $remote_addr n'est pas falsifiable.
+      # Ne jamais le remplacer par $proxy_add_x_forwarded_for ni déclarer un
+      # second X-Forwarded-For ici (nginx émet l'en-tête autant de fois).
       proxy_set_header X-Forwarded-For $remote_addr;
 
-      # En-tête Authorization VIDÉ pour la sous-requête, et c'est essentiel :
-      # Authelia honore l'authentification basique sur ce point d'entrée, donc
-      # il voit l'en-tête que le client destinait à l'application, cherche ce
-      # compte dans SON fichier d'utilisateurs et répond 401. Symptôme observé
-      # sur Nextcloud : « failed to retrieve user details for user admin: user
-      # not found » côté Authelia, et un 401 inexplicable côté navigateur.
-      #
-      # Vider l'en-tête ICI n'affecte que la sous-requête : la requête
-      # principale le transmet intact à l'application, qui reste seule juge de
-      # ses propres identifiants.
+      # Sinon Authelia lit l'auth basique de l'application et répond 401.
       proxy_set_header Authorization "";
 
-      # La décision ne dépend jamais du corps de la requête : ne pas le
-      # transmettre évite d'envoyer chaque téléversement à Authelia.
       proxy_set_header Content-Length "";
       proxy_pass_request_body off;
     '';
@@ -130,44 +64,22 @@ in
       default = null;
       example = "exemple.fr";
       description = ''
-        Domaine porteur du cookie de session. Il doit être un PARENT commun du
-        portail et de tous les services protégés, sinon le cookie posé par le
-        portail n'accompagne pas les requêtes vers le service et l'utilisateur
-        boucle indéfiniment sur la page de connexion.
-
-        À prendre le plus ÉTROIT possible en principe : un cookie de session est
-        transmis au domaine et à tous ses sous-domaines, donc le poser sur la
-        racine l'envoie aussi au site public et à tout ce qui y sera hébergé.
-
-        MAIS le resserrer suppose de loger le portail un cran plus bas
-        (auth.cloud.exemple.fr), et ça ne marche PAS derrière le plan gratuit de
-        Cloudflare : son certificat Universal SSL ne couvre que `*.exemple.fr` et
-        un joker DNS ne vaut que pour un niveau. Leur edge ne présente alors
-        aucun certificat valide et la connexion échoue avant d'atteindre le
-        tunnel ; couvrir deux niveaux exige Advanced Certificate Manager, payant.
+        Domaine porteur du cookie de session : parent commun du portail et des
+        services protégés.
       '';
     };
 
     port = lib.mkOption {
       type = lib.types.port;
       default = 9091;
-      description = ''
-        Port de bouclage d'Authelia, jamais joint directement de l'extérieur :
-        seuls nginx (pour `auth_request`) et le vhost du portail s'y adressent.
-        Exposé en option pour que les modules protégés le reprennent d'ici
-        plutôt que de le réécrire en dur.
-      '';
+      description = "Port de bouclage d'Authelia (nginx uniquement).";
     };
 
     portalHost = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
       example = "auth.exemple.fr";
-      description = ''
-        Nom du portail. Il doit être publié par le tunnel au même titre que les
-        services protégés : la redirection d'authentification se produit dans le
-        navigateur du visiteur, qui doit donc pouvoir l'atteindre.
-      '';
+      description = "Nom du portail, à publier par le tunnel comme les services protégés.";
     };
 
     defaultRedirect = lib.mkOption {
@@ -175,11 +87,7 @@ in
       default = null;
       example = "https://cloud.exemple.fr";
       description = ''
-        Où envoyer quelqu'un qui s'authentifie sans destination connue : arrivée
-        directe sur le portail, et surtout retour d'un lien d'enrôlement du
-        second facteur, qui ne transporte pas le paramètre `rd` de la requête
-        d'origine. Sans ce réglage, on reste bloqué sur le portail après une
-        authentification pourtant réussie.
+        Destination après authentification sans `rd` connu.
       '';
     };
 
@@ -187,23 +95,8 @@ in
       type = lib.types.bool;
       default = false;
       description = ''
-        Laisse Authelia RÉÉCRIRE son fichier d'utilisateurs, ce qui active le
-        changement et la réinitialisation de mot de passe depuis le portail.
-
-        Sans ça, le fichier vient de sops et vit en lecture seule : les mots de
-        passe sont figés et personne ne peut changer le sien.
-
-        Avec, sops ne fait plus que SEMER — tout compte déclaré et absent du
-        fichier vivant y est ajouté, les entrées existantes ne sont jamais
-        touchées. C'est la sémantique de `mutableUsers` de NixOS pour les comptes
-        système. Le champ `password` peut alors être omis : le semeur en génère
-        un aléatoire que personne ne lit, et la personne entre par « mot de passe
-        oublié ».
-
-        DEUX CONSÉQUENCES à assumer. Le fichier vivant devient un état hors du
-        dépôt, contenant les hachages de tout le monde, donc à sauvegarder. Et
-        RETIRER quelqu'un de sops ne le supprime plus : la révocation cesse
-        d'être déclarative et demande d'éditer le fichier vivant à la main.
+        Laisse Authelia réécrire son fichier d'utilisateurs ; sops ne sème que
+        les comptes absents, et en retirer un ne le révoque plus.
       '';
     };
 
@@ -216,12 +109,7 @@ in
         "trace"
       ];
       default = "info";
-      description = ''
-        Verbosité du journal. `info` ne trace que les échecs, ce qui rend
-        invisible tout ce qui réussit — passer en `debug` le temps de reproduire
-        un problème, puis revenir. `trace` consigne jusqu'au contenu des
-        requêtes, en-têtes d'authentification compris.
-      '';
+      description = "Verbosité du journal. `trace` consigne les en-têtes d'authentification.";
     };
 
     rules = lib.mkOption {
@@ -234,9 +122,7 @@ in
         }
       ];
       description = ''
-        Règles de contrôle d'accès, dans l'ordre : la première qui correspond
-        gagne. La politique par défaut est `deny`, donc tout service protégé doit
-        avoir sa règle ici.
+        Règles de contrôle d'accès, la première qui correspond gagne. Défaut : `deny`.
       '';
     };
 
@@ -245,35 +131,8 @@ in
       readOnly = true;
       default = {
         extraConfig = ''
-          # SEGMENTS « .. » REFUSÉS, et ce n'est pas une précaution de style :
-          # sans cette ligne, une règle `resources` peut être contournée.
-          #
-          # Authelia décide d'après `X-Original-URL`, construit sur
-          # `$request_uri` — l'URI BRUTE, telle que le client l'a envoyée.
-          # nginx, lui, sert `$uri`, la version NORMALISÉE : les `%XX` y sont
-          # décodés et les `..` résolus. Les deux divergent, et c'est
-          # exploitable. Vérifié sur un nginx réel :
-          #
-          #   GET /apps/files_sharing/../../remote.php/dav/files/x
-          #     $request_uri = /apps/files_sharing/../../remote.php/dav/files/x
-          #     $uri         = /remote.php/dav/files/x
-          #
-          # Un contournement portant sur `^/apps/files_sharing/` correspond donc
-          # à la première ligne, et nginx sert la seconde : le WebDAV par compte,
-          # que ce montage refuse justement d'exposer. La variante encodée
-          # `%2e%2e` passe pareil, nginx décodant avant de normaliser.
-          #
-          # On ne peut pas répondre en donnant `$uri` à Authelia : pour un
-          # service atteint par `proxy_pass`, nginx transmet l'URI brute au
-          # backend, et la décision cesserait alors de décrire ce qui est
-          # vraiment servi. On refuse donc la requête, ce qui aligne les deux par
-          # le haut. Aucun client légitime n'émet un segment « .. » : ni un
-          # navigateur, qui normalise avant d'envoyer, ni un client WebDAV, « . »
-          # et « .. » étant des noms réservés qu'aucun fichier ne porte.
-          #
-          # Le motif exige que les points forment un segment ENTIER. Un nom de
-          # fichier comme `mes..photos.jpg` passe donc sans encombre — vérifié
-          # lui aussi, avec les variantes encodées.
+          # Authelia décide d'après $request_uri (brute), nginx sert $uri (normalisée) :
+          # un segment « .. » contournerait une règle `resources`.
           if ($request_uri ~* "(?:^|/|%2f)(?:\.|%2e){2}([/?]|%2f|\z)") {
             return 400;
           }
@@ -285,14 +144,8 @@ in
       };
       defaultText = lib.literalExpression "le point de contrôle et sa directive auth_request";
       description = ''
-        SOCLE à fusionner dans le vhost d'un service à protéger : la directive
-        `auth_request` et le point de contrôle interne qu'elle interroge.
-
-        Volontairement SANS politique sur le 401 : c'est la seule pièce qui
-        diffère d'un service à l'autre, et se tromper là ouvre ou casse le
-        service en silence. Un service dont l'application n'émet jamais de 401
-        elle-même prendra plutôt `nginxProtect`, qui ajoute la redirection.
-        Nextcloud ne le peut pas, son WebDAV répondant lui-même 401.
+        Socle à fusionner dans le vhost d'un service protégé : `auth_request` et
+        le point de contrôle interne.
       '';
     };
 
@@ -301,20 +154,12 @@ in
       readOnly = true;
       default = {
         extraConfig = config.systemSettings.authelia.nginxAuthRequest.extraConfig + ''
-          # Statut de la SOUS-REQUÊTE, seul moyen de distinguer un refus
-          # d'Authelia d'un code que l'application produit elle-même.
           auth_request_set $auth_status $upstream_status;
 
           error_page 401 = @authelia_401;
           error_page 403 = @authelia_403;
         '';
         locations = config.systemSettings.authelia.nginxAuthRequest.locations // {
-          # Le 401 ne peut PAS être réécrit en 302 sans discernement. Authelia
-          # joint un en-tête Location quand il refuse, et il faut rediriger ;
-          # mais l'application derrière peut répondre 401 pour ses propres
-          # raisons — une SPA qui interroge son API sans session, un client
-          # WebDAV — et `$redirection_url` est alors vide. Rediriger quand même
-          # produirait un 302 avec un Location VIDE, que rien ne sait suivre.
           "@authelia_401".extraConfig = ''
             internal;
             auth_request off;
@@ -326,14 +171,7 @@ in
             return 401;
           '';
 
-          # Refus après authentification : le compte est connu mais aucune règle
-          # ne l'autorise, donc `default_policy = deny`. Sans cette page, nginx
-          # sert son 403 brut, qui ne dit pas à la personne que son compte est
-          # simplement hors périmètre.
-          #
-          # Conditionné à `$auth_status` pour la même raison que ci-dessus : un
-          # 403 émis par l'application ne doit pas être remplacé par une page qui
-          # parlerait d'autorisation Authelia.
+          # Conditionné à $auth_status pour ne pas masquer un 403 applicatif.
           "@authelia_403".extraConfig = ''
             internal;
             auth_request off;
@@ -362,18 +200,8 @@ in
       };
       defaultText = lib.literalExpression "nginxAuthRequest, plus le traitement des refus 401 et 403";
       description = ''
-        Fragment de vhost COMPLET : le socle, la redirection vers le portail sur
-        un refus d'Authelia, et une page lisible quand le compte est authentifié
-        mais hors périmètre.
-
-        Les deux traitements sont CONDITIONNELS, et c'est ce qui les rend
-        réutilisables : ils ne s'appliquent qu'aux codes venus d'Authelia, jamais
-        à ceux de l'application derrière.
-
-        Nextcloud n'emploie pas cette option : ses réponses 401 doivent en plus
-        réémettre les en-têtes de sécurité que le module amont pose sur le vhost,
-        un `add_header` de location remplaçant toute la liste du parent. Il part
-        donc de `nginxAuthRequest`.
+        Fragment de vhost complet : le socle, la redirection vers le portail
+        sur refus d'Authelia et une page pour le compte hors périmètre.
       '';
     };
   };
@@ -385,9 +213,6 @@ in
         message = "systemSettings.authelia : domain (parent commun pour le cookie) et portalHost (nom du portail) sont requis.";
       }
       {
-        # Toutes les assertions s'évaluent, y compris quand une précédente
-        # échoue : le garde sur null évite une erreur d'éval opaque à la place
-        # du message ci-dessus.
         assertion = cfg.domain == null || cfg.portalHost == null || isUnder cfg.domain cfg.portalHost;
         message = "systemSettings.authelia : portalHost doit être sous domain, sinon le cookie de session ne lui sera jamais envoyé.";
       }
@@ -397,42 +222,23 @@ in
       }
     ];
 
-    # Valeurs à générer avec `openssl rand -hex 32`, une par secret, JAMAIS la
-    # même : elles protègent des choses différentes.
-    #
-    # `restartUnits` n'est PAS décoratif. Authelia lit ces fichiers une fois au
-    # démarrage et ne les surveille pas ; or un changement de secret ne modifie
-    # pas l'unité systemd, donc un rebuild régénère le fichier sans rien
-    # redémarrer. Ajouter un utilisateur restait alors sans effet et le portail
-    # répondait « user not found » sur un compte pourtant présent dans sops.
+    # restartUnits : Authelia lit ces fichiers au démarrage seulement.
     sops.secrets =
       lib.genAttrs
         [
           "authelia/jwt_secret"
           "authelia/storage_key"
-          # Chiffre le contenu des sessions, que Redis ne voit alors que comme des
-          # octets opaques. Requis dès lors qu'elles y sont stockées (ci-dessous).
           "authelia/session_secret"
-          # Fichier d'utilisateurs au format Authelia (mots de passe hachés en
-          # argon2id, générés par `authelia crypto hash generate argon2`).
           "authelia/users"
         ]
         (_: {
           owner = "authelia-main";
-          # Le semeur figure ici aussi : sans lui, ajouter un compte dans sops
-          # ne le recopierait pas dans le fichier vivant.
           restartUnits = [
             "authelia-main.service"
           ]
           ++ lib.optional cfg.mutableUsers "authelia-seed-users.service";
         });
 
-    # Instance Redis DÉDIÉE, et pas celle de Nextcloud : deux services qui
-    # partagent un Redis lisent et écrivent les clés l'un de l'autre, donc une
-    # faille dans Nextcloud donnerait accès aux sessions d'authentification,
-    # c'est-à-dire au moyen de contourner Authelia.
-    #
-    # Socket unix et pas TCP : rien n'écoute sur le réseau, même en local.
     services.redis.servers.authelia = {
       enable = true;
       port = 0;
@@ -440,16 +246,11 @@ in
       unixSocketPerm = 660;
     };
 
-    # `redis-authelia` pour le socket des sessions, `smtp` pour le mot de passe
-    # du relais.
     users.users.authelia-main.extraGroups = [
       "redis-authelia"
     ]
     ++ lib.optional mail.enable "smtp";
 
-    # Sème le fichier vivant depuis sops : ajoute ce qui manque, ne touche JAMAIS
-    # à ce qui existe. Un mot de passe posé par un utilisateur survit donc aux
-    # rebuilds, ce qui est tout l'objet de mutableUsers.
     systemd.services.authelia-seed-users = lib.mkIf cfg.mutableUsers {
       description = "Sème le fichier d'utilisateurs Authelia depuis sops";
       before = [ "authelia-main.service" ];
@@ -464,7 +265,6 @@ in
         User = "authelia-main";
         StateDirectory = "authelia-main";
       };
-      # Chemins posés en tête, le corps vit à côté (seed-users.sh).
       script = ''
         live=${lib.escapeShellArg liveUsers}
         seed=${lib.escapeShellArg seedUsers}
@@ -475,8 +275,7 @@ in
     services.authelia.instances.main = {
       enable = true;
 
-      # Par fichier et non en clair dans la configuration : celle-ci finit dans
-      # le store, lisible par tous les utilisateurs de la machine.
+      # Par fichier : la configuration finit dans le store.
       environmentVariables = lib.mkIf mail.enable {
         AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE = config.sops.secrets.${mail.passwordKey}.path;
       };
@@ -495,9 +294,6 @@ in
         log.level = cfg.logLevel;
 
         authentication_backend.file = {
-          # Le fichier vivant quand Authelia doit pouvoir le réécrire, celui de
-          # sops sinon. C'est ce seul chemin qui décide si le changement de mot
-          # de passe fonctionne : sur /run/secrets, l'écriture échoue.
           path = if cfg.mutableUsers then liveUsers else seedUsers;
           password.algorithm = "argon2";
         };
@@ -515,27 +311,13 @@ in
             )
           ];
 
-          # Sessions persistées : en mémoire, tout le monde se reconnecte à
-          # chaque redémarrage d'Authelia, donc à chaque rebuild qui le touche —
-          # y compris ceux que fait autoUpgrade la nuit.
           redis.host = config.services.redis.servers.authelia.unixSocket;
 
-          # Durées posées explicitement : les défauts d'Authelia (cinq minutes
-          # d'inactivité, une heure au total) visent un usage bureautique
-          # surveillé et redemandent le second facteur sans cesse.
-          #
-          # Le curseur se règle ici. Rallonger, c'est laisser une session ouverte
-          # plus longtemps sur un appareil qu'on peut se faire voler ;
-          # raccourcir, c'est finir par cocher « se souvenir de moi » partout, ce
-          # qui est pire.
           expiration = "12h";
           inactivity = "2h";
           remember_me = "1M";
         };
 
-        # Bannissement après échecs répétés, posé explicitement : c'est la seule
-        # protection contre la force brute sur le portail, désormais la porte
-        # d'entrée publique.
         regulation = {
           max_retries = 3;
           find_time = "2m";
@@ -544,16 +326,10 @@ in
 
         storage.local.path = "${instanceDir}/db.sqlite3";
 
-        # Par SMTP si un relais est configuré, sinon dans un fichier. L'écart
-        # n'est pas cosmétique : sans courrier, enrôler le second facteur de
-        # quelqu'un d'autre oblige à se connecter en SSH pour aller pêcher son
-        # lien dans ce fichier, puis à le lui transmettre.
         notifier =
           if mail.enable then
             {
               smtp = {
-                # Clé `address` et non host/port : depuis 4.38 Authelia attend
-                # une URL dont le schéma porte le mode de chiffrement.
                 address = mail.url;
                 username = mail.user;
                 sender = "Authelia <${mail.from}>";
@@ -565,24 +341,12 @@ in
         totp.issuer = cfg.domain;
 
         access_control = {
-          # Refus par défaut : un service publié dont on aurait oublié la règle
-          # est inaccessible, pas ouvert.
           default_policy = "deny";
           inherit (cfg) rules;
         };
       };
     };
 
-    # Le portail est publié par le tunnel : la redirection d'authentification
-    # se joue dans le navigateur du visiteur, qui doit pouvoir l'atteindre
-    # depuis l'extérieur. Raccourci du LAN aussi (`lanShortcut` suit `public`) :
-    # sans lui, s'authentifier depuis la maison fait sortir la requête jusqu'à
-    # l'edge pour redescendre par le tunnel, et une panne de box suffit à rendre
-    # le portail injoignable sur place.
-    #
-    # La sonde vise le point de santé d'Authelia, servi sans authentification
-    # par ce vhost. Il tombe si Redis ou le fichier d'utilisateurs sont
-    # inaccessibles — deux pannes qui ferment l'accès à TOUT le reste.
     systemSettings.proxy.sites = lib.optionalAttrs (cfg.portalHost != null) {
       ${cfg.portalHost} = {
         public = true;
@@ -591,13 +355,7 @@ in
     };
 
     services.nginx.virtualHosts.${cfg.portalHost} = myLib.server.mkTlsVhost {
-      # Journal à l'adresse réelle plutôt qu'à celle de la connexion TCP. Le
-      # portail est la porte d'entrée publique, donc l'endroit où arrivent les
-      # tentatives d'identifiants, et tout y était consigné comme venant de
-      # 127.0.0.1 puisque c'est cloudflared qui se connecte. Attribution
-      # seulement : la régulation d'Authelia compte par COMPTE, pas par adresse,
-      # elle ne dépend pas de cette ligne. Cf. le format dans
-      # modules/system/server/proxy.
+      # cloudflared se connecte depuis 127.0.0.1 : cf_combined journalise l'adresse réelle.
       extraConfig = ''
         access_log /var/log/nginx/access.log cf_combined;
       '';
@@ -605,21 +363,7 @@ in
       locations."/" = {
         proxyPass = "http://127.0.0.1:${toString port}";
 
-        # En-têtes écrits À LA MAIN, et `recommendedProxySettings` coupé pour
-        # cette location. La liste recommandée pose
-        # `X-Forwarded-For $proxy_add_x_forwarded_for`, qui CONCATÈNE la valeur
-        # envoyée par le client : Authelia, qui retient le premier élément,
-        # consignerait donc une adresse choisie par l'appelant.
-        #
-        # Et on ne peut pas se contenter d'ajouter la bonne ligne à côté :
-        # vérifié, deux `proxy_set_header` de même nom dans une même location
-        # émettent l'en-tête DEUX fois, et le premier gagne côté Authelia. Il
-        # faut donc remplacer la liste, pas la compléter.
-        #
-        # Ce vhost est aussi le vhost par DÉFAUT du port 443 (premier bloc
-        # déclaré, aucun `default_server` ailleurs), donc tout ce qui arrive avec
-        # un Host inconnu atterrit ici : c'est la surface la plus exposée du
-        # host, elle ne doit rien croire de ce que le client raconte.
+        # La liste recommandée concatène le X-Forwarded-For du client, qu'Authelia lirait en premier.
         recommendedProxySettings = false;
         extraConfig = ''
           proxy_http_version 1.1;

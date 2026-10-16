@@ -5,22 +5,18 @@
   ...
 }:
 
-# Thunar « éphémère » du clic sur la case disque de waybar : flottant, Échap
-# pour fermer, fermé à l'ouverture d'un fichier (cf. daemon.sh). Le clic
-# lance `package` (launcher.sh), le démon tourne en service user.
 let
   waybar = config.userSettings.windowManager.sway.waybar;
   cfg = waybar.thunarFloat;
   inherit (waybar) pkgs;
 
-  # swaymsg du sway système (patché), pas un second sway tiré de pkgs.
   swayPkg = osConfig.programs.sway.package;
 
   launcher = pkgs.writeShellApplication {
     name = "thunar-float";
     runtimeInputs = [
       pkgs.coreutils
-      swayPkg # swaymsg
+      swayPkg
       pkgs.thunar
     ];
     text = builtins.readFile ./launcher.sh;
@@ -29,7 +25,7 @@ let
     name = "thunar-float-daemon";
     runtimeInputs = [
       pkgs.coreutils
-      swayPkg # swaymsg
+      swayPkg
       pkgs.jq
     ];
     text = builtins.readFile ./daemon.sh;
@@ -37,7 +33,6 @@ let
 in
 {
   options.userSettings.windowManager.sway.waybar.thunarFloat = {
-    # Suit waybar : seul le clic sur sa case disque ouvre ce Thunar-là.
     enable = lib.mkEnableOption "Thunar éphémère du clic sur la case disque de waybar" // {
       default = waybar.enable;
     };

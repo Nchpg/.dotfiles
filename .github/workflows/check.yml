@@ -1,43 +1,20 @@
 name: check
 
-# push limité à main + weekly-update : les branches de PR sont déjà couvertes
-# par l'event pull_request (sinon chaque job tournait deux fois sur le runner).
-#
-# weekly-update est explicite parce que la PR hebdomadaire est ouverte par
-# create-pull-request avec le GITHUB_TOKEN par défaut — et GitHub ne déclenche
-# AUCUN workflow sur les événements produits par ce token (anti-boucle). Sans
-# cette branche listée ici, la PR de bump arrivait sans le moindre check, y
-# compris sur le build displaylink que le job `flake-check` surveille.
+# `weekly-update` explicite : sa PR est ouverte avec le GITHUB_TOKEN par défaut, dont les événements ne déclenchent aucun workflow.
 on:
   push:
     branches: [main, weekly-update]
   pull_request:
 
-# Un nouveau push sur la même branche/PR annule les runs obsolètes
-# (runner self-hosted : évite d'empiler des jobs devenus inutiles).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Moindre privilège : ce workflow ne fait que lire le repo (fmt/lint/build).
 permissions:
   contents: read
 
-# Runner SELF-HOSTED sur un dépôt PUBLIC : le job `trusted`, dont dépendent
-# tous les autres, est un garde de sécurité, pas une optimisation. Sans lui, n'importe qui peut
-# forker, glisser du Nix arbitraire (preBuild, import d'un dérivé malveillant…)
-# dans une PR, et le faire exécuter sur la machine perso — celle qui porte les
-# deux identités age qui ouvrent le dépôt de secrets, dont celle de compte, en
-# lecture directe sous cet utilisateur. On ne construit donc que du code déjà
-# présent dans le dépôt : push sur main/weekly-update, ou PR ouverte depuis
-# une branche interne. Les PR de forks n'exécutent RIEN (statut « skipped »)
-# et doivent être relues à la main avant d'être poussées sur une branche
-# interne. Ne retire ce garde qu'en basculant les jobs sur un runner jetable
-# (ubuntu-latest).
-#
-# Un seul `if:`, sur `trusted`, au lieu d'une copie par job : un job dont une
-# dépendance est sautée est sauté aussi. `trusted` tourne sur un runner GitHub
-# jetable et n'extrait rien : il ne fait que porter la condition.
+# `trusted` est un garde de sécurité : une PR de fork exécuterait du Nix arbitraire sur le runner self-hosted (identités age).
+# Ne retirer qu'avec un runner jetable.
 jobs:
   trusted:
     runs-on: ubuntu-latest
@@ -53,9 +30,6 @@ jobs:
 
       - uses: ./.github/actions/setup-nix
 
-      # Vérifie que tout est passé par `nix fmt` (le hook pre-commit le fait
-      # en local, ceci rattrape les commits faits avec --no-verify).
-      # hardware-configuration.nix est exclu (fichier généré).
       - name: check formatting
         run: |
           git ls-files -z '*.nix' ':!:*hardware-configuration.nix' \
@@ -69,44 +43,20 @@ jobs:
 
       - uses: ./.github/actions/setup-nix
 
-      # Anti-patterns Nix (lints désactivés : voir statix.toml, qui n'était
-      # jusqu'ici exécuté nulle part).
       - name: statix
         run: nix run nixpkgs#statix -- check .
 
-      # Code mort Nix (bindings inutilisés, arguments de pattern jamais lus).
-      # hardware-configuration.nix est exclu (fichier généré, comme pour fmt).
       - name: deadnix
         run: |
           git ls-files -z '*.nix' ':!:*hardware-configuration.nix' \
             | xargs -r0 nix run nixpkgs#deadnix -- --fail
 
-      # Anti-patterns shell (quoting, word-splitting...) sur tous les scripts
-      # du repo, jusque-là jamais vérifiés par un linter.
       - name: shellcheck
         run: |
           git ls-files -z '*.sh' '.githooks/*' \
             | xargs -r0 nix run nixpkgs#shellcheck --
 
-      # Les scripts shell référencent des fichiers du dépôt par chemin EN DUR
-      # (`$flake/modules/user/.../pinned.json`, `modules/.../extensions.json`).
-      # Ces chaînes sont invisibles pour Nix, statix, deadnix ET shellcheck :
-      # un déplacement de dossier les laisse derrière lui sans le moindre
-      # message — exactement le problème décrit dans lib/modules/option-enabled.nix,
-      # mais côté shell. Vécu : la réorg des modules a laissé
-      # `modules/user/vscode/extensions.json` dans vscode/update.sh (script
-      # mort en silence, extensions jamais bumpées) et dans
-      # gather-update-facts.sh (jq sortant en 2 sous `set -e`, donc workflow
-      # hebdomadaire entier en échec).
-      #
-      # On extrait tout littéral ressemblant à un chemin sous modules/ et on
-      # vérifie qu'il existe. Le grep tourne depuis la racine du dépôt, donc le
-      # préfixe `$flake/` des scripts tombe tout seul hors de la capture.
-      #
-      # Les lignes de COMMENTAIRE sont écartées (`^\s*#`, même ancrage que
-      # expiring-workarounds.sh) : la prose cite des chemins à titre d'exemple,
-      # parfois volontairement périmés — dont ceux du commentaire ci-dessus.
-      # Seul un chemin réellement CONSOMMÉ par du code doit être vérifié.
+      # Les chemins modules/… en dur dans les scripts échappent aux linters : on vérifie que chaque littéral existe.
       - name: chemins de modules en dur
         run: |
           rc=0
@@ -127,24 +77,17 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
-          # Historique complet : gitleaks scanne tous les commits, pas
-          # seulement le dernier (un secret committé puis retiré fuit quand même).
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-nix
 
-      # Détection de secrets en clair (les secrets sops chiffrés ne le
-      # déclenchent pas — vérifié).
       - name: gitleaks
         run: nix run nixpkgs#gitleaks -- detect --source . --no-banner --redact
 
-      # Santé du flake.lock : nixpkgs sur une branche supportée et pas trop
-      # vieux (donc patchs de sécu récents). Informatif, ne bloque pas.
       - name: flake lock health
         uses: DeterminateSystems/flake-checker-action@3164002371bc90729c68af0e24d5aacf20d7c9f6 # v12
         with:
           fail-mode: false
-          # Nos inputs nixpkgs ne s'appellent pas `nixpkgs` (défaut de l'action).
           nixpkgs-keys: nixpkgs-stable,nixpkgs-unstable
 
   flake-check:
@@ -158,12 +101,6 @@ jobs:
       - name: nix flake check
         run: nix flake check --no-build
 
-      # Construit réellement chaque nixosConfiguration (auto-découvertes, donc
-      # pas de liste en dur ici non plus) : contrairement à un --dry-run, ça
-      # attrape aussi les erreurs de BUILD (ex. hash de l'overlay displaylink
-      # cassé par un bump nixpkgs), pas seulement les erreurs d'éval. Bonus sur
-      # runner self-hosted : le store local est pré-rempli, le rebuild sur
-      # machine après merge est quasi instantané.
       - name: build all nixosConfigurations
         run: |
           for cfg in $(nix eval .#nixosConfigurations --apply builtins.attrNames --json | jq -r '.[]'); do
@@ -172,9 +109,6 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Idem côté devshells (auto-découverts depuis devshells/, cf. flake.nix) :
-      # attrape une régression dans un devShells.<system>.<nom> sans attendre
-      # qu'un `nix develop` échoue sur machine.
       - name: build all devShells
         run: |
           for name in $(nix eval .#devShells.x86_64-linux --apply builtins.attrNames --json | jq -r '.[]'); do
@@ -183,26 +117,7 @@ jobs:
             echo "::endgroup::"
           done
 
-      # Réalise TOUTES les fetchurl du registre de fonds d'écran
-      # (themes/wallpapers.nix). Les builds ci-dessus ne téléchargent
-      # que les fonds des thèmes ACTIFS : une URL morte, ou un contenu
-      # republié sous la même URL, ne se découvrirait qu'en sélectionnant le
-      # thème concerné. `--keep-going` pour lister TOUS les fonds cassés d'un
-      # coup au lieu de s'arrêter au premier.
-      #
-      # Non bloquant (comme flake lock health) : ces 56 URLs sont tierces et
-      # éphémères, un fond retiré en amont ne doit pas bloquer un merge qui
-      # n'a rien à voir. L'annotation suffit à savoir quoi corriger.
-      #
-      # ⚠️ PORTÉE RÉELLE : ne revérifie RIEN tant que les fonds sont déjà dans
-      # le store du runner — une FOD réalisée n'est jamais retéléchargée, donc
-      # son hash n'est jamais recontrôlé. Sur Serv, qui n'a pas de GC, cette
-      # étape rend la main en 1 s sans rien faire. Elle ne redeviendra un vrai
-      # contrôle qu'une fois `nix.gc` actif (hérité de modules/system après la
-      # migration NixOS), quand les fonds non référencés seront collectés.
-      # Conservée telle quelle : elle coûte 1 s et se réactivera seule.
-      # Le seul contrôle fiable d'une FOD est celui qui télécharge SANS
-      # consulter le store — cf. modules/user/editors/vscode/update.sh.
+      # Non bloquant : URLs tierces.
       - name: build all wallpapers
         continue-on-error: true
         run: nix build .#wallpapers-all --no-link --keep-going

@@ -9,19 +9,16 @@ let
   cfg = config.userSettings.tui.task;
   py = cfg.pkgs.python3Packages;
 
-  # Version + hash épinglés automatiquement par update.sh
   pinned = builtins.fromJSON (builtins.readFile ./pinned.json);
 
-  # Publié sur PyPI, pas dans nixpkgs. unicurses est importé par
-  # tasks_tui/main.py mais ABSENT du pyproject.toml upstream (bug
-  # d'empaquetage) : rajouté à la main sinon l'app crash au démarrage.
+  # Publié sur PyPI, pas dans nixpkgs. unicurses et python-dateutil sont
+  # importés mais absents du pyproject upstream : ajoutés sinon crash au démarrage.
   tasks-tui = py.buildPythonApplication rec {
     pname = "tasks-tui-app";
     inherit (pinned) version;
     pyproject = true;
 
     src = py.fetchPypi {
-      # le sdist s'appelle tasks_tui_app-<ver>.tar.gz (underscores)
       pname = "tasks_tui_app";
       inherit version;
       inherit (pinned) hash;
@@ -29,9 +26,6 @@ let
 
     build-system = [ py.setuptools ];
 
-    # Esc quitte comme q (code touche 27), même chemin propre (synchro
-    # Google avant fermeture) plutôt qu'une fermeture forcée qui perdrait
-    # les modifs non synchronisées.
     postPatch = ''
       substituteInPlace tasks_tui/main.py \
         --replace "[ord('q'), ord('Q')]" "[ord('q'), ord('Q'), 27]"
@@ -41,11 +35,11 @@ let
       google-api-python-client
       google-auth-oauthlib
       google-auth-httplib2
-      unicurses # dép manquante du pyproject upstream (cf. note ci-dessus)
-      python-dateutil # idem : importé (dateutil) mais absent du pyproject
+      unicurses
+      python-dateutil
     ];
 
-    doCheck = false; # pas de tests amont
+    doCheck = false;
     pythonImportsCheck = [ "tasks_tui.main" ];
 
     meta = {
@@ -55,7 +49,6 @@ let
       mainProgram = "tasks-tui";
     };
   };
-
 in
 {
   options.userSettings.tui.task = {
@@ -84,8 +77,6 @@ in
 
         home.packages = [ tasks-tui ];
 
-        # Mêmes secrets OAuth que vdirsyncer/calendar-tui (source unique
-        # sous `google:`) : client_secrets.json généré depuis les sous-clés.
         sops.secrets."google/client_id" = { };
         sops.secrets."google/client_secret" = { };
         sops.secrets."google/project_id" = { };
@@ -103,14 +94,7 @@ in
             };
           };
         };
-        # L'app écrit ~/.gtask/token.json au 1er lancement (flux navigateur),
-        # token runtime mutable, hors sops. Setup : mêmes identifiants OAuth
-        # que calendar-tui, projet Google Cloud avec l'API "Google Tasks"
-        # activée, via `secrets edit`.
-        #
-        # Elle le crée en 644 alors qu'il contient un refresh token : lisible
-        # par tous, contrairement à celui de vdirsyncer. Remis en 600 (et le
-        # dossier en 700) à chaque session.
+        # L'app écrit ~/.gtask/token.json (refresh token) en 644 : remis en 600 à chaque session.
         systemd.user.tmpfiles.rules = [
           "d %h/.gtask 0700 - - -"
           "z %h/.gtask/token.json 0600 - - -"

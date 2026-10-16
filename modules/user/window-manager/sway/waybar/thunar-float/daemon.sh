@@ -1,18 +1,6 @@
 # shellcheck shell=bash
-# (Pas de shebang : writeShellApplication l'ajoute, avec set -euo pipefail.)
-#
-# Thunar « éphémère », ouvert par le clic sur la case disque de waybar
-# (launcher.sh) : flottant et centré, fermé par Échap, et fermé tout seul
-# quand on y ouvre un fichier. Les Thunar ouverts autrement restent en tuile
-# et normaux.
-#
-# Sway n'a pas de raccourci « seulement si telle fenêtre a le focus », et un
-# mode désactiverait tous les autres raccourcis. On AJOUTE donc Échap à la
-# volée quand la fenêtre éphémère prend le focus, et on le RETIRE dès qu'elle
-# le perd : ailleurs, la touche arrive normalement aux applis.
-#
-# Pas de `q` : il fermait la fenêtre même en tapant une recherche ou un chemin
-# (sway capte la touche avant Thunar, sans savoir quel champ a le focus).
+# Sway n'a pas de raccourci conditionnel au focus : Échap est lié à la prise de
+# focus et retiré à sa perte. Pas de `q` : il fermerait la fenêtre pendant une saisie.
 
 dir="${XDG_RUNTIME_DIR:-/tmp}/thunar-float"
 mkdir -p "$dir"
@@ -30,28 +18,22 @@ bind() {
         bound=1
     fi
 }
-# Jamais d'Échap volé au reste de la session si le démon s'arrête : on le
-# retire au départ (reste d'une instance tuée) et à la sortie.
+# Échap ne doit jamais rester capturé : retiré au départ et à la sortie
 cleanup() {
     swaymsg -q 'unbindsym Escape' 2>/dev/null || true
-    # Le pipeline d'écoute (lancé en fond plus bas) part avec nous.
     local pids
     mapfile -t pids < <(jobs -p)
     ((${#pids[@]} == 0)) || kill "${pids[@]}" 2>/dev/null || true
 }
 cleanup
 trap cleanup EXIT
-# SIGTERM (arrêt du service, rebuild) : passe par le trap EXIT pour retirer
-# Échap, sinon il resterait capturé pour toute la session.
+# SIGTERM passe par le trap EXIT
 trap 'exit 0' TERM INT HUP
 
 hz=$(getconf CLK_TCK)
 
-# La fenêtre du processus $1 vient-elle d'être lancée « par un fichier » ?
-# Pas de filiation possible : GIO détache les applis qu'il lance (rattachées
-# à systemd, pas à Thunar). Mais il marque leur environnement
-# (GIO_LAUNCHED_DESKTOP_FILE) ; on exige en plus un processus de moins de
-# 15 s, pour ignorer une appli déjà ouverte qui ferait apparaître une fenêtre.
+# GIO détache les applis (pas de filiation) mais marque leur environnement
+# (GIO_LAUNCHED_DESKTOP_FILE) ; on exige aussi moins de 15 s d'âge.
 launched_by_file() {
     local pid=$1 stat start up
     [ "$pid" -gt 1 ] 2>/dev/null || return 1
@@ -70,22 +52,16 @@ swaymsg -t subscribe -m '["window"]' \
     | while IFS=$'\t' read -r change id app pid type; do
         case $change in
             new)
-                # Fenêtre Thunar demandée par le clic waybar il y a < 10 s.
                 if [ "$app" = thunar ] && [ -f "$dir/pending" ] \
                     && (($(date +%s) - $(stat -c %Y "$dir/pending") < 10)); then
                     rm -f "$dir/pending"
                     float_id=$id
-                    # Déjà flottante : la règle du launcher a joué dès la
-                    # première image, rien à refaire. Sinon (un Thunar
-                    # tournait déjà) : rattrapage après coup.
+                    # Déjà flottante : la règle du launcher a joué. Sinon rattrapage.
                     if [ "$type" != floating_con ]; then
                         swaymsg -q "[con_id=$id] floating enable, resize set 1200 750, move position center" || true
                         # Thunar impose sa taille juste après s'être affiché.
                         (sleep 0.4 && swaymsg -q "[con_id=$id] resize set 1200 750, move position center") >/dev/null 2>&1 &
                     fi
-                # Nouvelle fenêtre lancée PAR ce Thunar alors qu'il avait le
-                # focus : un fichier vient d'y être ouvert. Les dialogues de
-                # Thunar lui-même (renommer, propriétés...) sont exclus.
                 elif [ -n "$float_id" ] && [ "$focused" = "$float_id" ] \
                     && [ "$app" != thunar ] && launched_by_file "$pid"; then
                     swaymsg -q "[con_id=$float_id] kill" || true
@@ -103,7 +79,5 @@ swaymsg -t subscribe -m '["window"]' \
                 ;;
         esac
     done &
-# En fond + `wait` : bash ne traite un signal qu'entre deux commandes, et ce
-# pipeline ne se termine jamais. Au premier plan, SIGTERM restait sans effet
-# (Échap jamais retiré) ; `wait`, lui, est interrompu par le signal.
+# En fond + `wait` : bash ne traite un signal qu'entre deux commandes
 wait $!

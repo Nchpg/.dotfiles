@@ -12,48 +12,18 @@ input type:touchpad {
 
 seat * xcursor_theme Adwaita 24
 
-#
-# Environnement de session
-#
-# Importer WAYLAND_DISPLAY/XDG_CURRENT_DESKTOP/XDG_SESSION_TYPE dans le
-# gestionnaire user systemd + le bus D-Bus, PUIS (re)démarrer les portails.
-# Sans display, xdg-desktop-portal-gtk meurt sur "cannot open display" et
-# entraîne le timeout du frontend → plus de FileChooser NI de ScreenCast
-# (partage d'écran Discord/Chrome cassé).
-#
-# Important : on redémarre AUSSI les backends (gtk + wlr), pas seulement le
-# frontend. S'ils ont démarré trop tôt (sans env) et sont en échec, un restart
-# du seul frontend ne les récupère pas ; reset-failed efface le backoff systemd.
-# Tout est chaîné pour garantir l'ordre (les exec de sway sont concurrents).
-#
-# /!\ TOUT est enveloppé dans `sh -c '...'` À CAUSE DU `;` : sway découpe une
-# ligne sur `;` (et `,`) AVANT de passer quoi que ce soit au shell, et cherche
-# à interpréter chaque morceau comme une commande sway. Sans les quotes, le
-# `restart` des portails partait donc en « Unknown/invalid command 'systemctl' »
-# et n'a jamais tourné — le frontend restait seul, le backend gtk en échec, et
-# GTK bloquait ~10 s sur le timeout D-Bus de org.freedesktop.appearance au
-# démarrage de waybar (barre absente au login pendant dix secondes).
-# `sway --validate` NE DÉTECTE PAS cette erreur : vérifier avec
-# `swaymsg 'exec <la ligne>'`, qui renvoie parse_error sur le morceau refusé.
-#
-# Variables : systemSettings.windowManager.sway.sessionVariables, la même
-# liste que celle retirée à la sortie de sway (module système).
-#
+# Chaîné pour garantir l'ordre (les exec de sway sont concurrents). Le `sh -c` est
+# obligatoire à cause du `;` : sway découpe la ligne dessus ; `sway --validate` ne
+# le détecte pas, tester avec `swaymsg 'exec <la ligne>'`.
     exec sh -c 'systemctl --user import-environment @sessionVars@ && \
          dbus-update-activation-environment --systemd @sessionVars@ && \
          systemctl --user start sway-session.target && \
          systemctl --user reset-failed xdg-desktop-portal.service xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service; \
          systemctl --user restart xdg-desktop-portal-wlr.service xdg-desktop-portal-gtk.service xdg-desktop-portal.service'
 
-#
-# Mod & Terminal
-#
     set $mod Mod4
     set $term @terminal@
 
-#
-# Basics
-#
     set $left h
     set $down j
     set $up k
@@ -64,34 +34,24 @@ seat * xcursor_theme Adwaita 24
     bindsym $mod+Shift+q kill
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
 
-
-#
-# Moving around:
-#
-    # Move your focus around
     bindsym $mod+$left focus left
     bindsym $mod+$down focus down
     bindsym $mod+$up focus up
     bindsym $mod+$right focus right
-    # Or use $mod+[up|down|left|right]
     bindsym $mod+Left focus left
     bindsym $mod+Down focus down
     bindsym $mod+Up focus up
     bindsym $mod+Right focus right
 
-    # Move the focused window with the same, but add Shift
     bindsym $mod+Shift+$left move left
     bindsym $mod+Shift+$down move down
     bindsym $mod+Shift+$up move up
     bindsym $mod+Shift+$right move right
-    # Ditto, with arrow keys
     bindsym $mod+Shift+Left move left
     bindsym $mod+Shift+Down move down
     bindsym $mod+Shift+Up move up
     bindsym $mod+Shift+Right move right
 
-    # Multi-écran : focus sur l'écran voisin (Ctrl), ou y envoyer le
-    # workspace courant en entier (Ctrl+Shift).
     bindsym $mod+Control+$left focus output left
     bindsym $mod+Control+$right focus output right
     bindsym $mod+Control+Left focus output left
@@ -100,10 +60,6 @@ seat * xcursor_theme Adwaita 24
     bindsym $mod+Control+Shift+$right move workspace to output right
     bindsym $mod+Control+Shift+Left move workspace to output left
     bindsym $mod+Control+Shift+Right move workspace to output right
-#
-# Workspaces:
-#
-    # Switch to workspace
     bindsym $mod+ampersand workspace number 1 
     bindsym $mod+eacute workspace number 2 
     bindsym $mod+quotedbl workspace number 3
@@ -115,7 +71,6 @@ seat * xcursor_theme Adwaita 24
     bindsym $mod+ccedilla workspace number 9
     bindsym $mod+agrave workspace number 10
 
-    # Move focused container to workspace
     bindsym $mod+Shift+ampersand move container to workspace number 1
     bindsym $mod+Shift+eacute move container to workspace number 2
     bindsym $mod+Shift+quotedbl move container to workspace number 3
@@ -127,68 +82,38 @@ seat * xcursor_theme Adwaita 24
     bindsym $mod+Shift+ccedilla move container to workspace number 9
     bindsym $mod+Shift+agrave move container to workspace number 10
 
-#
-# Layout stuff:
-#
-
-    # Switch the current container between different layout styles
     bindsym $mod+s layout stacking
     bindsym $mod+e layout toggle split
 
-    # Make the current focus fullscreen
     bindsym $mod+f fullscreen
 
-    # Toggle the current focus between tiling and floating mode
     bindsym $mod+Shift+space floating toggle
 
-    # Swap focus between the tiling area and the floating area
     bindsym $mod+space focus mode_toggle
 
-    # Plafond des fenêtres flottantes. Par défaut c'est la taille de TOUT le
-    # layout (les deux écrans) : le sélecteur de fichiers GTK, qui retient sa
-    # taille de l'écran 2560x1600, débordait de l'écran 1080p.
+    # Par défaut le plafond est la taille de tout le layout (les deux écrans)
     floating_maximum_size 1800 x 1000
 
-    # Dialogues du portail (sélecteur de fichiers...) : ils ne flottent d'eux-
-    # mêmes que rattachés à une fenêtre parente. Les apps qui n'en passent pas
-    # (rfd : Craft App Suite...) les ouvraient en tuile.
+    # Les dialogues du portail ne flottent que rattachés à une fenêtre parente
     for_window [app_id="xdg-desktop-portal-gtk"] floating enable
 
-    # Move focus to the parent container
     bindsym $mod+a focus parent
-#
-# Resizing containers:
-#
 mode "resize" {
-    # left will shrink the containers width
-    # right will grow the containers width
-    # up will shrink the containers height
-    # down will grow the containers height
     bindsym $left resize shrink width 10px
     bindsym $down resize grow height 10px
     bindsym $up resize shrink height 10px
     bindsym $right resize grow width 10px
 
-    # Ditto, with arrow keys
     bindsym Left resize shrink width 10px
     bindsym Down resize grow height 10px
     bindsym Up resize shrink height 10px
     bindsym Right resize grow width 10px
 
-    # Return to default mode
     bindsym Return mode "default"
     bindsym Escape mode "default"
 }
 bindsym $mod+r mode "resize"
 
-# Couleurs de bordures/titre volontairement fixes (non thémées par Stylix).
 client.focused  #285577 #285577 #ffffff #323232 #323232
 
-
-# Touches multimédia (conf.d/media-keys.conf, module sway), verrouillage et
-# capot (conf.d/lock.conf, module lock), lanceurs, captures, notifications,
-# session… : chaque module écrit son fragment conf.d, inclus ci-dessous.
-# Activer un module suffit à câbler ses binds, le couper les retire.
-
-# Modules additionnels
 include ~/.config/sway/conf.d/*.conf

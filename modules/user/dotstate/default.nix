@@ -5,20 +5,12 @@
   ...
 }:
 
-# INDICATEUR D'ÉTAT : cette machine correspond-elle à sa configuration ? Ce qui
-# tourne face au dépôt local, le dépôt face à GitHub, les secrets, un
-# redémarrage en attente (cf. dotstate.sh).
-#
-# Affiché à l'ouverture d'un shell, et seulement s'il y a un écart : donc aussi
-# en SSH, où chaque machine montre le sien. Rien dans le prompt.
 let
   cfg = config.userSettings.dotstate;
   shells = config.userSettings.shell;
 
   dotstate = pkgs-stable.writeShellApplication {
     name = "dotstate";
-    # `timeout`, `mktemp`, `readlink`, `uname`, `date`, `sha256sum` :
-    # coreutils ; `tar`, `find`/`xargs`, `sed` pour l'empreinte du contenu.
     runtimeInputs = with pkgs-stable; [
       git
       coreutils
@@ -29,10 +21,7 @@ let
     text = builtins.readFile ./dotstate.sh;
   };
 
-  # Seulement dans un shell de premier niveau : pas à chaque `nix develop` ou
-  # shell imbriqué. SHELL_DEPTH est calculée par le rc de chaque shell
-  # (modules/user/shell/common-posix, …/shell/fish/.fish), injecté avant ce
-  # bloc (mkAfter).
+  # Shell de premier niveau seulement (SHELL_DEPTH).
   greetPosix = ''
     if [ "''${SHELL_DEPTH:-1}" -le 1 ] && command -v dotstate > /dev/null; then
       dotstate greet
@@ -50,19 +39,15 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ dotstate ];
 
-    # fish : remplace le fish_greeting vide de la config fish (mkAfter).
     programs.fish.interactiveShellInit = lib.mkAfter ''
       function fish_greeting
           test "$SHELL_DEPTH" -le 1; or return
           command -q dotstate; and dotstate greet
       end
     '';
-    # bash : initExtra, la partie interactive du .bashrc.
     programs.bash.initExtra = lib.mkAfter greetPosix;
     programs.zsh.initContent = lib.mkAfter greetPosix;
 
-    # Fetch de GitHub à intervalle régulier : la seule partie lente, faite en
-    # arrière-plan pour que l'ouverture d'un shell reste instantanée.
     systemd.user.services.dotstate = {
       Unit.Description = "Mise à jour depuis GitHub pour dotstate";
       Service = {

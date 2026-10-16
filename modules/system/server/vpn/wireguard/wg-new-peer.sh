@@ -1,11 +1,4 @@
 # shellcheck shell=bash disable=SC2154 # private_key_path, dns_line, endpoint, allowed_ips : posés par le préambule Nix
-# wg-new-peer : fabrique une configuration cliente complète, QR compris, sans
-# jamais écrire la clé privée où que ce soit — elle ne traverse que la sortie
-# du terminal. C'est le remplaçant direct de l'interface d'appairage.
-#
-# Corps du script seulement : le module (default.nix à côté) le précède d'un
-# préambule qui pose `private_key_path`, `dns_line`, `endpoint` et
-# `allowed_ips` d'après sa configuration.
 
 if [ $# -lt 2 ]; then
   cat >&2 <<'USAGE'

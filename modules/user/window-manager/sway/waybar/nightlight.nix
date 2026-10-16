@@ -1,10 +1,5 @@
 { config, lib, ... }:
 
-# Night light (wlsunset) de la session, piloté depuis la case luminosité de
-# waybar (clic = bascule, cf. scripts/nightlight.sh).
-#
-# Lieu PAS en dur : wlsunset-geo.sh lit la ville/coords du cache météo, un
-# changement de ville météo change aussi le lieu du night light.
 let
   cfg = config.userSettings.windowManager.sway.waybar;
   inherit (cfg) scriptDir;
@@ -32,9 +27,7 @@ in
       };
       Install.WantedBy = [ "graphical-session.target" ];
       Service = {
-        # Drapeau posé par la bascule (nightlight.sh toggle) : condition
-        # échoue -> "skipped" (pas failed), pas de relance au login si le
-        # night light a été coupé.
+        # Échec = "skipped" (pas failed) : pas de relance au login si coupé
         ExecCondition = "${scriptDir}/nightlight.sh allowed";
         ExecStart = "${scriptDir}/wlsunset-geo.sh";
         Restart = "on-failure";

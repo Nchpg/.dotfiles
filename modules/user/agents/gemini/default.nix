@@ -9,8 +9,6 @@
 let
   cfg = config.userSettings.agents.gemini;
 
-  # Google a renommé Gemini CLI en Antigravity (paquet antigravity-cli,
-  # binaire `agy`) : wrapper pour garder la commande `gemini`.
   gemini-wrapper = cfg.pkgs.writeShellScriptBin "gemini" ''
     exec ${cfg.pkgs.antigravity-cli}/bin/agy "$@"
   '';

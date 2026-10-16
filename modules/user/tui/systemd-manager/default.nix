@@ -8,10 +8,7 @@
 let
   cfg = config.userSettings.tui.systemdManager;
 
-  # En amont, seul Ctrl+C quitte l'app (touches en dur). Patché pour quitter
-  # aussi avec q/Esc, mais UNIQUEMENT sur l'écran liste hors édition du
-  # filtre (sinon casse la frappe de "q" dans la recherche, et le retour
-  # arrière q/Esc des écrans Détails/Log qui reviennent déjà à la liste).
+  # Amont : seul Ctrl+C quitte. Patché pour q/Esc (écran liste, hors édition du filtre).
   systemd-manager-tui = cfg.pkgs.systemd-manager-tui.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
       substituteInPlace src/terminal/app.rs \

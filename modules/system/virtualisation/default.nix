@@ -5,7 +5,6 @@
   ...
 }:
 
-# Accès users géré à part : allowDocker/allowLibvirt dans modules/system/users.
 let
   cfg = config.systemSettings.virtualisation;
 in

@@ -5,8 +5,6 @@
   ...
 }:
 
-# API key dans le dépôt de secrets, ~/.wakatime.cfg généré via sops (jamais
-# en clair) : tous les plugins (vim, neovim, vscode) lisent ce même fichier.
 let
   cfg = config.userSettings.editors.wakatime;
 in
@@ -40,7 +38,6 @@ in
       need = "a besoin du secret sops (API key)";
     };
 
-    # CLI sur le PATH (usage manuel : `wakatime-cli --today`).
     home.packages = [ cfg.pkgs.wakatime-cli ];
 
     sops.secrets.${cfg.apiKeySops} = { };

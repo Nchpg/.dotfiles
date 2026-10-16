@@ -3,21 +3,9 @@ for profile in (string split " " $NIX_PROFILES)
     set -ga fish_complete_path $profile/share/fish/vendor_completions.d
 end
 
-# Complétions fournies par un devshell (ex. rmkernel dans devshells/python.nix).
-# Le fish nixpkgs ignore XDG_DATA_DIRS, d'où cette variable dédiée.
 if set -q NIX_DEVSHELL_FISH_COMPLETIONS
     set -ga fish_complete_path $NIX_DEVSHELL_FISH_COMPLETIONS
 end
-
-# Ni `fish_history_file` ni `fish_history_max` n'existent dans fish : la seule
-# variable reconnue est `fish_history` (nom de session). Elles ont été
-# retirées — en prime, `set -U` les gravait dans ~/.config/fish/fish_variables,
-# un état mutable hors du contrôle de Nix, réécrit à chaque shell interactif.
-# Si elles traînent encore : `set -eU fish_history_file fish_history_max`.
-
-# L'intégration shell kitty est déjà injectée par programs.kitty (home-manager)
-# dans les trois shells : la refaire ici la chargeait deux fois (hooks de
-# prompt et marqueurs OSC 133 enregistrés en double).
 
 export 0=fish
 export SH=fish
@@ -27,7 +15,6 @@ function git_branch
         return
     end
 
-    # Récupère la branche ou le commit HEAD
     set branch (command git symbolic-ref --short HEAD 2>/dev/null)
     if test $status -eq 0
         echo (set_color red)" $branch"(set_color normal)
@@ -37,24 +24,16 @@ function git_branch
     end
 end
 
-# Équivalent fish de ../common-posix. Profondeur d'imbrication du shell,
-# calculée une fois : affichée dans le prompt au-delà de 1, et lue par
-# dotstate (modules/user/dotstate) pour ne saluer que les shells de premier
-# niveau. VS Code ouvre son terminal un niveau plus bas.
 set -g SHELL_DEPTH $SHLVL
 test "$TERM_PROGRAM" = vscode; and set SHELL_DEPTH (math $SHELL_DEPTH - 1)
 
-# Premier prompt d'un shell de premier niveau : pas de saut de ligne avant.
 if test "$SHELL_DEPTH" -le 1
     set -g __fish_first_prompt 1
 else
     set -g __fish_first_prompt 0
 end
 
-# Le saut de ligne se décide sur l'ÉVÉNEMENT fish_prompt, émis une fois par
-# nouveau prompt : la FONCTION fish_prompt, elle, est réexécutée à chaque
-# rafraîchissement (raccourcis fzf, searchf, man…), qui doit redessiner le
-# même prompt sans ajouter de ligne.
+# Décidé sur fish_prompt (une fois par prompt), pas dans la fonction (repaint).
 function __fish_prompt_new_line --on-event fish_prompt
     if test "$__fish_first_prompt" = 1
         set -g __fish_prompt_new_line 0
@@ -102,7 +81,6 @@ function fish_prompt
     echo -n " $venv_name"
     set_color normal
 
-
     set gitb (git_branch)
     if test -n "$gitb"
     echo -n " "$gitb" "
@@ -124,8 +102,6 @@ end
 
 set -g fish_greeting ""
 set -g fish_term24bit 1
-
-# nix / nix-shell : wrappers communs aux trois shells, cf. shell/default.nix.
 
 function clear
     set -g __fish_first_prompt 1

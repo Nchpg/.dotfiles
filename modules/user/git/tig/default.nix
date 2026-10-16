@@ -17,14 +17,11 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-
     home.packages = with cfg.pkgs; [
       tig
     ];
 
     home.file.".tigrc".text = ''
-      # Couleurs héritées du TERMINAL (palette ANSI posée par stylix), pas
-      # d'indices 256 en dur : suivent thème et polarité sans double jeu.
       color cursor                        default     default     reverse
       color title-focus                   8           default
       color title-blur                    8           default

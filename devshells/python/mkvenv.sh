@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# uv choisit le python : --python X.Y explicite, .python-version du projet,
-# sinon le python nix du devshell. Les interpréteurs manquants sont
-# téléchargés par uv (cache ~/.cache/uv partagé entre projets).
-#
-# On ne devine pas le chemin du venv depuis les arguments (des options comme
-# --prompt/--cache-dir prennent une valeur sans tiret et cassaient
-# l'heuristique) : on retrouve le pyvenv.cfg réellement créé après coup.
 MARKER="$(mktemp)"
 trap 'rm -f "$MARKER"' EXIT
 uv venv "$@"

@@ -5,8 +5,6 @@
   ...
 }:
 
-# Distribution TeX pour LaTeX Workshop (VS Code : compile + aperçu pdf auto),
-# avec les paquets absents de texliveMedium utilisés par le CV.
 let
   cfg = config.userSettings.dev.latex;
 in

@@ -11,7 +11,6 @@ let
 in
 {
   options.userSettings.agents.mistral = {
-    # Paquet nixpkgs mistral-vibe, binaire réel `vibe` (+ `vibe-acp`).
     enable = lib.mkEnableOption "Mistral Vibe CLI";
     pkgs = myLib.mkPkgsOption {
       inherit lib config;
@@ -20,9 +19,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # 6 tests Textual (UI) échouent à l'installCheckPhase dans ce sandbox,
-    # timing-sensitive, indépendants de notre config. Binaire vérifié
-    # fonctionnel malgré tout.
+    # 6 tests Textual (UI) échouent dans le sandbox (timing).
     home.packages = [
       (cfg.pkgs.mistral-vibe.overrideAttrs (_old: {
         doInstallCheck = false;

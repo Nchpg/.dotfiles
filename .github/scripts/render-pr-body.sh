@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# Construit le corps Markdown de la PR à partir des faits de
-# gather-update-facts.sh. 100% déterministe : pour chaque input flake, dates
-# avant/après et nombre de commits (si connu) — aucun contenu de commit n'est
-# résumé ni interprété, donc aucun risque d'invention et aucune limite de
-# tokens à surveiller. Pas de lien de comparaison (repris tel quel dans la
-# notif Discord, qui doit rester minimale).
-#
-# Usage: render-pr-body.sh <facts.json>
+# Pas de lien de comparaison (le corps est repris dans Discord).
 set -euo pipefail
 
 facts_file="$1"
@@ -54,10 +47,6 @@ if [ "$ext_count" -gt 0 ]; then
     echo
 fi
 
-# Extensions non vérifiées ce coup-ci : leur version ET leur hash sont restés
-# tels quels. Ce n'est pas bloquant, mais ça doit se voir dans la PR — sinon
-# l'absence d'une extension de la liste ci-dessus se lit à tort comme « rien
-# n'a changé » alors qu'on n'en sait rien.
 skipped_count=$(jq '.skippedExtensions // [] | length' "$facts_file")
 if [ "$skipped_count" -gt 0 ]; then
     echo "## ⚠️ Extensions non vérifiées"

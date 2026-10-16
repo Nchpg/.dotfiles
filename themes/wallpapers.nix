@@ -1,24 +1,10 @@
-# Métadonnées hors spec base16 : fond d'écran par défaut, consommé par
-# stylixSettings (themes/default.nix). Polarité pas ici : lue dans le
-# champ `variant:` de chaque yaml (themes.polarity).
-#
-# themeWallpaper : nom de thème -> entrée du registre ci-dessous. Volontairement
-# PARTIEL (~60 thèmes sur ~510), le reste retombe sur defaultWallpaper.
-# Surchargeable via systemSettings/userSettings.stylix.wallpaper.
 rec {
-  # Par POLARITÉ (sombre sous thème clair jure). Défaut sombre en fichier
-  # LOCAL, contrairement aux entrées distantes : ne peut pas disparaître.
   defaultWallpaper = {
     dark = "custom-kyoto";
     light = "custom-kyoto";
   };
 
-  # Thème -> fond : par défaut le fond du registre qui porte LE MÊME nom (la
-  # grande majorité), plus les thèmes qui en partagent un autre. Sont exclus
-  # de cette identité les fonds du registre sans thème homonyme rattaché :
-  # custom-kyoto (sélection manuelle) et gruvbox-dark (partagé par les
-  # variantes gruvbox sombres, le thème `gruvbox-dark` lui-même retombe sur
-  # le défaut).
+  # Partiel : le reste retombe sur defaultWallpaper.
   themeWallpaper =
     let
       notThemes = [
@@ -45,10 +31,7 @@ rec {
     )
     // shared;
 
-  # nom -> { url; sha256; } (fetchurl) ou { path = ./wallpapers/<fichier>; }.
-  # Un fond peut être partagé par plusieurs thèmes ou n'appartenir à aucun.
   registry = {
-    # Rattaché à aucun thème, sélectionné via userSettings.stylix.wallpaper.
     custom-kyoto.path = ./wallpapers/custom-kyoto.png;
 
     alph = {

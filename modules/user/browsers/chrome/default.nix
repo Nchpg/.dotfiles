@@ -16,11 +16,7 @@ in
       package = lib.mkOption {
         type = lib.types.package;
         default = cfg.pkgs.google-chrome;
-        description = ''
-          Paquet du navigateur. google-chrome (codecs propriétaires +
-          Widevine) est recommandé pour Teams. Remplaçable par
-          cfg.pkgs.chromium / cfg.pkgs.ungoogled-chromium.
-        '';
+        description = "Paquet du navigateur (google-chrome : codecs propriétaires + Widevine, utile pour Teams).";
       };
     };
   };
@@ -30,19 +26,14 @@ in
       enable = true;
       inherit (cfg) package;
 
-      # Rendu natif Wayland (sinon flou/XWayland et tearing).
       commandLineArgs = [
         "--ozone-platform-hint=auto"
         "--enable-features=WaylandWindowDecorations"
-        # Rouvre fenêtres et onglets de la dernière fois, comme
-        # browser.startup.page = 3 côté Firefox (cf. sway-session restore).
         "--restore-last-session"
       ];
     };
 
-    # Nom de binaire résolu depuis le paquet (substituable : google-chrome-stable
-    # / chromium / ungoogled), pas un chemin store : le PATH doit résoudre le
-    # wrapper home-manager qui porte les flags Wayland.
+    # Nom de binaire, pas chemin store : le PATH doit résoudre le wrapper home-manager (flags Wayland).
     home.file.".config/sway/conf.d/chrome.conf" =
       lib.mkIf config.userSettings.windowManager.sway.enable
         {

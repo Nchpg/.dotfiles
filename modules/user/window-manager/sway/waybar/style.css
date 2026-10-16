@@ -13,14 +13,14 @@ window#waybar {
   margin-left: 6px;
 }
 #workspaces button {
-  padding: 3px 0;          /* hauteur ; min-width pour la largeur -> carré */
+  padding: 3px 0;
   margin: 2px 2px;
   min-width: 22px;
   border: none;
-  border-radius: 4px;      /* mettre 0 pour des angles bien droits */
+  border-radius: 4px;
   box-shadow: none;
-  background: @base01@;  /* fond inactif (un cran au-dessus du fond) */
-  color: @base04@;       /* texte inactif adouci -> l'actif ressort */
+  background: @base01@;
+  color: @base04@;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
 #workspaces button:hover {
@@ -29,44 +29,39 @@ window#waybar {
 }
 #workspaces button.focused,
 #workspaces button.visible {
-  background: @base0D@;   /* accent (bleu Stylix) pour l'actif */
+  background: @base0D@;
   color: @base00@;
 }
-/* bright-* (base24) : sur un thème base16, retombe sur la couleur
-   normale (repli mkBase24), rendu inchangé. */
 #workspaces button.urgent {
   background: @bright-red@;
   color: @base00@;
 }
 
-/* Espacement des modules de droite (aère les icônes/texte) */
 .modules-right > widget > * {
   padding: 0 8px;
   margin: 2px 2px;
 }
 
-/* Un accent de couleur par module (base16 Stylix). */
-#custom-nowplaying { color: @base0B@; }  /* vert    */
-#custom-bluetooth  { color: @base0D@; }  /* bleu    */
-#network           { color: @base0C@; }  /* cyan    */
-#custom-resources  { color: @base0A@; }  /* jaune   */
-#custom-backlight  { color: @base09@; }  /* orange (toujours, quel que soit l'état night light) */
-#wireplumber       { color: @base0E@; }  /* magenta (icône + %) */
-#custom-swaync     { color: @base0A@; }  /* jaune (cloche + nombre) */
-#custom-disk       { color: @base0C@; }  /* cyan    */
-#custom-battery    { color: @base0B@; }  /* vert    */
-#custom-weather    { color: @base0C@; }  /* cyan : partiellement/défaut */
-#custom-weather.sunny  { color: @base0A@; }  /* jaune : soleil / ciel clair  */
-#custom-weather.cloudy { color: @base04@; }  /* gris neutre : couvert / brume */
-#custom-weather.rain   { color: @base0D@; }  /* bleu : pluie / neige / orage  */
+/* Un accent de couleur par module */
+#custom-nowplaying { color: @base0B@; }
+#custom-bluetooth  { color: @base0D@; }
+#network           { color: @base0C@; }
+#custom-resources  { color: @base0A@; }
+#custom-backlight  { color: @base09@; }
+#wireplumber       { color: @base0E@; }
+#custom-swaync     { color: @base0A@; }
+#custom-disk       { color: @base0C@; }
+#custom-battery    { color: @base0B@; }
+#custom-weather    { color: @base0C@; }
+#custom-weather.sunny  { color: @base0A@; }
+#custom-weather.cloudy { color: @base04@; }
+#custom-weather.rain   { color: @base0D@; }
 #clock             { color: @base05@; font-weight: bold; }
 
-/* VPN : la couleur PORTE l'information, comme pour la météo et la
-   batterie — l'état est tout ce qu'on veut savoir d'un coup d'œil. */
-#custom-vpn            { color: @base0C@; }      /* cyan : voisin du réseau, état inconnu */
-#custom-vpn.on         { color: @base0B@; }      /* vert : tunnel actif, serveur joignable */
-#custom-vpn.unreachable { color: @bright-yellow@; } /* le tunnel est là, le serveur ne répond pas */
-#custom-vpn.off        { color: @base04@; }      /* gris neutre : coupé volontairement, pas une alerte */
+#custom-vpn            { color: @base0C@; }
+#custom-vpn.on         { color: @base0B@; }
+#custom-vpn.unreachable { color: @bright-yellow@; }
+#custom-vpn.off        { color: @base04@; }
 
 #custom-battery.warning  { color: @bright-yellow@; }
 #custom-battery.critical { color: @bright-red@; }

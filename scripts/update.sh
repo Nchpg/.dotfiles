@@ -1,33 +1,6 @@
 #!/usr/bin/env bash
-
-# Mises à jour des dépendances épinglées, sans rebuild. Lançable de n'importe
-# où via la commande `update` (cf. scripts/default.nix) ; `rebuild -u`
-# l'appelle avant de reconstruire.
-#
-# Deux catégories, présentées à part :
-#   - les modules épinglés : tout dossier de modules/ qui contient un
-#     `update.sh` (auto-découverts, comme côté CI) ;
-#   - les inputs du flake (flake.lock), sauf `secrets`, que `rebuild` et la
-#     commande `secrets` gèrent déjà à part.
-#
-# Déroulé, pensé pour ne jamais attendre entre deux questions :
-#   1. vérification de TOUT en parallèle, sans rien télécharger (`update.sh
-#      --check` côté modules, `git ls-remote` côté inputs) ;
-#   2. récapitulatif, puis un seul choix par catégorie (liste à cocher gum) ;
-#   3. application : inputs d'abord (`nix flake update`, d'un bloc), puis les
-#      modules en parallèle avec un statut par ligne. Un échec reste local à
-#      son module, l'état précédent est conservé.
-#
-# Options :
-#   -y, --yes    : pas de question, applique la sélection par défaut (tous les
-#                  modules + claude-code, comme l'ancien `rebuild -u -y`)
-#   -c, --check  : liste seulement, ne modifie rien
-#   NOM...       : restreint aux modules / inputs dont le nom contient NOM
 set -euo pipefail
 
-# Dépôt et valeurs de ce système : cf. lib/env.sh. Couleurs, liens, palette
-# gum : cf. lib/ui.sh. Découverte des modules et lecture du lock, communes
-# avec la CI : cf. lib/flake-lock.sh.
 here="$(dirname "$0")"
 # shellcheck source=scripts/lib/env.sh
 . "$here/lib/env.sh"
@@ -38,7 +11,6 @@ here="$(dirname "$0")"
 require_flake update
 cd "$flake"
 
-# ── Vérifications (appelé par le script lui-même, en parallèle) ─────────────
 # Un input -> JSON {name, current, latest, url, available} sur stdout.
 check_input() {
     local name="$1" type slug ref url rev date remote pattern new
@@ -54,11 +26,7 @@ check_input() {
     local auth=()
     [ -n "${GITHUB_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $GITHUB_TOKEN")
     new=""
-    # API GitHub d'abord : ~0,4 s, contre ~7 s pour un ls-remote sur nixpkgs
-    # (des dizaines de milliers de refs). Aussi pour un type=git hébergé sur
-    # GitHub (claude-code). ls-remote en secours (limite de l'API atteinte,
-    # dépôt non GitHub), sans invite de mot de passe pour un dépôt privé :
-    # échec net à la place.
+    # API GitHub d'abord (~0,4 s contre ~7 s pour un ls-remote sur nixpkgs).
     if [ -n "$slug" ]; then
         new=$(curl -fsSL --max-time 5 "${auth[@]}" -H "Accept: application/vnd.github.sha" \
             "https://api.github.com/repos/$slug/commits/$pattern" 2>/dev/null || true)
@@ -75,7 +43,6 @@ check_input() {
     local latest="${new:0:7}" compare=""
     if [ -n "$slug" ] && [ "$new" != "$rev" ]; then
         compare="https://github.com/$slug/compare/$rev...$new"
-        # Nombre de commits d'écart, au mieux (API GitHub limitée sans jeton).
         local ahead
         if ahead=$(fl_commit_count "$slug" "$rev" "$new"); then
             latest="$latest (+$ahead commits)"
@@ -87,8 +54,6 @@ check_input() {
         '{$name, $current, $latest, $url, $available}'
 }
 
-# Lance toutes les vérifications du plan en parallèle et attend la fin.
-# Chaque job écrit <id>.json (stdout) et <id>.err, puis <id>.rc.
 run_checks() {
     local tmp="$1" kind id target
     while IFS=$'\t' read -r kind id target; do
@@ -110,7 +75,6 @@ if [ "${1:-}" = "__checks" ]; then
     exit 0
 fi
 
-# ── Arguments ────────────────────────────────────────────────────────────────
 YES=0
 CHECK=0
 filters=()
@@ -130,7 +94,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# Interactif seulement sur un vrai terminal ; sinon (pipe, CI) comme --yes.
 interactive=0
 if [ "$YES" -eq 0 ] && [ "$CHECK" -eq 0 ] && [ -t 0 ] && [ -t 1 ]; then
     interactive=1
@@ -142,8 +105,6 @@ if [ "$interactive" -eq 1 ] && [ "$fancy" -eq 0 ]; then
     exit 1
 fi
 
-# Jeton GitHub : relève la limite de l'API (60 requêtes/h sans), lu par les
-# update.sh qui interrogent GitHub. Repris de gh s'il est connecté.
 if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
     GITHUB_TOKEN=$(gh auth token 2>/dev/null || true)
 fi
@@ -166,8 +127,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ── Plan : modules + inputs ─────────────────────────────────────────────────
-# Même découverte que la CI (cf. lib/flake-lock.sh).
 mapfile -d '' -t scripts < <(fl_module_updaters)
 m_ids=()
 for i in "${!scripts[@]}"; do
@@ -177,7 +136,6 @@ for i in "${!scripts[@]}"; do
     printf 'm\tm%s\t%s\n' "$i" "$flake/$s" >>"$tmp/plan"
 done
 
-# Sans les `follows` ni `secrets`, comme la CI (cf. lib/flake-lock.sh).
 mapfile -t inputs < <(fl_bumpable_inputs flake.lock)
 f_ids=()
 for i in "${!inputs[@]}"; do
@@ -201,12 +159,7 @@ else
     run_checks "$tmp"
 fi
 
-# ── Lecture des résultats ───────────────────────────────────────────────────
-# Par id : name, current, latest, url, état (available | uptodate | error |
-# expanded). Un module peut détailler des sous-éléments (`items`, ex. une
-# ligne par extension VS Code) : chacun devient alors un id proposé à part
-# (<id>.<n>, PARENT et KEY renseignés), le module lui-même passe en
-# « expanded » et n'est plus listé que pour ses notes.
+# Les `items` d'un module deviennent des ids à part ; le module passe en « expanded ».
 declare -A NAME CUR LAT URL STATE NOTE SUMMARY ERRMSG PARENT KEY CHILDREN
 read_result() {
     local id="$1" fallback="$2" json
@@ -222,8 +175,7 @@ read_result() {
     URL[$id]=$(jq -r '.url // ""' <<<"$json")
     NOTE[$id]=$(jq -r '.note // ""' <<<"$json")
     SUMMARY[$id]=$(jq -r '.summary // ""' <<<"$json")
-    # Pas de `.available // …` : jq traite false comme absent et retomberait
-    # sur la comparaison des libellés.
+    # Pas de `.available // …` : jq traite false comme absent.
     if [ "$(jq -r 'if has("available") then .available else .current != .latest end' <<<"$json")" = true ]; then
         STATE[$id]=available
     else
@@ -250,13 +202,11 @@ read_result() {
 for i in "${m_ids[@]}"; do read_result "m$i" "$(basename "$(dirname "${scripts[$i]}")")"; done
 for i in "${f_ids[@]}"; do read_result "f$i" "${inputs[$i]}"; done
 
-# ── Récapitulatif ───────────────────────────────────────────────────────────
 width=0
 for id in "${!NAME[@]}"; do
     [ ${#NAME[$id]} -gt "$width" ] && width=${#NAME[$id]}
 done
 
-# Ligne d'un élément à mettre à jour (sans couleur : sert aussi de libellé gum).
 label() {
     printf "%-${width}s  %s → %s" "${NAME[$1]}" "${CUR[$1]}" "${LAT[$1]}"
 }
@@ -305,7 +255,6 @@ ids_of() {
     local i
     for i in "$@"; do echo "$prefix$i"; done
 }
-# Modules, avec leurs sous-éléments juste après eux.
 m_all=()
 for id in $(ids_of m "${m_ids[@]}"); do
     m_all+=("$id")
@@ -328,14 +277,10 @@ if [ ${#m_avail[@]} -eq 0 ] && [ ${#f_avail[@]} -eq 0 ]; then
 fi
 [ "$CHECK" -eq 1 ] && exit 0
 
-# ── Choix ────────────────────────────────────────────────────────────────────
-# Par défaut : tous les modules, et parmi les inputs seulement claude-code
-# (comportement historique de `rebuild -u`) ; nixpkgs & co se choisissent.
 is_default() {
     [[ "$1" == m* ]] || [ "${NAME[$1]}" = claude-code ]
 }
 
-# choose <titre> <ids...> : affiche la liste à cocher, imprime les ids retenus.
 choose() {
     local header="$1"; shift
     local id labels=() preselected=() picked rc
@@ -355,11 +300,9 @@ choose() {
         ${sel:+--selected="$sel"} -- "${labels[@]}")
     rc=$?
     set -e
-    # Ctrl+C : on abandonne tout (code 130, relayé par l'appelant : on est
-    # dans un sous-shell). Échap : rien de coché dans cette catégorie.
+    # Ctrl+C : abandon (130) ; Échap : rien de coché.
     [ "$rc" -eq 130 ] && return 130
     [ "$rc" -ne 0 ] && return 0
-    # Rendus dans l'ordre de la liste, quel que soit l'ordre de cochage.
     declare -A chosen
     while IFS= read -r l; do
         [ -n "$l" ] && chosen["${by_label[$l]}"]=1
@@ -373,8 +316,6 @@ choose() {
 m_sel=()
 f_sel=()
 if [ "$interactive" -eq 1 ]; then
-    # gum affiche déjà ses touches (x, ctrl+a, entrée) ; seul Échap mérite
-    # d'être rappelé.
     hint="échap : aucun"
     if [ ${#m_avail[@]} -gt 0 ]; then
         out=$(choose "📦 Modules à mettre à jour   ($hint)" "${m_avail[@]}") \
@@ -396,12 +337,10 @@ if [ ${#m_sel[@]} -eq 0 ] && [ ${#f_sel[@]} -eq 0 ]; then
     exit 0
 fi
 
-# ── Application ─────────────────────────────────────────────────────────────
 failures=0
 done_ok=0
 
-# Inputs d'abord, d'un bloc : certains update.sh lisent flake.lock (spotify
-# vendore ses dépendances avec le nixpkgs locké), autant qu'ils voient le neuf.
+# Inputs d'abord : certains update.sh lisent flake.lock.
 if [ ${#f_sel[@]} -gt 0 ]; then
     names=()
     for id in "${f_sel[@]}"; do names+=("${NAME[$id]}"); done
@@ -426,11 +365,8 @@ if [ ${#f_sel[@]} -gt 0 ]; then
     fi
 fi
 
-# Modules en parallèle, un statut par ligne rafraîchi sur place.
 if [ ${#m_sel[@]} -gt 0 ]; then
     echo
-    # Un job par script : les sous-éléments cochés d'un même module partent
-    # ensemble, via `--only KEY...`.
     declare -A JOB ONLY
     jobs_order=()
     for id in "${m_sel[@]}"; do
@@ -456,9 +392,6 @@ if [ ${#m_sel[@]} -gt 0 ]; then
 
     frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
     n=${#m_sel[@]}
-    # Seules les lignes qui changent sont réécrites (une terminée reste telle
-    # quelle, sinon elle clignote à chaque frame), et tout part en une seule
-    # écriture, effacement en fin de ligne plutôt qu'avant.
     rendered=()
     render() {
         local frame="$1" id rc line out="" i=0
@@ -517,7 +450,6 @@ if [ ${#m_sel[@]} -gt 0 ]; then
             failures=$((failures + 1))
         fi
     done
-    # Log des échecs, une fois par job (pas par sous-élément).
     for job in "${jobs_order[@]}"; do
         [ "$(cat "$tmp/$job.done")" = 0 ] && continue
         printf '\n  %s%s :%s\n' "$ERR" "${NAME[$job]}" "$R"
@@ -525,7 +457,6 @@ if [ ${#m_sel[@]} -gt 0 ]; then
     done
 fi
 
-# ── Bilan ────────────────────────────────────────────────────────────────────
 echo
 msg="$done_ok mis à jour"
 [ "$failures" -gt 0 ] && msg="$msg, ${ERR}$failures en échec${R}"

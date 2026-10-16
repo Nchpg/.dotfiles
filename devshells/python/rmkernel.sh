@@ -8,12 +8,9 @@ if [ -z "$KERNEL_NAME" ]; then
   find "$HOME/.local/share/jupyter/kernels" -mindepth 1 -maxdepth 1 -printf '  - %f\n' 2>/dev/null >&2
   exit 1
 fi
-# ipykernel installe en minuscules — accepter n'importe quelle casse.
 KERNEL_NAME="${KERNEL_NAME,,}"
 
-# Sous sudo, $HOME devient /root : viser le home de l'utilisateur d'origine
-# pour que `sudo rmkernel` supprime bien SES kernels (utile pour les vieux
-# kernels créés en root, ex. l'ère Docker).
+# Sous sudo, $HOME vaut /root : viser le home de l'utilisateur d'origine.
 USER_HOME=$(getent passwd "${SUDO_USER:-$USER}" | cut -d: -f6)
 KDIR="${USER_HOME:-$HOME}/.local/share/jupyter/kernels/$KERNEL_NAME"
 

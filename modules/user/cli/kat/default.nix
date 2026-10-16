@@ -5,12 +5,6 @@
   ...
 }:
 
-# `kat` : un `cat` qui choisit l'affichage selon le TYPE du fichier (mime,
-# extension en appoint). Texte et code -> bat, markdown -> glow, image ->
-# chafa (protocole graphique kitty, à travers tmux grâce à son
-# allow-passthrough), PDF et documents -> texte, vidéo et audio -> lus par
-# mpv, mermaid (fichier ou bloc dans du markdown) -> diagramme rendu,
-# archive -> contenu, base SQLite -> schéma, dossier -> arbre.
 let
   cfg = config.userSettings.cli.kat;
 
@@ -25,24 +19,21 @@ let
       glow
       jq
       chafa
-      poppler-utils # pdftotext, pdfinfo
-      libarchive # bsdtar : zip, tar.*, 7z, rar, iso…
+      poppler-utils
+      libarchive
       pandoc
       sqlite
       eza
       hexyl
       mpv
-      mermaid-cli # mmdc (rendu via un Chromium headless, ~3 s)
+      mermaid-cli
     ];
     text = ''
       usage() {
         echo "usage: kat FICHIER... (sans argument : lit l'entrée standard)" >&2
       }
 
-      # Images : protocole kitty si le terminal le parle, passthrough si on
-      # est dans tmux. chafa retombe sur des blocs Unicode ailleurs.
-      # $2 (optionnel) = taille en cases « COLxLIG », ou « native » : pixel
-      # pour pixel, chafa mesurant lui-même les cases (hors tmux).
+      # $2 optionnel : taille en cases « COLxLIG », ou « native » (pixel pour pixel).
       show_image() {
         local args=()
         if [ -n "''${KITTY_WINDOW_ID:-}" ]; then
@@ -59,11 +50,8 @@ let
         chafa "''${args[@]}" "$1"
       }
 
-      # Taille en cases d'une image affichée pixel pour pixel, bornée à la
-      # largeur du terminal. Hors tmux, chafa s'en charge (« native »). Dans
-      # tmux, il interroge le terminal pour la taille des cases, tmux ne
-      # transmet pas la question, et l'image finit étirée à toute la
-      # largeur : on calcule donc ici, tmux >= 3.4 donnant cette taille.
+      # Taille en cases d'une image pixel pour pixel. Dans tmux chafa ne peut pas
+      # interroger le terminal : on calcule ici (tmux >= 3.4).
       native_size() {
         local w h cw ch cols rows max=''${COLUMNS:-80}
         if [ -z "''${TMUX:-}" ]; then
@@ -82,15 +70,11 @@ let
         echo "''${cols}x$rows"
       }
 
-      # Diagramme rendu en PNG puis affiché comme une image. Thème calé sur
-      # la polarité stylix, fond transparent pour se fondre dans le terminal.
-      # Source affichée telle quelle si le rendu échoue (syntaxe invalide).
       show_mermaid() {
         local png
         png=$(mktemp --suffix .png)
         if mmdc -q -i "$1" -o "$png" -t ${mermaidTheme} -b transparent -s 2 >/dev/null 2>&1; then
-          # Rendu x2 affiché pixel pour pixel : le texte du diagramme a alors
-          # à peu près la taille de celui du terminal.
+          # Rendu x2 pixel pour pixel : texte à la taille du terminal.
           show_image "$png" "$(native_size "$png")"
         else
           echo "kat: rendu mermaid impossible, source affichée" >&2
@@ -99,9 +83,7 @@ let
         rm -f "$png"
       }
 
-      # Markdown : glow ne sait pas dessiner les blocs ```mermaid. Le fichier
-      # est découpé en morceaux (texte / diagramme) rendus dans l'ordre, le
-      # texte par glow, chaque diagramme par show_mermaid (~3 s chacun).
+      # glow ne dessine pas les blocs ```mermaid : découpage en morceaux rendus dans l'ordre.
       show_markdown() {
         local f=$1 dir n=0 inblock=0 cur line seg width=''${COLUMNS:-100}
         if ! grep -q '^```[[:space:]]*mermaid' "$f"; then
@@ -127,7 +109,6 @@ let
         for seg in "$dir"/*; do
           case "$seg" in
             *.mmd) show_mermaid "$seg" ;;
-            # Morceau vide ou blanc (entre deux diagrammes) : rien à afficher.
             *)
               if grep -q '[^[:space:]]' "$seg"; then
                 glow -w "$width" "$seg"
@@ -153,8 +134,7 @@ let
         ext=''${f##*.}
         ext=''${ext,,}
 
-        # Extension d'abord pour les cas où le mime est trop vague
-        # (text/plain pour du markdown, du json…).
+        # Extension d'abord : le mime est trop vague (text/plain pour markdown, json).
         case "$ext" in
           md | markdown) show_markdown "$f"; return ;;
           json) jq -C . "$f" 2>/dev/null || bat "$f"; return ;;
@@ -172,10 +152,7 @@ let
             echo
             pdftotext -layout "$f" - | bat --file-name "$f" -l txt
             ;;
-          # Vidéo dans le terminal seulement si c'est en pleine qualité :
-          # protocole graphique kitty, hors tmux (mpv ne sait pas le faire
-          # passer à travers tmux : écran noir). Sinon fenêtre mpv, jamais de
-          # rendu en blocs pixelisés.
+          # Terminal seulement via le protocole kitty hors tmux (écran noir sinon), sinon fenêtre mpv.
           video/*)
             if [ -n "''${KITTY_WINDOW_ID:-}" ] && [ -z "''${TMUX:-}" ]; then
               mpv --really-quiet --vo=kitty --vo-kitty-use-shm=yes "$f"
@@ -210,7 +187,6 @@ let
             bat "$f"
             ;;
           *)
-            # Binaire inconnu : ce que `file` en dit + le début en hexa.
             file -b "$f"
             hexyl --length 256 "$f"
             ;;
@@ -227,7 +203,6 @@ let
 
       status=0
       for f in "$@"; do
-        # En-tête entre les fichiers quand il y en a plusieurs.
         if [ $# -gt 1 ]; then
           printf '\n\033[1m── %s ──\033[0m\n' "$f"
         fi

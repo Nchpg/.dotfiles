@@ -1,8 +1,5 @@
-# Source unique des polices, consommée par modules/system/fonts,
-# modules/system/stylix et modules/user/stylix.
 pkgs: rec {
-  # /!\ stylix (ci-dessous) référence ces familles par leur nom : le rendu
-  # GDM/session casse si elles manquent d'ici.
+  # Doit contenir les familles référencées par `stylix` ci-dessous.
   packages = [
     pkgs.nerd-fonts.fira-code
     pkgs.twitter-color-emoji

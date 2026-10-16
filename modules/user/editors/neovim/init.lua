@@ -17,9 +17,6 @@ vim.opt.clipboard = "unnamedplus"
 
 vim.g.mapleader = " "
 
--- Couleurs : le colorscheme base16 est injecté par Stylix
--- (même palette exacte que le shell et le reste du système).
-
 -- Lualine
 require("lualine").setup({
   options = {
@@ -47,11 +44,8 @@ telescope.setup({
 })
 telescope.load_extension("fzf")
 
--- Telescope ne suit pas la palette base16 de Stylix par défaut
--- (base16-nvim ne définit pas ses highlight groups), on les mappe
--- explicitement sur les couleurs Stylix pour rester cohérent.
--- Placeholders @stylix_baseXX@ injectés par default.nix (lib.replaceStrings),
--- comme @terminal@/@bar@ dans le config.template de sway.
+-- base16-nvim ne définit pas les highlight groups de Telescope : mappés sur la
+-- palette (placeholders @stylix_baseXX@ remplacés par default.nix).
 local c = {
   base00 = "#@stylix_base00@", -- fond
   base01 = "#@stylix_base01@", -- fond clair
@@ -89,9 +83,7 @@ local function tshl()
   set(0, "TelescopeMatching",        { fg = c.base0A, bold = true })
 end
 tshl()
--- Stylix charge son colorscheme (base16-nvim) potentiellement APRÈS ce
--- bloc : on réapplique sur ColorScheme, et une fois l'UI prête, pour
--- garantir qu'on passe en dernier.
+-- Stylix peut charger son colorscheme après ce bloc : on réapplique.
 vim.api.nvim_create_autocmd("ColorScheme", { callback = tshl })
 vim.api.nvim_create_autocmd("VimEnter", {
   callback = function() vim.schedule(tshl) end,
@@ -106,7 +98,7 @@ vim.keymap.set("n", "<leader>fr", builtin.oldfiles,         { desc = "Recent fil
 vim.keymap.set("n", "<leader>fs", builtin.lsp_document_symbols, { desc = "Document symbols" })
 vim.keymap.set("n", "<leader>fd", builtin.diagnostics,      { desc = "Diagnostics" })
 
--- Treesitter (nouvelle API nvim-treesitter + built-in Neovim 0.10+)
+-- Treesitter
 vim.api.nvim_create_autocmd("FileType", {
   callback = function(args)
     pcall(vim.treesitter.start, args.buf)
@@ -134,9 +126,7 @@ require("gitsigns").setup({
 vim.keymap.set("n", "<leader>gh", ":Gitsigns preview_hunk<CR>",  { desc = "Preview hunk" })
 vim.keymap.set("n", "<leader>gb", ":Gitsigns blame_line<CR>",    { desc = "Blame line" })
 
--- image.nvim : rendu d'images via le protocole graphique kitty.
--- tmux_show_only_in_active_window + le passthrough tmux (cf. module tmux)
--- sont nécessaires pour que les images traversent tmux correctement.
+-- image.nvim (kitty) ; tmux_show_only_in_active_window + passthrough tmux requis.
 require("image").setup({
   backend = "kitty",
   processor = "magick_rock",
@@ -159,17 +149,11 @@ require("Comment").setup()
 -- Autopairs
 require("nvim-autopairs").setup()
 
--- LSP (nouvelle API Neovim 0.11 : vim.lsp.config / vim.lsp.enable)
+-- LSP (API Neovim 0.11) ; nvim-lspconfig fournit les configs de base.
 local capabilities = require("cmp_nvim_lsp").default_capabilities()
-
--- Capabilities communes à tous les serveurs
 vim.lsp.config("*", { capabilities = capabilities })
-
--- nvim-lspconfig fournit les configs de base (cmd, filetypes, root_markers)
--- dans runtimepath/lsp/<server>.lua ; on se contente de les activer.
 vim.lsp.enable({ "nil_ls", "pyright", "gopls", "lua_ls", "clangd" })
 
--- Keymaps LSP au moment de l'attach
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)
     local opts = { buffer = args.buf }

@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# `theme` : change de thème (galerie) ou de variante dark/light. Installé
-# seulement avec Stylix (cf. scripts/default.nix).
-#
-#   theme                  galerie servie en local : appliquer un thème
-#                          réécrit le profil de CETTE cible (darkTheme /
-#                          lightTheme), les favoris vivent dans
-#                          themes/gallery/favorites.json — versionnés,
-#                          sélection personnelle et non état système
-#   theme dark|light|toggle  rebuild dans cette variante
 set -euo pipefail
 
-# Dépôt, cible et variante actuelles, galerie et navigateur figés au build :
-# cf. lib/env.sh. confirm : cf. lib/ui.sh.
 here="$(dirname "$0")"
 # shellcheck source=scripts/lib/env.sh
 . "$here/lib/env.sh"
@@ -22,11 +11,7 @@ current="${DOTS_VARIANT:-dark}"
 
 want="${1:-}"
 
-# Sans argument : galerie servie en local (pas file://) pour que le
-# bouton "appliquer" puisse réécrire le profil.
 if [ -z "$want" ]; then
-  # Pas de require_flake : ce sont ces deux fichiers du dépôt qu'il faut
-  # pouvoir écrire, contrôlés juste en dessous.
   profile="$flake/profiles/$DOTS_PROFILE/default.nix"
   favorites="$flake/themes/gallery/favorites.json"
   for f in "$profile" "$favorites"; do
@@ -45,8 +30,7 @@ if [ -z "$want" ]; then
   [ "$rc" = 2 ] && exit 0
   [ "$rc" = 0 ] || exit "$rc"
 
-  # Le rebuild vit ici (terminal) et pas dans le handler HTTP : il a
-  # besoin de sudo.
+  # Rebuild ici et non dans le serveur HTTP : il a besoin de sudo.
   echo
   if confirm "Rebuild maintenant ?"; then exec rebuild; fi
   echo "Config modifiée. Lance \`rebuild\` quand tu veux l'appliquer."

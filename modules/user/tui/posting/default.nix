@@ -24,7 +24,6 @@ in
       watch_themes: false
     '';
 
-    # posting cherche ses thèmes dans ~/.local/share/posting/themes (xdg.dataFile).
     xdg.dataFile."posting/themes/stylix.yaml".text = ''
       name: stylix
       primary: "${c.base0D}"

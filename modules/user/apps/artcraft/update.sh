@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# Vérifie la dernière release GitHub d'ArtCraft Launcher (storytold/craft-launcher)
-# et met à jour pinned.json avec l'URL et le hash SRI de l'AppImage x86_64,
-# calculé via `nix store prefetch-file` pour que le hash corresponde à
-# l'artefact réellement empaqueté.
-# Seul le launcher est épinglé ici : les apps de la suite, il les installe et
-# les met à jour lui-même dans ~/Applications (cf. default.nix).
-# Protocole : cf. scripts/lib/update-module.sh.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"

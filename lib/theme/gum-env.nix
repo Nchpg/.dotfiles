@@ -1,9 +1,3 @@
-# Bloc bash qui donne aux menus gum la palette du thème (cf. ui-palette.nix),
-# pour les TUI qui en affichent (lg-control, bt-combine) : jamais le rose par
-# défaut de gum. Les commandes du dépôt, elles, tirent les mêmes rôles de
-# scripts/lib/ui.sh.
-#
-# `colors` : palette base16 au format de `config.lib.stylix.colors`, ou null.
 { colors }:
 with import ./ui-palette.nix colors;
 ''

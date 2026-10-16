@@ -1,16 +1,8 @@
 function searchf --description "Search files and their content using fzf"
-    # Le token sert UNIQUEMENT à préremplir --query de fzf (cf. plus bas).
-    # Surtout pas d'`eval` ici : $token est du texte non validé tapé ou collé
-    # par l'utilisateur, et un chemin contenant $(...), ; ou des backticks
-    # serait exécuté au simple appui sur le raccourci. Une expansion du ~
-    # suffit à l'usage voulu.
+    # Le token ne préremplit que --query : surtout pas d'`eval` (texte non validé).
     set -f token (commandline --current-token)
     set -f unescaped_exp_token (string replace -r '^~' -- $HOME $token)
 
-    # Toutes les lignes de tous les fichiers texte sous le dossier courant,
-    # « fichier:ligne:contenu » ; fzf ne cherche que dans le contenu (--nth 3..).
-    # rg saute d'office les binaires, les fichiers cachés et ceux ignorés par
-    # git, comme le faisait le couple fd + `file` d'avant.
     set results (
         rg --line-number --no-heading --with-filename --color=always \
             --colors path:fg:green --colors line:fg:magenta --colors line:style:intense \
@@ -41,7 +33,6 @@ function searchf --description "Search files and their content using fzf"
 
     if test -n "$results"
         for line in $results
-            # Nettoyer les codes ANSI du nom de fichier pour vim
             set file_with_color (echo $line | cut -d: -f1)
             set file (string replace -ra '\e\[[0-9;]*m' '' "$file_with_color")
             set lineno (echo $line | cut -d: -f2)
@@ -65,11 +56,8 @@ function fzf_custom_bindings --description "Bind keys to searchf"
     end
 end
 
-
 function man
-      # BAT_THEME=$__bat_preview_theme dans la preview (posé par
-      # shell/fish/default.nix) : sans tty, bat ne peut pas détecter la
-      # polarité du terminal et retomberait sur Monokai au lieu de gruvbox.
+      # BAT_THEME dans la preview : sans tty, bat retomberait sur Monokai.
       set MAN_ARGS $argv
       if test (count $argv) -eq 0;
           set selected_page (command man -k . | sort | fzf --ansi --multi --delimiter=" - " --border --prompt='Manual > ' --height=90% --reverse -e --preview="bash -c '
@@ -81,9 +69,7 @@ function man
           if test -z "$selected_page"
             return
           end
-          # Une ligne par page choisie (--multi), « nom[, alias…] (section) - … » :
-          # on garde le premier nom et sa section, passés sous la forme
-          # `nom(section)` (`man 1 ls 3 printf` ne lirait que la première).
+          # Premier nom + section de chaque ligne, en `nom(section)` (`man 1 ls 3 printf` ne lirait que la première).
           for line in $selected_page
               set -l parts (string match -r --groups-only '^(.*?) *\(([0-9a-zA-Z ]+)\)' -- $line)
               or continue

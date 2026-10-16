@@ -5,26 +5,13 @@
   ...
 }:
 
-# ArtCraft Launcher : installe et met à jour la Craft App Suite (PhotoCraft,
-# VectorCraft, FilmCraft, ... clones open source d'Adobe). Gaté par profil.
-#
-# Partage des rôles : Nix gère le LAUNCHER (épinglé par pinned.json, bumpé par
-# update.sh), le launcher gère les APPS (AppImages dans ~/Applications, MAJ en
-# un clic). Les apps sortent quasi tous les jours en alpha : les épingler une
-# par une ferait un bump de hash par jour et par app.
-#
-# Pourquoi le launcher n'écrase pas sa version Nix : son auto-update ne
-# s'active que lancé en AppImage ($APPIMAGE) ou en .deb/.rpm dans /usr/bin.
-# Extrait par wrapType2, ni l'un ni l'autre : il affiche juste un bandeau
-# « Download » quand une version sort, à ignorer (le bump passe par update.sh).
+# Le bandeau « Download » du launcher est à ignorer : pas d'auto-update hors AppImage natif/.deb/.rpm.
 let
   cfg = config.userSettings.apps.artcraft;
 
-  # Version, URL + hash épinglés automatiquement par update.sh
   pinned = lib.importJSON ./pinned.json;
 
   pname = "artcraft-launcher";
-  # Préfixe des .desktop, icônes et unités dans l'AppImage.
   appId = "ai.storyteller.artcraft-launcher";
 
   src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
@@ -38,17 +25,7 @@ let
     inherit pname src;
     inherit (pinned) version;
 
-    # Les apps lancées par le launcher (« Open ») tournent DANS son bac à
-    # sable bwrap, où le fusermount setuid ne marche pas : leur AppImage ne
-    # peut pas monter son squashfs (« No suitable fusermount binary »). Ce
-    # mode l'extrait dans /tmp à la place, au prix d'un démarrage un peu plus
-    # lent.
-    #
-    # Fermer la fenêtre QUITTE le launcher : son réglage « Keep running in the
-    # tray » (vrai par défaut) le laisserait tourner en fond. Remis à faux à
-    # chaque lancement, dans le fichier où il garde ses réglages (une seule
-    # occurrence ; fichier absent : réglages partiels acceptés, le reste prend
-    # ses valeurs par défaut).
+    # EXTRACT_AND_RUN : fusermount setuid ne marche pas dans le bwrap du launcher.
     profile = ''
       export APPIMAGE_EXTRACT_AND_RUN=1
 
@@ -62,8 +39,7 @@ let
       unset artcraft_settings
     '';
 
-    # .desktop de l'AppImage : Exec pointe le binaire interne, à remplacer par
-    # le wrapper (seul à monter l'environnement FHS).
+    # Exec doit pointer le wrapper (seul à monter l'environnement FHS).
     extraInstallCommands = ''
       install -Dm444 ${extracted}/usr/share/applications/${appId}.desktop \
         $out/share/applications/${appId}.desktop
@@ -98,9 +74,6 @@ in
       syncDesktop
     ];
 
-    # Entrées de menu des apps installées par le launcher (cf.
-    # sync-desktop.sh) : resynchro à chaque install/MAJ/désinstall dans
-    # ~/Applications, et une fois à la connexion pour rattraper l'existant.
     systemd.user.paths.artcraft-sync-desktop = {
       Unit.Description = "Surveille ~/Applications (apps ArtCraft)";
       Path = {

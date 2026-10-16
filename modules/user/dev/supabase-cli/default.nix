@@ -8,7 +8,6 @@
 let
   cfg = config.userSettings.dev.supabaseCli;
 
-  # SUPABASE_ACCESS_TOKEN lu par le CLI lui-même (confirmé dans son binaire).
   supabase-wrapper = myLib.sops.mkSecretEnvWrapper {
     inherit config;
     pkgs = cfg.pkgs;

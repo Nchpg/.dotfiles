@@ -9,11 +9,8 @@
 let
   cfg = config.userSettings.agents.mammouthCode;
 
-  # Version, URL + hash épinglés automatiquement par update.sh
   pinned = lib.importJSON ./pinned.json;
 
-  # Binaire précompilé (fork d'OpenCode) en release GitHub, pas npm/nixpkgs :
-  # autoPatchelfHook patche l'interpréteur ELF vers le glibc de nixpkgs.
   mammouth-code = cfg.pkgs.stdenv.mkDerivation {
     pname = "mammouth-code";
     version = pinned.version;
@@ -22,9 +19,7 @@ let
 
     nativeBuildInputs = [ cfg.pkgs.autoPatchelfHook ];
     dontBuild = true;
-    # Exécutable Bun single-file : le JS de l'app est un trailer après le
-    # binaire bun. Le strip par défaut l'arrache (mammouth affichait le CLI
-    # générique de Bun au lieu de l'app).
+    # Exécutable Bun : le JS de l'app est un trailer que strip arracherait.
     dontStrip = true;
 
     installPhase = ''

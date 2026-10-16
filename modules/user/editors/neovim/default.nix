@@ -9,8 +9,6 @@
 let
   cfg = config.userSettings.editors.neovim;
 
-  # init.lua séparé (coloration syntaxique à l'édition) : valeurs dynamiques
-  # injectées via placeholders @stylix_baseXX@.
   colors = myLib.theme.schemeColors { inherit config themes; };
   stylixColorNames = [
     "base00"
@@ -40,26 +38,22 @@ in
       enable = true;
       viAlias = true;
       vimAlias = true;
-      # 26.05 a basculé ces défauts à false ; on garde l'ancien comportement.
+      # 26.05 a basculé ces défauts à false : on garde l'ancien.
       withRuby = true;
       withPython3 = true;
 
       plugins =
         with cfg.pkgs.vimPlugins;
         [
-          # telescope + deps
           plenary-nvim
           nvim-web-devicons
           telescope-nvim
           telescope-fzf-native-nvim
 
-          # treesitter
           nvim-treesitter.withAllGrammars
 
-          # lsp
           nvim-lspconfig
 
-          # completion
           nvim-cmp
           cmp-nvim-lsp
           cmp-buffer
@@ -67,39 +61,33 @@ in
           luasnip
           cmp_luasnip
 
-          # ui
           lualine-nvim
           nvim-tree-lua
-          image-nvim # rendu d'images (backend kitty)
+          image-nvim
 
-          # git
           vim-fugitive
           gitsigns-nvim
 
-          # edition
           comment-nvim
           nvim-autopairs
           vim-surround
         ]
-        # WakaTime : suivi du temps de code, partage la cfg sops (~/.wakatime.cfg)
         ++ lib.optional config.userSettings.editors.wakatime.enable cfg.pkgs.vimPlugins.vim-wakatime;
 
       extraPackages =
         myLib.packaging.editorLspPackages cfg.pkgs
         ++ (with cfg.pkgs; [
-          gopls # go
+          gopls
           lua-language-server
-          ripgrep # telescope live grep
+          ripgrep
           fd
-          # image.nvim : rendu + rasterisation PDF/EPS (poppler-utils déclaré
-          # ici et pas seulement via claude, sinon perdu sans ce module).
+          # image.nvim : rendu + rasterisation PDF/EPS
           imagemagick
           ghostscript
           poppler-utils
         ]);
 
-      # Rock lua `magick` : extraLuaPackages matche la version de Neovim,
-      # pas de conflit luajit.
+      # Rock lua `magick` : extraLuaPackages matche la version de Neovim.
       extraLuaPackages = ps: [ ps.magick ];
 
       initLua = initLuaContent;

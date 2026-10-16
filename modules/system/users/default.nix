@@ -35,14 +35,7 @@
               sshKeys = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
-                description = ''
-                  Clés PUBLIQUES autorisées à ouvrir une session SSH sous cet
-                  utilisateur (~/.ssh/authorized_keys). Publiques : rien à
-                  protéger, elles restent en clair dans le repo — contrairement
-                  aux secrets, qui passent par sops.
-
-                  Sans effet tant que systemSettings.ssh.enable est faux.
-                '';
+                description = "Clés publiques autorisées en SSH (authorized_keys). Sans effet tant que systemSettings.ssh.enable est faux.";
                 example = [ "ssh-ed25519 AAAAC3Nza… nchpg@gram" ];
               };
 
@@ -55,11 +48,7 @@
                   ]
                 );
                 default = null;
-                description = ''
-                  Shell de LOGIN (TTY, SSH). null = bash (défaut NixOS).
-                  Les terminaux graphiques suivent userSettings.shell.default
-                  (home-manager), indépendamment de ce réglage.
-                '';
+                description = "Shell de login (TTY, SSH). null = bash. Les terminaux graphiques suivent userSettings.shell.default.";
               };
             };
           }
@@ -69,15 +58,9 @@
   };
 
   config = {
-    # Mots de passe non déclaratifs : mutableUsers = true (défaut NixOS),
-    # posés/modifiés à la main via `passwd`.
 
-    # Binaire sudo exécutable par le seul groupe wheel : un compte non admin
-    # (guest, utilisateurs de service) ne peut même pas tenter une élévation.
-    # Rien d'autre que l'admin n'appelle sudo (ni service, ni CI).
     security.sudo.execWheelOnly = true;
 
-    # Couvre aussi la liste vide : `lib.any` y vaut false.
     assertions = [
       {
         assertion = lib.any (user: user.isAdmin) config.systemSettings.users;
@@ -90,13 +73,7 @@
         inherit (user) name;
         value = {
           isNormalUser = true;
-          # networkmanager pour tous : gérer son wifi crée une connexion
-          # système (policy polkit modify.system). Conditionné à NM, sinon le
-          # groupe n'existe pas (profil à IP statique, cf. modules/system/network).
-          # video/render pour tous : accès GPU (luminosité, Vulkan, VA-API),
-          # pas un souci sur une machine mono-user de confiance. libvirtd reste
-          # opt-in comme docker : quasi équivalent root (une VM peut monter le
-          # disque hôte).
+          # networkmanager seulement si NM est actif ; libvirtd et docker restent opt-in (quasi root).
           extraGroups = [
             "video"
             "render"
@@ -113,7 +90,7 @@
       }) config.systemSettings.users
     );
 
-    # Ajoute le shell à /etc/shells (sinon login refusé) + complétions système.
+    # Ajoute le shell à /etc/shells (sinon login refusé).
     programs.fish.enable = lib.any (user: user.shell == "fish") config.systemSettings.users;
     programs.zsh.enable = lib.any (user: user.shell == "zsh") config.systemSettings.users;
 

@@ -17,7 +17,6 @@ let
     ${vdirsyncerBin} sync
   '';
 
-  # ID de collection (PII) depuis sops, placeholder remplacé à l'activation.
   khalCalendars = concatStringsSep "\n" (
     mapAttrsToList (name: calendar: ''
       [[${name}]]
@@ -31,8 +30,6 @@ let
     mapAttrsToList (_: calendar: lib.nameValuePair calendar.collectionSecret { }) cfg.calendars
   );
 
-  # Placeholders remplacés à l'activation par sops : rien de secret ne
-  # transite par Git ni par le Nix store.
   vdirsyncerConfig = ''
     [general]
     status_path = "~/.local/state/vdirsyncer/status/"
@@ -57,7 +54,6 @@ let
     end_date = "datetime.now() + timedelta(days=${toString cfg.syncFutureDays})"
     item_types = ["VEVENT"]
   '';
-
 in
 {
   options.userSettings.tui.calendar = {
@@ -152,9 +148,6 @@ in
         height = 950;
       })
       {
-        # Vérifie le DROIT d'accès (keyOwner/root) à l'éval, message clair au
-        # lieu d'un échec obscur au déchiffrement. La présence effective de la
-        # clé age est vérifiée par sops-nix à l'activation (fichier runtime).
         assertions = myLib.sops.assertAvailable {
           inherit config;
           optionName = "userSettings.tui.calendar";
@@ -166,8 +159,6 @@ in
           vdirsyncer
         ];
 
-        # Couleurs Stylix résolues à l'éval, IDs injectés à l'activation
-        # (mix placeholder runtime + interpolation build OK).
         sops.templates."khal-config" = {
           path = "${config.home.homeDirectory}/.config/khal/config";
           content = ''
@@ -232,8 +223,6 @@ in
           '';
         };
 
-        # google/* = creds OAuth (partagés avec task-tui) ; calendars/* = IDs
-        # d'agendas (PII), un par calendrier.
         sops.secrets = calendarSecrets // {
           "google/client_id" = { };
           "google/client_secret" = { };
@@ -245,13 +234,11 @@ in
 
         home.file.".calendars/google/.keep".text = "";
 
-        # No-op tant que ~/.config/vdirsyncer/config n'a pas été créé.
         systemd.user.services.calendar-tui-sync = {
           Unit.Description = "Synchronisation Google Calendar pour ikhal";
           Service = {
             Type = "oneshot";
-            # Au réveil, le timer part souvent avant le retour du Wi-Fi (DNS
-            # injoignable) : on réessaie au lieu de rester en échec.
+            # Au réveil le Wi-Fi n'est souvent pas revenu : on réessaie.
             Restart = "on-failure";
             RestartSec = "30s";
             ExecStart = "${cfg.pkgs.writeShellScript "calendar-tui-sync" ''
@@ -270,12 +257,6 @@ in
           Install.WantedBy = [ "timers.target" ];
         };
 
-        # Setup OAuth (config vdirsyncer générée automatiquement par sops) :
-        # Google Cloud Console -> activer l'API CalDAV + créer un OAuth Client
-        # ID "Desktop application", puis `secrets edit` pour
-        # renseigner google.client_id/client_secret/project_id et
-        # calendars.perso/epita/feries. Après switch : vdirsyncer discover
-        # && vdirsyncer sync une fois, puis Mod+c ouvre ikhal.
       }
     ]
   );

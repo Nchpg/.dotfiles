@@ -18,8 +18,6 @@
 # Les chemins HM sont résolus à l'exécution (XDG sinon legacy per-user) → portable.
 set -euo pipefail
 
-# Aucun argument : sans ce garde, `genclean --help` (proposé par `dots`) lançait
-# directement le nettoyage. L'aide est l'en-tête ci-dessus.
 case "${1:-}" in
     "") ;;
     -h|--help) sed -n '3,19p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -28,9 +26,6 @@ esac
 
 SYSTEM_PROFILE="/nix/var/nix/profiles/system"
 
-# Couleurs, err/warn, confirm et palette gum : cf. lib/ui.sh (valeurs de ce
-# système : lib/env.sh). gum seulement vers un terminal ; sans lui, questions
-# en read classiques. Le dépôt n'est pas nécessaire : seul `rebuild` y touche.
 here="$(dirname "$0")"
 # shellcheck source=scripts/lib/env.sh
 . "$here/lib/env.sh"
@@ -40,12 +35,10 @@ here="$(dirname "$0")"
 fancy=0
 ui_fancy && fancy=1
 
-# Ctrl+C / Échap dans un menu gum : on abandonne tout, rien n'a encore été fait.
 abort() { echo "Annulé, rien n'a été modifié." >&2; exit 130; }
 
 me="$(id -un)"
 
-# Exécute une commande en tant que $user (sans sudo si c'est déjà nous).
 run_as() {
     local user="$1"; shift
     if [ "$user" = "$me" ]; then
@@ -55,10 +48,7 @@ run_as() {
     fi
 }
 
-# Demande un entier ≥ 1, redemande tant qu'il est invalide. ^[1-9] et pas
-# ^[0-9] : « 0d » ou « +0 » supprimerait TOUT l'historique de rollback d'un
-# coup, alors que préserver ces points de retour est justement l'objet de ce
-# script.
+# ^[1-9] et non ^[0-9] : « 0d » ou « +0 » supprimerait tout l'historique de rollback.
 ask_int() {
     local header="$1" placeholder="$2" v
     while :; do
@@ -72,7 +62,6 @@ ask_int() {
     done
 }
 
-# --- Questions, toutes d'avance ----------------------------------------------
 gens=$(find "$(dirname "$SYSTEM_PROFILE")" -maxdepth 1 -name 'system-*-link' | wc -l)
 echo "Générations système actuelles : $gens"
 
@@ -107,8 +96,6 @@ S_GC="Garbage collection (libérer l'espace disque)"
 S_OPTIMISE="Optimiser le store (déduplication par hardlinks, peut être long)"
 declare -A STEP=()
 if [ "$fancy" -eq 1 ]; then
-    # Préselection : profils + GC, le nettoyage habituel ; hm-backup (supprime
-    # des fichiers) et optimise (long) se cochent à la demande.
     picked=$(gum choose --no-limit --header "Étapes en plus   (espace : cocher, entrée : valider)" \
         --cursor-prefix "› " --selected-prefix "◉ " --unselected-prefix "○ " \
         --selected="$S_PROFILES,$S_GC" \
@@ -122,7 +109,6 @@ fi
 has_rebuild=0
 command -v rebuild >/dev/null 2>&1 && has_rebuild=1
 
-# Récapitulatif avant de lancer, puis plus aucune question.
 echo
 echo "À faire :"
 echo "  • système : $sys_desc"
@@ -135,16 +121,12 @@ if [ "$fancy" -eq 1 ]; then
     gum confirm "Lancer ?" --affirmative "Oui" --negative "Non" || abort
 fi
 
-# sudo demandé maintenant, pas au milieu d'une étape longue.
 sudo -v
 
-# --- 1. Profil SYSTÈME -------------------------------------------------------
 echo "→ Système : $sys_desc..."
 sudo nix-env -p "$SYSTEM_PROFILE" --delete-generations "$sys_arg"
 
-# --- 2. Profils utilisateur : home-manager ET profile (optionnel) -----------
 if [ -n "${STEP[$S_PROFILES]:-}" ]; then
-    # Users détectés via les services générés par le module HM (portable).
     mapfile -t HM_USERS < <(
         systemctl list-unit-files --no-legend 'home-manager-*.service' 2>/dev/null \
             | sed -n 's/^home-manager-\(.*\)\.service.*/\1/p'
@@ -155,11 +137,7 @@ if [ -n "${STEP[$S_PROFILES]:-}" ]; then
     else
         for u in "${HM_USERS[@]}"; do
             echo "→ HM[$u] : purge de l'historique (on garde la génération courante)..."
-            # Résolution du chemin + purge EN TANT QUE $u : on lit ainsi son
-            # $HOME (même protégé) et on préserve les permissions du profil.
-            # shellcheck disable=SC2016 # single quotes voulues : ce bloc s'exécute
-            # dans le bash de run_as (sous l'user $u), pas ici -> $HOME/$p/... doivent
-            # s'étendre là-bas, pas dans CE shell (qui n'a pas le bon $HOME).
+            # shellcheck disable=SC2016 # le bloc s'exécute sous l'user $u : $HOME doit s'étendre là-bas
             run_as "$u" bash -c '
                 if   [ -d "$HOME/.local/state/nix/profiles" ]; then
                      dir="$HOME/.local/state/nix/profiles"                     # XDG
@@ -168,13 +146,6 @@ if [ -n "${STEP[$S_PROFILES]:-}" ]; then
                 else
                      printf "\033[1;33m   profils introuvables, ignoré.\033[0m\n"; exit 0
                 fi
-                # DEUX profils accumulent une génération par rebuild, pas un :
-                #   home-manager : la génération HM elle-même
-                #   profile      : les user-environment (nix profile / nix-env)
-                # Ne purger que le premier laissait le second croître sans fin.
-                # Constaté sur guest : 325 générations `profile` retenant 304
-                # closures distinctes, soit ~20 000 chemins que le GC ne pouvait
-                # pas libérer — alors que son historique HM était bien purgé.
                 for name in home-manager profile; do
                      p="$dir/$name"
                      if [ ! -e "$p" ]; then
@@ -190,19 +161,13 @@ else
     echo "Purge home-manager ignorée."
 fi
 
-# --- 2bis. Fichiers *.hm-backup (optionnel) ----------------------------------
-# home-manager.backupFileExtension = "hm-backup" : à chaque collision, HM
-# renomme l'ancien fichier en *.hm-backup au lieu d'échouer. Ils s'accumulent.
+# HM renomme l'ancien fichier en *.hm-backup à chaque collision : ils s'accumulent.
 if [ -n "${STEP[$S_HMBACKUP]:-}" ]; then
     for d in /home/*/ /root/; do
         [ -d "$d" ] || continue
         u="$(stat -c %U "$d")"
         echo "→ hm-backup[$u] : recherche dans $d ..."
-        # -print0 / mapfile -d "" : robuste aux noms de fichiers exotiques
-        # (espaces, voire newlines), contrairement à l'ancien xargs -d "\n".
-        # shellcheck disable=SC2016 # single quotes voulues : ce bloc s'exécute
-        # dans le bash de run_as (sous l'user $u), pas ici -> $HOME doit s'étendre
-        # là-bas, pas dans CE shell (qui n'a pas le bon $HOME).
+        # shellcheck disable=SC2016 # le bloc s'exécute sous l'user $u : $HOME doit s'étendre là-bas
         run_as "$u" bash -c '
             mapfile -d "" -t found < <(find "$HOME" -xdev -name "*.hm-backup" -type f -print0 2>/dev/null)
             if [ "${#found[@]}" -eq 0 ]; then echo "   aucun fichier."; exit 0; fi
@@ -215,9 +180,6 @@ else
     echo "Nettoyage hm-backup ignoré."
 fi
 
-# --- 3. Garbage collection (optionnel) --------------------------------------
-# Sans -d : les générations ont déjà été purgées ci-dessus à la granularité
-# voulue. Le GC libère juste l'espace des chemins devenus orphelins.
 if [ -n "${STEP[$S_GC]:-}" ]; then
     echo "Garbage collection..."
     sudo nix-collect-garbage
@@ -225,7 +187,6 @@ else
     echo "Garbage collection ignoré."
 fi
 
-# --- 4. Optimisation du store (optionnel) -----------------------------------
 if [ -n "${STEP[$S_OPTIMISE]:-}" ]; then
     echo "Optimisation du store..."
     sudo nix-store --optimise
@@ -233,10 +194,6 @@ else
     echo "Optimisation ignorée."
 fi
 
-# --- 5. Rebuild pour rafraîchir le menu de boot (systemd-boot) ---------------
-# La commande `rebuild` du système, qui connaît la cible : absente si le paquet
-# des commandes n'a pas encore été switché (repo fraîchement cloné) — on
-# prévient au lieu d'échouer sur la dernière étape.
 if [ "$has_rebuild" -eq 1 ]; then
     echo "Rebuild du système via la commande rebuild..."
     rebuild -y

@@ -1,26 +1,9 @@
-# La politique de ce dépôt-ci et le .sops.yaml du dépôt PRIVÉ disent la même
-# chose : vérifié par le check `sops-policy` du flake (cf. flake.nix), dans la
-# forme { ok, report } de check-option-paths.
-#
-# Ce que son absence laissait passer n'est pas anodin, et c'est exactement le
-# mode de panne contre lequel tout le montage est écrit : une audience qui
-# RÉTRÉCIT. Un host retiré de `deployments`, un peer supprimé, un secret qui
-# cesse d'être déclaré par un profil — le .sops.yaml garde ses anciens
-# destinataires, rien ne rescelle selon un .sops.yaml périmé, le rebuild
-# réussit, et le rayon d'explosion reste large sans un mot. Sur-sceller n'a
-# jamais produit d'erreur nulle part.
-#
-# On compare le SUFFIXE du fichier à partir de son marqueur : ce qui précède,
-# ce sont les ancres de clés du dépôt privé, qui s'éditent à la main et ne
-# regardent pas ce dépôt-ci.
+# Compare le SUFFIXE du .sops.yaml à partir du marqueur ; les ancres au-dessus sont éditées à la main.
 lib:
 
 {
-  # Sortie de sopsPolicy.generate.
   expected,
-  # Marqueur du bloc généré (sopsPolicy.marker).
   marker,
-  # Chemin du .sops.yaml du dépôt de secrets.
   file,
 }:
 
@@ -29,9 +12,6 @@ let
   found = lib.length parts > 1;
   block = marker + lib.concatStringsSep marker (lib.tail parts);
 
-  # Ancres définies (avant le marqueur) et citées (par la politique) : une
-  # ancre citée mais absente rend le fichier illisible pour sops (« unknown
-  # anchor »), alors que le bloc, lui, serait conforme.
   namesIn =
     re: text:
     lib.unique (

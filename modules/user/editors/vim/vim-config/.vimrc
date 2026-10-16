@@ -1,26 +1,9 @@
-" Plugin section managed by Nix, do not edit
-" call plug#begin('~/.vim/plugged') 
-"     Plug 'morhetz/gruvbox'
-"     Plug 'sheerun/vim-polyglot'
-"     Plug 'vim-airline/vim-airline-themes'
-"     Plug 'vim-airline/vim-airline' 
-"     Plug 'wakatime/vim-wakatime' 
-"     Plug 'tpope/vim-fugitive'
-"     Plug 'airblade/vim-gitgutter'
-"     Plug 'tpope/vim-commentary'     
-"     Plug 'preservim/nerdtree'
-"     Plug 'neoclide/coc.nvim', {'branch': 'release'}
-" call plug#end()
-
-" set laststatus=2
 set ttimeout ttimeoutlen=50
 if !has('gui_running')
   set t_Co=256
 endif
 set noshowmode
 
-" airline_theme
-" let g:airline_theme='powerline'
 let g:show_error = 0
 let g:modification_color = 0
 let g:airline_powerline_fonts = 1
@@ -69,8 +52,6 @@ if has("termguicolors")
   set termguicolors
 endif
 syntax on
-" set background=dark
-" colorscheme gruvbox
 
 " duplicate line
 nnoremap <C-d> yyp:-1<CR>

@@ -1,31 +1,10 @@
 #!/usr/bin/env bash
-# Compare l'état AVANT (HEAD, avant tout bump) et APRÈS (working tree, une
-# fois flake.lock / pinned.json / extensions.json mis à jour) et produit un
-# JSON de FAITS : pour chaque input flake racine dont le lock a changé, date
-# + rev avant/après, nombre de commits entre les deux (si c'est un dépôt
-# GitHub) et lien de comparaison. Idem pour chaque module à `pinned.json`
-# (auto-découvert, cf. update.yml) et pour les extensions VS Code dont la
-# version a bougé. Si nixpkgs-stable change, compare aussi la version du
-# noyau (linuxPackages_latest) avant/après.
-#
-# Tout est comparé via `git show HEAD:<path>` vs le fichier courant : comme
-# flake.lock, pinned.json et extensions.json sont tous trackés, pas besoin de
-# copier un "avant" à part avant de lancer les bumps.
-#
-# Volontairement minimal : pas de contenu de commit récupéré ni interprété
-# (juste un compte + un lien) — consommé par render-pr-body.sh, qui construit
-# le corps de la PR de façon 100% déterministe (aucun LLM).
-#
-# Usage: gather-update-facts.sh [skipped-extensions.json]
-# Nécessite GH_TOKEN dans l'environnement (auth API GitHub, sinon rate-limit
-# anonyme trop bas pour ~8 inputs).
+# Usage: gather-update-facts.sh [skipped-extensions.json] ; nécessite GH_TOKEN (rate-limit anonyme trop bas).
 set -euo pipefail
 
-# owner/repo et nombre de commits : mêmes règles que la commande `update`.
 # shellcheck source=scripts/lib/flake-lock.sh
 . scripts/lib/flake-lock.sh
 
-# Contenu d'un fichier à HEAD, ou vide s'il n'existait pas encore.
 at_head() {
     git show "HEAD:$1" 2>/dev/null || true
 }
@@ -41,7 +20,7 @@ for name in $root_inputs; do
     new_locked=$(jq -c --arg n "$name" '.nodes[$n].locked // empty' "$new_lock")
 
     if [ -z "$old_locked" ] || [ "$old_locked" = "$new_locked" ]; then
-        continue # input absent avant, ou inchangé
+        continue
     fi
 
     old_rev=$(jq -r '.rev // empty' <<<"$old_locked")
@@ -67,10 +46,6 @@ for name in $root_inputs; do
         fi
     fi
 
-    # Alerte changement de version de noyau : nixpkgs-stable fournit
-    # linuxPackages_latest (cf. modules/system/boot). On évalue la version du
-    # noyau aux deux revs pour distinguer un vrai bump de noyau d'un simple
-    # bump de nixpkgs sans impact sur le noyau.
     if [ "$name" = "nixpkgs-stable" ] && [ -n "$old_rev" ] && [ -n "$new_rev" ]; then
         kernel_attr="legacyPackages.x86_64-linux.linuxPackages_latest.kernel.version"
         old_kernel=$(nix eval --raw "github:NixOS/nixpkgs/${old_rev}#${kernel_attr}" 2>/dev/null || echo "")
@@ -85,15 +60,8 @@ for name in $root_inputs; do
     flake_facts=$(jq --argjson e "$entry" '. + [$e]' <<<"$flake_facts")
 done
 
-# Diff générique entre deux maps JSON {clé: {version, ...}} : liste des clés
-# dont `.version` a changé, en {key, oldVersion, newVersion}. Partagé par les
-# pinned.json (1 fichier par module, assemblés en map ci-dessous) et
-# extensions.json (déjà une map, 1 clé par extension) — même notion de
-# "version épinglée qui a bougé", juste un stockage différent en amont (un
-# fichier par entité vs une seule map à plusieurs entités, chacun adapté à son
-# usage : pas de raison de forcer les deux dans le même format de fichier).
-# `// "nouveau"` : pour une entrée AJOUTÉE, $old[clé] vaut null et la PR
-# afficherait sinon littéralement « foo : null → 1.2.3 ».
+# Diff de deux maps JSON {clé: {version, ...}} : clés dont `.version` a changé,
+# en {key, oldVersion, newVersion}. `// "nouveau"` : entrée ajoutée.
 diff_version_map() {
     local old="$1" new="$2"
     jq -n --argjson old "$old" --argjson new "$new" '
@@ -105,10 +73,6 @@ diff_version_map() {
       ]'
 }
 
-# Modules à pin unique (kimi-code, et tout futur module du même moule) :
-# auto-découverts par leur pinned.json, pas de liste en dur ici non plus.
-# Assemblés en une map {module: <contenu du pinned.json>} pour être diffés par
-# la même fonction que les extensions vscode.
 old_pinned_map="{}"
 new_pinned_map="{}"
 while IFS= read -r -d '' pinned_file; do
@@ -120,11 +84,6 @@ while IFS= read -r -d '' pinned_file; do
         old_pinned_map=$(jq --arg m "$module" --argjson e "$old_entry" '.[$m] = $e' <<<"$old_pinned_map")
     fi
     new_pinned_map=$(jq --arg m "$module" --argjson e "$new_entry" '.[$m] = $e' <<<"$new_pinned_map")
-# Pas de -maxdepth : il valait 4 et sautait dev/vercel-cli/claude-plugin/pinned.json
-# (un cran plus profond), dont le bump était donc APPLIQUÉ par update.yml mais
-# jamais décrit dans le corps de la PR. Borner la profondeur couple ce script à
-# l'arborescence des modules — cf. la même règle pour les update.sh,
-# fl_module_updaters (scripts/lib/flake-lock.sh).
 done < <(find modules -name 'pinned.json' -print0 | sort -z)
 
 pinned_facts=$(diff_version_map "$old_pinned_map" "$new_pinned_map" | jq 'map({module: .key, oldVersion, newVersion})')
@@ -134,16 +93,11 @@ old_ext_map=$(at_head "$ext_file" | jq -c '. // {}')
 new_ext_map=$(jq -c '.' "$ext_file")
 vscode_facts=$(diff_version_map "$old_ext_map" "$new_ext_map")
 
-# Argument optionnel : extensions qu'update.sh (vscode) n'a PAS pu vérifier
-# (API Marketplace en erreur, téléchargement échoué). Elles ne font pas
-# échouer le run, donc sans ça elles ne seraient visibles que dans le log.
 skipped_ext="[]"
 if [ -n "${1:-}" ] && [ -s "$1" ]; then
     skipped_ext=$(cat "$1")
 fi
 
-# kernelChanges : les changements de noyau, calculés une fois ici pour le
-# corps de la PR et la notification Discord.
 jq -n --argjson flakeInputs "$flake_facts" --argjson pinnedUpdates "$pinned_facts" \
     --argjson vscodeExtensions "$vscode_facts" --argjson skippedExtensions "$skipped_ext" \
     '{flakeInputs: $flakeInputs, pinnedUpdates: $pinnedUpdates, vscodeExtensions: $vscodeExtensions, skippedExtensions: $skippedExtensions,

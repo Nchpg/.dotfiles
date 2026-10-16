@@ -1,44 +1,17 @@
 name: weekly-update
 
-# Bump hebdomadaire de TOUS les inputs flake (claude-code inclus, `secrets`
-# excepté) + de tout module ayant un `update.sh` (auto-découvert, même
-# découverte que la commande `update`, cf. scripts/lib/flake-lock.sh : tout
-# futur module du même moule sans qu'il faille toucher ce fichier), puis ouverture d'une PR listant, par
-# input, les dates avant/après, le nombre de commits et un lien de
-# comparaison GitHub, avec alerte si la version du noyau change. Rendu 100%
-# déterministe (pas de LLM) : aucun contenu de commit n'est résumé ni
-# interprété. Ne merge jamais automatiquement.
-#
-# La PR est ouverte avec le GITHUB_TOKEN par défaut, et GitHub ne déclenche
-# aucun workflow sur les événements produits par ce token : les checks ne
-# viennent donc PAS de l'event pull_request, mais du `push` sur la branche
-# `weekly-update`, explicitement listée dans check.yml. Ne retire pas cette
-# branche de check.yml sans passer create-pull-request sur un PAT, sinon la PR
-# de bump repart sans aucune vérification.
-#
-# Notifie Discord (succès ou échec) à la fin du run.
+# PR ouverte avec le GITHUB_TOKEN par défaut (aucun workflow déclenché) : les checks viennent du `push`
+# sur `weekly-update` dans check.yml. Ne pas le retirer sans passer create-pull-request sur un PAT.
 on:
   schedule:
-    - cron: "0 6 * * 1"  # lundi 06:00 UTC
+    - cron: "0 6 * * 1"
   workflow_dispatch: {}
 
-# Deux runs simultanés (typiquement un workflow_dispatch manuel pendant que le
-# cron tourne) poussent tous les deux sur la MÊME branche `weekly-update` à
-# l'étape create-pull-request : le second écrase le premier, et la PR peut se
-# retrouver avec un corps qui décrit d'autres bumps que ceux réellement dans
-# son flake.lock. Aucune erreur n'est levée, le résultat est juste faux.
-#
-# cancel-in-progress: false — on met en file d'attente au lieu d'annuler,
-# contrairement à check.yml : un run de bump déjà lancé a un travail utile à
-# terminer, il ne devient pas obsolète parce qu'un autre démarre.
 concurrency:
   group: weekly-update
   cancel-in-progress: false
 
-# Runner self-hosted en locale française : create-pull-request compare la
-# sortie de `git stash push` à la chaîne anglaise "No local changes to save",
-# croit qu'un stash existe, et son `git stash pop` échoue (« Aucune entrée de
-# remisage trouvée »). Git en anglais règle ça pour tous les steps.
+# create-pull-request compare la sortie de `git stash push` à la chaîne anglaise : git en anglais.
 env:
   LC_ALL: C.UTF-8
 
@@ -52,18 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
-      # Jeton frais et caches binaires, cf. l'action (même montage que check.yml).
       - uses: ./.github/actions/setup-nix
 
-      # `nix flake update` traite un échec de résolution d'input en WARNING :
-      # il retombe sur « using cached version », n'écrit rien, et sort en 0.
-      # Le job passe donc au vert en n'ayant rien bumpé (vécu : 9 jours de MAJ
-      # hebdo fantômes sur un token expiré). On échoue explicitement.
-      # `set -o pipefail` indispensable : sans lui le code de retour serait
-      # celui de `tee`, et un vrai échec de `nix flake update` serait masqué.
-      #
-      # Mêmes inputs que la commande `update` (sans `secrets` ni les
-      # `follows`, cf. fl_bumpable_inputs) : une seule définition.
+      # `nix flake update` sort en 0 sur un échec de résolution (WARNING) : échec explicite ; pipefail pour ne pas masquer l'échec derrière `tee`.
       - name: bump des inputs flake
         run: |
           set -o pipefail
@@ -75,16 +39,7 @@ jobs:
             exit 1
           fi
 
-      # Auto-discovery : tout module avec un `update.sh` (kimi-code, vscode,
-      # ...) est lancé ici — même découverte que `update` / `rebuild -u`, cf.
-      # fl_module_updaters. Un échec reste local au module (API tierce down,
-      # offline, ...) et n'interrompt jamais les autres ni la création de la PR.
-      # VSCODE_SKIPPED_FILE : liste des extensions que vscode/update.sh n'a
-      # pas pu vérifier (API Marketplace en erreur, téléchargement échoué).
-      # Reprise plus bas dans les faits, pour apparaître dans le corps de la PR.
       - name: bump des modules (update.sh auto-découverts)
-        # Lu par les update.sh qui interrogent l'API GitHub (artcraft...) :
-        # sans jeton, 60 requêtes/h par IP.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -106,11 +61,6 @@ jobs:
           changed=$(jq '(.flakeInputs | length) > 0 or (.pinnedUpdates | length) > 0 or (.vscodeExtensions | length) > 0' "${RUNNER_TEMP}"/facts.json)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
-      # Les contournements marqués `EXPIRE:` sont ajoutés en fin de corps : le
-      # rendez-vous hebdomadaire est le seul moment où on les relit, et le
-      # script dit quand une PR amont a été mergée (donc quand le
-      # contournement peut sauter). Non bloquant : `gh` peut échouer, ça ne
-      # doit pas empêcher la PR de bump d'exister.
       - name: générer le corps de la PR
         if: steps.facts.outputs.changed == 'true'
         env:

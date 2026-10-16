@@ -14,7 +14,6 @@ let
 in
 {
   options.userSettings.windowManager.sway.rofi = {
-    # Suit sway : sert le lanceur $mod+d et $mod+v de cliphist.
     enable = lib.mkEnableOption "lanceur rofi (remplace wofi + dmenu)" // {
       default = config.userSettings.windowManager.sway.enable;
     };
@@ -133,7 +132,6 @@ in
             };
         };
 
-        # $menu : lanceur d'applis, sur $mod+d et la touche Recherche.
         home.file.".config/sway/conf.d/rofi.conf".text = ''
           set $menu rofi -show drun
           bindsym $mod+d exec $menu
@@ -143,10 +141,6 @@ in
         '';
       }
 
-      # Actions système dans le lanceur (glyphes maison, cf. lib/desktop/rofi-action.nix).
-      # systemctl poweroff : pas besoin de sudo (polkit, session graphique
-      # active), contrairement à `shutdown now`. L'entrée `awake` vient du
-      # module lock.
       (myLib.desktop.mkRofiAction {
         inherit config;
         name = "shutdown";

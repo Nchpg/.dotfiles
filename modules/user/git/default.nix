@@ -43,16 +43,11 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-
-        # delta (core.pager/diffFilter plus bas) : fourni par le socle de
-        # modules/user/shell, toujours actif.
         home.packages = [ cfg.pkgs.git-graph ];
 
         programs.git = {
           enable = true;
           package = cfg.pkgs.git;
-          # HM 26.05 : user.* n'accepte plus null -> défini seulement si renseigné
-          # (guest n'en a pas).
           settings = {
             user.name = lib.mkIf (cfg.userName != null) cfg.userName;
             user.email = lib.mkIf (cfg.userEmail != null && cfg.userEmailSops == null) cfg.userEmail;
@@ -62,31 +57,21 @@ in
               co = "checkout";
               br = "branch";
               ci = "commit";
-              # `-f` ne matche qu'en argument exact : le motif `*-f*` attrapait
-              # aussi --first-parent, --follow, ou un fichier "mon-fichier.c".
               lg = "!f() { case \"$*\" in *--format*|*\" -f \"*|-f|\"-f \"*|*\" -f\") git-graph -m simple \"$@\" ;; *) git-graph -m simple --format \"$(printf '%%h %%d %%s \\033[1;36m<%%an>\\033[0m \\033[32m(%%ad)\\033[0m')\" \"$@\" ;; esac }; f";
             };
 
             init.defaultBranch = "main";
             push.autoSetupRemote = true;
 
-            # `git pull` rebase au lieu de fusionner. Évite les commits de fusion
-            # parasites quand la branche distante a bougé pendant qu'on
-            # travaillait — cas courant avec la PR hebdomadaire de weekly-update,
-            # qui pousse sur une branche qu'on peut avoir en local.
-            #
-            # Corollaire : un `pull` sur un travail non commité s'interrompt au
-            # lieu de fusionner. C'est voulu, mais ça surprend la première fois.
+            # Évite les commits de fusion de la PR hebdomadaire.
             pull.rebase = true;
             core.pager = "delta";
             interactive.diffFilter = "delta --color-only";
 
-            # Lu aussi par l'alias `diff` (delta seul, cf. modules/user/shell).
             delta = {
               navigate = true;
               side-by-side = true;
               line-numbers = true;
-              # Colore avec les 16 ANSI du terminal -> suit le thème stylix actif.
               syntax-theme = "base16";
               diff-stat = true;
               hunk-header-style = "syntax bold";
@@ -98,8 +83,6 @@ in
         };
       }
 
-      # Fragment gitconfig généré via sops : l'email n'apparaît ni dans le
-      # repo ni dans le store.
       (lib.mkIf (cfg.userEmailSops != null) {
         assertions = myLib.sops.assertAvailable {
           inherit config;

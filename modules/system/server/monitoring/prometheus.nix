@@ -4,18 +4,10 @@
   ...
 }:
 
-# Prometheus : collecte, historique, et ÉVALUATION DES RÈGLES. C'est lui qui
-# décide qu'il y a un problème.
-#
-# Ce fichier ne déclare ni tâche ni règle : il ramasse celles que les
-# composants déposent dans `internal` et fixe leur ORDRE dans le fichier
-# produit.
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) ports scrapeJobs alertRules;
 
-  # Ordre des tâches de collecte. Une entrée absente (composant coupé) est
-  # sautée ; une tâche déclarée mais oubliée ici fait échouer l'évaluation.
   ordreCollecte = [
     "prometheus"
     "node"
@@ -35,20 +27,8 @@ let
     "blackbox"
   ];
 
-  # RÈGLES D'ALERTE, par groupe et dans l'ordre où elles s'écrivent. C'est la
-  # seule partie de ce module qui décide de quelque chose : Prometheus
-  # fraîchement installé collecte en silence et ne dit jamais rien tant que rien
-  # n'est écrit ici.
-  #
-  # Deux réglages portent tout le poids et méritent qu'on y revienne quand une
-  # alerte agace : le SEUIL, et surtout le `for`, qui exige que la condition
-  # tienne pendant toute la durée. C'est lui qui fait la différence entre une
-  # alerte qu'on lit et une alerte qu'on apprend à ignorer.
-  #
-  # Un groupe sans règle (composant coupé) disparaît du fichier.
   groupes = [
     {
-      # components/host.nix, sauf la dernière paire (components/cloudflared.nix).
       name = "host";
       rules = [
         "CibleInjoignable"
@@ -72,7 +52,6 @@ let
       ];
     }
     {
-      # components/blackbox.nix
       name = "sondes";
       rules = [
         "SondeEnEchec"
@@ -82,7 +61,6 @@ let
       ];
     }
     {
-      # components/smartctl.nix
       name = "disques";
       rules = [
         "DisqueSmartEnEchec"
@@ -99,7 +77,6 @@ let
       ];
     }
     {
-      # Les exporteurs applicatifs, un composant chacun.
       name = "applications";
       rules = [
         "PortailRefusEnRafale"
@@ -112,8 +89,6 @@ let
       ];
     }
     {
-      # La surveillance elle-même : components/meta.nix, components/logs.nix
-      # (la collecte de journaux) et loki.nix (son ruler).
       name = "meta";
       rules = [
         "Watchdog"
@@ -152,10 +127,7 @@ in
 
     services.prometheus = {
       enable = true;
-      # Boucle locale : rien n'a besoin de joindre Prometheus depuis le réseau,
-      # et son interface d'exploration donne accès à TOUTES les métriques sans
-      # la moindre authentification — c'est Grafana, derrière le portail, qui
-      # sert de façade.
+      # Interface sans authentification : Grafana, derrière le portail, sert de façade.
       listenAddress = "127.0.0.1";
       port = ports.prometheus;
       retentionTime = cfg.retention;
@@ -177,8 +149,7 @@ in
     systemSettings.monitoring.internal.scrapeJobs.prometheus =
       cfg.internal.helpers.localJob "prometheus" ports.prometheus;
 
-    # Prometheus arrêté n'évalue plus la règle qui dirait qu'il est arrêté : le
-    # signalement d'échec d'unité est son SEUL filet.
+    # Arrêté, il n'évalue plus la règle qui le dirait.
     systemSettings.notify.discord.units = [ "prometheus" ];
   };
 }

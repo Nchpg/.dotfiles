@@ -1,8 +1,6 @@
 { ... }:
 
 {
-  # Machine française : fuseau horaire, formats régionaux (l'interface reste en
-  # anglais) et clavier azerty partout (X/Wayland via xkb, TTY via console).
   time.timeZone = "Europe/Paris";
 
   i18n.defaultLocale = "en_US.UTF-8";

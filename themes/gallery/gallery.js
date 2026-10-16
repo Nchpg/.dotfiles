@@ -1,17 +1,10 @@
-// Jeton injecté par server.py au moment de servir la page. Reste au
-// placeholder si la page est ouverte directement en file:// : dans ce cas il
-// n'y a pas de serveur, et les boutons « appliquer » sont masqués (.static).
+// Reste au placeholder en file:// : boutons « appliquer » masqués via .static.
 const TOKEN = '__THEME_TOKEN__';
 if (TOKEN.startsWith('__')) document.body.classList.add('static');
 
-// Thèmes actifs, injectés par le serveur : { dark: "...", light: "..." }.
-// Reste au placeholder en file:// — d'où le try/catch, qui laisse un objet
-// vide et donc aucune carte marquée.
 let CURRENT = {};
 try { CURRENT = JSON.parse('__THEME_CURRENT__'); } catch (err) { CURRENT = {}; }
 
-// Favoris persistés dans gallery/favorites.json, injectés comme
-// CURRENT. Même repli en file://.
 let FAVORITES = new Set();
 try { FAVORITES = new Set(JSON.parse('__THEME_FAVORITES__')); } catch (err) { FAVORITES = new Set(); }
 
@@ -47,14 +40,6 @@ function markCurrent() {
   syncApplyButtons();
 }
 
-// Un thème déjà en place n'a rien à appliquer : on RETIRE le bouton plutôt
-// que de le griser — un bouton mort en permanence n'est que du bruit, la
-// pastille « actuel · <slot> » dit déjà tout. La hauteur du pied ne bouge
-// pas : c'est l'étoile, plus haute que le bouton, qui la détermine.
-//
-// La comparaison porte sur LE SLOT VISÉ par le bouton, pas sur « ce thème est
-// quelque part dans CURRENT » : un thème sombre posé à la main dans
-// lightTheme resterait légitimement applicable à darkTheme.
 function syncApplyButtons() {
   for (const [name, el] of cardByName) {
     const btn = el.querySelector('button.apply');
@@ -88,9 +73,6 @@ const search = document.getElementById('search');
 const count = document.getElementById('count');
 const empty = document.getElementById('empty');
 const filterButtons = Array.from(document.querySelectorAll('.filters button'));
-// Un seul filtre actif à la fois : « custom » porte sur l'origine du thème,
-// « dark »/« light » sur sa polarité — mutuellement exclusifs, comme les
-// onglets d'une même liste.
 let activeFilter = 'all';
 
 function matchesFilter(card) {
@@ -129,8 +111,7 @@ document.addEventListener('click', async (ev) => {
   try {
     await navigator.clipboard.writeText(name);
   } catch (err) {
-    // Clipboard API refusée (page file://, permission) : repli sur une
-    // sélection temporaire, qui marche partout.
+    // Clipboard API refusée (file://, permission) : repli par sélection.
     const ta = document.createElement('textarea');
     ta.value = name;
     document.body.appendChild(ta);
@@ -144,8 +125,6 @@ document.addEventListener('click', async (ev) => {
   setTimeout(() => { btn.textContent = previous; btn.classList.remove('copied'); }, 900);
 });
 
-// POST JSON authentifié (jeton ajouté ici) ; rend la réponse décodée, ou lève
-// avec le message d'erreur du serveur.
 async function postJson(path, body) {
   const res = await fetch(path, {
     method: 'POST',
@@ -157,7 +136,6 @@ async function postJson(path, body) {
   return data;
 }
 
-// Slots déjà réglés dans cette session, pour le récapitulatif en haut de page.
 const appliedBySlot = new Map();
 const appliedBox = document.getElementById('applied');
 
@@ -181,11 +159,6 @@ document.addEventListener('click', async (ev) => {
     const data = await postJson('/apply', { name, slot });
     appliedBySlot.set(slot, data.message);
     renderApplied();
-    // Le marqueur « actuel » suit le choix : la carte remonte en tête,
-    // l'ancienne perd son cerclage, et syncApplyButtons (appelé par
-    // markCurrent) fixe l'état des DEUX boutons — celui-ci passe à « déjà
-    // dans … » et l'ancien redevient applicable. D'où l'absence de
-    // restauration manuelle du libellé ici : elle écraserait ce calcul.
     CURRENT[slot] = name;
     markCurrent();
     showToast(data.message, 'ok');
@@ -204,11 +177,8 @@ document.addEventListener('click', async (ev) => {
   btn.disabled = true;
   try {
     const data = await postJson('/favorite', { name, on });
-    // On repart de la liste renvoyée par le serveur, pas d'un état deviné
-    // côté client : le fichier reste la source de vérité.
     FAVORITES = new Set(data.favorites);
     markFavorites();
-    // Le filtre « favoris » doit refléter le retrait immédiatement.
     if (activeFilter === 'favorite') refilter();
   } catch (err) {
     showToast('Favori : ' + err.message, 'err');
@@ -226,8 +196,7 @@ doneBtn.addEventListener('click', async () => {
       headers: { 'X-Theme-Token': TOKEN },
     });
   } catch (err) {
-    // Le serveur coupe la connexion en répondant : une erreur réseau ici
-    // signifie généralement qu'il s'est bien arrêté.
+    // Le serveur coupe la connexion en répondant : erreur attendue.
   }
   doneBtn.textContent = 'terminé';
   showToast('Session terminée — la suite se passe dans le terminal. Tu peux fermer cet onglet.', 'ok');
@@ -235,7 +204,5 @@ doneBtn.addEventListener('click', async () => {
 });
 
 refilter();
-// preventScroll : sans ça, focus() fait défiler la page pour « amener le
-// champ dans la vue » — et comme l'en-tête est en position:sticky, le
-// navigateur sur-corrige et on arrive sous le titre au lieu du haut de page.
+// preventScroll : l'en-tête sticky fait sur-corriger le navigateur.
 search.focus({ preventScroll: true });

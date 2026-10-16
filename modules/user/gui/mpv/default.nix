@@ -20,14 +20,10 @@ in
       enable = true;
       package = cfg.pkgs.mpv;
       config = {
-        # VA-API d'abord (auto-safe seul essaie avant Vulkan Video, non géré
-        # par le GPU), puis tout décodeur matériel sûr, CPU en dernier. Sans
-        # ça mpv décode tout en logiciel, même avec un driver fonctionnel.
+        # auto-safe seul essaie Vulkan Video avant VA-API, non géré par le GPU
         hwdec = "vaapi,auto-safe";
         vo = "gpu-next";
       };
-      # Profil appliqué automatiquement par mpv aux .gif : en boucle comme dans
-      # une visionneuse, au lieu de se fermer à la fin de la première lecture.
       profiles."extension.gif" = {
         loop-file = "inf";
       };

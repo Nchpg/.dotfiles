@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Vérifie la dernière version publiée de Vercel CLI sur le registre npm (celui
-# qu'utilise réellement `npx`, cf. default.nix) et met à jour pinned.json avec
-# l'URL et le hash SRI du tarball, calculé via `nix store prefetch-file` pour
-# que le hash corresponde à l'artefact effectivement exécuté. Protocole : cf.
-# scripts/lib/update-module.sh.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"

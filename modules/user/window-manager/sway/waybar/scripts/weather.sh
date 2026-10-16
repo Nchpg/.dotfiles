@@ -1,46 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Météo courante via Open-Meteo (gratuit, sans clé API). Sortie JSON :
-# barre = icône + température, tooltip = lieu / description / ressenti / vent.
-#
-# Open-Meteo a été préféré à wttr.in pour le ressenti : son champ
-# `apparent_temperature` combine température, humidité, vent ET rayonnement
-# solaire, alors que le `FeelsLikeC` de wttr.in (Heat Index NWS) devient faux en
-# air sec (< ~40% d'humidité) où il passe sous la température réelle.
-#
-# L'icône n'est PAS écrite ici : on émet une CATÉGORIE dans le champ "alt", et
-# waybar la mappe sur le glyphe Material Design défini côté Nix (format-icons).
-# Ça évite les glyphes astraux en dur et garde la cohérence avec la barre.
-#
-# Jour/nuit vient du champ `is_day` de l'API (ciel clair / partiellement couvert
-# ont une icône différente la nuit). En cas d'absence de réseau, on réutilise le
-# dernier relevé en cache, sinon on affiche l'état "offline".
+# Open-Meteo plutôt que wttr.in, dont le ressenti est faux en air sec.
 
 export LC_ALL=C
 
-# Répertoire d'état persistant (survit aux reboots et rebuilds) : il porte la
-# ville choisie ET les caches (coords + relevé). Auparavant coords/relevé
-# vivaient dans $XDG_RUNTIME_DIR (tmpfs, effacé au reboot) -> après un reboot
-# hors-ligne on perdait tout (affichage "--"). En state, le dernier relevé
-# connu reste affichable et on évite même un géocodage au premier lancement.
 statedir=$(weather_statedir)
 mkdir -p "$statedir"
 
-# Ville courante + ses coordonnées : logique partagée avec le night light (cf.
-# weather_city / weather_coords dans lib.sh). weather_coords réutilise le cache
-# de coords par ville et ne géocode qu'au premier affichage d'une ville (ou si
-# le cache a disparu) -> une requête HTTP en moins par cycle.
 location=$(weather_city)
-cache="$statedir/weather-$(weather_slug "$location").json" # cache du relevé courant (par ville)
+cache="$statedir/weather-$(weather_slug "$location").json"
 read -r lat lon <<<"$(weather_coords "$location")"
 
-# --- Relevé courant pour ces coordonnées ; à défaut on bascule sur le cache ---
-# json initialisé à vide : sous `set -u`, si lat est vide (géocodage
-# indisponible), le bloc ci-dessous est sauté et $json serait sinon "unbound".
+# Initialisé : sous `set -u`, $json serait unbound si lat est vide
 json=""
 if [[ -n "$lat" && "$lat" != "null" ]]; then
-    # || true : curl en échec (pas de réseau) ne doit pas tuer le script avant
-    # le repli sur le cache juste en dessous.
+    # || true : pas de réseau, repli sur le cache
     json=$(curl -fsS --max-time 8 -G "https://api.open-meteo.com/v1/forecast" \
         --data-urlencode "latitude=${lat}" \
         --data-urlencode "longitude=${lon}" \
@@ -50,10 +24,9 @@ fi
 if [[ -n "$json" ]] && jq -e .current >/dev/null 2>&1 <<<"$json"; then
     printf '%s' "$json" >"$cache"
 else
-    json=$(cat "$cache" 2>/dev/null) || true # pas de cache -> repli "offline" plus bas
+    json=$(cat "$cache" 2>/dev/null) || true
 fi
 
-# Pas de relevé exploitable (ni réseau, ni cache au bon format) -> offline.
 if [[ -z "$json" ]] || ! jq -e .current >/dev/null 2>&1 <<<"$json"; then
     emit "--" "Météo indisponible" "" offline
     exit 0
@@ -65,18 +38,15 @@ read -r temp feels code humidity wind winddeg isday <<<"$(
         <<<"$json"
 )"
 
-# Arrondis pour l'affichage (l'API renvoie des flottants : 40.7, 16.2, ...).
 temp=$(printf '%.0f' "$temp")
 feels=$(printf '%.0f' "$feels")
 wind=$(printf '%.0f' "$wind")
 humidity=$(printf '%.0f' "$humidity")
 
-# Direction du vent : degrés -> rose des vents 16 points (FR, O = Ouest).
 deg=$(printf '%.0f' "$winddeg")
 dirs=(N NNE NE ENE E ESE SE SSE S SSO SO OSO O ONO NO NNO)
 winddir=${dirs[$(((deg * 100 + 1125) / 2250 % 16))]}
 
-# Codes WMO (Open-Meteo) -> catégorie d'icône + description FR.
 case "$code" in
     0)  wcat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Ciel dégagé" ;;
     1)  wcat=$([[ $isday == 1 ]] && echo clear-day || echo clear-night);  desc="Plutôt dégagé" ;;
@@ -109,9 +79,6 @@ case "$code" in
     *)  wcat=cloudy;     desc="Conditions inconnues" ;;
 esac
 
-# Classe CSS (couleur dynamique du module, cf. style dans default.nix). On
-# regroupe les catégories en 4 ambiances : ensoleillé (jaune), couvert (gris),
-# pluie/neige (bleu), et le reste garde la couleur de base (cyan).
 case "$wcat" in
     clear-*) class=sunny ;;
     cloudy | fog) class=cloudy ;;
@@ -120,12 +87,7 @@ case "$wcat" in
 esac
 
 text="${temp}°"
-# Dernière actualisation = date d'écriture du cache (mtime). En cas de relevé
-# frais c'est « maintenant » ; hors-ligne, c'est le dernier relevé réussi.
 updated=$(date -r "$cache" '+%d/%m %H:%M' 2>/dev/null) || true
-# En-tête = le preset choisi (et non le lieu géocodé renvoyé par l'API).
-# Tooltip multi-lignes en VRAIES nouvelles lignes ; emit (lib.sh) les
-# convertit en \n.
 tooltip="${location} · ${desc}"
 tooltip+=$'\n'"Ressenti ${feels}°  ·  Humidité ${humidity}%"
 tooltip+=$'\n'"Vent ${wind} km/h ${winddir}"

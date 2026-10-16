@@ -5,13 +5,6 @@
   ...
 }:
 
-# nginx, par son `stub_status` : les requêtes et les connexions que la
-# machine ne voit pas.
-#
-# Comme pour chaque exporteur applicatif, l'exporteur suit le service qu'il
-# observe : allumer celui de nginx sur une machine sans proxy ne produirait pas
-# une erreur, mais une tâche de collecte en échec permanent, donc une alerte
-# `CibleInjoignable` qui hurle sans rien signaler.
 let
   cfg = config.systemSettings.monitoring;
   proxy = config.systemSettings.proxy;
@@ -22,11 +15,6 @@ in
   config = lib.mkIf (cfg.enable && cfg.apps.enable) (
     lib.mkMerge [
       (lib.mkIf proxy.enable {
-        # `stub_status` sur un socket À PART, cf. le commentaire des ports
-        # (internal.nix) : c'est le seul moyen d'obtenir les compteurs de nginx
-        # sans toucher au port 80 ni à l'ordre des vhosts. Pas de `enableACME`
-        # ni de TLS, l'écoute étant sur la boucle locale et le contenu étant sept
-        # entiers sans intérêt pour personne.
         services.nginx.virtualHosts."nginx-status" = {
           listen = [
             {
@@ -49,16 +37,7 @@ in
 
       {
         systemSettings.monitoring.internal = {
-          # L'exporteur joint sa cible mais s'en fait rejeter — socket absent,
-          # `pm.status_path` disparu, `stub_status` retiré. `CibleInjoignable` ne
-          # l'attrape PAS : de son point de vue l'exporteur répond très bien, il
-          # répond juste du vide.
-          #
-          # DEUX FORMES, nginx et PHP-FPM, parce que les deux exporteurs ne
-          # comptent pas pareil, et ça se vérifie dans les binaires plutôt que
-          # par symétrie : nginx publie un `nginx_up`, php-fpm n'a AUCUN
-          # `phpfpm_up` mais un compteur d'échecs cumulatif, donc une
-          # progression.
+          # L'exporteur répond mais à vide : `CibleInjoignable` ne l'attrape pas.
           alertRules.SondeApplicativeAveugle = {
             alert = "SondeApplicativeAveugle";
             expr = "nginx_up == 0 or increase(phpfpm_scrape_failures[15m]) > 0";
@@ -75,8 +54,6 @@ in
             decimals = 0;
             targets = [
               {
-                # PAR MINUTE : un taux par seconde sur cette machine s'affiche en
-                # centièmes, qu'il faut convertir de tête.
                 expr = "rate(nginx_http_requests_total[5m]) * 60";
                 legend = "requêtes/min";
               }

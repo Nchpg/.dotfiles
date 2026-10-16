@@ -2,8 +2,6 @@
 
 set -euo pipefail
 
-# Dépôt, valeurs de ce système : cf. lib/env.sh. Couleurs et questions : cf.
-# lib/ui.sh ; hooks git : cf. lib/hooks.sh.
 here="$(dirname "$0")"
 # shellcheck source=scripts/lib/env.sh
 . "$here/lib/env.sh"
@@ -12,9 +10,6 @@ here="$(dirname "$0")"
 # shellcheck source=scripts/lib/hooks.sh
 . "$here/lib/hooks.sh"
 
-# Défauts : la cible qui a construit ce système (DOTS_* de lib/config.sh, cf.
-# scripts/default.nix). Lancé depuis un clone : aucun, --host et --profile
-# sont alors obligatoires.
 PROFILE="${DOTS_PROFILE:-}"
 HOST="${DOTS_HOST:-}"
 VARIANT="${DOTS_VARIANT:-dark}"
@@ -35,9 +30,6 @@ usage() {
     echo "       touche JAMAIS au lock des secrets (avertit seulement)"
 }
 
-# Formes courtes et longues.
-# need_value : sous `set -u`, un `--host` sans valeur mourait sur un
-# « $2: unbound variable » au lieu d'un message clair.
 need_value() {
     [[ $# -ge 2 ]] || { echo "rebuild : option $1 sans valeur" >&2; exit 1; }
 }
@@ -53,7 +45,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Vérification obligatoire
 if [[ -z "$HOST" || -z "$PROFILE" ]]; then
     usage >&2
     exit 1
@@ -64,9 +55,6 @@ case "$VARIANT" in
     *) echo "Variante invalide : $VARIANT (attendu : dark ou light)" >&2; exit 1 ;;
 esac
 
-# Nom de la cible du flake : la variante dark garde le nom historique
-# (personal-gram), light suffixe (personal-gram-light) — même calcul que
-# lib/flake/target-name.nix (`full`), qui nomme les nixosConfigurations.
 ATTR="$PROFILE-$HOST"
 if [[ "$VARIANT" != "dark" ]]; then
     ATTR="$ATTR-$VARIANT"
@@ -75,19 +63,10 @@ fi
 require_flake rebuild
 cd "$flake"
 
-# Mises à jour seulement sur demande (--update / rebuild -u) : les faire à
-# chaque rebuild salissait flake.lock (→ warning git systématique). Délégué à
-# update.sh (aussi lançable seul via `update`) : vérifie tout en parallèle,
-# puis propose modules épinglés et inputs du flake à cocher. Garde-fou
-# conservé : contrairement à la CI (PR relue avant merge), un `rebuild -u`
-# enchaîne directement sur le switch, donc rien ne s'applique sans choix
-# explicite — sauf --yes (genclean), qui prend la sélection par défaut
-# (modules + claude-code). Jamais fatal : un échec garde l'état précédent.
+# Jamais fatal : un échec de update garde l'état précédent.
 if [[ "$UPDATE" -eq 1 ]]; then
     update_args=()
     [[ "$YES" -eq 1 ]] && update_args+=(--yes)
-    # Ctrl+C dans la liste (130) : on abandonne aussi le rebuild. Tout autre
-    # échec : on reconstruit avec l'état actuel.
     UPDATE_FROM_REBUILD=1 "$here/update.sh" "${update_args[@]}" && rc=0 || rc=$?
     if [[ "$rc" -eq 130 ]]; then
         echo "Rebuild annulé."
@@ -96,7 +75,6 @@ if [[ "$UPDATE" -eq 1 ]]; then
         echo "⚠️  update en échec — rebuild avec l'état actuel."
     fi
 fi
-
 
 echo "🔎 Checking Git status before rebuild..."
 
@@ -110,13 +88,8 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "------------------------------------------------------------------"
     git status --short
     echo "------------------------------------------------------------------"
-    # Rappel du comportement flake : les modifs des fichiers TRACKÉS sont bien
-    # incluses même non commitées ; seuls les fichiers NON TRACKÉS sont ignorés.
     echo "Note: modified tracked files ${OK}ARE included${R} in the build; ${ERR}untracked files are NOT${R} (git add them first)."
     echo
-    # --yes : pas de confirmation (utilisé par genclean pour son rebuild final
-    # automatique ; `theme` ne modifie plus aucun fichier depuis que la
-    # variante est portée par la cible du flake).
     if [[ "$YES" -eq 1 ]]; then
         echo "(--yes) Continuing without confirmation."
     else
@@ -129,37 +102,15 @@ else
     echo "${OK}✅ Git status is clean.${R}"
 fi
 
-# ── Cohérence du dépôt de secrets ────────────────────────────────────────────
-#
-# Le lock épingle l'entrée `secrets`, donc une valeur modifiée là-bas n'est PAS
-# déployée tant que le lock ici n'a pas bougé (`secrets sync`). C'est
-# voulu — sans ça, éditer le dépôt privé suffirait à changer ce que les machines
-# déploient. Mais la contrepartie est un rebuild qui réussit en installant
-# l'ANCIENNE valeur, sans un message.
-#
-# Ça a coûté une base Authelia illisible, un tunnel Cloudflare hors service et
-# deux clés WireGuard désynchronisées en une soirée. On compare donc, ici, au
-# moment qui compte.
-#
-# Tout passe par la commande `secrets` (scripts/secrets.sh), seule
-# à lire le lock et à le mettre à jour : `status` sort en 1 quand `sync` a du
-# travail (modifications, commits non poussés, lock en retard sur le dépôt), en
-# 2 quand il en a mais refuserait (dépôt privé en retard : pull d'abord).
-# Sans réseau, donc sans phrase de passe SSH à chaque rebuild. Absente sur une
-# machine neuve avant son premier rebuild, où le clone est de toute façon frais.
+# Le lock épingle `secrets` : sans `secrets sync`, un rebuild installerait l'ANCIENNE valeur.
 if command -v secrets > /dev/null; then
     secrets_rc=0
     secrets status || secrets_rc=$?
     if [[ "$secrets_rc" -eq 2 ]]; then
-        # `sync` refuserait (dépôt en retard) : rien à proposer ici, le détail
-        # et la marche à suivre viennent d'être affichés.
         echo "${WARN}Modifications de secrets non déployables avant un pull du dépôt privé ; poursuite avec la révision épinglée.${R}"
     elif [[ "$secrets_rc" -ne 0 ]]; then
         echo "  Rebuild en l'état = ${ERR}déploiement de l'ANCIENNE valeur${R}."
         echo
-        # --yes (genclean) ne bouge JAMAIS ce lock : une maintenance
-        # de générations n'a pas à déployer de nouvelles valeurs de secrets
-        # sans qu'on l'ait demandé. Avertissement seul, révision épinglée.
         if [[ "$YES" -eq 1 ]]; then
             echo "${WARN}(--yes) Lock non modifié, poursuite avec la révision épinglée.${R}"
             echo "  Pour déployer la nouvelle : \`secrets sync\`, ou rebuild sans --yes."
@@ -178,39 +129,17 @@ fi
 
 echo "🚀 Starting NixOS system rebuild..."
 
-# Génération courante avant le switch, pour afficher le diff des paquets après.
 PREV_SYSTEM="$(readlink -f /run/current-system)"
 
-# Pas de --impure : la config est pure (aucun getEnv/lecture impure), et --impure
-# désactiverait le cache d'évaluation -> chaque rebuild réévaluerait tout de zéro.
-# Pas de --show-trace par défaut : il ralentit nettement l'éval. Pour déboguer une
-# erreur d'éval, relancer ponctuellement via : REBUILD_EXTRA_ARGS=--show-trace rebuild
-# Split volontaire de REBUILD_EXTRA_ARGS en mots, via un tableau (et pas une
-# expansion non quotée, qui subirait aussi l'expansion des globs).
+# Pas de --impure ni de --show-trace ; pour déboguer : REBUILD_EXTRA_ARGS=--show-trace.
 read -ra EXTRA_ARGS <<< "${REBUILD_EXTRA_ARGS:-}"
 
-# NIX_CONFIG posé ici plutôt que d'exiger une invocation particulière le jour où
-# l'on enrôle une machine.
-#
-# L'entrée `secrets` vit dans un dépôt privé, donc sa récupération demande le
-# jeton rangé dans ce fichier. C'est ce que fait `nix.extraOptions` (cf.
-# modules/system/configuration.nix), sauf que cette configuration n'atterrit dans
-# /etc/nix/nix.conf qu'à l'ACTIVATION — laquelle a besoin de l'entrée, qui a
-# besoin du jeton. Sur une machine neuve, le premier rebuild échouait donc en 404
-# et il fallait retaper l'include à la main.
-#
-# Sans effet une fois la machine à jour : inclure deux fois le même fichier pose
-# deux fois le même réglage. Et un include absent est toléré par nix, donc une
-# machine sans jeton (aucun dépôt privé à récupérer) n'y voit rien.
-#
-# ATTENTION au répertoire : s'il n'est pas traversable, nix n'ignore pas
-# l'include, il jette la TOTALITÉ de /etc/nix/nix.conf. Cf. le commentaire de la
-# règle tmpfiles.
+# Jeton du dépôt privé `secrets` : nix.conf ne l'a qu'après activation (404 au premier rebuild).
+# ATTENTION : si le répertoire n'est pas traversable, nix jette tout /etc/nix/nix.conf.
 if sudo NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
     nixos-rebuild switch --flake .#"$ATTR" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}; then
     echo "✅ System rebuild successful."
 
-    # Diff des paquets ancien système → nouveau (versions bump, ajouts, retraits).
     NEW_SYSTEM="$(readlink -f /run/current-system)"
     if [[ "$PREV_SYSTEM" != "$NEW_SYSTEM" ]] && command -v nvd > /dev/null; then
         echo "📦 Changes since previous generation:"
@@ -219,19 +148,12 @@ if sudo NIX_CONFIG='!include /var/lib/nix/access-tokens.conf' \
 
     if [ -n "${SWAYSOCK:-}" ]; then
         echo "💨 Sway session detected. Reloading configuration..."
-        # `|| true` comme pour nvd et waybar plus bas : le switch a DÉJÀ
-        # réussi à ce stade, un reload raté ne doit pas tuer le script avant
-        # le redémarrage de waybar ni faire croire à un rebuild en échec.
         if swaymsg reload; then
             echo "🎉 Sway reloaded."
         else
             echo "⚠️  Sway reload échoué (le rebuild, lui, est bien appliqué)." >&2
         fi
 
-        # waybar tourne en service systemd --user : le rebuild (root) ne peut
-        # pas le relancer, donc les X-Restart-Triggers / onChange du module HM
-        # sont sautés. On le redémarre ici, côté utilisateur, pour qu'il reprenne
-        # sa nouvelle config/couleurs. try-restart = no-op s'il ne tourne pas.
         echo "📊 Restarting waybar..."
         systemctl --user try-restart waybar.service 2>/dev/null || true
     fi
@@ -240,11 +162,6 @@ else
     exit 1
 fi
 
-# ── Hooks git du dépôt ───────────────────────────────────────────────────────
-#
-# Cf. lib/hooks.sh. Après un rebuild, la commande `secrets` qu'ils appellent
-# est à jour : c'est le bon moment pour rattraper un clone fait sans
-# ./init.sh. --yes ne décide pas à ta place : avertissement seul.
 if [[ "$YES" -eq 1 ]]; then
     hooks_offer "$PWD" --no-ask
 else

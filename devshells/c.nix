@@ -3,8 +3,6 @@
 pkgs.mkShell {
   name = "c-dev";
 
-  # Outils exécutés en packages, bibliothèques linkées en buildInputs
-  # (pkg-config les y découvre).
   packages = [
     pkgs.gcc
     pkgs.gdb

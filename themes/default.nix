@@ -1,18 +1,3 @@
-# API des thèmes, injectée dans TOUS les modules sous le nom `themes`
-# (specialArgs / extraSpecialArgs, cf. flake.nix) — comme `myLib`, pour que
-# personne n'ait à remonter jusqu'ici par des `../..` dépendants de sa
-# profondeur.
-#
-# Les schemes amont (tinted-theming/schemes) ne sont pas vendorés, lus depuis
-# l'input `tinted-schemes`. schemes/ ne contient que les nôtres (originaux,
-# ou homonymes d'un thème amont dont on veut des couleurs différentes).
-#
-# Résolution d'un nom (cf. pathByName) : schemes/<nom>.yaml en priorité
-# absolue, puis <tinted-schemes>/base16/<nom>.yaml, puis base24/<nom>.yaml
-# (suffixé -base24 si le nom est déjà pris en base16, 43 collisions upstream).
-#
-# NB : pas un module NixOS — vit hors de modules/, hors du périmètre de
-# lib/modules/import-all.nix.
 lib: inputs:
 
 let
@@ -20,17 +5,13 @@ let
     localDir = ./schemes;
     upstream = inputs.tinted-schemes;
 
-    # Le parseur stylix (fromYaml, sans IFD) échoue sur les commentaires en fin
-    # de ligne et les `description: |` multi-lignes (4 fichiers amont sur 495).
-    # Format assez régulier pour qu'un `builtins.match` par ligne suffise —
-    # vérifié identique à PyYAML sur les 513 fichiers.
+    # Le parseur stylix (fromYaml) échoue sur certains fichiers amont : match par ligne.
     parseScheme =
       name:
       let
         path = pathByName.${name};
         lines = lib.splitString "\n" (builtins.readFile path);
 
-        # `  base0A: "#ffbb08"  # yellow` -> [ "base0A" "ffbb08" ] ; # et guillemets optionnels.
         colorMatch =
           l: builtins.match "[[:space:]]*(base[0-9A-Fa-f]{2}):[[:space:]]*\"?#?([0-9a-fA-F]{6})\"?.*" l;
 
@@ -44,7 +25,6 @@ let
           ) lines
         );
 
-        # Champ scalaire de premier niveau, guillemets optionnels.
         field =
           key:
           let
@@ -57,7 +37,6 @@ let
           in
           if m == null then null else builtins.head m;
 
-        # Chacun lu une seule fois (une recherche linéaire par appel).
         schemeName = field "name";
         author = field "author";
         variant = field "variant";
@@ -65,7 +44,6 @@ let
       lib.throwIf (colors == { }) "themes : aucune couleur lue dans ${toString path}" (
         colors
         // {
-          # Nomme les fichiers générés par stylix (base16-<slug>.conf).
           slug = name;
           scheme = if schemeName != null then schemeName else name;
         }
@@ -73,7 +51,7 @@ let
         // lib.optionalAttrs (variant != null) { inherit variant; }
       );
 
-    # .yml toléré en plus de .yaml (cyberpunk.yml en amont).
+    # .yml toléré (cyberpunk.yml en amont).
     yamlNames =
       dir:
       builtins.filter (x: x != null) (
@@ -100,7 +78,6 @@ let
     # Un base24 homonyme est suffixé plutôt que d'écraser silencieusement.
     claimedNames = localNames ++ base16Names;
 
-    # Source unique des noms publics, lue telle quelle par la galerie.
     pathByName =
       (lib.genAttrs localNames (n: yamlPath localDir n))
       // (lib.genAttrs (lib.subtractLists localNames base16Names) (n: yamlPath (upstream + "/base16") n))
@@ -113,10 +90,10 @@ let
         ) base24Names
       ));
 
-    names = builtins.attrNames pathByName; # pour lib.types.enum : typo -> éval cassée
+    names = builtins.attrNames pathByName;
 
     polarity = name: polarityOf (parseScheme name);
-    polarityOf = scheme: scheme.variant or "dark"; # défaut de la spec
+    polarityOf = scheme: scheme.variant or "dark";
 
     meta = import ./wallpapers.nix;
     wallpapers = meta.registry;
@@ -129,8 +106,6 @@ let
       in
       w.path or (pkgs.fetchurl w);
 
-    # Bloc commun à poser dans `stylix = { ... }`. wallpaper = surcharge
-    # explicite ; null = résolution automatique (cf. `chosen`).
     stylixSettings =
       {
         pkgs,
@@ -138,11 +113,8 @@ let
         wallpaper ? null,
       }:
       let
-        # Un seul parsing du yaml pour la polarité et la palette.
         scheme = parseScheme theme;
         themePolarity = polarityOf scheme;
-        # Surcharge explicite > fond du thème > défaut de la polarité (garantit
-        # une image même hors des ~60 thèmes couverts par themeWallpaper).
         chosen =
           if wallpaper != null then
             wallpaper
@@ -157,8 +129,6 @@ let
         image = wallpaperPath pkgs chosen;
       };
 
-    # ./fonts.nix et ./gallery prennent un `pkgs` : exposés en fonctions
-    # plutôt qu'en chemins, seul ce fichier connaît encore sa propre structure.
     fontsFor = import ./fonts.nix;
     galleryFor =
       pkgs:

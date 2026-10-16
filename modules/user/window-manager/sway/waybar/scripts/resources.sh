@@ -1,24 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# RAM / CPU / GPU pour waybar (module custom, sortie JSON : texte compact dans
-# la barre + détail en tooltip).
-#
-# FLUX CONTINU (comme nowplaying.sh) : un seul process vit tout du long et
-# écrit une ligne JSON toutes les $period s. L'ancien mode (waybar relançant
-# le script toutes les 3 s) coûtait ~11 processus par tour (bash, awk ×4,
-# date, nproc, sous-shells) : ~220 forks/min pour cette seule case. Ici :
-# un `sleep` par tour, tout le reste en builtins bash, état en variables.
-#
-# CPU : usage instantané via le delta de /proc/stat entre deux tours (un
-# `top -bn1` donne une moyenne depuis le boot, qui ne bouge quasi jamais).
-# RAM : /proc/meminfo (total - MemAvailable), indépendant de la locale.
-# GPU Intel (driver xe) : pas de gpu_busy_percent en sysfs, % occupé calculé
-# via le delta d'idle_residency_ms entre deux tours.
+# GPU Intel xe : pas de gpu_busy_percent, % calculé via le delta d'idle_residency_ms.
 
 export LC_ALL=C
 period=3
 
-# --- Recherches faites une seule fois (chemins stables pendant la session) ---
 ncpu=$(nproc)
 
 gpu_idle_file=""
@@ -26,9 +12,7 @@ for f in /sys/class/drm/card*/device/tile0/gt0/gtidle/idle_residency_ms; do
     [[ -r "$f" ]] && { gpu_idle_file="$f"; break; }
 done
 
-# Température du package CPU (coretemp, « Package id 0 ») : LA température
-# utile du SoC (l'iGPU Meteor Lake est dans le même package, la LPDDR soudée
-# n'a pas de capteur). Numéro hwmon instable entre boots -> recherche par nom.
+# Température du package CPU (coretemp) ; numéro hwmon instable entre boots
 cpu_temp_file=""
 for namefile in /sys/class/hwmon/hwmon*/name; do
     [[ $(<"$namefile") == coretemp ]] || continue
@@ -40,19 +24,14 @@ for namefile in /sys/class/hwmon/hwmon*/name; do
     done
 done
 
-# Millisecondes depuis l'epoch, sans `date` ($EPOCHREALTIME : « s.µs », avec
-# le séparateur décimal de la locale -> on retire . ou ,).
+# Millisecondes depuis l'epoch, sans `date` (séparateur décimal selon la locale)
 now_ms() { local t=${EPOCHREALTIME//[.,]/}; printf -v "$1" '%s' "$((10#$t / 1000))"; }
 
-# Kio -> « x.y » Gio, en entiers arrondis (pas d'awk).
 gib() { # $1 = variable de sortie, $2 = Kio
     local d=$(( ($2 * 10 + 524288) / 1048576 ))
     printf -v "$1" '%d.%d' $((d / 10)) $((d % 10))
 }
 
-# Load average « 1.05 » -> % de charge par cœur, arrondi (100 % = tous les
-# cœurs pleins ; > 100 % = des tâches attendent). /proc/loadavg a toujours
-# deux décimales.
 load_pct() { # $1 = variable de sortie, $2 = load
     local c=${2/./}
     c=$((10#$c))
@@ -60,12 +39,11 @@ load_pct() { # $1 = variable de sortie, $2 = load
 }
 
 prev_idle=0 prev_total=0 prev_gpu_idle=0 prev_gpu_ms=0 first=1
-# Remplies par sample() (en partie via printf -v, invisible pour shellcheck).
+# Remplies par sample() (printf -v, invisible pour shellcheck)
 mem_pct=0 mem_used_gb="" mem_total_gb="" cpu_pct=0 gpu_val="" cpu_temp=""
 load1_pct=0 load5_pct=0 load15_pct=0
 
 sample() {
-    # --- RAM ---
     local key val _ mem_total=0 mem_avail=0
     while read -r key val _; do
         case $key in
@@ -78,7 +56,6 @@ sample() {
     gib mem_used_gb "$mem_used"
     gib mem_total_gb "$mem_total"
 
-    # --- CPU (delta /proc/stat) ---
     local user nice system idle iowait irq softirq steal total d_idle d_total
     read -r _ user nice system idle iowait irq softirq steal _ </proc/stat
     idle=$((idle + iowait))
@@ -93,7 +70,6 @@ sample() {
     fi
     prev_idle=$idle prev_total=$total
 
-    # --- GPU (delta idle_residency_ms) ---
     if [[ -z "$gpu_idle_file" ]]; then
         gpu_val="N/A"
     else
@@ -111,7 +87,6 @@ sample() {
         gpu_val="${busy}%"
     fi
 
-    # --- Température ---
     cpu_temp=""
     if [[ -n "$cpu_temp_file" ]]; then
         local t=""
@@ -119,7 +94,6 @@ sample() {
         [[ $t =~ ^[0-9]+$ ]] && cpu_temp=$((t / 1000))
     fi
 
-    # --- Charge ---
     local l1 l5 l15
     read -r l1 l5 l15 _ </proc/loadavg
     load_pct load1_pct "$l1"
@@ -128,14 +102,11 @@ sample() {
     first=0
 }
 
-# Premier relevé pour amorcer les deltas CPU/GPU, puis 1 s avant d'afficher :
-# pas de « CPU 0 % » trompeur au lancement de la barre.
 sample
 sleep 1
 
 while :; do
     sample
-    # emit + json_escape_to : cf. lib.sh (sans sous-shell)
     text="󰍛   RAM : ${mem_pct}%  CPU ${cpu_pct}%  GPU ${gpu_val}"
     tooltip="RAM   ${mem_used_gb} / ${mem_total_gb} Gio  (${mem_pct}%)"
     tooltip+=$'\n'"CPU   ${cpu_pct}%${cpu_temp:+  ·  ${cpu_temp}°C}  ·  charge 1 min : ${load1_pct}%   5 min : ${load5_pct}%   15 min : ${load15_pct}%"

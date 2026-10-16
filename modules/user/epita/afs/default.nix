@@ -5,66 +5,29 @@
   ...
 }:
 
-# AFS du CRI (EPITA) depuis l'extérieur de l'école, via la passerelle SSH.
-#
-# Trois choses seulement, mais aucune ne marche sans les deux autres :
-#
-#   1. Un ssh COMPILÉ AVEC GSSAPI. Depuis 24.11, le paquet `openssh` de nixpkgs
-#      est construit sans, donc le ssh du système ignore purement et simplement
-#      `GSSAPIAuthentication yes` — la passerelle répond alors « Permission
-#      denied » comme si le ticket n'existait pas. D'où `openssh_gssapi`, posé
-#      sur `programs.ssh.package` (donc pour TOUT ssh de ce compte, cf. plus bas).
-#   2. Un bloc Host qui demande GSSAPI *et rien d'autre*. Le CRI insiste : si le
-#      client tente d'abord l'agent ou une clé publique, le serveur tranche sur
-#      cette identité-là et on tombe sur un « Permission denied » trompeur alors
-#      que le ticket Kerberos est bon. On coupe donc explicitement les clés.
-#   3. Un ticket Kerberos vivant (`kinit`). Il expire en quelques jours, et
-#      quand il meurt le point de montage reste là mais répond en erreur : il
-#      faut démonter, reprendre un ticket, remonter — c'est exactement ce que
-#      fait `afs mount` quand on le relance.
-#
-# PAS de krb5.conf ici, et ce n'est pas un oubli : le realm CRI.EPITA.FR publie
-# ses enregistrements de découverte (`_kerberos._tcp.cri.epita.fr` -> SRV
-# kerberos.cri.epita.fr, `_kerberos.cri.epita.fr` -> TXT "CRI.EPITA.FR"), et MIT
-# krb5 les suit par défaut. Écrire les KDC en dur ne ferait que figer une
-# infrastructure qui n'est pas la nôtre.
+# Pas de krb5.conf : le realm publie ses KDC par DNS (SRV/TXT).
 let
   cfg = config.userSettings.epita.afs;
 
-  # sshfs lance `ssh` lui-même, et c'est CELUI QU'IL A ÉTÉ COMPILÉ AVEC, pas
-  # celui du PATH : le paquet nixpkgs pointe le chemin du store d'openssh à la
-  # construction. Sans cet override, le montage échoue même avec un ticket
-  # valide et un ~/.ssh/config parfait, puisque ce ssh-là n'a pas GSSAPI.
-  #
-  # La doc du CRI passe par une gymnastique `callPackage`/`newScope` : plus
-  # nécessaire, `sshfs.override` expose directement `openssh`.
+  # sshfs utilise le ssh avec lequel il a été compilé, pas celui du PATH.
   sshfs = cfg.pkgs.sshfs.override { openssh = cfg.pkgs.openssh_gssapi; };
 
   afs = cfg.pkgs.writeShellApplication {
     name = "afs";
     runtimeInputs = [
-      cfg.pkgs.krb5 # kinit, klist, kdestroy
+      cfg.pkgs.krb5
       sshfs
       cfg.pkgs.coreutils
-      cfg.pkgs.gawk # lecture de /proc/self/mountinfo
+      cfg.pkgs.gawk
     ];
-    # `fusermount3` N'EST PAS dans cette liste, volontairement : il doit venir
-    # du wrapper setuid de /run/wrappers/bin (posé par NixOS), seul autorisé à
-    # (dé)monter pour un utilisateur. Le binaire de `pkgs.fuse3`, lui, échouerait
-    # sur les permissions.
+    # fusermount3 absent volontairement : il doit venir du wrapper setuid de /run/wrappers/bin.
 
     text = ''
       mount_point=${lib.escapeShellArg cfg.mountPoint}
       remote=${lib.escapeShellArg "${cfg.gateway}:${cfg.remotePath}"}
       principal=${lib.escapeShellArg "${cfg.login}@${cfg.realm}"}
 
-      # Tout ce qui suit interroge /proc/self/mountinfo au lieu d'appeler
-      # `mountpoint`(8), et ce n'est pas une coquetterie : un stat() sur un
-      # montage sshfs dont la session est morte ne revient JAMAIS (le processus
-      # part en D, insensible jusqu'au SIGKILL). Comme le point de montage est
-      # dans le home, ça gèle tout ce qui liste le home — Thunar, le portail xdg
-      # donc le sélecteur de fichiers de Discord, un shell, un agent. mountinfo
-      # est lu depuis le noyau et répond toujours.
+      # /proc/self/mountinfo plutôt que mountpoint(8) : stat() sur un sshfs mort gèle le home.
       mount_id() {
         awk -v mp="$mount_point" '$5 == mp { split($3, dev, ":"); print dev[2]; exit }' /proc/self/mountinfo
       }
@@ -73,12 +36,7 @@ let
         [ -n "$(mount_id)" ]
       }
 
-      # Démontage qui aboutit même quand la session ssh est morte :
-      #   1. `abort` du connecteur FUSE : les requêtes en attente reçoivent EIO
-      #      au lieu d'attendre indéfiniment, ce qui réveille d'un coup tous les
-      #      processus bloqués. C'est l'étape qui dégèle l'environnement.
-      #   2. démontage paresseux : un shell dont le cwd est resté dans le
-      #      montage le garde « busy », et -z détache quand même l'arborescence.
+      # Abort FUSE (EIO aux requêtes en attente) puis démontage paresseux.
       force_umount() {
         conn=$(mount_id)
         if [ -n "$conn" ] && [ -w "/sys/fs/fuse/connections/$conn/abort" ]; then
@@ -88,10 +46,7 @@ let
       }
 
       ticket() {
-        # `klist -s` : silencieux, statut non-zéro si aucun ticket valide. On ne
-        # redemande donc le mot de passe Forge que quand il le faut vraiment.
-        # -f : ticket TRANSFÉRABLE, sans quoi GSSAPIDelegateCredentials n'a rien
-        # à déléguer et la passerelle ne peut pas obtenir de jeton AFS.
+        # -f : ticket transférable, requis par GSSAPIDelegateCredentials.
         klist -s || kinit -f "$principal"
       }
 
@@ -103,12 +58,7 @@ let
             echo "afs : déjà monté sur $mount_point"
             exit 0
           fi
-          # `reconnect` relance la session quand elle tombe, mais seul il ne
-          # suffit pas : sans keepalive, ssh ne s'aperçoit jamais que le pair a
-          # disparu (veille, changement de réseau, VPN coupé). Le montage reste
-          # alors vivant pour le noyau avec plus personne au bout, et la
-          # première lecture du home gèle la machine. Les options qui suivent
-          # bornent l'attente à ~45 s, après quoi sshfs reconnecte.
+          # Sans keepalive ssh ne voit jamais le pair disparaître (veille, VPN).
           sshfs "$remote" "$mount_point" \
             -o reconnect \
             -o ServerAliveInterval=15 \
@@ -121,8 +71,7 @@ let
           echo "afs : démonté"
           ;;
         ticket)
-          # Force un ticket neuf : le cas du ticket expiré alors que le montage
-          # tient encore. Démonter d'abord, sinon sshfs garde sa session morte.
+          # Ticket neuf : démonter d'abord, sinon sshfs garde sa session morte.
           if is_mounted; then force_umount; fi
           kinit -f "$principal"
           ;;
@@ -174,11 +123,7 @@ in
         in
         "/afs/cri.epita.fr/user/${lib.substring 0 1 l}/${lib.substring 0 2 l}/${l}/u/";
       defaultText = "/afs/cri.epita.fr/user/<initiale>/<2 premières lettres>/<login>/u/";
-      description = ''
-        Répertoire AFS monté. Le défaut reproduit le rangement du CRI
-        (`.../user/x/xa/xavier.login/u/`) ; à surcharger pour monter autre chose
-        que son propre `u/`.
-      '';
+      description = "Répertoire AFS monté (défaut : le `u/` de l'utilisateur, rangé comme `.../user/x/xa/xavier.login/u/`).";
     };
 
     mountPoint = lib.mkOption {
@@ -186,15 +131,8 @@ in
       default = "${config.home.homeDirectory}/mnt/afs";
       defaultText = "\${config.home.homeDirectory}/mnt/afs";
       description = ''
-        Point de montage local, créé à la volée par `afs mount`.
-
-        Sous `mnt/` et pas directement dans le home, délibérément : lister un
-        répertoire appelle `stat()` sur chacune de ses entrées, et sur un
-        montage réseau qui ne répond plus cet appel attend. Tant que le montage
-        est à la racine du home, la moindre ouverture du sélecteur de fichiers
-        (Thunar, le portail xdg, donc Discord) ou un `ls ~` se fige. Une
-        indirection suffit à immuniser le home : `mnt` est un vrai répertoire
-        local, instantané, et seul un passage explicite dedans peut attendre.
+        Point de montage local, créé par `afs mount`. Sous `mnt/` et non à la
+        racine du home : un montage mort y figerait `ls ~` et les sélecteurs de fichiers.
       '';
     };
   };
@@ -207,27 +145,16 @@ in
       }
     ];
 
-    # POUR TOUT SSH DE CE COMPTE, pas seulement la passerelle : `programs.ssh`
-    # n'a qu'un paquet, et sshfs a le sien (ci-dessus). Sans conséquence — c'est
-    # le même OpenSSH avec une méthode d'authentification de plus, jamais tentée
-    # face à un serveur qui ne l'annonce pas.
     programs.ssh.package = cfg.pkgs.openssh_gssapi;
 
-    # Passe par le module ssh du dépôt plutôt que par `programs.ssh.settings` :
-    # un seul endroit écrit ~/.ssh/config, et le bloc se lit à côté des autres
-    # hôtes déclarés par le profil.
     userSettings.ssh.hosts.${cfg.gateway} = {
       User = cfg.login;
 
       GSSAPIAuthentication = "yes";
-      # La délégation est le point entier de l'affaire : la passerelle a besoin
-      # de NOTRE ticket pour obtenir un jeton AFS en notre nom. Sans elle, on se
-      # connecte mais tout /afs répond « Permission denied ».
+      # Sans délégation, tout /afs répond « Permission denied ».
       GSSAPIDelegateCredentials = "yes";
 
-      # GSSAPI et rien d'autre. Une clé publique ou un agent qui répond avant
-      # donne au serveur une identité qui n'a aucun droit sur l'AFS, et l'erreur
-      # ressemble alors à un problème de ticket.
+      # GSSAPI uniquement : une clé ou un agent donnerait une identité sans droit sur l'AFS.
       PreferredAuthentications = "gssapi-with-mic";
       PubkeyAuthentication = "no";
       IdentityAgent = "none";
@@ -235,7 +162,7 @@ in
 
     home.packages = [
       afs
-      cfg.pkgs.krb5 # kinit/klist utilisables à la main, hors du wrapper
+      cfg.pkgs.krb5
       sshfs
     ];
   };

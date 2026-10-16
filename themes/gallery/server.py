@@ -3,16 +3,8 @@
 
     server.py <galerie.html> <manifeste.json> <profil.nix> <favoris.json>
 
-Une page ouverte en file:// ne peut pas écrire sur le disque : d'où ce
-serveur, qui vit le temps d'un choix. Il écoute sur 127.0.0.1 uniquement,
-sur un port éphémère, et exige un jeton aléatoire régénéré à chaque
-lancement — sans quoi n'importe quel processus local (le compte `guest`
-existe sur cette machine) pourrait POSTer et réécrire la config.
-
-Codes de sortie, lus par la commande `theme` :
-  0 — un thème a été appliqué (le détail est écrit sur stdout)
-  2 — fermé sans rien appliquer (Ctrl-C ou timeout)
-  1 — erreur
+Écoute sur 127.0.0.1 avec un jeton aléatoire par lancement : sans lui, tout processus local pourrait réécrire la config.
+Codes de sortie lus par `theme` : 0 appliqué, 2 fermé sans rien appliquer (Ctrl-C ou timeout), 1 erreur.
 """
 
 import http.server
@@ -26,41 +18,19 @@ import sys
 import threading
 import webbrowser
 
-# Au-delà, on considère que la fenêtre a été abandonnée : on rend la main
-# plutôt que de laisser un serveur ouvert indéfiniment.
 IDLE_TIMEOUT_SECONDS = 15 * 60
 
 SLOTS = {"dark": "darkTheme", "light": "lightTheme"}
 
 
 def js_string_body(value):
-    """json.dumps(value), échappé pour tenir dans un littéral JS '...'.
-
-    CURRENT/FAVORITES sont réinjectés tels quels dans la page (cf.
-    do_GET/main) à l'intérieur de `JSON.parse('__PLACEHOLDER__')`. JSON
-    n'échappe pas le guillemet simple (seul `"` l'est), donc un nom de thème
-    contenant une apostrophe casserait le littéral JS ; le tout vit en plus
-    dans un <script>, donc une séquence `</script` briserait la balise avant
-    même que le JS ne s'exécute. Les deux échappements ci-dessous couvrent
-    ces deux cas (le risque réel est quasi nul ici — noms de thèmes issus
-    d'un manifeste connu — mais le coût de le couvrir est négligeable).
-    """
+    """json.dumps(value), échappé pour un littéral JS '...' dans un <script>."""
     encoded = json.dumps(value)
     encoded = encoded.replace("\\", "\\\\").replace("'", "\\'")
     return encoded.replace("</", "<\\/")
 
 
-class Applied(Exception):
-    """Levée pour arrêter le serveur une fois le choix appliqué."""
-
-
 def read_current(profile_path):
-    """Thèmes actuellement déclarés dans le profil, par slot.
-
-    Sert à mettre en avant les thèmes actifs dans la galerie. Un slot absent
-    ou déclaré plusieurs fois est simplement omis : c'est de la décoration,
-    ça ne doit jamais empêcher la galerie de s'ouvrir.
-    """
     try:
         with open(profile_path, encoding="utf-8") as fh:
             content = fh.read()
@@ -76,8 +46,6 @@ def read_current(profile_path):
 
 
 def read_favorites(favorites_path):
-    """Liste des thèmes en favori. Tolérante : un fichier absent ou abîmé
-    donne une liste vide plutôt que d'empêcher la galerie de s'ouvrir."""
     try:
         with open(favorites_path, encoding="utf-8") as fh:
             data = json.load(fh)
@@ -87,9 +55,7 @@ def read_favorites(favorites_path):
 
 
 def atomic_write(path, content):
-    """Écriture atomique (fichier temporaire puis renommage) : un rebuild
-    concurrent ne doit jamais voir un fichier .nix tronqué, ni git un JSON à
-    moitié écrit."""
+    """Écriture atomique : un rebuild concurrent ne doit pas voir un fichier tronqué."""
     tmp = path + ".theme-tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(content)
@@ -97,11 +63,6 @@ def atomic_write(path, content):
 
 
 def write_favorites(favorites_path, names):
-    """Réécrit le fichier de favoris (trié, une entrée par ligne).
-
-    Trié pour que le diff git soit stable : sans ça, l'ordre de clic
-    produirait des diffs illisibles à chaque session.
-    """
     atomic_write(
         favorites_path,
         json.dumps(sorted(set(names)), indent=2, ensure_ascii=False) + "\n",
@@ -109,12 +70,7 @@ def write_favorites(favorites_path, names):
 
 
 def apply_to_profile(profile_path, slot, name):
-    """Remplace `<slot>Theme = "...";` dans le fichier de profil.
-
-    Renvoie (ancien_nom, nouveau_nom). Lève ValueError si le champ est
-    absent ou présent plusieurs fois — mieux vaut échouer que réécrire au
-    petit bonheur un fichier de config.
-    """
+    """Remplace `<slot>Theme = "...";` dans le profil ; renvoie (ancien, nouveau). ValueError si absent ou multiple."""
     option = SLOTS[slot]
     with open(profile_path, encoding="utf-8") as fh:
         content = fh.read()
@@ -138,7 +94,6 @@ def apply_to_profile(profile_path, slot, name):
 
 def build_handler(html, token, valid_names, profile_path, favorites_path, result):
     class Handler(http.server.BaseHTTPRequestHandler):
-        # Silence les logs par requête : la sortie utile est celle de `theme`.
         def log_message(self, format, *args):  # noqa: A002 (signature imposée)
             pass
 
@@ -156,9 +111,6 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             if self.path.split("?")[0] not in ("/", "/index.html"):
                 self.send_error(404)
                 return
-            # Relu à CHAQUE requête : un rechargement en cours de session doit
-            # montrer les thèmes réellement dans le profil, pas ceux d'il y a
-            # dix minutes.
             page = html.replace(
                 "__THEME_CURRENT__", js_string_body(read_current(profile_path))
             ).replace(
@@ -167,18 +119,12 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             self._send(200, page.encode("utf-8"), "text/html")
 
         def _auth(self, presented):
-            """Vérifie le jeton de session ; répond 403 et rend False sinon.
-
-            compare_digest : évite de laisser fuir la longueur du préfixe
-            correct par le temps de comparaison.
-            """
             if secrets.compare_digest(str(presented), token):
                 return True
             self._json(403, {"error": "jeton invalide"})
             return False
 
         def _read_payload(self):
-            """Corps JSON authentifié, ou None (la réponse d'erreur est partie)."""
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 payload = json.loads(self.rfile.read(length) or b"{}")
@@ -190,12 +136,7 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             return payload
 
         def _valid_name(self, payload):
-            """Nom de thème du corps, ou None (400 envoyé).
-
-            On ne fait JAMAIS confiance au nom envoyé : il doit venir du
-            manifeste, sinon on écrirait une chaîne arbitraire dans un fichier
-            versionné (.nix du profil ou favoris).
-            """
+            """Nom de thème du corps, ou None (400 envoyé) ; doit venir du manifeste."""
             name = str(payload.get("name", ""))
             if name in valid_names:
                 return name
@@ -226,10 +167,7 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
                 self._json(500, {"error": str(err)})
                 return
 
-            # On NE coupe PAS le serveur ici : on doit pouvoir régler
-            # darkTheme puis lightTheme dans la même session. Le premier
-            # `previous` d'un slot est conservé pour que le récapitulatif
-            # montre le point de départ réel, même après plusieurs essais.
+            # Le premier `previous` d'un slot est conservé pour le récapitulatif.
             entry = result.setdefault(slot, {"option": SLOTS[slot], "previous": previous})
             entry["name"] = new
 
@@ -265,14 +203,12 @@ def build_handler(html, token, valid_names, profile_path, favorites_path, result
             self._json(200, {"favorites": sorted(set(favorites))})
 
         def do_DELETE(self):
-            """Fin de session demandée par la page (bouton « terminer »)."""
             if self.path != "/session":
                 self.send_error(404)
                 return
             if not self._auth(self.headers.get("X-Theme-Token", "")):
                 return
             self._json(200, {"message": "session terminée"})
-            # Laisse la réponse partir avant de couper le serveur.
             threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     return Handler
@@ -298,9 +234,6 @@ def main():
     with open(gallery_path, encoding="utf-8") as fh:
         html = fh.read()
 
-    # Le jeton ne change pas de la session ; __THEME_CURRENT__ reste en place
-    # et est substitué à chaque GET (cf. do_GET), pour qu'un rechargement
-    # reflète l'état réel du profil.
     token = secrets.token_urlsafe(24)
     html = html.replace("__THEME_TOKEN__", token)
 
@@ -309,14 +242,11 @@ def main():
         html, token, valid_names, profile_path, favorites_path, result
     )
 
-    # Port 0 = éphémère attribué par le noyau, et 127.0.0.1 : jamais exposé
-    # hors de la machine.
     with socketserver.TCPServer(("127.0.0.1", 0), handler) as httpd:
         httpd.timeout = 1
         port = httpd.server_address[1]
         url = f"http://127.0.0.1:{port}/"
-        # flush : stdout est bufferisé dès que la sortie est redirigée
-        # (pipe, fichier). Sans ça l'URL n'apparaîtrait qu'à la fermeture.
+        # flush : stdout est bufferisé quand il est redirigé.
         print(f"Galerie : {url}", flush=True)
         print(
             "Applique autant de thèmes que tu veux (sombre ET clair), "
@@ -324,18 +254,12 @@ def main():
             flush=True,
         )
 
-        # daemon : un Timer ordinaire garde le processus en vie jusqu'à son
-        # échéance, donc `theme` restait bloqué quinze minutes après
-        # « terminer ». Annulé en sortie par la même occasion.
+        # daemon : sinon `theme` resterait bloqué jusqu'à l'échéance.
         idle = threading.Timer(IDLE_TIMEOUT_SECONDS, httpd.shutdown)
         idle.daemon = True
         idle.start()
 
-        # $THEME_BROWSER : navigateur épinglé par la commande `theme` (chemin
-        # du store), pour ne pas dépendre du PATH ni de $BROWSER. Repli sur
-        # webbrowser si la variable n'est pas posée.
-        # Un lancement raté ne doit PAS tuer le serveur : l'URL est déjà
-        # affichée, elle reste ouvrable à la main.
+        # $THEME_BROWSER : navigateur épinglé par `theme` ; un lancement raté ne tue pas le serveur.
         browser = os.environ.get("THEME_BROWSER")
         try:
             if browser:
@@ -358,16 +282,13 @@ def main():
             idle.cancel()
 
     favorites_touched = result.pop("favorites_touched", False)
-    # Ne garde que les slots réellement changés : appliquer un thème puis
-    # revenir au précédent ne doit pas déclencher un rebuild pour rien.
     changed = {slot: e for slot, e in result.items() if e["previous"] != e["name"]}
 
     if favorites_touched:
         print(f"Favoris mis à jour : {favorites_path}", flush=True)
 
     if not changed:
-        # Les favoris ne changent pas le système construit : pas de rebuild
-        # à proposer, d'où le code 2 même s'ils ont bougé.
+        # Les favoris ne changent pas le système : code 2 même s'ils ont bougé.
         print("Aucun thème changé.", flush=True)
         return 2
 

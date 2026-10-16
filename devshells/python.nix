@@ -1,6 +1,3 @@
-# Devshell Python minimal : python nix + uv, aucun paquet figé. Chaque projet
-# a son .venv uv, wheels/interpréteurs hardlinkés depuis ~/.cache/uv partagé.
-# Exposé en fonction pour être étendu par d'autres devshells (cf. xpu.nix).
 {
   pkgs,
   name ? "python-dev",
@@ -22,16 +19,12 @@ let
       text = builtins.readFile source;
     };
 
-  # bash découvre via XDG_DATA_DIRS ; fish (patché pour l'ignorer) et zsh
-  # passent par NIX_DEVSHELL_{FISH,ZSH}_COMPLETIONS (shell/{fish,zsh}).
+  # bash via XDG_DATA_DIRS ; fish et zsh via NIX_DEVSHELL_{FISH,ZSH}_COMPLETIONS.
   fishCompletions = completion "/share/fish/vendor_completions.d/rmkernel.fish" ./python/completions/rmkernel.fish;
   bashCompletions = completion "/share/bash-completion/completions/rmkernel" ./python/completions/rmkernel.bash;
   zshCompletions = completion "/share/zsh/site-functions/_rmkernel" ./python/completions/_rmkernel;
 
-  # Dlopen par les wheels compilés (numpy, torch...) à l'import. PAS de glibc
-  # ici : ça ferait charger sa libc à tout binaire du shell, y compris ceux
-  # linkés contre une AUTRE glibc (segfault possible, xpu.nix instancie ce
-  # shell en unstable). Les wheels manylinux trouvent leur libc via nix-ld.
+  # Dlopen par les wheels. Pas de glibc : elle serait chargée par tout binaire du shell (xpu.nix est en unstable).
   commonLibs = [
     pkgs.stdenv.cc.cc.lib
     pkgs.zlib
@@ -80,7 +73,5 @@ pkgs.mkShell {
   ''
   + extraShellHook;
 
-  # Via `env` (pas un `//` sur l'attrset) : extraEnv.packages/.shellHook ne
-  # peut plus écraser silencieusement les attributs ci-dessus.
   env = extraEnv;
 }

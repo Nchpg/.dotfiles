@@ -1,18 +1,5 @@
 #!/usr/bin/env bash
-# Vérifie la dernière version publiée de chaque extension marketplace de
-# extensions.json (API du VS Code Marketplace), et bump version + hash (via
-# `nix store prefetch-file`) pour celles qui ont bougé. Protocole (--check,
-# --only KEY...) : cf. scripts/lib/update-module.sh.
-#
-# Ramassé automatiquement par la commande `update` et par la CI hebdo (cf.
-# `find modules -name update.sh` dans scripts/update.sh / update.yml) : ce nom
-# est une convention, pas un hasard. L'API Marketplace n'étant ni officielle
-# ni garantie stable, un échec ici est TOUJOURS non bloquant (cf. note_skip
-# plus bas) — le coût accepté est une mise à jour parfois plus lente/flaky.
-#
-# `arch` (facultatif, ex. "linux-x64") : VSIX propre à une plateforme, la
-# même clé que lit vscode-utils de nixpkgs (?targetPlatform= dans l'URL). La
-# version et le hash suivent alors cette plateforme-là.
+# L'API Marketplace n'est pas officielle : un échec est toujours non bloquant.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
@@ -24,18 +11,8 @@ if [ ! -f "$file" ]; then
     exit 1
 fi
 
-# filterType 7 = recherche exacte par "publisher.name" ; flags 103 = inclut la
-# liste des versions (la plus récente en premier).
-#
-# Toute défaillance réseau est LOCALE à une extension : on la signale et on
-# passe à la suivante, jamais d'abandon global. L'API Marketplace n'est ni
-# officielle ni fiable (throttling, pages d'erreur HTML), et une extension
-# capricieuse ne doit pas faire perdre le `nix flake update` déjà effectué ni
-# empêcher la PR hebdomadaire d'être créée.
-#
-# Les `|| return 1` sont indispensables : sous `set -euo pipefail`, un `curl |
-# jq` qui échoue interrompt tout le script AVANT que l'appelant puisse tester
-# le résultat — la garde « ignoré » plus bas n'était jamais atteinte.
+# filterType 7 = recherche exacte "publisher.name" ; flags 103 = inclut les versions.
+# `|| return 1` : sinon set -e interrompt tout avant la garde de l'appelant.
 query_latest_version() {
     local publisher="$1" name="$2" arch="$3" response body
     body=$(jq -n --arg v "${publisher}.${name}" \
@@ -49,13 +26,9 @@ query_latest_version() {
         2>/dev/null || return 1
 }
 
-# --check : versions seulement, sans télécharger les vsix. La détection d'un
-# contenu republié à version égale (cf. plus bas) exige le téléchargement :
-# elle n'a lieu qu'en mise à jour réelle.
 if [ "$UM_CHECK" -eq 1 ]; then
     changes="[]"
     failed=0
-    # Requêtes en parallèle (une par extension) : en série, ~6 s.
     results=$(mktemp -d)
     trap 'rm -rf "$results"' EXIT
     for key in $(jq -r 'keys[]' "$file"); do
@@ -96,10 +69,6 @@ fi
 
 updated=0
 skipped=0
-# Extensions ignorées, accumulées en JSON pour être reprises dans le corps de
-# la PR hebdomadaire (cf. VSCODE_SKIPPED_FILE en fin de script) : une
-# extension non vérifiée doit être VISIBLE dans la PR, pas seulement dans le
-# log du run que personne ne relit.
 skipped_json="[]"
 note_skip() {
     skipped=$((skipped + 1))
@@ -123,8 +92,6 @@ for key in $(jq -r 'keys[]' "$file"); do
     fi
 
     url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${name}/${latest}/vspackage${arch:+?targetPlatform=$arch}"
-    # --json donne directement le hash au format SRI (sha256-...), attendu tel
-    # quel par extensionsFromVscodeMarketplace : pas de conversion à faire.
     if ! prefetch=$(nix store prefetch-file --json "$url" 2>/dev/null) \
         || ! hash=$(printf '%s' "$prefetch" | jq -er '.hash' 2>/dev/null); then
         echo "⚠️  $key : téléchargement du vsix échoué ($latest), ignoré." >&2
@@ -133,12 +100,7 @@ for key in $(jq -r 'keys[]' "$file"); do
     fi
     current_hash=$(jq -r ".\"$key\".hash" "$file")
 
-    # On télécharge TOUJOURS, même à version identique, et on compare le
-    # contenu : le Marketplace republie parfois une même version avec des
-    # octets différents (resignature/recompression). Ni un rebuild local ni la
-    # CI ne peuvent voir cette dérive — dès que la sortie est dans le store,
-    # Nix ne redescend plus jusqu'au téléchargement, donc ne revérifie plus le
-    # hash de la FOD. Ce script est le seul maillon qui fetch inconditionnellement.
+    # Téléchargement même à version identique : le Marketplace republie parfois des octets différents.
     if [ "$latest" = "$current" ] && [ "$hash" = "$current_hash" ]; then
         echo "✓ $key : à jour ($current)"
         continue
@@ -162,16 +124,10 @@ else
     echo "$updated extension(s) mise(s) à jour dans $file — vérifie le diff, puis rebuild."
 fi
 
-# Les extensions ignorées ne font PAS échouer le run (une API tierce
-# capricieuse ne doit pas bloquer la PR hebdomadaire), mais elles remontent en
-# annotation GitHub pour rester visibles plutôt que noyées dans le log.
 if [ "$skipped" -gt 0 ]; then
     echo "::warning::$skipped extension(s) ignorée(s) : API Marketplace ou téléchargement en échec."
 fi
 
-# Consommé par gather-update-facts.sh pour que la PR hebdomadaire liste ce qui
-# n'a PAS pu être vérifié. Optionnel : hors CI la variable n'est pas définie et
-# le script se comporte comme avant.
 if [ -n "${VSCODE_SKIPPED_FILE:-}" ]; then
     printf '%s\n' "$skipped_json" > "$VSCODE_SKIPPED_FILE"
 fi

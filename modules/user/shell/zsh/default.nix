@@ -20,8 +20,6 @@ in
       enable = true;
       package = cfg.pkgs.zsh;
       enableCompletion = true;
-      # Confort aligné sur fish : suggestion grise depuis l'historique +
-      # coloration des commandes pendant la frappe.
       autosuggestion.enable = true;
       syntaxHighlighting.enable = true;
       history = {

@@ -1,21 +1,11 @@
-# Entrée rofi (drun) d'une action système : un .desktop et son icône SVG.
-# Adwaita ne fournit que des -symbolic en #2e3436, invisibles sur le fond
-# foncé de rofi : glyphe maison d'un seul tracé, coloré au thème.
-#
-#   myLib.desktop.mkRofiAction {
-#     inherit config;
-#     name = "shutdown"; label = "Shutdown"; comment = "…";
-#     exec = "systemctl poweroff"; color = c.base05; path = "M12 3 v9 …";
-#   }
-#   => { xdg.dataFile."icons/rofi-shutdown.svg" ; xdg.dataFile."applications/shutdown.desktop" }
 {
   config,
-  name, # nom du .desktop et de l'icône
-  label, # Name= affiché par rofi
+  name,
+  label,
   comment,
   exec,
-  color, # trait du glyphe, ex. c.base05
-  path, # attribut `d` du <path> SVG (viewBox 24x24)
+  color,
+  path,
 }:
 {
   xdg.dataFile."icons/rofi-${name}.svg".text = ''

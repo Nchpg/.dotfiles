@@ -1,11 +1,4 @@
-# Palette des interfaces du dépôt, PAR RÔLES : une palette base16 au format de
-# `config.lib.stylix.colors` (hex sans '#') -> { accent, ok, warn, err, dim,
-# text, base } en « #rrggbb ». Sans palette (null : serveur sans Stylix), les
-# numéros de couleur du TERMINAL (4 = bleu, 2 = vert…), que Stylix colore
-# justement avec la même palette quand il est actif.
-#
-# Lue par le paquet des commandes (DOTS_COLOR_*, cf. scripts/default.nix et
-# scripts/lib/ui.sh) et par mkGumEnv (menus gum des TUI).
+# colors = null (serveur sans Stylix) : numéros de couleur du terminal.
 colors:
 if colors != null then
   {

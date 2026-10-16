@@ -1,10 +1,6 @@
-# Pas de garde `[[ $- != *i* ]] && return` ici : home-manager pose la sienne,
-# et comme bashrcExtra est injecté EN TÊTE du .bashrc généré, un `return`
-# prématuré à cet endroit court-circuiterait tout ce que HM ajoute ensuite.
+# Pas de garde d'interactivité : home-manager injecte ce fichier en tête du .bashrc.
 
-# On interroge git plutôt que de lire $PWD/.git/HEAD : ce dernier n'existe
-# qu'à la racine du dépôt (aucune branche affichée dans un sous-dossier) et
-# n'est même pas un dossier sur un worktree ou un submodule.
+# git plutôt que $PWD/.git/HEAD (absent en sous-dossier, worktree ou submodule).
 parse_git_branch() {
   local branch
   branch=$(git symbolic-ref --short HEAD 2>/dev/null) \
@@ -13,16 +9,10 @@ parse_git_branch() {
   [[ -n "$branch" ]] && echo "\[\e[31m\] $branch\[\e[0m\]"
 }
 
-# HISTCONTROL/HISTSIZE/HISTFILESIZE/histappend sont posés par home-manager
-# (programs.bash.*), APRÈS ce bloc : les redéclarer ici n'avait aucun effet.
 shopt -s checkwinsize
 
 export SH=bash
 
-# SHELL_DEPTH, FIRST_PROMPT, clear(), setdev() : cf. ../common-posix (partagé
-# avec zsh, injecté par shell/bash/default.nix).
-
-# Construit le prompt (deux lignes) avant chaque commande.
 set_bash_prompt() {
     local last_status=$?
     local user_host="\[\e[0;36m\]\u@\h\[\e[0m\]"
@@ -49,9 +39,7 @@ set_bash_prompt() {
         venv_name="${venv_name}($current) "
     done
 
-    # Couleur jaune. Les \[ \] sont indispensables : sans eux bash compte les
-    # octets ANSI dans la largeur du prompt, et l'édition de ligne se décale
-    # dès qu'un venv est actif.
+    # Les \[ \] évitent que bash compte les octets ANSI dans la largeur du prompt.
     venv_name="\[\e[33m\]$venv_name\[\e[0m\]"
 
     if [ "$FIRST_PROMPT" -eq 1 ]; then
@@ -61,14 +49,10 @@ set_bash_prompt() {
         NEW_LINE="\n"
     fi
 
-    # Profondeur (cf. ../common-posix), affichée seulement au-delà de 1.
     local depth=""
     [ "$SHELL_DEPTH" -gt 1 ] && depth=$SHELL_DEPTH
 
-    # Construire la ligne finale
     PS1="$NEW_LINE$user_host $cwd $venv_name$git_branch\n$status\[\e[0;32m\]$depth❯ \[\e[0m\]"
 }
-
-# nix / nix-shell : wrappers communs aux trois shells, cf. shell/default.nix.
 
 PROMPT_COMMAND=set_bash_prompt

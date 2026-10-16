@@ -10,7 +10,6 @@ let
 in
 {
   options.userSettings.windowManager.sway.pickers.volume = {
-    # Suit waybar : l'entrée "mixer" du menu volume ouvre ce module.
     enable = lib.mkEnableOption "mixeur audio (ncpamixer dans terminal flottant)" // {
       default = config.userSettings.windowManager.sway.waybar.enable;
     };

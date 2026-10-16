@@ -5,34 +5,16 @@
   ...
 }:
 
-# Applications par défaut (xdg-open, Thunar, liens des apps Electron/kitty...).
-#
-# Sans déclaration, le choix se faisait au hasard des installations : les apps
-# ArtCraft revendiquent beaucoup de types et passaient devant (cache MIME local
-# régénéré par leur synchro de menu), et `inode/directory` revenait à Nautilus
-# (GNOME, session de secours) au lieu de Thunar. ~/.config/mimeapps.list était
-# écrit à la main par Firefox et Teams.
-#
-# home-manager prend la main sur ~/.config/mimeapps.list : un « Toujours ouvrir
-# avec » choisi dans une app est écrasé au rebuild suivant. C'est ICI qu'on
-# change un défaut.
+# « Toujours ouvrir avec » est écrasé au rebuild : changer les défauts ici.
 let
   cfg = config.userSettings.gui.defaultApps;
 
-  # Ids des entrées générées par la synchro ArtCraft (modules/user/apps/artcraft) :
-  # tant que l'app n'est pas installée, le type retombe sur la suite de la liste
-  # du cache MIME, comme sans défaut.
   craft = app: "ai.storyteller.${app}.desktop";
 
-  # Tout ce qui est texte sans être un document de traitement de texte, et tout
-  # ce qu'on ne reconnaît pas : nvim. Règle : WordCraft seulement quand on est
-  # SÛR que c'est un document (wordTypes), nvim dans le doute. Les fichiers sans
-  # type propre (Dockerfile, .conf, .ini, .nix...) sont du text/plain, les
-  # inconnus de l'application/octet-stream.
   codeTypes = [
     "text/plain"
     "application/octet-stream"
-    "application/x-zerosize" # fichier vide
+    "application/x-zerosize"
     "text/markdown"
     "text/x-markdown"
     "text/x-csrc"
@@ -70,8 +52,7 @@ let
     "text/x-patch"
   ];
 
-  # Documents de traitement de texte (formats que WordCraft déclare savoir
-  # ouvrir). Pas de .doc : WordCraft ne le gère pas.
+  # Pas de .doc : WordCraft ne le gère pas
   wordTypes = [
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document" # .docx
     "application/vnd.oasis.opendocument.text" # .odt
@@ -90,7 +71,6 @@ let
     "image/x-portable-pixmap"
   ];
 
-  # Photos brutes d'appareil : développement RAW, c'est LightCraft (Lightroom).
   rawTypes = [
     "image/x-dcraw"
     "image/x-canon-cr2"
@@ -103,8 +83,6 @@ let
     "image/x-adobe-dng"
   ];
 
-  # GIF à part : des animations, pas des images à retoucher, lues en boucle
-  # dans mpv (cf. le profil extension.gif du module mpv).
   gifTypes = [ "image/gif" ];
 
   videoTypes = [
@@ -117,7 +95,6 @@ let
     "video/ogg"
   ];
 
-  # Navigateur : repris de l'ancien mimeapps.list (écrit par Firefox).
   webTypes = [
     "text/html"
     "application/xhtml+xml"
@@ -133,8 +110,7 @@ let
 
   to = app: types: lib.genAttrs types (_: app);
 
-  # nvim dans le terminal par défaut : l'entrée nvim.desktop du paquet est en
-  # Terminal=true, que xdg-open (mode générique) ignore -> nvim sans terminal.
+  # nvim.desktop est en Terminal=true, ignoré par xdg-open
   nvimInTerminal = myLib.desktop.mkTerminalCmd {
     inherit config;
     title = "nvim";
@@ -153,7 +129,6 @@ in
       exec = "${nvimInTerminal} %F";
       icon = "nvim";
       terminal = false;
-      # Cible des associations seulement : rofi a déjà l'entrée nvim du paquet.
       noDisplay = true;
       categories = [
         "Utility"
@@ -173,7 +148,7 @@ in
         // to "vlc.desktop" videoTypes
         // {
           "application/pdf" = craft "pdfcraft";
-          "image/svg+xml" = craft "vectorcraft"; # vectoriel : Illustrator
+          "image/svg+xml" = craft "vectorcraft";
           "inode/directory" = "thunar.desktop";
           "x-scheme-handler/msteams" = "teams.desktop";
           "x-scheme-handler/claude-cli" = "claude-code-url-handler.desktop";

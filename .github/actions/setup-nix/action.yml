@@ -7,27 +7,9 @@ description: >
 runs:
   using: composite
   steps:
-    # NIX_CONFIG via $GITHUB_ENV : vaut pour toutes les étapes suivantes du
-    # job, l'installeur compris.
-    #
-    # Token GitHub frais à chaque run. Sans ça, Nix réutilise
-    # l'`access-tokens` que l'installeur a gravé dans le nix.conf PERSISTANT
-    # du runner self-hosted : un GITHUB_TOKEN qui expire au bout d'une heure.
-    # Les résolutions d'inputs `github:` partent alors avec un token mort (401
-    # « Bad credentials »), et `nix flake update` retombe en silence sur
-    # « using cached version ». Symptôme observé : job vert, PR créée, et zéro
-    # input réellement bumpé pendant plus d'une semaine. NIX_CONFIG a priorité
-    # sur les fichiers de conf.
-    #
-    # Les caches binaires sont posés ICI, et pas en `nixConfig` dans
-    # flake.nix : ce runner est la SEULE machine qui en manque. Sur une
-    # machine switchée ils viennent déjà de nix.settings
-    # (modules/system/configuration.nix), où ils restent la source de vérité
-    # — garder les deux listes alignées. Un `nixConfig` côté flake serait de
-    # toute façon ignoré hors trusted-users, et imposerait d'élargir
-    # trusted-users pour un gain nul sur la machine.
-    #
-    # Format nix.conf : une ligne par réglage, valeurs séparées par des espaces.
+    # Token frais à chaque run : sinon Nix réutilise l'`access-tokens` expiré du nix.conf persistant et
+    # `nix flake update` retombe sur « using cached version » (job vert, rien de bumpé).
+    # Caches posés ici et non en `nixConfig` : garder alignés avec nix.settings (modules/system/configuration.nix).
     - name: NIX_CONFIG
       shell: bash
       env:

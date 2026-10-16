@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Suit la PR btop #1457 (support du driver GPU Intel xe), greffée en override
-# dans default.nix tant qu'elle n'est pas mergée. Met à jour pinned.json sur
-# le dernier commit de la branche de la PR (dépôt de la branche + hash via
-# `nix flake prefetch`, même hash NAR que fetchFromGitHub). Une fois la PR
-# mergée, ne bumpe plus rien et rappelle de retirer l'override.
-# Protocole : cf. scripts/lib/update-module.sh.
+# Suit la PR btop #1457 : pinned.json sur le dernier commit de sa branche.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
@@ -21,8 +16,6 @@ fi
 
 current=$(um_pinned rev)
 
-# En --check, la PR mergée ou fermée n'est pas une mise à jour : on remonte
-# juste une note, affichée par update.sh à côté des modules à jour.
 if [ "$(printf '%s' "$pr_json" | jq -r '.merged')" = "true" ]; then
     [ "$UM_CHECK" -eq 1 ] && um_check "$name" "${current:0:7}" "${current:0:7}" "" \
         "PR mergée : retirer l'override btopXe"
@@ -37,23 +30,18 @@ if [ "$state" != "open" ]; then
     exit 0
 fi
 
-# Dépôt de la branche de la PR (un fork), lu ici et épinglé avec le commit :
-# default.nix le reprend de pinned.json, rien en dur des deux côtés.
 owner=$(printf '%s' "$pr_json" | jq -er '.head.repo.owner.login')
 repo=$(printf '%s' "$pr_json" | jq -er '.head.repo.name')
 rev=$(printf '%s' "$pr_json" | jq -er '.head.sha')
 echo "Latest PR commit: $rev ($owner/$repo)"
 
 if [ "$UM_CHECK" -eq 1 ]; then
-    # Pas de lien de comparaison au premier épinglage (rien à comparer).
     url=""
     [ -n "$current" ] && url="https://github.com/$owner/$repo/compare/${current}...${rev}"
     um_check "$name" "${current:0:7}" "${rev:0:7}" "$url" ""
 fi
 um_skip_if_current "btop PR #$pr" "$current" "$rev"
 
-# Date du commit dans la version : lisible dans le diff de la PR CI, qui
-# compare le champ .version des pinned.json.
 if ! date=$(um_curl "https://api.github.com/repos/$owner/$repo/commits/$rev" \
     | jq -er '.commit.committer.date[0:10]'); then
     um_die "Could not read commit date for $rev"

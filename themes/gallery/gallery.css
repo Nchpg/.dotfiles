@@ -1,8 +1,5 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
-/* Largeur partagée par l'en-tête et la grille. 2100px : 6 colonnes sur un
-   écran 2K tout en gardant ~200px de marge de chaque côté. Le padding en
-   clamp() garantit de l'air même sous le plafond. */
 :root { --content: 2100px; }
 body {
   margin: 0;
@@ -10,8 +7,6 @@ body {
   background: #16181d; color: #d7dae0;
   font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-/* Collant : avec ~500 cartes, filtres et recherche doivent rester à portée
-   sans remonter en haut de page. */
 header.top {
   max-width: var(--content); margin: 0 auto 1.5rem;
   position: sticky; top: 0; z-index: 10;
@@ -56,8 +51,6 @@ body.static #done { display: none; }
 .grid {
   max-width: var(--content); margin: 0 auto;
   display: grid; gap: clamp(.75rem, 1vw, 1.15rem);
-  /* auto-fill + minmax : le nombre de colonnes suit la largeur réelle
-     (~4 en 1400px, ~7 en 2K) sans media query. */
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
 .card {
@@ -65,20 +58,13 @@ body.static #done { display: none; }
   background: #1c1f25; display: flex; flex-direction: column;
 }
 .card[hidden] { display: none; }
-/* Thèmes actuellement dans la config : remontés en tête de grille (order
-   négatif) et fortement cerclés, pour les retrouver sans les chercher. */
 .card.is-current {
   order: -2;
   border-color: #5aa9e6;
   box-shadow: 0 0 0 3px #5aa9e6, 0 0 18px rgba(90, 169, 230, .35);
 }
 .card.is-current footer { background: #1b2530; }
-/* Favoris : remontés juste après les thèmes actifs (-1 contre -2), avec un
-   liseré doré discret — repérable sans voler la vedette au thème courant. */
 .card.is-favorite { order: -1; border-color: #7a6320; }
-/* Actuelle ET favorite : à spécificité égale ce serait la dernière règle
-   du fichier qui gagnerait, sortant la carte du groupe de tête. Ce
-   sélecteur tranche pour « actuel », quel que soit l'ordre des règles. */
 .card.is-current.is-favorite { order: -2; border-color: #5aa9e6; }
 button.fav {
   flex: none; cursor: pointer; font: inherit; font-size: 15px; line-height: 1;
@@ -90,23 +76,17 @@ button.fav[aria-pressed=true] { color: #e8b93a; }
 button.fav:disabled { opacity: .5; cursor: default; }
 body.static button.fav { display: none; }
 .current-tag {
-  /* margin-left auto : sur une carte actuelle, le bouton « appliquer » est
-     retiré (cf. syncApplyButtons) — sans ça la pastille viendrait se coller
-     à l'étoile au lieu de rester à droite. */
   flex: none; margin-left: auto;
   font-size: 11px; font-weight: 650;
   text-transform: uppercase; letter-spacing: .05em;
   color: #06121d; background: #5aa9e6; border: 1px solid #5aa9e6;
   border-radius: 999px; padding: .12rem .55rem;
 }
-/* `hidden` est sans effet sur un élément dont le display est forcé par une
-   autre règle : on le réaffirme pour les boutons du pied. */
+/* `hidden` perd contre un display forcé ailleurs. */
 footer button[hidden] { display: none; }
 .preview { padding: 0; }
 .chrome { display: flex; gap: .35rem; padding: .5rem .65rem; }
 .chrome span { width: 10px; height: 10px; border-radius: 50%; display: block; }
-/* Proche d'un vrai terminal : trop petit, le fond du thème occupe peu de
-   surface et une palette claire paraît plus délavée qu'elle ne l'est. */
 .preview pre {
   margin: 0; padding: 1rem 1.1rem 1.3rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -114,14 +94,7 @@ footer button[hidden] { display: none; }
 }
 .swatches { display: flex; height: 22px; }
 .swatches i { flex: 1; }
-/* Rangée des 8 slots base10-17 : plus fine, pour se lire comme un
-   complément et pas comme une seconde palette. */
-/* JAMAIS d'opacity ni de filtre sur les pastilles : la galerie sert à juger
-   des couleurs, toute retouche afficherait autre chose que ce que le
-   terminal rendra. Le repère « dérivée vs déclarée » passe donc par le
-   liseré au-dessus de la rangée — hors zone colorée — et par le badge
-   base24. Liseré sur les DEUX (plein / tireté) pour que la hauteur reste
-   identique entre base16 et base24. */
+/* Jamais d'opacity/filtre sur les pastilles (couleurs fidèles) : « dérivée » = liseré tireté. */
 .swatches.extra { height: 12px; border-top: 1px solid rgba(255,255,255,.28); }
 .swatches.extra.derived { border-top-style: dashed; border-top-color: rgba(255,255,255,.16); }
 .spec {
@@ -133,8 +106,6 @@ footer {
   display: flex; align-items: center; gap: .5rem;
   padding: .6rem .7rem; border-top: 1px solid #2c313a;
 }
-/* Le nom occupe sa propre rangée : dans le pied, il était comprimé entre
-   l'étoile, le bouton et les pastilles, illisible sur les noms longs. */
 header.name {
   display: flex; align-items: center; gap: .4rem;
   padding: .5rem .6rem .45rem;
@@ -149,9 +120,6 @@ button.copy {
 }
 button.copy:hover { background: #262a32; }
 button.copy.copied { background: #2f5233; color: #b7e4c0; }
-/* Les pastilles vivent dans l'en-tête : réunies ici avec l'étoile et le
-   marqueur « actuel », elles ne laissaient qu'une trentaine de pixels au
-   bouton sur une carte courante en base24. */
 button.apply {
   flex: 1; min-width: 0; cursor: pointer; font: inherit; font-size: 11.5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -160,7 +128,6 @@ button.apply {
 }
 button.apply:hover { background: #2c3440; color: #d7dae0; }
 button.apply:disabled { opacity: .5; cursor: default; }
-/* Sans serveur (page ouverte en file://), le bouton n'a rien à contacter. */
 body.static button.apply { display: none; }
 #toast {
   position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
@@ -178,8 +145,6 @@ body.static button.apply { display: none; }
 .empty { max-width: var(--content); margin: 3rem auto; text-align: center; color: #8b93a1; }
 .empty[hidden] { display: none; }
 
-/* Sous ~600px (fenêtre étroite, pas seulement mobile) : les contrôles
-   passent en pleine largeur plutôt que de se tasser sur une ligne. */
 @media (max-width: 600px) {
   .controls { gap: .5rem; }
   input[type=search] { flex-basis: 100%; }

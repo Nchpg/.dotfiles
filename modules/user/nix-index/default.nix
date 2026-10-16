@@ -5,16 +5,11 @@
   ...
 }:
 
-# Remplace le command-not-found des channels, coupés dans
-# modules/system/configuration.nix (nix.channel.enable = false).
 let
   cfg = config.userSettings.nixIndex;
 
-  # Ne propose que `nix-shell -p <paquet>` (pas `nix profile install`, jamais
-  # utilisé ici). Marche sans channels : NIX_PATH=nixpkgs=flake:nixpkgs.
   cnfScript = pkgs.writeShellScript "command-not-found-suggest" ''
     cmd=$1
-    # Vrai terminal seulement : pas de latence nix-locate dans les scripts/pipes.
     if [ ! -t 2 ]; then
       echo "$cmd: command not found" >&2
       exit 127
@@ -31,8 +26,6 @@ let
 
     echo "$cmd: command not found. Run it once with:" >&2
     while IFS= read -r attr; do
-      # `.out` (output par défaut) est du bruit ; les autres outputs (.bin,
-      # ...) restent nécessaires pour cibler le bon.
       echo "  nix-shell -p ''${attr%.out}" >&2
     done <<<"$attrs"
     exit 127
@@ -46,7 +39,6 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Intégrations shell upstream coupées au profit de cnfScript ci-dessous.
     programs.nix-index = {
       enable = true;
       enableBashIntegration = false;

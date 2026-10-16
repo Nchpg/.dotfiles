@@ -5,9 +5,6 @@
   ...
 }:
 
-# hosts.yml généré depuis le PAT stocké dans le dépôt de secrets (jamais en
-# clair dans le repo ni le store) : gh le lit directement, auth disponible
-# dans tous les shells sans variable d'environnement à propager.
 let
   cfg = config.userSettings.git.gh;
 in
@@ -20,10 +17,7 @@ in
     tokenSops = lib.mkOption {
       type = lib.types.str;
       default = "gh/token";
-      description = ''
-        Nom du secret sops contenant le PAT GitHub (Personal Access Token).
-        A renseigner via `secrets edit <ce nom>`.
-      '';
+      description = "Nom du secret sops contenant le PAT GitHub (`secrets edit <ce nom>`).";
     };
 
     user = lib.mkOption {

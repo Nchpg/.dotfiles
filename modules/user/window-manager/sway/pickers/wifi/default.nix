@@ -9,7 +9,6 @@
 let
   cfg = config.userSettings.windowManager.sway.pickers.wifi;
 
-  # Thème sombre pour nmtui via NEWT_COLORS.
   newtColors =
     "root=white,black:"
     + "border=blue,black:"
@@ -28,13 +27,11 @@ let
     + "actbutton=white,black:"
     + "compactbutton=white,black";
 
-  # nmtui ne quitte nativement qu'avec Esc : q mappé côté kitty pour unifier
-  # la sortie des TUIs. Effet de bord : plus de "q" littéral tapable (mdp wifi).
+  # q quitte comme dans les autres TUIs (mais plus de "q" littéral tapable : mdp wifi)
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
 in
 {
   options.userSettings.windowManager.sway.pickers.wifi = {
-    # Suit waybar : son bloc réseau a un on-click vers ce picker.
     enable = lib.mkEnableOption "sélecteur WiFi (nmtui dans terminal flottant)" // {
       default = config.userSettings.windowManager.sway.waybar.enable;
     };

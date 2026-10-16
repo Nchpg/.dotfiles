@@ -1,19 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# État du tunnel WireGuard vers la maison. Trois états distincts, parce que
-# « l'interface existe » ne veut pas dire « ça marche » : le tunnel démarre au
-# boot (autostart), donc il est présent même quand le serveur est éteint, et
-# c'est justement ce cas-là qu'on veut voir.
-#
-# Aucune sonde ici : vpn-alert (sway/notifications), SEULE sonde du tunnel,
-# teste le serveur toutes les 15 s, publie l'état et réveille ce module par
-# signal. Ligne « epoch état adresse ». Au-delà de 45 s, l'état ne reflète
-# plus le présent (timer arrêté, pas de client VPN) : repli « inconnu », sauf
-# interface absente, qui se lit sans rien sonder.
-#
-# Paramètres posés par scripts.nix depuis la config du client VPN : VPN_IFACE,
-# VPN_PEER, VPN_ROUTED. emit vient de lib.sh : l'état est ce qui compte ici, il
-# doit se voir à la couleur (classe CSS) sans lire l'infobulle.
+# « interface présente » ne veut pas dire « ça marche ». Lit la ligne publiée par
+# vpn-alert ; périmée au-delà de 45 s (repli « inconnu », sauf interface absente).
 
 export LC_ALL=C
 

@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Vérifie la dernière version de tasks-tui-app sur PyPI et met à jour
-# pinned.json avec le hash SRI du sdist. Pas de téléchargement : PyPI publie
-# le sha256 du fichier, converti tel quel au format attendu par fetchPypi.
-# Protocole : cf. scripts/lib/update-module.sh.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
@@ -17,7 +13,6 @@ current=$(um_pinned version)
     "https://pypi.org/project/tasks-tui-app/$version/"
 um_skip_if_current "tasks-tui-app" "$current" "$version"
 
-# Le sdist, celui que fetchPypi télécharge (pas la wheel).
 echo "🔎 Reading sdist hash for $version..."
 if ! hex=$(um_curl "https://pypi.org/pypi/tasks-tui-app/${version}/json" \
     | jq -er '[.urls[] | select(.packagetype == "sdist")][0].digests.sha256') \

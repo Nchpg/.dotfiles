@@ -21,13 +21,11 @@
   };
 
   config = {
-    # link home-manager with system users
     programs.home-manager.enable = true;
 
     home.sessionVariables = {
       EDITOR = "vim";
       VISUAL = "vim";
-      # homeDirectory (pas /home/${user} en dur) : le home de root est /root.
       MY_FLAKE = "${config.home.homeDirectory}/.dotfiles";
     };
 

@@ -18,14 +18,9 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # home-manager fixe TMUX_TMPDIR = $XDG_RUNTIME_DIR : le binding sway
-    # (Ctrl+Return) s'aligne dessus, sinon sway viserait /tmp et les
-    # sessions seraient invisibles entre elles.
     stylix.targets.tmux.enable = true;
 
-    # Ctrl+Entrée : terminal sur la session tmux `main` (créée ou rejointe).
-    # $XDG_RUNTIME_DIR (aligné sur les shells) : sway exec passe par sh -c,
-    # donc bien expansé, toujours défini dans une session sway/wayland.
+    # TMUX_TMPDIR aligné sur home-manager ($XDG_RUNTIME_DIR), sinon sessions invisibles entre elles.
     home.file.".config/sway/conf.d/tmux.conf" = lib.mkIf config.userSettings.windowManager.sway.enable {
       text = ''
         bindsym Control+Return exec ${
@@ -39,27 +34,26 @@ in
 
     programs.tmux = {
       enable = true;
-      # Même binaire que celui installé par le module du shell (son `pkgs`).
       shell = myLib.desktop.mkTerminalShellBin {
         inherit (config.userSettings.shell.${shell}) pkgs;
         inherit shell;
       };
       terminal = "tmux-256color";
       historyLimit = 100000;
-      escapeTime = 10; # latence Esc minimale (utile pour vim/neovim)
-      baseIndex = 1; # fenêtres/panes numérotés à partir de 1
+      escapeTime = 10;
+      baseIndex = 1;
       keyMode = "vi";
       mouse = true;
 
       plugins = with cfg.pkgs.tmuxPlugins; [
         sensible
-        yank # copie vers le presse-papier système
+        yank
         {
-          plugin = resurrect; # sauvegarde/restaure les sessions
+          plugin = resurrect;
           extraConfig = "set -g @resurrect-strategy-nvim 'session'";
         }
         {
-          plugin = continuum; # sauvegarde automatique périodique
+          plugin = continuum;
           extraConfig = ''
             set -g @continuum-restore 'on'
             set -g @continuum-save-interval '10'
@@ -68,50 +62,40 @@ in
       ];
 
       extraConfig = ''
-        # Préfixe : Ctrl-a (plus accessible que Ctrl-b)
         unbind C-b
         set -g prefix C-a
         bind C-a send-prefix
 
-        # Recharger la config
         bind r source-file ~/.config/tmux/tmux.conf \; display "Config rechargée !"
 
-        # Splits avec | et - (et garde le répertoire courant)
         bind | split-window -h -c "#{pane_current_path}"
         bind - split-window -v -c "#{pane_current_path}"
         unbind '"'
         unbind %
 
-        # Navigation entre panes à la vim (sans préfixe)
         bind -n M-h select-pane -L
         bind -n M-l select-pane -R
         bind -n M-k select-pane -U
         bind -n M-j select-pane -D
 
-        # Redimensionnement des panes
         bind -r H resize-pane -L 5
         bind -r J resize-pane -D 5
         bind -r K resize-pane -U 5
         bind -r L resize-pane -R 5
 
-        # Navigation entre fenêtres (sans préfixe)
         bind -n M-Left previous-window
         bind -n M-Right next-window
 
-        # Sélection façon vim en mode copie
         bind -T copy-mode-vi v send-keys -X begin-selection
         bind -T copy-mode-vi y send-keys -X copy-selection-and-cancel
 
-        # Couleurs true color
         set -ga terminal-overrides ",*256col*:Tc"
 
-        # Requis par image.nvim (Kitty graphics protocol) pour afficher les images.
+        # image.nvim (Kitty graphics protocol)
         set -gq allow-passthrough on
 
-        # Renumérote les fenêtres quand on en ferme une
         set -g renumber-windows on
 
-        # Notifications d'activité
         set -g monitor-activity on
         set -g visual-activity off
       '';

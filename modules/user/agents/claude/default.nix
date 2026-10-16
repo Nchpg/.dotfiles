@@ -6,9 +6,7 @@
   ...
 }:
 
-# Claude Code ÉCRIT lui-même dans ~/.claude/settings.json (modèle, thème...) :
-# un symlink lecture-seule casserait ces écritures. Deep-merge au rebuild à
-# la place (cf. `settings` plus bas).
+# Claude Code écrit dans ~/.claude/settings.json : deep-merge plutôt que symlink lecture-seule.
 let
   inherit (config.home) homeDirectory;
   cfg = config.userSettings.agents.claude;
@@ -41,14 +39,11 @@ in
         };
 
         home.packages = [
-          # Flake dédié, toujours à jour (bump via `update`, coché par défaut).
           inputs.claude-code.packages.${cfg.pkgs.stdenv.hostPlatform.system}.default
-          cfg.pkgs.poppler-utils # pdftoppm/pdftotext, lecture de PDF
+          cfg.pkgs.poppler-utils
         ];
       }
 
-      # Logique dans ./statusline.js, wrapper épinglant nodejs-slim (déjà
-      # dans le profil, pas de poids ajouté).
       (lib.mkIf cfg.statusline.enable {
         userSettings.agents.claude.settings.statusLine = {
           type = "command";

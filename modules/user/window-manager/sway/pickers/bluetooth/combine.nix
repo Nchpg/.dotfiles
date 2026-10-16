@@ -9,17 +9,8 @@ let
   cfg = config.userSettings.windowManager.sway.pickers.bluetooth.combine;
   c = config.lib.stylix.colors.withHashtag;
 
-  # PipeWire n'a pas d'équivalent déclaratif simple à une sortie combinée
-  # (combine-stream cible des noms de nœuds fixes) : on construit et lance à
-  # la volée un mini contexte pipewire qui fait tourner un nœud virtuel
-  # "sink" tant que le process vit, puis on le passe en sortie par défaut.
-  # Tuer le process suffit à tout défaire (WirePlumber retombe sur
-  # priority.session, vérifié en conditions réelles).
-  #
-  # stream.rules / matches / actions.create-stream est la syntaxe RÉELLEMENT
-  # supportée par libpipewire-module-combine-stream (vérifié contre le
-  # binaire installé) : `combine.streams` + `target.object` est ignoré
-  # silencieusement, avec retombée sur TOUS les sinks du système.
+  # stream.rules est la syntaxe supportée : `combine.streams` + `target.object` est
+  # ignoré silencieusement (retombée sur TOUS les sinks).
   bt-combine = cfg.pkgs.writeShellApplication {
     name = "bt-combine";
     runtimeInputs = [
@@ -58,7 +49,6 @@ let
         exit 0
       fi
 
-      # Sorties Bluetooth connectées : name\tdescription, une par ligne.
       mapfile -t sink_lines < <(
         pw-dump | jq -r '
           .[] | select(.info.props."media.class" == "Audio/Sink"
@@ -81,8 +71,6 @@ let
       for line in "''${sink_lines[@]}"; do
         name="''${line%%$'\t'*}"
         desc="''${line#*$'\t'}"
-        # Deux appareils au même nom : suffixe par le node.name pour rester
-        # sélectionnable sans ambiguïté.
         if [ -n "''${node_by_desc[$desc]:-}" ]; then
           desc="$desc ($name)"
         fi
@@ -142,7 +130,7 @@ let
       disown
       echo $! > "$pid_file"
 
-      # Création asynchrone côté pipewire : attend jusqu'à ~3s.
+      # Création asynchrone : attend jusqu'à ~3s
       node_id=""
       for _ in $(seq 1 30); do
         node_id=$(pw-dump | jq -r '.[] | select(.info.props."node.name" == "bt_combine") | .id' | head -1)
@@ -166,7 +154,6 @@ let
 in
 {
   options.userSettings.windowManager.sway.pickers.bluetooth.combine = {
-    # Suit bluetooth-picker : son message d'erreur renvoie vers $mod+b.
     enable =
       lib.mkEnableOption "sortie Bluetooth combinée (diffuse vers plusieurs appareils BT à la fois)"
       // {

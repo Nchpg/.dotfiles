@@ -1,17 +1,4 @@
-# Depuis fish 4.x, le thème "default" livré en boîte met fish_color_command
-# à --reset (couleur du terminal, pas de vert) si aucun thème n'a jamais été
-# choisi explicitement sur la machine. Fixé ici pour que toutes les machines
-# aient le même rendu, sans dépendre de fish_variables (état local non
-# versionné).
-#
-# Deux registres, volontairement :
-#   - noms ANSI (green, cyan…) : suivent la palette du terminal, donc le thème
-#     stylix actif — et en SSH, celle du terminal client ;
-#   - @stylix_baseXX@ : injectés au build par default.nix, pour les rôles que
-#     les 16 couleurs ANSI ne portent pas (gris de commentaire, fond de
-#     sélection). Ces slots étaient des hex Catppuccin arrivés là par un
-#     `fish_config theme dump` sur gram : ils ne bougeaient plus avec le
-#     thème, et restaient illisibles sur la variante claire.
+# Le thème par défaut de fish 4.x met fish_color_command à --reset.
 set -g fish_color_autosuggestion @stylix_base03@
 set -g fish_color_cancel -r
 set -g fish_color_command green

@@ -11,7 +11,6 @@ in
 {
   options = {
     userSettings.cli.bat = {
-      # Défaut true : socle commun à tous les users (comme common.nix).
       enable = lib.mkEnableOption "bat (cat amélioré) + batgrep/batman" // {
         default = true;
       };
@@ -23,10 +22,7 @@ in
     programs.bat = {
       enable = true;
       package = cfg.pkgs.bat;
-      # Polarité déléguée à bat lui-même (≥ 0.25, détecte le fond du terminal) :
-      # thèmes natifs gruvbox, pas de branchement dark/light côté Nix, reste
-      # gruvbox quel que soit darkTheme/lightTheme. Nécessite de couper le
-      # target stylix (ci-dessous), qui poserait sinon un `theme` prioritaire.
+      # Le target stylix est coupé plus bas : il poserait un `theme` prioritaire.
       config = {
         theme-dark = "gruvbox-dark";
         theme-light = "gruvbox-light";

@@ -10,9 +10,6 @@ let
   cfg = config.userSettings.tui.lgControl;
   c = (myLib.theme.schemeColors { inherit config themes; }).withHashtag;
 
-  # Ventilateur + profil d'alimentation via menu gum. Écriture de fan_mode
-  # sans root grâce à la règle udev du module système lg-laptop. Limite
-  # batterie gérée en dur (déclaratif), pas ici.
   lg-control = cfg.pkgs.writeShellApplication {
     name = "lg-control";
     runtimeInputs = [
@@ -24,7 +21,6 @@ let
     text = ''
       SYS=/sys/devices/platform/lg-laptop
 
-      # Palette du thème pour les menus gum (cf. lib/theme/gum-env.nix).
       ${myLib.theme.mkGumEnv { colors = myLib.theme.schemeColors { inherit config themes; }; }}
 
       fan_label() {
@@ -81,8 +77,7 @@ let
     '';
   };
 
-  # gum ne quitte qu'avec Esc/Ctrl-C/"Quitter", jamais q : mappé côté kitty
-  # pour unifier la sortie de tous les TUIs.
+  # gum ne quitte pas sur q : mappé côté kitty comme les autres TUIs.
   kittyQuit = ''-o "map q close_window" -o confirm_os_window_close=0'';
 in
 {

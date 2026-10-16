@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Stockage racine. Texte compact dans la barre (icône + utilisé + %) + détail
-# en tooltip.
-#
-# Le TOTAL affiché est l'espace UTILISABLE (utilisé + libre), donc hors ~5% de
-# blocs réservés à root qu'on ne peut pas remplir. Du coup utilisé+libre = total
-# (pas de "trou" déroutant), et c'est cohérent avec le % de df, lui-même calculé
-# sur utilisé/(utilisé+libre). On lit les octets (`df -B1`) puis on formate avec
-# `numfmt` -> l'addition reste juste. LC_ALL=C pour des sorties stables.
+# Le total affiché est l'espace utilisable (utilisé + libre), hors blocs réservés à root.
 
 export LC_ALL=C
 
@@ -16,28 +9,24 @@ read -r size_b used_b avail_b pct < <(
 )
 usable_b=$((used_b + avail_b))
 
-fmt() { numfmt --to=iec "$1"; } # 161337651200 -> 151G
+fmt() { numfmt --to=iec "$1"; }
 
 used_h=$(fmt "$used_b")
 avail_h=$(fmt "$avail_b")
 usable_h=$(fmt "$usable_b")
 size_h=$(fmt "$size_b")
 
-# Réserve root dérivée des valeurs AFFICHÉES (Gio arrondis au supérieur, comme
-# numfmt) et non des octets bruts : sinon le double arrondi indépendant fait
-# que usable + réserve ≠ partition à l'écran (ex. 190 + 11 = 201 ≠ 200).
+# Réserve root dérivée des valeurs affichées (arrondies au supérieur comme numfmt),
+# sinon usable + réserve ≠ partition à l'écran
 g=$((1024 * 1024 * 1024))
 reserve_g=$(( (size_b + g - 1) / g - (usable_b + g - 1) / g ))
 
-# Sortie JSON (emit : cf. lib.sh).
 text="󰉋   ${used_h}o : ${pct}"
 tooltip="Utilisé    ${used_h}o / ${usable_h}o  (${pct})"
 tooltip+=$'\n'"Libre      ${avail_h}o"
 tooltip+=$'\n'"Partition  ${size_h}o  (réserve root ${reserve_g}Go)"
 
-# Santé NVMe, si le service système nvme-health-export publie son JSON
-# (cf. modules/system/disks : smartctl exige root, waybar tourne en user).
-# Absent ou illisible → tooltip de base, sans erreur.
+# Santé NVMe publiée par le service système nvme-health-export (smartctl exige root)
 set -- /run/nvme-health/nvme*.json
 health="$1"
 if [ -e "$health" ]; then
@@ -46,7 +35,7 @@ if [ -e "$health" ]; then
             .temperature.current,
             .nvme_smart_health_information_log.percentage_used,
             .nvme_smart_health_information_log.available_spare,
-            # data units NVMe = blocs de 512 000 octets (spec)
+            # data units NVMe = blocs de 512 000 octets
             (.nvme_smart_health_information_log.data_units_written * 512000),
             .power_on_time.hours,
             (if .smart_status.passed then "OK" else "DÉFAILLANT" end)

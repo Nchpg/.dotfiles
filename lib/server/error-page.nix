@@ -1,16 +1,4 @@
-# Page d'erreur HTML autonome, en français, servie par nginx sans passer par
-# l'application (`return 404 '…';`) :
-#
-#   return 404 '${myLib.server.mkErrorPage { title = "Lien introuvable"; body = "<p>…</p>"; }}';
-#
-# Ni marque, ni version, ni nom de produit : une page d'erreur qui trahit ce
-# qui tourne derrière est un renseignement offert à qui balaie internet. Thème
-# clair et sombre selon le réglage du navigateur, aucune ressource externe.
-#
-# `body` est du HTML brut, inséré tel quel après le titre. `withLinks` ajoute
-# la couleur des liens, pour une page qui en porte. PAS d'apostrophe droite dans
-# le texte : la page vit entre apostrophes dans la configuration nginx, d'où les
-# entités (`&rsquo;`).
+# Pas d'apostrophe droite dans le texte (la page vit entre apostrophes dans nginx) : `&rsquo;`.
 {
   title,
   body,

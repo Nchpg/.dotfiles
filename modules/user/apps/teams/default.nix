@@ -5,26 +5,17 @@
   ...
 }:
 
-# `teams-for-linux` (wrapper Electron non-officiel) : le switcher d'orga
-# Teams v2 tourne en boucle sur un tenant invité (erreur renderer "user:1
-# ... not authenticated"). Un accès invité n'est pas un compte séparé,
-# c'est ta propre identité invitée chez l'autre tenant : la parade est une
-# instance dédiée (`profiles`) avec son propre --user-data-dir et une URL
-# deep-link ?tenantId=<GUID> qui charge Teams direct dans ce tenant.
-#
-# Binaire amont hors PATH/menu : wrappers `teams` (défaut) et `teams-<nom>`
-# (profils) avec icône custom.
+# Une instance par tenant : le switcher d'orga de Teams v2 boucle sur un tenant invité.
 let
   cfg = config.userSettings.apps.teams;
 
   baseBin = "${cfg.pkgs.teams-for-linux}/bin/teams-for-linux";
   argsStr = lib.concatMapStringsSep " " lib.escapeShellArg cfg.extraArgs;
 
-  trayIcon = "${./teams.png}"; # défaut teams-for-linux moche
+  trayIcon = "${./teams.png}";
   jsonFormat = cfg.pkgs.formats.json { };
   configFile = jsonFormat.generate "teams-for-linux-config.json" cfg.settings;
 
-  # URL effective d'un profil : `url` explicite > deep-link tenant > défaut amont.
   profileUrl =
     p:
     if p.url != null then
@@ -42,8 +33,6 @@ let
       ${argsStr} "$@"
   '';
 
-  # --user-data-dir garde le nom "teams-for-linux-<nom>" pour ne pas
-  # invalider une session déjà connectée (le nom de l'exe seul change).
   mkProfile =
     name: p:
     let
@@ -71,8 +60,6 @@ let
       "Network"
       "InstantMessaging"
     ];
-    # Permet à Sway/waybar d'associer la fenêtre Electron à cette entrée (donc
-    # à l'icône custom) via WM_CLASS.
     settings.StartupWMClass = wmClass;
   };
 in
@@ -86,10 +73,7 @@ in
       title = lib.mkOption {
         type = lib.types.str;
         default = "Teams";
-        description = ''
-          Titre de l'instance principale (`--appTitle`) : sert à distinguer le
-          tooltip du tray et le titre de fenêtre des instances `profiles`.
-        '';
+        description = "Titre de l'instance principale (`--appTitle`).";
       };
 
       extraArgs = lib.mkOption {
@@ -100,10 +84,7 @@ in
           # WebRTCPipeWireCapturer : partage d'écran via le portail PipeWire.
           "--enable-features=WaylandWindowDecorations,WebRTCPipeWireCapturer"
         ];
-        description = ''
-          Flags Electron passés à teams (instance principale ET instances
-          déclarées dans `profiles`).
-        '';
+        description = "Flags Electron de l'instance principale et des `profiles`.";
       };
 
       settings = lib.mkOption {
@@ -115,11 +96,7 @@ in
         example = {
           screenSharing.thumbnail.enabled = true;
         };
-        description = ''
-          Contenu du `config.json` de teams-for-linux, déployé dans le
-          `--user-data-dir` de CHAQUE instance (principale + profiles). Voir la
-          doc teams-for-linux pour les clés disponibles.
-        '';
+        description = "`config.json` de teams-for-linux, déployé dans chaque instance (principale + profiles).";
       };
 
       profiles = lib.mkOption {
@@ -128,12 +105,9 @@ in
           { bouygues.tenantId = "00000000-0000-0000-0000-000000000000"; }
         '';
         description = ''
-          Instances isolées supplémentaires, une par tenant. Chaque entrée crée
-          une commande `teams-<nom>` (+ une entrée de menu) avec son propre
-          `--user-data-dir`. Renseigner `tenantId` (GUID du tenant) pour
-          atterrir directement dans ce tenant via deep-link, ce qui contourne le
-          switcher d'organisation cassé de Teams v2 (indispensable pour un accès
-          invité type « Bouygues SA », où ton identité reste celle d'origine).
+          Instances isolées, une par tenant : commande `teams-<nom>`, entrée de
+          menu et `--user-data-dir` propres. `tenantId` ouvre directement le
+          tenant (contourne le switcher cassé pour un accès invité).
         '';
         type = lib.types.attrsOf (
           lib.types.submodule {
@@ -142,28 +116,20 @@ in
                 type = lib.types.nullOr lib.types.str;
                 default = null;
                 description = ''
-                  GUID du tenant Microsoft à ouvrir directement (deep-link
-                  `?tenantId=`). Présent dans le lien d'invitation (param
-                  `tenant=`), ou via le portail My Account, ou via
-                  `https://login.microsoftonline.com/<domaine>/v2.0/.well-known/openid-configuration`
-                  (champ `issuer`).
+                  GUID du tenant à ouvrir (deep-link `?tenantId=`), présent dans le
+                  lien d'invitation (param `tenant=`) ou le champ `issuer` de
+                  `https://login.microsoftonline.com/<domaine>/v2.0/.well-known/openid-configuration`.
                 '';
               };
               url = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
-                description = ''
-                  URL de démarrage explicite (prioritaire sur `tenantId`). Laisser
-                  null pour utiliser le deep-link tenant ou le défaut amont.
-                '';
+                description = "URL de démarrage explicite (prioritaire sur `tenantId`).";
               };
               title = lib.mkOption {
                 type = lib.types.nullOr lib.types.str;
                 default = null;
-                description = ''
-                  Titre/nom de l'instance (`--appTitle`) affiché dans le tooltip
-                  du tray et le titre de fenêtre. null => « Teams (<nom>) ».
-                '';
+                description = "Titre de l'instance (`--appTitle`) ; null => « Teams (<nom>) ».";
               };
             };
           }

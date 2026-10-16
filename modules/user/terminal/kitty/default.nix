@@ -9,10 +9,7 @@
 let
   cfg = config.userSettings.terminal.kitty;
 
-  # Stylix code en dur `target = "base16"` pour kitty : même avec un scheme
-  # base24, color9-14 restent mappés sur base08-0E ("rouge vif" = "rouge").
-  # Rétabli plus bas. `? base12` (pas le repli mkBase24 de base16.nix) :
-  # parseScheme n'invente pas les slots absents.
+  # Stylix force target base16 : color9-14 restent mappés sur base08-0E en base24 (rétabli plus bas).
   scheme = themes.parseScheme config.userSettings.stylix.theme;
   isBase24 = config.userSettings.stylix.enable && scheme ? base12;
 in
@@ -27,7 +24,6 @@ in
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       {
-
         programs.kitty = {
           enable = true;
           package = cfg.pkgs.kitty;
@@ -38,19 +34,16 @@ in
             window_padding_width = 4;
             term = "xterm-256color";
 
-            # Tabs
             tab_bar_min_tabs = 2;
             tab_bar_edge = "bottom";
             tab_bar_style = "powerline";
             tab_powerline_style = "round";
             tab_title_template = "{title}{' :{}:'.format(num_windows) if num_windows > 1 else ''}";
 
-            ## Animate cursor
             cursor_trail = 3;
             cursor_trail_decay = "0.1 0.4";
             cursor_shape = "block";
 
-            ## OS Window titlebar colors
             wayland_titlebar_color = "system";
             macos_titlebar_color = "system";
           };
@@ -63,19 +56,14 @@ in
             map ctrl+c copy_or_interrupt
             map ctrl+alt+c copy_to_clipboard
             map ctrl+shift+v paste_from_clipboard
-            # Surtout PAS de `map ctrl+v` : des TUI comme Claude Code collent
-            # une image en recevant Ctrl+V et en lisant eux-mêmes wl-paste ;
-            # un bind kitty interceptant la touche pour un collage TEXTE
-            # casserait ça silencieusement (rien ne se passe).
+            # Pas de `map ctrl+v` : les TUI (Claude Code) collent les images eux-mêmes.
           '';
         };
 
         stylix.targets.kitty.enable = true;
       }
 
-      # Bloc séparé : deux définitions du même attribut dans un attrset sont
-      # une erreur d'éval. mkAfter : doit passer après l'include de stylix
-      # (kitty applique la dernière valeur lue, pas besoin de couper le target).
+      # mkAfter : après l'include de stylix (kitty garde la dernière valeur lue).
       (lib.mkIf isBase24 {
         programs.kitty.extraConfig = lib.mkAfter ''
 

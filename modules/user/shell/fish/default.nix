@@ -10,11 +10,7 @@
 let
   cfg = config.userSettings.shell.fish;
 
-  # bat détecte la polarité du terminal (OSC 11) à chaque appel, mais ça exige
-  # un tty : dans une preview fzf (sortie = tube), la détection échoue et bat
-  # prend son thème par défaut (Monokai) au lieu de retomber sur theme-dark.
-  # Résolu au build depuis la polarité stylix, uniquement dans les previews
-  # (un `set -gx BAT_THEME` global figerait la polarité partout ailleurs).
+  # bat sans tty (previews fzf) prend Monokai : thème résolu au build.
   batPreviewTheme =
     {
       dark = "gruvbox-dark";
@@ -22,14 +18,10 @@ let
     }
     .${themes.polarity config.userSettings.stylix.theme};
 
-  # Slots du scheme injectés dans colors.fish (@stylix_baseXX@), même procédé
-  # que modules/user/editors/neovim. Lus via parseScheme et pas
-  # `config.lib.stylix.colors` : ces couleurs doivent exister même pour un
-  # user sans stylix (root en console), et userSettings.stylix.theme a une
-  # valeur dans tous les cas.
+  # Via parseScheme et non config.lib.stylix.colors : doit marcher sans stylix (root).
   schemeColors = [
-    "base02" # fond de sélection / de correspondance
-    "base03" # gris des commentaires et des suggestions
+    "base02" # sélection
+    "base03" # commentaires et suggestions
   ];
   scheme = themes.parseScheme config.userSettings.stylix.theme;
   colorsFish = lib.replaceStrings (map (name: "@stylix_${name}@") schemeColors) (map (
@@ -48,10 +40,7 @@ in
       enable = true;
       package = cfg.pkgs.fish;
 
-      # Une copie UNIVERSELLE de fish_complete_path (reste de fisher) est
-      # réécrite et allongée par chaque `set`/`set -a` non scopé (complétions
-      # HM, kitty...) : 8500 entrées, 1,1 s de démarrage. La globale définie
-      # par fish suffit ; on supprime l'universelle si elle réapparaît.
+      # Copie universelle de fish_complete_path (reste de fisher) gonflée par `set -a` (1,1 s de démarrage) : supprimée.
       shellInit = lib.mkBefore ''
         set -qU fish_complete_path; and set -eU fish_complete_path
       '';
@@ -65,8 +54,6 @@ in
       ];
     };
 
-    # Chargé par l'autoload vendor de fish. unstable pour suivre le fzf
-    # unstable épinglé dans modules/user/shell.
     home.packages = with pkgs-unstable; [
       fishPlugins.fzf-fish
     ];

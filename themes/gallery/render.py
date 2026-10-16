@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Génère la galerie HTML des thèmes (commande `theme` sans argument).
-
-Entrée  : un manifeste JSON { "<nom>": { path, source }, ... }, produit par
-          themes/default.nix depuis `pathByName` — donc exactement
-          les thèmes sélectionnables, ni plus ni moins.
-Sortie  : un fichier HTML autonome (aucune ressource externe).
-
-PyYAML plutôt que le parseur Nix de themes : celui-ci ne lit que ce
-dont stylix a besoin, là où la galerie affiche aussi les slots base24 et les
-métadonnées. Le rendu étant fait au build, un vrai parseur ne coûte rien.
-"""
+"""Génère la galerie HTML des thèmes à partir du manifeste JSON."""
 
 import html
 import json
@@ -18,9 +8,6 @@ import sys
 import yaml
 
 SLOTS = [f"base0{c}" for c in "0123456789ABCDEF"]
-# Slots propres à base24 : deux fonds plus sombres (base10/11) et six
-# variantes « vives » des couleurs ANSI (base12-17). Absents d'un scheme
-# base16, d'où le traitement optionnel partout.
 SLOTS_BASE24 = [f"base1{c}" for c in "01234567"]
 
 
@@ -45,11 +32,7 @@ def load_scheme(path):
     return {
         "name": str(data.get("name") or "untitled"),
         "author": str(data.get("author") or ""),
-        # base24 seulement si les 8 slots sont là : un scheme base16 qui en
-        # déclarerait deux au hasard ne doit pas être annoncé comme base24.
         "extra": extra if len(extra) == len(SLOTS_BASE24) else {},
-        # Repli sur "dark" : quelques schemes amont anciens ne déclarent pas
-        # `variant`, et c'est la valeur par défaut de la spec base16.
         "variant": str(data.get("variant") or "dark"),
         "colors": colors,
     }
@@ -58,10 +41,7 @@ def load_scheme(path):
 def card(key, scheme):
     c = scheme["colors"]
     esc = html.escape
-    # Les data-* portent la recherche côté client (nom public, titre, auteur).
     haystack = f"{key} {scheme['name']} {scheme['author']}".lower()
-    # Un thème clair remplace lightTheme, un sombre darkTheme : appliquer un
-    # thème sombre à lightTheme donnerait une variante « claire » sombre.
     slot = "light" if scheme["variant"] == "light" else "dark"
     swatches = "".join(
         f'<i style="background:{c[s]}"></i>' for s in SLOTS
@@ -70,11 +50,7 @@ def card(key, scheme):
     extra = scheme.get("extra", {})
     is24 = bool(extra)
 
-    # Slots base10-17 effectifs : un scheme base16 ne les déclare pas, mais
-    # stylix les dérive (mkBase24 dans base16.nix). On affiche donc toujours
-    # la rangée — elle montre ce que le terminal utilisera vraiment, met en
-    # évidence que le base24 les distingue là où le base16 les recopie, et
-    # aligne la hauteur des cartes.
+    # Slots base10-17 effectifs : stylix les dérive pour un scheme base16.
     eff = extra or {
         "base10": c["base00"], "base11": c["base00"],
         "base12": c["base08"], "base13": c["base0A"],
@@ -91,9 +67,6 @@ def card(key, scheme):
         + "".join(f'<i style="background:{eff[s]}"></i>' for s in SLOTS_BASE24)
         + "</div>"
     )
-    # Les 6 couleurs vives (base12-17) ET les 2 fonds sombres (base10/11) :
-    # sans base10/11, la principale valeur ajoutée du base24 — des fonds plus
-    # profonds que base00 — resterait invisible hors des pastilles.
     bright_line = f"""
 <span style="background:{eff['base11']};color:{c['base05']}"> vifs </span><span style="background:{eff['base10']};color:{eff['base12']}"> ●</span><span style="background:{eff['base10']};color:{eff['base13']}">●</span><span style="background:{eff['base10']};color:{eff['base14']}">●</span><span style="background:{eff['base10']};color:{eff['base15']}">●</span><span style="background:{eff['base10']};color:{eff['base16']}">●</span><span style="background:{eff['base10']};color:{eff['base17']}">● </span>"""
     spec_badge = '<span class="spec">base24</span>' if is24 else ""
@@ -135,9 +108,6 @@ def card(key, scheme):
 
 
 def main():
-    # Feuille de style et script à côté de ce fichier (gallery.css,
-    # gallery.js), passés en chemins par gallery/default.nix : au build, chaque
-    # source arrive seule dans le store, rien n'est relatif à __file__.
     manifest_path, out_path, css_path, js_path = sys.argv[1:5]
     with open(css_path, encoding="utf-8") as fh:
         css = fh.read()

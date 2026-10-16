@@ -1,13 +1,5 @@
 # shellcheck shell=bash
-# (Pas de shebang : writeShellApplication l'ajoute, avec set -euo pipefail.)
-#
-# brightness up|down|set N — luminosité de l'écran, appelée par les touches
-# clavier (sway) ET la molette / le menu de waybar : un seul comportement.
-# up/down suivent des paliers, plus fins en bas de plage (1 % puis 5 %) : un
-# pas fixe de 5 % sautait de 5 % à 0 %. Jamais 0 % (écran noir).
-#
-# WAYBAR_BACKLIGHT_SIGNAL : posé par le module sway (signal RTMIN de la case
-# luminosité de waybar).
+# Jamais 0 % (écran noir)
 
 steps=(1 5 10 15 20 25 30 35 40 45 50 55 60 65 70 75 80 85 90 95 100)
 
@@ -47,6 +39,4 @@ case "${1:-}" in
   *) usage ;;
 esac
 
-# Rafraîchit tout de suite la case luminosité de waybar, qui ne relit sinon
-# la luminosité que toutes les 60 s.
 pkill -RTMIN+"$WAYBAR_BACKLIGHT_SIGNAL" waybar 2>/dev/null || true

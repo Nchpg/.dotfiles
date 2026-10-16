@@ -6,25 +6,13 @@
   ...
 }:
 
-# Verrouillage de la session sway : swaylock (patché), verrou d'inactivité
-# et avant la veille (swayidle), `awake`, et le capot. Binds dans
-# ~/.config/sway/conf.d/lock.conf.
 let
   cfg = config.userSettings.windowManager.sway.lock;
   inherit (cfg) pkgs;
 
-  # swaymsg du sway système (patché, cf. overlays/sway) : pas un second
-  # sway tiré de pkgs à côté.
   swaymsgBin = "${osConfig.programs.sway.package}/bin/swaymsg";
 
-  # Args swaylock partagés par le bind clavier (lockBindCmd) et swayidle
-  # ci-dessous : une seule définition, pas de divergence possible.
-  # Écran SANS capture (branché pendant le verrouillage) : swaylock prend
-  # l'image par défaut (--image sans nom de sortie) et lui applique les mêmes
-  # effets (flou, vignette) qu'aux captures. Sans elle, couleur unie
-  # (--color, blanche par défaut, d'où le base00 ci-dessous). Fond d'écran stylix réduit à 1920 px au build :
-  # le flou est calculé au verrouillage, sur TOUTES les images, une image
-  # 4K le rallongerait. --color en dernier recours (pas de fond d'écran).
+  # Réduite à 1920 px : le flou est calculé au verrouillage, une 4K le rallongerait.
   lockFallbackImage =
     lib.optionalString (config.userSettings.stylix.enable && config.stylix.image != null)
       (
@@ -34,8 +22,6 @@ let
         ''
       );
 
-  # Sans --screenshots : seulement pour remplacer un verrou existant avant
-  # la veille (cf. lockCmdBeforeSleep), où la capture serait l'écran rouge.
   lockArgsNoCapture =
     "--clock --indicator"
     + " --color ${config.lib.stylix.colors.base00}"
@@ -44,41 +30,13 @@ let
     + " --effect-vignette 0.5:0.5 --ring-color bb00cc --key-hl-color 880033"
     + " --line-color 00000000 --inside-color 00000088 --separator-color 00000000";
   lockArgs = "--screenshots " + lockArgsNoCapture;
-  # Fondu net -> flou, pour les verrous qu'on VOIT se poser. Pas sur
-  # before-sleep : la veille gèle le fondu en cours et il reprend à
-  # l'ouverture du capot, ce qui donne l'illusion que le verrou se pose
-  # au réveil (il est posé avant la veille). Sans fondu, swaylock rend aussi
-  # la main dès le verrouillage (avec, -f attend fondu + 0,5 s) : la veille
-  # part plus vite.
+  # Pas de fondu sur before-sleep : la veille le gèle et il reprendrait au réveil
   fadeArgs = "--fade-in 1";
-  # Le bref noir (~66 ms) qui précédait le fondu venait de sway, pas de
-  # swaylock : fond opaque posé dès la demande de verrouillage, jusqu'à la
-  # première image du client. Supprimé par un patch de sway, cf.
-  # overlays/sway (sway-smooth-lock.patch). Un
-  # assombrissement préalable (chayang) avait été essayé avant : pire, le
-  # bureau revient en pleine luminosité pendant la capture + le flou.
-  # Délai de grâce (n'importe quel input déverrouille) pour le SEUL verrou
-  # d'inactivité, où il rattrape un verrou non voulu. Le timer de swaylock
-  # est en CLOCK_MONOTONIC, figé pendant la suspension : une grâce en cours
-  # au moment de la veille reste entière au réveil, et ouvrir le capot puis
-  # bouger la souris déverrouille sans mot de passe. D'où aucune grâce :
-  #   - sur before-sleep (la veille suit immédiatement) ;
-  #   - sur le bind manuel : Ctrl+Échap puis capot fermé dans les 2 s est un
-  #     geste naturel, et ce verrou-là est voulu, la grâce n'y sert à rien.
-  # Reste une fenêtre de 2 s sur l'inactivité (verrou auto puis capot fermé
-  # aussitôt), jugée négligeable.
+  # Grâce uniquement pour le verrou d'inactivité : une grâce restante au réveil
+  # déverrouillerait sans mot de passe.
   graceArgs = "--grace 2";
-  # swaylock-effects patché (./swaylock-effects-defer-ack.patch) : brancher
-  # ou débrancher un écran pendant le verrouillage envoie des configures
-  # rapprochés ; sans tampon libre, swaylock acquittait la nouvelle taille et
-  # validait la surface sans image à cette taille -> erreur de protocole,
-  # sway le tue, écran rouge sans issue (reboot forcé). Le patch n'acquitte
-  # qu'une fois un tampon à la bonne taille attaché, comme swaylock amont.
-  #
-  # Même garde-fou que le patch de sway (lib/packaging/guarded-patch.nix) : build
-  # arrêté si un des fichiers patchés change (relire, retester au sway
-  # imbriqué avec `swaymsg create_output` pendant le verrou, mettre à jour
-  # les empreintes).
+  # Sans le patch, brancher un écran pendant le verrou tue swaylock. Le build échoue
+  # si un fichier patché change : retester avec `swaymsg create_output`, màj empreintes.
   swaylockPackage = myLib.packaging.mkGuardedPatch {
     package = pkgs.swaylock-effects;
     patch = ./swaylock-effects-defer-ack.patch;
@@ -96,29 +54,13 @@ let
   ps = "${pkgs.procps}/bin/ps";
   user = config.home.username;
   lockCmd = "${swaylockBin} ${lockArgs} ${fadeArgs}";
-  # Bind Ctrl+Échap (--locked) : ne lance un swaylock que s'il n'en tourne
-  # aucun. Verrouille en temps normal ; sur l'écran rouge (swaylock mort),
-  # en relance un pour déverrouiller ; sans effet sous un verrou vivant.
-  # -u : seulement les swaylock de CE compte, sinon un processus « swaylock »
-  # d'un autre utilisateur (guest) ferait croire au verrou et Ctrl+Échap ne
-  # verrouillerait plus rien.
+  # -u : ignorer les swaylock d'un autre compte.
   lockBindCmd = "${pgrep} -u ${user} -x swaylock >/dev/null || ${lockCmd}";
-  # -f (daemonize) requis : sinon le lock bloquerait l'événement before-sleep
-  # (swayidle attend la fin de la commande avant de continuer).
+  # -f requis : swayidle attend la fin de la commande before-sleep
   lockCmdIdle = "${swaylockBin} -f ${lockArgs} ${fadeArgs} ${graceArgs}";
-  # Avant la veille, on REMPLACE un swaylock encore dans sa grâce par un
-  # verrou sans grâce : un verrou d'inactivité (grâce 2 s) posé juste avant
-  # la veille gardait sinon sa grâce gelée jusqu'au réveil (cf. graceArgs),
-  # et le swaylock de before-sleep échouait (« already locked »). Un verrou
-  # de plus de 3 s n'a plus de grâce : on le garde tel quel. SIGTERM (défaut
-  # de pkill) tue swaylock SANS déverrouiller (seul SIGUSR1 déverrouille) :
-  # sway passe le verrou en « abandonné » (écran rouge, toujours verrouillé)
-  # et accepte le nouveau en remplacement. Ce nouveau verrou ne capture pas
-  # l'écran (lockArgsNoCapture) : la capture serait ce fond rouge, flouté.
-  # Si le remplacement échouait, on reste sur l'écran rouge verrouillé, levé
-  # par Ctrl+Échap : pas de fuite.
-  # `sleep` et `ps` en chemins absolus, {1..40} au lieu de `seq` : le PATH
-  # du service swayidle n'a pas coreutils.
+  # Remplace un swaylock encore en grâce (< 3 s), dont la grâce gelée échouerait le
+  # verrou. SIGTERM ne déverrouille pas ; remplaçant sans capture (fond rouge).
+  # Chemins absolus : le PATH de swayidle n'a pas coreutils.
   lockCmdBeforeSleep = pkgs.writeShellScript "lock-before-sleep" ''
     pids=$(${pgrep} -u ${user} -x swaylock)
     if [ -n "$pids" ]; then
@@ -136,25 +78,8 @@ let
     exec ${swaylockBin} -f ${lockArgs}
   '';
 
-  # `awake` : verrouille ET garde la machine éveillée capot fermé (session
-  # Claude Code pilotée à distance, par ex.). L'inhibiteur logind vit
-  # exactement le temps du verrouillage : swaylock tourne au premier plan
-  # (pas de -f) sous systemd-inhibit, donc déverrouiller termine swaylock,
-  # libère l'inhibiteur, et le capot retrouve son comportement normal
-  # (veille). Rien à désactiver, impossible de l'oublier actif.
-  # Pas de délai de grâce : ouvrir le capot et toucher une touche ne doit
-  # pas suffire à déverrouiller.
-  #
-  # N'inhibe QUE le capot, pas `sleep` : rien d'autre ne met en veille ici,
-  # et bloquer `sleep` empêcherait UPower d'agir à batterie critique -> portable
-  # vidé jusqu'à la coupure si awake est oublié sur batterie. (Action réelle :
-  # extinction. HybridSleep, le défaut NixOS, exige un swap disque pour
-  # `resume` ; avec zram seul, UPower retombe sur PowerOff.)
-  #
-  # Anneau orange du thème (au lieu du violet) et « Éveillé » sous l'heure :
-  # on voit d'un coup d'œil que ce verrou-là garde la machine allumée.
-  # swaylock garde la DERNIÈRE valeur d'une option répétée, d'où l'ajout
-  # après lockArgs.
+  # N'inhibe QUE le capot, pas `sleep` (UPower doit agir à batterie critique).
+  # swaylock garde la dernière valeur d'une option répétée : d'où l'ordre après lockArgs.
   awakeArgs =
     "--ring-color ${config.lib.stylix.colors.base09}"
     + " --key-hl-color ${config.lib.stylix.colors.base0A}"
@@ -170,25 +95,16 @@ let
     '';
   };
 
-  # Écran interne : le premier dont le nom commence par eDP (même règle que le
-  # clonage d'écran de gui/displays), plutôt qu'un eDP-1 en dur.
   internalOutput = ''
     internal=$(swaymsg -t get_outputs | jq -r '[.[] | select(.name | test("^eDP"))][0].name // empty')
     [ -n "$internal" ] || exit 0
   '';
 
-  # Capot fermé : on éteint l'écran interne quand AUCUNE veille ne suit,
-  # c'est-à-dire si :
-  #   - `awake` tient son inhibiteur (repéré par son --who chez logind) ;
-  #   - ou un autre écran est actif : logind ignore alors le capot
-  #     (HandleLidSwitchDocked=ignore par défaut), l'écran resterait allumé.
-  # Sinon la veille arrive et éteint tout : on n'y touche pas, l'écran doit
-  # rester capturable par le swaylock de before-sleep (sinon fond de repli
-  # au lieu du bureau flouté).
+  # Pas d'extinction si une veille suit : le swaylock de before-sleep doit pouvoir capturer l'écran.
   lidClose = pkgs.writeShellApplication {
     name = "lid-close";
     runtimeInputs = [
-      osConfig.programs.sway.package # swaymsg
+      osConfig.programs.sway.package
       pkgs.systemd
       pkgs.gawk
       pkgs.jq
@@ -205,7 +121,7 @@ let
   lidOpen = pkgs.writeShellApplication {
     name = "lid-open";
     runtimeInputs = [
-      osConfig.programs.sway.package # swaymsg
+      osConfig.programs.sway.package
       pkgs.jq
     ];
     text = internalOutput + ''
@@ -215,8 +131,6 @@ let
 in
 {
   options.userSettings.windowManager.sway.lock = {
-    # Suit sway : une session sway sans verrou ne se verrouille jamais, ni
-    # à l'inactivité ni avant la veille.
     enable = lib.mkEnableOption "verrouillage de la session sway (swaylock, swayidle, awake)" // {
       default = config.userSettings.windowManager.sway.enable;
     };
@@ -232,27 +146,13 @@ in
         ];
 
         home.file.".config/sway/conf.d/lock.conf".text = ''
-          # --locked : marche AUSSI écran verrouillé, donc sur l'écran rouge (verrou
-          # abandonné, swaylock mort) : relance un swaylock, que sway accepte en
-          # remplacement -> écran de mot de passe au lieu d'un reboot forcé. Sans
-          # effet si un swaylock tourne déjà (garde pgrep, cf. lockBindCmd).
+          # --locked : doit marcher aussi sur l'écran rouge (swaylock mort)
           bindsym --locked Control+Escape exec ${lockBindCmd}
 
-          # Capot fermé sans veille (cf. `awake`) : l'écran interne ne s'éteint
-          # pas tout seul (rétroéclairage allumé contre le clavier). --locked :
-          # doit marcher écran verrouillé, c'est justement le cas d'awake.
-          # Éteint SEULEMENT si awake est actif (cf. lidClose) : sinon la
-          # veille suit, et un écran déjà éteint fait échouer la capture de
-          # swaylock (before-sleep) -> fond de repli au lieu du bureau flouté.
           bindswitch --locked lid:on exec ${lib.getExe lidClose}
           bindswitch --locked lid:off exec ${lib.getExe lidOpen}
         '';
 
-        # Lock après 10 min d'inactivité, écrans éteints après 15 min (rallumés au
-        # premier input), mise en veille après 30 min, et lock systématique avant
-        # mise en veille (sinon la session revient déverrouillée au réveil). Sans
-        # la veille, un portable laissé ouvert tirait 5-8 W indéfiniment, écran
-        # noir.
         services.swayidle = {
           enable = true;
           package = pkgs.swayidle;
@@ -275,8 +175,6 @@ in
         };
       }
 
-      # Entrée rofi : la tasse en orange (base09), la couleur de l'anneau de ce
-      # verrou-là, pour l'associer d'un coup d'œil.
       (lib.mkIf config.userSettings.windowManager.sway.rofi.enable (
         myLib.desktop.mkRofiAction {
           inherit config;

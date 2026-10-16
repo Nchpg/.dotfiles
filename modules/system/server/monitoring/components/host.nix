@@ -5,8 +5,6 @@
   ...
 }:
 
-# node_exporter : ce que la machine sait d'elle-même — disque, mémoire, charge,
-# état des unités systemd, dérive d'horloge, températures, timers.
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) ports helpers;
@@ -18,82 +16,35 @@ let
     thresholdLine
     ;
 
-  # Seuils partagés entre une règle et le panneau qui la montre : écrits une
-  # fois, le panneau ne peut pas dire autre chose que l'alerte.
   seuils = {
-    # Charge sur 15 min, en multiple du nombre de cœurs.
     chargeParCoeur = 2;
-    # Ancienneté du dernier déclenchement d'un timer quotidien : deux périodes.
     timerSecondes = 48 * 3600;
   };
 
-  # Nombre de cœurs. Un scalaire sans étiquette : le diviser à une série
-  # étiquetée demande `on() group_left`, sans quoi PromQL ne sait pas apparier
-  # les deux membres et rend un résultat vide — sans erreur.
+  # Scalaire sans étiquette : le diviser à une série étiquetée demande `on() group_left`.
   coeurs = ''count without(cpu, mode) (node_cpu_seconds_total{mode="idle"})'';
 
-  # Filtre commun aux règles et panneaux sur les systèmes de fichiers.
-  #
-  # `/nix/store` en est EXCLU, et ça n'a rien d'esthétique : sur NixOS c'est un
-  # montage lié en lecture seule de la racine, donc node_exporter le rapporte
-  # comme un système de fichiers à part alors qu'il partage les mêmes octets.
-  # Sans cette exclusion, chaque alerte de remplissage partirait en double, sur
-  # deux points de montage qui désignent le même disque.
-  #
-  # `/boot` est gardé À DESSEIN, alors qu'on l'oublie souvent : c'est la
-  # partition qui se remplit toute seule sur cette distribution, une génération
-  # à la fois, et son remplissage casse le rebuild suivant.
+  # `/nix/store` exclu : montage lié de la racine, les alertes partiraient en double.
   fsSelector = ''fstype!~"tmpfs|ramfs|overlay|nsfs|squashfs|fuse.*",mountpoint!="/nix/store"'';
 
-  # Timers dont le silence coûte quelque chose. Les hebdomadaires (`fstrim`,
-  # `nix-gc`) sont volontairement exclus : ils demanderaient un autre seuil, et
-  # leur arrêt ne casse rien d'immédiat.
+  # Timers quotidiens seulement : les hebdomadaires demanderaient un autre seuil.
   timersSurveilles = ''node_systemd_timer_last_trigger_seconds{name=~"nixos-upgrade.timer|acme-.+"}'';
 
-  # Seuil de température : 90 % de la limite que le matériel déclare.
   seuilTemperature = "0.9 * node_hwmon_temp_crit_celsius";
 in
 {
   config = lib.mkIf cfg.enable {
     services.prometheus.exporters.node = helpers.mkLocalExporter ports.node // {
-      # UN SEUL collecteur ajouté, et il est consommé : `systemd` porte à lui
-      # seul la règle `UniteSystemdEnEchec`. Il parle à systemd par dbus ; le
-      # module amont ouvre AF_UNIX quand il est demandé, sans quoi le service
-      # démarrerait en ne rapportant rien.
-      #
-      # Pas de `processes` : aucun panneau ni aucune règle ne lit ce qu'il
-      # produit. Un collecteur qu'on allume « au cas où » coûte des séries à
-      # stocker et donne l'illusion d'une surveillance qui n'existe pas.
-      #
-      # Les autres viennent par défaut : cpu, mémoire, systèmes de fichiers,
-      # réseau, disque, vmstat (dont `oom_kill`), timex (la dérive d'horloge),
-      # hwmon et pressure.
       enabledCollectors = [ "systemd" ];
 
-      # COMPTEUR DE REDÉMARRAGES PAR UNITÉ, qui ferme un angle mort réel : le
-      # service qui redémarre en boucle sans jamais échouer.
-      #
-      # `Restart = on-failure` avec `StartLimitBurst = 5` — la configuration des
-      # conteneurs podman — a un trou précis. Un service qui plante VITE épuise
-      # ses cinq tentatives, passe en `failed`, et `UniteSystemdEnEchec`
-      # l'attrape. Un service qui plante LENTEMENT, une fois par minute, ne
-      # franchit jamais la limite : il redémarre indéfiniment, l'unité reste
-      # `active`, et rien ne le voit.
-      #
-      # Nom relevé en lançant l'exporteur avec ce drapeau, pas supposé :
-      # `node_systemd_service_restart_total`, étiqueté par `name`.
       extraFlags = [ "--collector.systemd.enable-restarts-metrics" ];
     };
 
-    # node_exporter porte la quasi-totalité des règles : sa panne rend muettes
-    # des dizaines d'autres alertes et vaut d'être connue tout de suite, sans
-    # attendre les cinq minutes de `CibleInjoignable`.
     systemSettings.notify.discord.units = [ "prometheus-node-exporter" ];
 
     systemSettings.monitoring.internal = {
       scrapeJobs.node = helpers.localJob "node" ports.node // {
-        # node_exporter reprend verbatim les noms de `/proc/vmstat`, qui
-        # ignorent la convention du suffixe. Cf. `suffixeTotal`.
+        # `/proc/vmstat` ignore la convention du suffixe.
         metric_relabel_configs = helpers.suffixeTotal "node_vmstat_oom_kill";
       };
 
@@ -112,8 +63,6 @@ in
           for = "5m";
           labels.severity = "critical";
           annotations.summary = "{{ $labels.mountpoint }} occupé à {{ $value | printf \"%.1f\" }} %, la machine va commencer à casser.";
-          # Deux points de montage qui se remplissent ensemble restent deux
-          # alertes, d'où `mountpoint`.
           inhibits = {
             alertname = "DisqueBientotPlein";
             equal = [
@@ -123,10 +72,7 @@ in
           };
         };
 
-        # La SEULE règle qui prévient AVANT que le seuil soit atteint : elle
-        # extrapole la pente des six dernières heures. Le second terme n'est pas
-        # décoratif — sans lui, un disque à 4 % d'occupation qui gagne un
-        # mégaoctet déclencherait l'alerte au moindre bruit de mesure.
+        # Le second terme évite qu'un disque à 4 % qui gagne un mégaoctet déclenche l'alerte.
         DisquePleinEnTroisJours = {
           alert = "DisquePleinEnTroisJours";
           expr = "predict_linear(node_filesystem_avail_bytes{${fsSelector}}[6h], 3 * 24 * 3600) < 0 and node_filesystem_avail_bytes{${fsSelector}} / node_filesystem_size_bytes{${fsSelector}} < 0.4";
@@ -135,9 +81,6 @@ in
           annotations.summary = "Au rythme actuel, {{ $labels.mountpoint }} sera plein d'ici trois jours.";
         };
 
-        # Se remplit indépendamment de l'espace, et le message d'erreur qui en
-        # découle (« No space left on device » sur un disque à moitié vide) est
-        # parmi les plus déroutants qui soient.
         InodesEpuises = {
           alert = "InodesEpuises";
           expr = "node_filesystem_files_free{${fsSelector}} / node_filesystem_files{${fsSelector}} * 100 < 10";
@@ -146,9 +89,6 @@ in
           annotations.summary = "{{ $labels.mountpoint }} : plus que {{ $value | printf \"%.1f\" }} % d'inodes libres.";
         };
 
-        # Bascule que le noyau opère seul quand il trouve une corruption. La
-        # machine continue de tourner et de répondre, mais plus rien ne s'écrit
-        # — c'est la panne la plus silencieuse de la liste.
         SystemeDeFichiersEnLectureSeule = {
           alert = "SystemeDeFichiersEnLectureSeule";
           expr = "node_filesystem_readonly{${fsSelector}} == 1";
@@ -157,9 +97,6 @@ in
           annotations.summary = "{{ $labels.mountpoint }} est passé en lecture seule.";
         };
 
-        # `MemAvailable` et pas `MemFree` : le noyau garde volontairement peu de
-        # mémoire libre, l'essentiel servant de cache. Seul le premier dit ce
-        # qu'une application pourrait réellement obtenir.
         MemoireFaible = {
           alert = "MemoireFaible";
           expr = "node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10";
@@ -176,8 +113,6 @@ in
           annotations.summary = "Swap occupé à {{ $value | printf \"%.1f\" }} % : quelque chose ne tient plus en mémoire.";
         };
 
-        # Sans `for` : un tueur de mémoire a déjà fait son travail quand on
-        # l'apprend, attendre une confirmation n'aurait aucun sens.
         ProcessusTuePourMemoire = {
           alert = "ProcessusTuePourMemoire";
           expr = "increase(node_vmstat_oom_kill_total[15m]) > 0";
@@ -185,9 +120,6 @@ in
           annotations.summary = "Le noyau a tué au moins un processus faute de mémoire.";
         };
 
-        # Rapportée au NOMBRE DE CŒURS, faute de quoi le seuil ne veut rien
-        # dire : une charge de 4 est confortable sur huit cœurs et catastrophique
-        # sur un.
         ChargeElevee = {
           alert = "ChargeElevee";
           expr = "node_load15 > ${toString seuils.chargeParCoeur} * ${coeurs}";
@@ -196,10 +128,6 @@ in
           annotations.summary = "Charge sur 15 minutes à {{ $value | printf \"%.1f\" }}, soit plus du double des cœurs disponibles.";
         };
 
-        # RECOUVRE partiellement `notify.discord`, et c'est voulu : celui-ci
-        # signale la TRANSITION vers l'échec, celle-là l'ÉTAT qui dure. Une unité
-        # tombée pendant que Discord était injoignable n'apparaît que dans la
-        # seconde.
         UniteSystemdEnEchec = {
           alert = "UniteSystemdEnEchec";
           expr = "node_systemd_unit_state{state=\"failed\"} == 1";
@@ -208,17 +136,7 @@ in
           annotations.summary = "L'unité {{ $labels.name }} est en échec.";
         };
 
-        # LE SERVICE QUI RENAÎT SANS JAMAIS MOURIR. `UniteSystemdEnEchec` voit
-        # l'état `failed` ; celle-ci voit ce qui ne l'atteint jamais — un
-        # conteneur dont l'amont disparaît par intermittence redémarre toutes les
-        # minutes sans épuiser `StartLimitBurst`, et la sonde HTTP le trouve
-        # debout entre deux morts.
-        #
-        # TROIS PAR HEURE comme seuil, et pas un : un rebuild redémarre chaque
-        # service une fois, et une nuit d'`autoUpgrade` ne doit pas sonner.
-        #
-        # Volontairement SANS filtre sur le nom : le mode de panne vaut pour tout
-        # ce qui porte une politique de redémarrage.
+        # Seuil à trois par heure : un rebuild redémarre chaque service une fois.
         ServiceRedemarreEnBoucle = {
           alert = "ServiceRedemarreEnBoucle";
           expr = "increase(node_systemd_service_restart_total[1h]) > 3";
@@ -227,24 +145,7 @@ in
           annotations.summary = "L'unité {{ $labels.name }} a redémarré {{ $value | printf \"%.0f\" }} fois en une heure : elle tourne, mais elle n'arrête pas de renaître.";
         };
 
-        # LE PLAFOND QUI NE PRÉVIENT PAS. La table de suivi de connexions du
-        # noyau a une taille finie ; une fois pleine, le noyau REFUSE les
-        # nouvelles connexions et écrit une ligne dans son journal, mais rien ne
-        # tombe en panne : les services tournent, les sondes locales passent, et
-        # depuis l'extérieur les connexions échouent au hasard.
-        #
-        # Cette machine multiplie les sources de connexions suivies : le tunnel
-        # Cloudflare, les pairs WireGuard, le NAT du VPN et le résolveur, chacun
-        # avec ses flux UDP dont les entrées expirent lentement.
-        #
-        # SUR LE RAPPORT et non sur un nombre : la limite est calculée par le
-        # noyau depuis la mémoire disponible, donc un seuil absolu serait faux
-        # sur toute autre machine. La marge mesurée est de trois ordres de
-        # grandeur — cette alerte est faite pour dormir.
-        #
-        # PAS D'ÉQUIVALENT POUR LES DESCRIPTEURS DE FICHIERS, et c'est vérifié :
-        # `node_filefd_maximum` vaut ici la limite que systemd pose quand il n'y
-        # en a pas (9,2 × 10¹⁸). Une règle sur ce rapport serait inerte.
+        # Pas d'équivalent pour les descripteurs de fichiers : `node_filefd_maximum` vaut 9,2 × 10¹⁸ ici.
         TableDeConnexionsPresquePleine = {
           alert = "TableDeConnexionsPresquePleine";
           expr = "node_nf_conntrack_entries / node_nf_conntrack_entries_limit * 100 > 80";
@@ -253,9 +154,6 @@ in
           annotations.summary = "Table de suivi des connexions occupée à {{ $value | printf \"%.0f\" }} % : au plafond, le noyau refusera les nouvelles connexions sans qu'aucun service ne tombe.";
         };
 
-        # Pas un détail de confort sur CETTE machine : les codes TOTP d'Authelia
-        # sont calculés sur l'heure, et une dérive suffisante les fait tous
-        # refuser sans que rien n'explique pourquoi.
         HorlogeDerive = {
           alert = "HorlogeDerive";
           expr = "abs(node_timex_offset_seconds) > 0.05";
@@ -264,23 +162,7 @@ in
           annotations.summary = "Horloge décalée de {{ $value | printf \"%.3f\" }} s : les codes TOTP finiront par être refusés.";
         };
 
-        # LA CHALEUR, QUI NE FAIT ÉCHOUER AUCUNE UNITÉ. C'est une dérive qui
-        # s'installe sur des semaines — de la poussière, un ventilateur qui
-        # ralentit, un été — jusqu'au jour où le processeur se bride ou où le
-        # disque abrège sa vie.
-        #
-        # AU SEUIL DU CONSTRUCTEUR et non à un chiffre choisi au hasard :
-        # `node_hwmon_temp_crit_celsius` est la limite que le matériel déclare
-        # lui-même. Alerter à 90 % de cette valeur laisse une marge réelle sans
-        # supposer quoi que ce soit d'un matériel qu'on ne connaît pas.
-        #
-        # LE `on(chip, sensor)` PORTE SUR LA COMPARAISON, pas sur la
-        # multiplication : `0.9 * on(…) métrique` ne s'analyse pas, un
-        # modificateur d'appariement ne pouvant pas s'appliquer entre un scalaire
-        # et un vecteur. Écrit ainsi, PromQL rend un résultat vide sans erreur.
-        #
-        # Les capteurs sans limite déclarée sont ignorés d'eux-mêmes : la
-        # jointure ne les apparie à rien.
+        # Le `on(chip, sensor)` porte sur la comparaison : `0.9 * on(…) métrique` ne s'analyse pas.
         MachineTropChaude = {
           alert = "MachineTropChaude";
           expr = "node_hwmon_temp_celsius >= on(chip, sensor) (${seuilTemperature})";
@@ -289,19 +171,7 @@ in
           annotations.summary = "Capteur {{ $labels.chip }} à {{ $value | printf \"%.0f\" }} °C, soit 90 % de la limite constructeur : vérifie la poussière et les ventilateurs.";
         };
 
-        # LE TIMER QUI CESSE DE SE DÉCLENCHER. Un timer qui ne se déclenche plus
-        # n'échoue pas : pas d'unité en échec, pas de log, pas de métrique qui
-        # bouge. Sur `nixos-upgrade`, ça veut dire que les correctifs de sécurité
-        # ont cessé d'arriver ; sur `acme-renew-*`, que les certificats
-        # expireront dans trente jours sans un mot.
-        #
-        # QUARANTE-HUIT HEURES pour des timers QUOTIDIENS : deux fois la période
-        # laisse passer un décalage, un `Persistent` qui rattrape, ou une machine
-        # éteinte une nuit — sans laisser filer une panne réelle.
-        #
-        # `> 0` N'EST PAS DÉCORATIF : un timer jamais déclenché depuis le
-        # démarrage rapporte zéro, et `time() - 0` rendrait l'heure Unix
-        # courante, soit cinquante-six ans de retard.
+        # `> 0` : un timer jamais déclenché rapporte 0 et `time() - 0` ferait cinquante-six ans.
         TimerNeSeDeclenchePlus = {
           alert = "TimerNeSeDeclenchePlus";
           expr = "(time() - ${timersSurveilles} > ${toString seuils.timerSecondes}) and (node_systemd_timer_last_trigger_seconds > 0)";
@@ -342,10 +212,6 @@ in
           ];
         };
 
-        # « Stockage » et non « Racine » : le chiffre-clé s'adresse au coup
-        # d'œil, pas à l'administrateur qui sait ce qu'est `/`. La précision
-        # perdue est mince — la racine occupe le disque à un gigaoctet près, le
-        # reste étant `/boot`, qui a son propre suivi dans la section Stockage.
         stockageUtilise = mkStat {
           id = 3;
           title = "Stockage utilisé";
@@ -360,28 +226,12 @@ in
           ];
         };
 
-        # DES PROPRIÉTÉS DE LA MACHINE, PAS DES SÉRIES TEMPORELLES : aucune des
-        # trois ne bouge sur une machine physique. Un chiffre-clé est exactement
-        # la forme qui convient à une valeur qu'on veut connaître sans la suivre.
-        # Le compte de cœurs donne aussi la clé de lecture du panneau `Charge`,
-        # qui est en pourcentage de cette capacité.
-        #
-        # LES TROIS ENSEMBLE DANS UNE SEULE BOÎTE, parce qu'une machine ne se
-        # décrit pas par « 4 » ni par « 14 Gio » mais par les trois à la fois.
-        #
-        # AUCUN SEUIL, d'où l'unique palier : colorer un nombre de cœurs
-        # laisserait croire qu'il existe une bonne et une mauvaise valeur.
-        #
-        # UNITÉS MÊLÉES, d'où la surcharge : le panneau est en octets pour la RAM
-        # et le disque, et le compte de cœurs redevient un nombre nu. Sans elle,
-        # Grafana annoncerait « 4 o ».
+        # Unités mêlées d'où la surcharge, sinon Grafana annoncerait « 4 o ».
         materiel = mkStat {
           id = 5;
           title = "Matériel";
           unit = "bytes";
           description = "Ce que la machine EST, et non ce qu'elle fait : trois constantes, qui donnent l'échelle de lecture des quatre mesures voisines.";
-          # Trois constantes : la courbe de fond ne tracerait que des droites
-          # plates, sur trois échelles sans rapport.
           graph = false;
           targets = [
             {
@@ -393,8 +243,6 @@ in
               legend = "RAM";
             }
             {
-              # La racine, qui est le disque à un gigaoctet près — `/boot` mis
-              # à part.
               expr = "node_filesystem_size_bytes{mountpoint=\"/\"}";
               legend = "stockage";
             }
@@ -449,10 +297,6 @@ in
           ];
         };
 
-        # RAPPORTÉE AU NOMBRE DE CŒURS, donc en pourcentage de capacité. La
-        # charge brute est un nombre sans échelle ; divisée par les cœurs,
-        # 100 % veut dire « exactement saturé » et il n'y a plus de repère à
-        # tracer, puisqu'il est devenu l'échelle elle-même.
         chargeProcesseur = mkTs {
           id = 13;
           title = "Charge processeur";
@@ -460,9 +304,6 @@ in
           description = "Charge système rapportée au nombre de cœurs : 100 % veut dire exactement saturé. L'alerte `ChargeElevee` se lit à ${
             toString (seuils.chargeParCoeur * 100)
           } %.";
-          # PAS de borne haute ici, contrairement aux autres pourcentages : la
-          # charge peut légitimement dépasser 100 %, et c'est justement ce qu'on
-          # vient voir.
           targets =
             map
               (n: {
@@ -476,8 +317,6 @@ in
               ];
         };
 
-        # Sur une heure glissante, parce que le compteur brut est cumulatif
-        # depuis le démarrage : sa valeur ne dit rien, sa progression dit tout.
         processusTues = mkTs {
           id = 21;
           title = "Processus tués faute de mémoire";
@@ -492,27 +331,7 @@ in
           ];
         };
 
-        # LA SATURATION, QUI EST UNE AUTRE QUESTION QUE L'USAGE. Les panneaux
-        # voisins disent ce que la machine CONSOMME ; celui-ci dit ce qu'elle
-        # ATTEND, c'est-à-dire la seule chose qui explique « c'est lent ».
-        #
-        # LA PRESSION (PSI) : la fraction de temps pendant laquelle au moins une
-        # tâche est bloquée faute de processeur, de mémoire ou d'entrée-sortie.
-        # C'est plus direct que la charge moyenne, qui compte les tâches prêtes
-        # sans dire si elles souffrent.
-        #
-        # L'OCCUPATION DU DISQUE avec : un disque se sature sur des OPÉRATIONS,
-        # pas sur un volume. Des milliers de petites écritures dispersées — les
-        # miniatures de Nextcloud, PostgreSQL — le tiennent occupé à 100 % pour
-        # un débit dérisoire, que le panneau `Disque` montre comme du repos.
-        #
-        # PAS DE BORNE HAUTE : la valeur normale est proche de ZÉRO et c'est le
-        # pic qui porte l'information ; borner à 100 écraserait les courbes sur
-        # l'axe.
-        #
-        # « ATTENTE » ET NON « SATURATION » dans le titre : un panneau intitulé
-        # « Saturation » avec des pourcentages ne dit pas de QUOI ils sont le
-        # pourcentage. Formulé en temps d'attente, il n'y a plus d'ambiguïté.
+        # Pas de borne haute (normal proche de zéro, le pic informe).
         tempsAttente = mkTs {
           id = 44;
           title = "Temps passé à attendre";
@@ -532,10 +351,6 @@ in
               legend = "en attente de mémoire";
             }
             {
-              # LA SEULE QUI NE MESURE PAS UNE ATTENTE : le temps où le DISQUE
-              # travaille. Elle se lit avec les autres — un disque occupé à
-              # 100 % explique une attente d'entrées-sorties —, et sa légende
-              # dit qu'elle parle d'autre chose.
               expr = "rate(node_disk_io_time_seconds_total[5m]) * 100";
               legend = "disque {{ device }} occupé";
             }
@@ -580,14 +395,7 @@ in
           ];
         };
 
-        # Processeur, circuit graphique intégré et disque sur le même axe : ce
-        # qui informe n'est pas la valeur absolue mais l'ÉCART entre elles et
-        # leur dérive commune — une panne lente, invisible au jour le jour, que
-        # les alertes `MachineTropChaude` et `DisqueTropChaud` n'attrapent
-        # qu'une fois tard.
-        #
-        # La jointure sur `node_hwmon_chip_names` sert uniquement à la légende :
-        # sans elle les séries s'appellent `pci0000:00_0000:00:18_3`.
+        # La jointure sur `node_hwmon_chip_names` ne sert qu'à la légende.
         temperatures = mkTs {
           id = 30;
           title = "Températures";
@@ -603,7 +411,6 @@ in
               legend = "disque {{ device }}";
             }
             {
-              # Le seuil de `MachineTropChaude`, tracé avec la mesure.
               expr = seuilTemperature;
               legend = "seuil d'alerte";
             }
@@ -611,8 +418,7 @@ in
           overrides = [ (thresholdLine (byName "seuil d'alerte")) ];
         };
 
-        # `min` nul et non zéro : la dérive va dans les deux sens, et un décalage
-        # négatif est aussi fatal aux codes TOTP qu'un positif.
+        # `min` nul : la dérive va dans les deux sens.
         deriveHorloge = mkTs {
           id = 22;
           title = "Dérive d'horloge";
@@ -627,19 +433,11 @@ in
           ];
         };
 
-        # EN POURCENTAGE ET NON EN OCTETS : en valeur absolue, `/boot` est
-        # plusieurs centaines de fois plus petit que `/`, et sa courbe restait
-        # collée à l'axe — alors que c'est précisément la partition qui se
-        # remplit toute seule. Le pourcentage est aussi la bonne grandeur pour
-        # « est-ce que ça se remplit », et les seuils des alertes s'y lisent
-        # directement.
         espaceDisqueLibre = mkTs {
           id = 12;
           title = "Espace disque libre";
           unit = "percent";
           description = "En pourcentage, ce qui rend `/` et `/boot` comparables malgré un rapport de 370 entre leurs tailles — et fait lire directement les seuils des alertes, écrits en pourcentage eux aussi.";
-          # BORNÉ À 100 : une racine stable entre 38,4 et 38,6 % se lirait sinon
-          # comme une montagne russe.
           max = 100;
           targets = [
             {
@@ -649,8 +447,6 @@ in
           ];
         };
 
-        # L'autre façon de remplir un disque, et la plus déroutante : `df`
-        # annonce de la place libre pendant que toute écriture échoue.
         inodesLibres = mkTs {
           id = 23;
           title = "Inodes libres";
@@ -664,9 +460,6 @@ in
           ];
         };
 
-        # Une SÉRIE PAR UNITÉ, pas un compteur : le nom de l'unité est
-        # précisément l'information que l'alerte ne transporte pas, et la forme
-        # de la courbe distingue une panne franche d'un clignotement.
         unitesEnEchec = mkTs {
           id = 19;
           title = "Unités systemd en échec";
@@ -675,35 +468,13 @@ in
           decimals = 0;
           targets = [
             {
-              # LE NOM DE L'UNITÉ **ET** PAS DE « No Data ».
-              #
-              # `… {state="failed"} == 1` ne rend RIEN quand tout va bien, et
-              # Grafana écrit « No Data » — qui dit aussi bien « aucune unité en
-              # échec » que « la collecte est morte ». Un `count(…) or vector(0)`
-              # réglerait l'ambiguïté mais perdrait le nom.
-              #
-              # D'où `absent()`, qui ne rend une valeur QUE lorsque son argument
-              # n'en rend aucune. Multiplié par zéro et étiqueté par
-              # `label_replace`, il fabrique une série de repli qui porte un nom
-              # lisible — et qui DISPARAÎT dès qu'une vraie unité tombe.
-              #
-              # À NE PAS GÉNÉRALISER : ce repli vaut pour un COMPTE D'ÉVÉNEMENTS,
-              # où zéro veut dire « rien ne s'est produit ». Sur une jauge d'état
-              # il mentirait — un 0 sur une usure de disque absente afficherait
-              # « disque neuf » là où la vérité est « pas mesurable ».
+              # `absent()` fabrique une série de repli nommée, pour éviter « No Data ». Faux pour une jauge d'état.
               expr = "(node_systemd_unit_state{state=\"failed\"} == 1) or label_replace(absent(node_systemd_unit_state{state=\"failed\"} == 1) * 0, \"name\", \"aucune en échec\", \"\", \"\")";
               legend = "{{ name }}";
             }
           ];
         };
 
-        # LE JUMEAU DU PANNEAU VOISIN : celui-ci voit ce qui n'atteint jamais
-        # l'état `failed`, comme la règle `ServiceRedemarreEnBoucle`.
-        #
-        # LE FILTRE `> 0` N'EST PAS COSMÉTIQUE : la métrique existe pour chaque
-        # unité de la machine, et sans lui le panneau empile des centaines de
-        # séries plates à zéro. Le repli par `absent()` est le même procédé que
-        # chez le voisin.
         servicesQuiRedemarrent = mkTs {
           id = 40;
           title = "Services qui redémarrent";
@@ -718,12 +489,6 @@ in
           ];
         };
 
-        # LA COURBE DIT CE QUE `TimerNeSeDeclenchePlus` NE DIT PAS : un timer
-        # sain dessine un escalier, l'âge monte jusqu'à vingt-quatre heures puis
-        # retombe à zéro. Un timer mort est une droite qui monte et ne redescend
-        # plus — ce qui se voit avant les quarante-huit heures du seuil.
-        #
-        # Le `and (… > 0)` est le même garde-fou que dans la règle.
         timers = mkTs {
           id = 42;
           title = "Timers : temps depuis le dernier déclenchement";

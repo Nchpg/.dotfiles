@@ -1,20 +1,8 @@
 #!/usr/bin/env python3
-"""Indicateur SNI maison pour Spotify (vrai StatusNotifierItem via
-libayatana-appindicator, visible dans waybar — contrairement à spotify-tray qui
-ne fait que du XEmbed invisible sous Sway).
+"""Indicateur SNI pour Spotify (libayatana-appindicator, visible dans waybar).
 
-Idée : « fermer l'interface sans couper la musique ». Masquer Spotify l'envoie
-au scratchpad de sway -> la fenêtre disparaît de l'écran MAIS le process et la
-musique continuent, et la fenêtre reste dans l'arbre sway (donc l'icône reste).
-Seul « Quitter » (clic droit) ou un pkill arrête vraiment Spotify.
-
-Cycle de vie :
-  - De base : rien (aucun démon au login).
-  - Ouvrir « Spotify » (l'entrée de menu pointe sur ce binaire) : 1er lancement
-    -> verrou + lancement de Spotify + icône.
-  - Masquer : la fenêtre va au scratchpad (musique conservée, icône conservée).
-  - Afficher : ramène/relance la fenêtre.
-  - Quitter / pkill : Spotify s'arrête -> plus de fenêtre -> l'icône disparaît.
+Masquer envoie la fenêtre au scratchpad de sway : la musique continue et
+l'icône reste. L'icône disparaît quand plus aucune fenêtre Spotify n'existe.
 """
 
 import fcntl
@@ -30,11 +18,8 @@ gi.require_version("AyatanaAppIndicator3", "0.1")
 from gi.repository import Gtk, GLib, AyatanaAppIndicator3 as AppIndicator  # noqa: E402
 
 PLAYER = "spotify"
-# Critère sway ciblant la fenêtre Spotify. En Wayland natif (NIXOS_OZONE_WL=1)
-# la fenêtre n'expose QUE `app_id` ; sous XWayland elle expose `class`/`instance`.
-# On ne peut pas OR ces deux propriétés dans un seul critère sway, donc on
-# détermine le bon critère au runtime (cf. _walk / spotify_crit) et on garde
-# app_id comme repli par défaut (mode Wayland natif).
+# Wayland natif : seul `app_id` ; XWayland : `class`/`instance`. Pas de OR
+# possible dans un critère sway, donc _walk détecte le bon.
 SPOTIFY_APP_ID_CRIT = '[app_id="(?i)spotify"]'
 SPOTIFY_CLASS_CRIT = '[class="(?i)spotify"]'
 LOCK_PATH = os.path.join(
@@ -55,10 +40,6 @@ def playerctl(*args):
 
 
 def _walk(node, in_scratch):
-    """Cherche une fenêtre Spotify. Renvoie (trouvée?, dans_le_scratchpad?,
-    critère_sway). Le critère reflète comment la fenêtre s'identifie : app_id
-    (Wayland natif) ou class (XWayland), pour que les commandes swaymsg ciblent
-    bien la fenêtre quel que soit le mode de rendu."""
     scratch = in_scratch or node.get("name") == "__i3_scratch"
     wp = node.get("window_properties") or {}
     app_id = (node.get("app_id") or "").lower()
@@ -75,9 +56,6 @@ def _walk(node, in_scratch):
 
 
 def spotify_state():
-    """(running, hidden, crit) : running = une fenêtre Spotify existe (même cachée
-    au scratchpad) ; hidden = elle est dans le scratchpad ; crit = critère sway
-    pour la cibler (None si absente)."""
     try:
         tree = json.loads(
             subprocess.check_output(
@@ -94,9 +72,6 @@ def spotify_running():
 
 
 def launch_spotify():
-    # Précharge spotify-adblock (LD_PRELOAD) uniquement pour Spotify : blocage
-    # des pubs au niveau réseau, sans toucher au player. Le chemin du .so est
-    # fourni par le wrapper Nix via SPOTIFY_ADBLOCK_LIB.
     env = dict(os.environ)
     lib = env.get("SPOTIFY_ADBLOCK_LIB")
     if lib:
@@ -109,9 +84,6 @@ def launch_spotify():
 
 
 def _reveal_or_launch():
-    """Rend Spotify visible : le lance s'il n'existe pas, le sort du scratchpad
-    s'il est caché. Renvoie (était_déjà_visible, critère_sway). Le critère est
-    None quand on vient de lancer Spotify (pas encore de fenêtre)."""
     running, hidden, crit = spotify_state()
     if not running:
         launch_spotify()
@@ -124,15 +96,12 @@ def _reveal_or_launch():
 
 
 def show_window(_=None):
-    """Affiche Spotify (focus sa fenêtre / le ramène / le relance)."""
     was_visible, crit = _reveal_or_launch()
     if was_visible and crit:
         swaymsg(crit, "focus")
 
 
 def toggle_window(_=None):
-    """Bascule affiché <-> masqué. Masquer = scratchpad (musique + icône
-    conservées). Afficher = ramener/relancer."""
     was_visible, crit = _reveal_or_launch()
     if was_visible and crit:  # était visible -> on masque
         swaymsg(crit, "move", "scratchpad")
@@ -154,30 +123,25 @@ def metadata():
         return "Spotify"
 
 
-# --- Singleton : un seul indicateur à la fois -------------------------------
 _lock = open(LOCK_PATH, "w")
 try:
     fcntl.flock(_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 except OSError:
-    # Indicateur déjà présent : ce 2e lancement sert juste à afficher Spotify.
     show_window()
     sys.exit(0)
 
 
 def quit_all(_=None):
-    # Arrêt total : ferme la fenêtre Spotify (-> il quitte), puis sort.
     crit = spotify_state()[2] or SPOTIFY_APP_ID_CRIT
     swaymsg(crit, "kill")
     Gtk.main_quit()
 
 
-# Premier lancement : on ouvre Spotify.
 if not spotify_running():
     launch_spotify()
 
 indicator = AppIndicator.Indicator.new(
     "spotify-tray-custom",
-    # Le paquet Spotify installe l'icône sous le nom "spotify-client".
     "spotify-client",
     AppIndicator.IndicatorCategory.APPLICATION_STATUS,
 )
@@ -203,7 +167,6 @@ add("Quitter", quit_all)
 menu.show_all()
 
 indicator.set_menu(menu)
-# Clic « secondaire » (molette/milieu selon le host) -> bascule afficher/masquer.
 indicator.set_secondary_activate_target(toggle_item)
 
 seen_running = False
@@ -211,9 +174,7 @@ _waited = 0
 
 
 def tick():
-    """Tant qu'une fenêtre Spotify existe (même cachée au scratchpad), on garde
-    l'icône. Quand il n'y en a plus (Quitter/pkill), on sort -> icône retirée.
-    Délai de grâce au démarrage le temps que Spotify s'ouvre."""
+    """Garde l'icône tant qu'une fenêtre Spotify existe ; délai de grâce au démarrage."""
     global seen_running, _waited
     running, hidden, _crit = spotify_state()
     if running:

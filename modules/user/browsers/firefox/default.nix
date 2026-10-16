@@ -7,8 +7,6 @@
 
 let
   cfg = config.userSettings.browsers.firefox;
-  # Même source que rofi/waybar. CSS émis seulement si stylix est activé
-  # (sinon `colors` n'est pas évaluable).
   c = config.lib.stylix.colors;
   themed = config.userSettings.stylix.enable;
 in
@@ -23,25 +21,20 @@ in
     programs.firefox = {
       enable = true;
       package = cfg.pkgs.firefox;
-      # Accordées d'office (policy entreprise), sans bannière. Rend déclaratif
-      # ce qui vit normalement dans permissions.sqlite (non reproductible).
+      # Notifications accordées d'office (sinon dans permissions.sqlite).
       policies.Permissions.Notifications = {
         Allow = [
           "https://discord.com"
           "https://claude.ai"
         ];
-        BlockNewRequests = false; # autres sites toujours libres de demander
+        BlockNewRequests = false;
       };
-      # 26.05 a changé le défaut vers $XDG_CONFIG_HOME/mozilla/firefox : on
-      # garde le chemin historique pour ne pas déplacer ~/.mozilla.
       configPath = ".mozilla/firefox";
       profiles.default = {
-        # Pas de extensions.packages -> pas de extensions.force (sinon
-        # désinstalle au rebuild toute extension installée à la main).
+        # Pas de extensions.force : désinstallerait les extensions manuelles.
         settings = {
           "toolkit.legacyUserProfileCustomizations.stylesheets" = true;
-          # Rouvre fenêtres et onglets de la dernière fois : c'est ce qui
-          # remplit les fenêtres que `sway-session restore` remet en place.
+          # Pour `sway-session restore`.
           "browser.startup.page" = 3;
         };
         userChrome = lib.optionalString themed ''

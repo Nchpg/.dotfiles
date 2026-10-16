@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Le plugin Claude Code officiel de Vercel est distribue via la marketplace
-# anthropics/claude-plugins-official, qui epingle elle-meme un commit precis
-# de vercel/vercel-plugin (champ .source.sha). On suit CETTE marketplace, pas
-# la branche main de vercel-plugin : c'est elle qui fait foi pour la version
-# que `claude plugin install vercel@claude-plugins-official` installerait.
-# Protocole : cf. scripts/lib/update-module.sh.
+# Suit le commit épinglé par la marketplace claude-plugins-official (.source.sha), pas main.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"

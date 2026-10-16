@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# nightlight.sh toggle|allowed — night light (service wlsunset, cf.
-# ../nightlight.nix).
-#
-# Le choix PERSISTE au reboot via un drapeau : couper le pose, rallumer le
-# retire. `allowed` sert d'ExecCondition au service (sans drapeau, WantedBy
-# graphical-session relancerait systématiquement le service) : code 1 ->
-# « skipped », pas « failed ». Seule définition du chemin du drapeau.
-# WAYBAR_BACKLIGHT_SIGNAL : posé par scripts.nix (l'icône de la case
-# luminosité reflète l'état du night light).
 
 flag="${XDG_STATE_HOME:-$HOME/.local/state}/wlsunset-off"
 
