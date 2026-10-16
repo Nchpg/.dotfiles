@@ -30,9 +30,9 @@
     "revision": "c2ef74f935bdbc93cab7f9e05ef9b2a0663b6e34"
   },
   "ghcr.io/nchpg/stage:main": {
-    "digest": "sha256:56defc85e0672831caba858b4048215e3d5f8eaf1192953d8d84f64d1c1ba4a5",
+    "digest": "sha256:0ec1736612984b8169380b1505bc5c4174abc7a9b51d51c278f75dc85ba502ea",
     "port": 3000,
-    "revision": null
+    "revision": "b8cf73a5b274d98ec9c0d1f33784bc0f605c8e3c"
   },
   "ghcr.io/nchpg/yolo-detection:main": {
     "digest": "sha256:0b4115eef5c301e766fbc93c4d3dc8aff8cba7378058d31ae3aca5221abc14f3",
