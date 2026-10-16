@@ -72,12 +72,19 @@ let
     .${themes.polarity config.userSettings.stylix.theme};
 
   # settings.json doit rester du JSON strict (lu par importJSON).
-  settings = lib.recursiveUpdate (lib.importJSON ./vscode-config/settings.json) {
-    "workbench.colorTheme" = colorTheme;
-    "terminal.integrated.defaultProfile.linux" = config.userSettings.shell.default;
-    # Vide plutôt qu'absent : le merge ne retire jamais une clé, l'ancien chemin resterait.
-    "claudeCode.claudeProcessWrapper" = "";
-  };
+  settings =
+    lib.recursiveUpdate (lib.importJSON ./vscode-config/settings.json) {
+      "workbench.colorTheme" = colorTheme;
+      "terminal.integrated.defaultProfile.linux" = config.userSettings.shell.default;
+      # Vide plutôt qu'absent : le merge ne retire jamais une clé, l'ancien chemin resterait.
+      "claudeCode.claudeProcessWrapper" = "";
+    }
+    // lib.optionalAttrs config.programs.ssh.enable {
+      # Passé en `-F`, donc sans le contrôle de propriétaire qui rejette ce lien vers le store
+      # (appartenant à `nobody` dans le bac à sable de vscode-fhs).
+      "remote.SSH.configFile" = "${homeDirectory}/.ssh/config";
+    };
+
   settingsFile = cfg.pkgs.writeText "vscode-settings.json" (builtins.toJSON settings);
 in
 {
