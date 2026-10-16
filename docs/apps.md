@@ -9,16 +9,19 @@ app et quoi faire quand ça casse.
 ```
 push sur l'app
   └─ CI de l'app : app-image.yml (partagé, dans ce dépôt)
-       ├─ build + push ghcr.io/nchpg/<image>:main et :sha-<commit>
-       └─ apps-bump.yml ici, avec les digests de toutes les images du run
-            ├─ vérifie les entrées, met à jour profiles/server/apps.lock.json
-            ├─ évalue server-think
-            └─ commit « chore(apps): bump … » sur main
-                 └─ comin sur think : déployé en moins d'une minute
+       └─ build, contrôle, push ghcr.io/nchpg/<image>:main et :sha-<commit>
+            └─ think (apps-watch, toutes les minutes) voit le tag bouger
+                 └─ apps-bump.yml ici : met à jour profiles/server/apps.lock.json,
+                    évalue server-think, commit « chore(apps): bump … » sur main
+                      └─ comin sur think : déployé en moins d'une minute
+                           └─ Discord : « 🚀 rlkart mis à jour … répond (200) »
 ```
 
-Toutes les images d'un même run partent dans un seul commit. Le frontend et le
-backend de RLkart ne tournent donc jamais à des versions différentes.
+think attend que toutes les images d'une app issues d'un même dépôt portent le
+même commit (label `org.opencontainers.image.revision`) avant de demander leur
+épinglage, en un seul commit. Le frontend et le backend de RLkart ne tournent
+donc jamais à des versions différentes. Rien n'est à poser dans les dépôts des
+apps : le seul jeton est sur think.
 
 `apps.nix` ne donne que l'image et sa branche (`portfolio:main`, lu `ghcr.io/nchpg/portfolio:main`).
 Le digest et le port exposé (`EXPOSE` du Dockerfile) sont dans `apps.lock.json` :
@@ -47,28 +50,20 @@ bougé.
        permissions:
          contents: read
          packages: write
-         actions: read
-       secrets: inherit
    ```
 
    Plusieurs images : une entrée par image, avec `dockerfile` (et `context` si
    ce n'est pas la racine), par exemple
    `[{"name": "monapp-front", "dockerfile": "front/Dockerfile"}, {"name": "monapp-api", "dockerfile": "api/Dockerfile"}]`.
 
-2. Le secret `DOTFILES_DISPATCH_TOKEN` dans le dépôt de l'app (voir plus bas) :
-
-   ```sh
-   gh secret set DOTFILES_DISPATCH_TOKEN -R Nchpg/monapp
-   ```
-
-3. Pousser une première fois, pour que l'image existe sur ghcr.io. Le workflow
+2. Pousser une première fois, pour que l'image existe sur ghcr.io. Le workflow
    partagé refuse de publier une image qui tourne en root ou écoute sous le port
    1024 (voir « Règles des images »). Le Dockerfile déclare aussi son port
    (`EXPOSE 3000`). Un package privé ne demande rien de plus :
    le login `appImages.login` (secret `ghcr/token`) vaut pour toutes les images de
    `ghcr.io/nchpg`.
 
-4. Ici, déclarer l'app dans `profiles/server/apps.nix` :
+3. Ici, déclarer l'app dans `profiles/server/apps.nix` :
 
    ```nix
    monapp.container.image = "monapp:main";
@@ -167,20 +162,29 @@ l'ancien digest. Pour tout le système, revert du commit fautif de la même faç
 
 ## Jetons
 
-- `DOTFILES_DISPATCH_TOKEN`, dans chaque dépôt d'app : PAT *fine-grained*, dépôt
+- `github/dispatch_token`, secret sops de think : PAT *fine-grained*, dépôt
   `Nchpg/.dotfiles` seul, permission **Actions: Read and write** et rien
-  d'autre. Il ne fait que déclencher `apps-bump.yml`, qui commite avec son
-  propre jeton. Note sa date d'expiration.
+  d'autre. think s'en sert pour déclencher `apps-bump.yml`, qui commite avec son
+  propre jeton. Note sa date d'expiration : un refus de GitHub déclenche une
+  alerte Discord (`apps-watch` en échec), une seule fois par nouvelle image.
+- `ghcr/token`, secret sops de think : PAT classique `read:packages`, pour tirer
+  et surveiller les images privées.
 - `GHCR_READ_TOKEN`, facultatif, dans ce dépôt : PAT classique `read:packages`,
   pour que la PR du lundi vérifie aussi les images privées. Localement :
   `GHCR_TOKEN=… dots update apps`.
 
-Sans `DOTFILES_DISPATCH_TOKEN`, l'image est publiée mais pas épinglée : le run
-de l'app l'indique, et `dots update apps` ou la PR du lundi rattrapent.
+Si think ne peut pas déclencher l'épinglage, `dots update apps` ou la PR du
+lundi rattrapent : ils lisent les mêmes tags.
+
+## Annonces
+
+À chaque déploiement qui change l'image d'une app, `apps-announce` attend
+qu'elle réponde (2 min au plus) puis poste sur le webhook Discord des alertes :
+lien, commit, code HTTP. Une app qui ne répond pas est annoncée avec ⚠️.
 
 ## Dépôt privé
 
 Une app déclarée dans `${inputs.secrets}/think.nix` (aujourd'hui `stage`) n'est
-pas dans le lock public, pour ne pas en révéler l'existence. Sa CI appelle
-`app-image.yml` avec `bump: false`, et son digest se reporte à la main dans le
+pas dans le lock public, pour ne pas en révéler l'existence. Sa CI publie
+l'image en `:latest` ; think ne la surveille pas, et son digest se reporte à la main dans le
 dépôt de secrets.
