@@ -106,6 +106,21 @@ jobs:
           fi
           exit "$fail"
 
+      # Dépôt privé, package privé : un package créé par la CI l'est par défaut, ceci rattrape un
+      # passage en public fait à la main. Package encore inexistant ou API muette : pas de blocage.
+      - name: visibilité
+        if: github.event.repository.private
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NAME: ${{ matrix.image.name }}
+        run: |
+          visibility=$(gh api "users/$GITHUB_REPOSITORY_OWNER/packages/container/${NAME,,}" --jq .visibility 2>/dev/null) \
+            || { echo "::notice::visibilité du package illisible (nouveau package ?), il sera privé par défaut."; exit 0; }
+          if [ "$visibility" != private ]; then
+            echo "::error::le dépôt est privé mais le package ghcr ${NAME,,} est $visibility : repasse-le en privé (Package settings → Change visibility)."
+            exit 1
+          fi
+
       # Même builder : tout vient du cache de l'étape `build`.
       - id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
