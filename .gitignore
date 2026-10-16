@@ -8,3 +8,6 @@ result
 result-*
 .direnv/
 .vercel
+
+# Réglages locaux de Claude Code
+.claude/
