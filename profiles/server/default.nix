@@ -60,12 +60,9 @@ in
       # Précondition : compte région EUROPE, puis `secrets edit datadog/api_key` et commit du lock,
       # sinon l'évaluation échoue.
       datadog.enable = true;
-
-      # Chaque commit sur main est en production dans la minute ; essai sans persistance : branche `testing-server-think`.
-      gitops = {
-        enable = true;
-        url = "https://github.com/Nchpg/.dotfiles.git";
-      };
     };
+
+    # Sans --delete-older-than, les anciennes générations restent des racines du GC.
+    nix.gc.options = "--delete-older-than 30d";
   };
 }

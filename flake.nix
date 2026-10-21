@@ -37,12 +37,6 @@
       inputs.nixpkgs.follows = "nixpkgs-stable";
     };
 
-    # Déploiement GitOps du serveur (modules/system/server/gitops).
-    comin = {
-      url = "github:nlewo/comin";
-      inputs.nixpkgs.follows = "nixpkgs-stable";
-    };
-
     nix-index-database = {
       url = "github:nix-community/nix-index-database";
       inputs.nixpkgs.follows = "nixpkgs-stable";
@@ -161,7 +155,6 @@
               { systemSettings.stylix.variant = target.variant; }
 
               inputs.sops-nix.nixosModules.sops
-              inputs.comin.nixosModules.comin
 
               inputs.home-manager.nixosModules.home-manager
               {

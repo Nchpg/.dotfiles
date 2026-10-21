@@ -15,7 +15,7 @@ in
 
       disks.enable = true;
 
-      # À régler côté healthchecks : période 15 min, grâce 10 min, sinon le redémarrage nocturne de gitops fait sonner.
+      # À régler côté healthchecks : période 15 min, grâce 10 min, sinon un redémarrage fait sonner.
       deadManSwitch.enable = true;
 
       apps.enable = true;

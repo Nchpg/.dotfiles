@@ -13,7 +13,7 @@ push sur l'app
             └─ think (apps-watch, toutes les minutes) voit le tag bouger
                  └─ apps-bump.yml ici (runner GitHub) : met à jour profiles/server/apps.lock.json,
                     commit « chore(apps): bump … » sur main
-                      └─ comin sur think : déployé en moins d'une minute
+                      └─ think (apps-deploy) : commit qui ne touche que le lock → déployé seul
                            └─ Discord : « 🚀 rlkart mis à jour … répond (200) »
 ```
 
@@ -137,28 +137,35 @@ données que rien ne fait à ta place.
 Les migrations de schéma restent du ressort de l'app, et un retour en arrière
 ne restaure pas les données. Les volumes podman ne sont sauvegardés par rien.
 
-## Déploiement : comin
+## Ce qui se déploie seul, et ce qui attend
 
-think suit `main` sur GitHub (`systemSettings.gitops`). Un commit est évalué,
-construit puis activé en `switch` dans la minute.
+think (`appImages.deploy`) regarde `main` toutes les minutes. Il déploie seul un
+nouveau commit si, et seulement si :
 
-- Essayer sans risque : pousser sur la branche `testing-server-think` (partie de
-  `main`). comin l'active en `test`, rien n'est écrit dans le chargeur de
-  démarrage : un reboot revient sur `main`. Une fois satisfait, rebaser `main`
-  dessus et pousser. Pour abandonner, remettre la branche sur `origin/main`.
-- Intervenir à la main sur think : `comin suspend`, puis `comin resume`. Un
-  `rebuild` local est remplacé au prochain commit sur `main`.
-- État et erreurs : `comin status`, `journalctl -u comin`.
-- Le noyau ou l'initrd a changé : `gitops-reboot.timer` redémarre à 04:40.
+- les commits depuis la version qui tourne ne touchent que
+  `profiles/server/apps.lock.json`, c'est-à-dire des mises à jour de sites ;
+- la version qui tourne est un commit poussé sur `main` (pas de changements
+  locaux non commités, pas de commits locaux pas encore poussés).
 
-Les échecs (évaluation, build, activation) déclenchent l'alerte
-`DeploiementEnEchec` sur Discord. Un build cassé est retenté trois fois, puis
-think reste sur la version précédente jusqu'au commit suivant.
+Dans tous les autres cas, il ne touche à rien et poste une seule fois sur
+Discord ce qui attend (« 📦 nouveaux commits … `rebuild` à la main », ou
+« ⏸️ think tourne une version locale … »). Une modif de config ne part donc
+que par ton `rebuild`, avec son retour habituel, et une version locale n'est
+jamais écrasée par une mise à jour de site.
+
+`rebuild` vérifie de son côté que ton dépôt n'est pas en retard sur GitHub : des
+bumps de sites absents en local reviendraient en arrière. Il propose alors un
+`git pull --rebase` avant de construire.
+
+Un déploiement automatique qui échoue signale l'unité `apps-deploy` sur Discord
+(`journalctl -u apps-deploy`) et n'est pas retenté pour ce commit : think reste
+sur la version précédente jusqu'au commit suivant ou au prochain `rebuild`.
 
 ## Revenir en arrière
 
-`git revert` du commit `chore(apps): bump …`, puis pousser : comin remet
-l'ancien digest. Pour tout le système, revert du commit fautif de la même façon.
+`git revert` du commit `chore(apps): bump …`, puis pousser : ce commit ne touche
+que le lock, think remet l'ancien digest tout seul. Pour le reste du système,
+revert du commit fautif puis `rebuild`.
 
 ## Jetons
 

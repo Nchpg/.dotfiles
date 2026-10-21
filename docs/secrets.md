@@ -196,9 +196,9 @@ des hooks et pas des alias, ils marchent quel que soit le raccourci (`git st`,
 | `git push` | Le lock de chaque commit poussé doit pointer sur une révision présente sur l'origin du dépôt privé. Sinon `~/.secrets` est poussé d'abord, et si ça ne suffit pas, le push est **refusé**. |
 | `git status` | `secrets status` s'affiche dessous quand il y a quelque chose à dire (hook fish `fish_postexec`, alias git résolus). |
 
-Le refus au push protège le serveur : comin construit la config **depuis
-GitHub**, donc avec le lock poussé. Un lock qui pointe sur un commit de secrets
-resté sur une machine ferait échouer le déploiement de ce commit.
+Le refus au push protège le serveur : il déploie seul les mises à jour de sites
+**depuis GitHub**, donc avec le lock poussé. Un lock qui pointe sur un commit de
+secrets resté sur une machine ferait échouer ce déploiement.
 `git push --no-verify` passe outre.
 
 ## Ajouter un secret

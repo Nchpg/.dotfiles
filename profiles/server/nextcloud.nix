@@ -21,7 +21,7 @@ in
         # Sinon un partage sort en `https://cloud.vpn.…/s/<jeton>`, lien mort pour le destinataire.
         canonicalLinkHost = true;
 
-        # Patche le bundle Nextcloud : une mise à jour qui le change fait échouer le build de comin.
+        # Patche le bundle Nextcloud : une mise à jour qui le change fait échouer le rebuild.
         canonicalLinkWebUi = true;
 
         linkExpireDays = 60;

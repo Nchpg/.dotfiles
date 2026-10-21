@@ -25,7 +25,6 @@ let
     "redis"
     "dnsmasq"
     "blackbox"
-    "comin"
   ];
 
   groupes = [
@@ -87,15 +86,6 @@ let
         "MetriquesDnsmasqAbsentes"
         "ResolutionDnsEnEchec"
         "MetriquesNextcloudAveugles"
-      ];
-    }
-    {
-      name = "deploiement";
-      rules = [
-        "DeploiementEnEchec"
-        "DepotInjoignable"
-        "DeploiementSuspendu"
-        "RedemarrageEnAttente"
       ];
     }
     {

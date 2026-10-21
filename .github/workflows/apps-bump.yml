@@ -1,11 +1,11 @@
 name: apps-bump
 
 # Déclenché par think (apps-watch) quand une image a changé : épingle ses digests en un seul
-# commit sur main, que comin déploie dans la minute. Un workflow_dispatch exige déjà le droit
-# d'écriture sur ce dépôt.
+# commit sur main, que think déploie seul (apps-deploy : un commit qui ne touche que le lock).
+# Un workflow_dispatch exige déjà le droit d'écriture sur ce dépôt.
 # Runner GitHub et non self-hosted : il doit passer même machine éteinte. Pas d'évaluation ici
-# (elle demanderait le dépôt de secrets) : apps-bump.sh vérifie chaque entrée, et comin refuse
-# de déployer un commit qui ne s'évalue pas (alerte DeploiementEnEchec).
+# (elle demanderait le dépôt de secrets) : apps-bump.sh vérifie chaque entrée, et un déploiement
+# qui échoue laisse think sur la version précédente (unité apps-deploy signalée sur Discord).
 on:
   workflow_dispatch:
     inputs:
