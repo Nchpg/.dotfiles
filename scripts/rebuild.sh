@@ -127,6 +127,31 @@ if command -v secrets > /dev/null; then
     fi
 fi
 
+# Des commits sur GitHub absents ici (bumps de sites par apps-bump.yml) : un rebuild en l'état
+# les annulerait. Lecture en HTTPS, sans clé : le dépôt est public. Hors ligne, rien n'est vérifié.
+branch=$(git symbolic-ref --quiet --short HEAD || true)
+origin=$(git remote get-url origin 2> /dev/null | sed -E 's#^git@github\.com:#https://github.com/#')
+if [[ -n "$branch" && "$origin" == https://* ]] \
+    && timeout 15 git fetch --quiet "$origin" "$branch" 2> /dev/null; then
+    behind=$(git rev-list --count HEAD..FETCH_HEAD)
+    if [[ "$behind" -gt 0 ]]; then
+        echo "${WARN}GitHub a $behind commit(s) sur $branch que ce dépôt n'a pas :${R}"
+        git log --oneline HEAD..FETCH_HEAD | head -n 10
+        echo "  Rebuild en l'état = ${ERR}retour en arrière de ces changements${R} (versions des sites comprises)."
+        echo
+        if [[ "$YES" -eq 1 ]]; then
+            echo "${WARN}(--yes) Poursuite sans les récupérer.${R}"
+        elif confirm "Les récupérer maintenant (git pull --rebase) ?" yes; then
+            git pull --rebase "$origin" "$branch" || {
+                err "git pull --rebase a échoué : résous-le, puis relance rebuild."
+                exit 1
+            }
+        else
+            echo "${WARN}Poursuite sans les récupérer.${R}"
+        fi
+    fi
+fi
+
 echo "🚀 Starting NixOS system rebuild..."
 
 PREV_SYSTEM="$(readlink -f /run/current-system)"
