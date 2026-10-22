@@ -23,7 +23,6 @@
       "web": {
         "data": [
           {
-            "on": "myetf-data",
             "path": "/app/data"
           }
         ],
@@ -70,7 +69,6 @@
       "web": {
         "data": [
           {
-            "on": "/var/lib/stage",
             "path": "/data"
           }
         ],

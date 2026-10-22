@@ -29,15 +29,6 @@
     announce = true;
   };
 
-  # Emplacement d'avant `data` (apps.json garde `"on": "/var/lib/stage"`). Créé avant le
-  # conteneur et à son nom : sans CAP_CHOWN, il ne pourrait pas écrire dans un répertoire que
-  # podman aurait créé en root. 0700 : le groupe `users` n'a rien à y lire.
-  systemd.tmpfiles.rules = [
-    "d /var/lib/stage 0700 1000 100 -"
-    "d /var/lib/stage/pdfs 0700 1000 100 -"
-    "d /var/lib/stage/logos 0700 1000 100 -"
-  ];
-
   # 127.0.0.1 et pas localhost : le wget de busybox essaie ::1 d'abord et le serveur
   # n'écoute qu'en IPv4. À déplacer dans le Dockerfile de stage (HEALTHCHECK).
   systemSettings.apps.stage.containers.web.healthcheck.command =
