@@ -1,0 +1,102 @@
+{
+  "iseg2017": {
+    "containers": {
+      "web": {
+        "image": "iseg-2017:main",
+        "memory": "128m"
+      }
+    }
+  },
+  "mnist": {
+    "containers": {
+      "web": {
+        "image": "mnist-cnn-cpp:main",
+        "memory": "256m"
+      }
+    },
+    "rateLimit": [
+      "/predict"
+    ]
+  },
+  "myetf": {
+    "containers": {
+      "web": {
+        "data": [
+          {
+            "on": "myetf-data",
+            "path": "/app/data"
+          }
+        ],
+        "image": "myetf:main"
+      }
+    },
+    "devices": [
+      "gram",
+      "windows_gram",
+      "xiaomi_17t"
+    ],
+    "expose": "vpn",
+    "internetAccess": true,
+    "subdomain": "etf"
+  },
+  "portfolio": {
+    "containers": {
+      "web": {
+        "image": "portfolio:main"
+      }
+    },
+    "subdomain": "@"
+  },
+  "rlkart": {
+    "containers": {
+      "backend": {
+        "image": "rlkart-backend:main"
+      },
+      "frontend": {
+        "dependsOn": [
+          "backend"
+        ],
+        "image": "rlkart-frontend:main"
+      }
+    },
+    "entrypoint": "frontend",
+    "rateLimit": [
+      "/generate",
+      "/simulate"
+    ]
+  },
+  "stage": {
+    "containers": {
+      "web": {
+        "data": [
+          {
+            "on": "/var/lib/stage",
+            "path": "/data"
+          }
+        ],
+        "image": "stage:main",
+        "memory": "512m",
+        "secrets": [
+          "stage/gemini_env"
+        ]
+      }
+    },
+    "devices": [
+      "gram",
+      "windows_gram",
+      "xiaomi_17t"
+    ],
+    "expose": "vpn",
+    "internetAccess": true,
+    "probe": "/api/sante"
+  },
+  "traffic": {
+    "containers": {
+      "web": {
+        "image": "yolo-detection:main",
+        "memory": "128m"
+      }
+    },
+    "subdomain": "trafficvision"
+  }
+}

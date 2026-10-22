@@ -10,7 +10,7 @@ let
 
   authelia = config.systemSettings.authelia;
 
-  ssoApps = lib.filterAttrs (_: app: app.expose == "sso") cfg;
+  ssoApps = lib.filterAttrs (_: app: app.sso.enable) cfg;
 
   limitedApps = lib.filter (n: cfg.${n}.rateLimit.enable) (lib.attrNames cfg);
 
@@ -57,25 +57,18 @@ in
     );
 
     # Les locations n'ont pas d'`auth_request_set` : elles héritent de celles posées par `nginxProtect`.
+    # Liste d'appareils et portail se cumulent : le filtrage d'adresse passe avant le portail.
     services.nginx.virtualHosts = lib.mapAttrs' (
       _: app:
       lib.nameValuePair app.domain (
-        myLib.server.mkTlsVhost (
-          if app.expose == "sso" then
-            {
-              locations = locationsOf app // authelia.nginxProtect.locations;
-              inherit (authelia.nginxProtect) extraConfig;
-            }
-          else
-            {
-              locations = locationsOf app;
-            }
-            // lib.optionalAttrs (app.allowedNetworks != null) {
-              extraConfig = ''
-                ${myLib.server.nginxAllowOnly app.allowedNetworks}
-              '';
-            }
-        )
+        myLib.server.mkTlsVhost {
+          locations = locationsOf app // lib.optionalAttrs app.sso.enable authelia.nginxProtect.locations;
+          extraConfig =
+            lib.optionalString (app.allowedNetworks != null) ''
+              ${myLib.server.nginxAllowOnly app.allowedNetworks}
+            ''
+            + lib.optionalString app.sso.enable authelia.nginxProtect.extraConfig;
+        }
       )
     ) cfg;
 
@@ -101,7 +94,7 @@ in
             module =
               if app.probe.module != null then
                 app.probe.module
-              else if app.expose == "sso" then
+              else if app.sso.enable then
                 "http_authelia"
               else
                 "http_2xx";

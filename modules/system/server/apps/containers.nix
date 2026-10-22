@@ -197,6 +197,15 @@ let
               default = true;
               description = "Monte en lecture seule.";
             };
+
+            chown = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Donne le montage à l'utilisateur de l'image à chaque démarrage (`:U` de podman),
+                sans avoir à connaître son uid sur le host.
+              '';
+            };
           };
         }
       );
@@ -250,7 +259,11 @@ in
           inherit (c.container) environmentFiles environment;
 
           volumes = map (
-            v: "${v.source}:${v.target}${lib.optionalString v.readOnly ":ro"}"
+            v:
+            let
+              opts = lib.optional v.readOnly "ro" ++ lib.optional v.chown "U";
+            in
+            "${v.source}:${v.target}${lib.optionalString (opts != [ ]) ":${lib.concatStringsSep "," opts}"}"
           ) c.container.volumes;
 
           podman.sdnotify = if c.container.healthcheck.command != null then "healthy" else "conmon";

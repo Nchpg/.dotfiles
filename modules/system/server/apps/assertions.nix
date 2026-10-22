@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  options,
   ...
 }:
 
@@ -16,14 +17,20 @@ let
   otherPorts =
     lib.optional config.systemSettings.authelia.enable config.systemSettings.authelia.port
     ++ lib.optional config.services.vaultwarden.enable config.services.vaultwarden.config.ROCKET_PORT;
+
+  domains = map (a: a.domain) (lib.attrValues cfg);
+
+  dupes = l: lib.unique (lib.filter (x: lib.count (y: y == x) l > 1) l);
+
+  # nginx.nix déclare tous les noms des apps en une seule définition : un nom présent dans une autre
+  # définition de `proxy.sites` vient d'un autre module.
+  siteDefinitions = map (d: d.value) options.systemSettings.proxy.sites.definitionsWithLocations;
+  takenElsewhere = lib.filter (d: lib.count (def: def ? ${d}) siteDefinitions > 1) (
+    lib.unique domains
+  );
 in
 {
   config = lib.mkIf (cfg != { }) {
-    warnings = lib.mapAttrsToList (
-      name: _:
-      "systemSettings.apps.${name}.public est obsolète : `expose = \"public\"`, `\"vpn\"` ou `\"sso\"`."
-    ) (lib.filterAttrs (_: a: a.public != null) cfg);
-
     assertions = [
       {
         assertion = config.systemSettings.proxy.enable;
@@ -32,23 +39,21 @@ in
       {
         assertion =
           lib.all (a: a.expose == "vpn") (lib.attrValues cfg) || config.systemSettings.cloudflared.enable;
-        message = "systemSettings.apps : une application `expose = \"public\"` ou `\"sso\"` a besoin de systemSettings.cloudflared.enable pour être routée, aucun port n'étant ouvert sur la box.";
+        message = "systemSettings.apps : une application `expose = \"public\"` a besoin de systemSettings.cloudflared.enable pour être routée, aucun port n'étant ouvert sur la box.";
       }
       {
         assertion = lib.all (a: a.expose == "vpn" || a.allowedNetworks == null) (lib.attrValues cfg);
         message = "systemSettings.apps : `allowedNetworks` n'a de sens qu'avec `expose = \"vpn\"` — tout ce qui vient du tunnel Cloudflare se présente en 127.0.0.1.";
       }
       {
-        # `public` (obsolète) ou `allowedNetworks` explicite : déclarations antérieures, filtrées autrement.
-        assertion = lib.all (
-          a: a.expose != "vpn" || a.devices != null || a.allowedNetworks != null || a.public != null
-        ) (lib.attrValues cfg);
+        # `allowedNetworks` explicite : sources filtrées autrement que par des noms d'appareils.
+        assertion = lib.all (a: a.expose != "vpn" || a.devices != null || a.allowedNetworks != null) (
+          lib.attrValues cfg
+        );
         message = "systemSettings.apps : une application `expose = \"vpn\"` doit lister ses `devices` (noms de vpn.wireguard.peers) : ${
           toString (
             lib.attrNames (
-              lib.filterAttrs (
-                _: a: a.expose == "vpn" && a.devices == null && a.allowedNetworks == null && a.public == null
-              ) cfg
+              lib.filterAttrs (_: a: a.expose == "vpn" && a.devices == null && a.allowedNetworks == null) cfg
             )
           )
         }.";
@@ -63,15 +68,24 @@ in
         message = "systemSettings.apps : `devices` ne s'applique qu'avec `expose = \"vpn\"`.";
       }
       {
-        assertion = lib.all (a: a.expose != "sso") (lib.attrValues cfg) || authelia.enable;
-        message = "systemSettings.apps : `expose = \"sso\"` exige systemSettings.authelia.enable, c'est lui qui tient le portail.";
+        assertion = lib.all (a: !a.sso.enable) (lib.attrValues cfg) || authelia.enable;
+        message = "systemSettings.apps : `sso.enable` exige systemSettings.authelia.enable, c'est lui qui tient le portail.";
       }
       {
         # Sinon le cookie de session n'est jamais envoyé : boucle de redirection vers le portail.
         assertion = lib.all (
-          a: a.expose != "sso" || authelia.domain == null || lib.hasSuffix ".${authelia.domain}" a.domain
+          a: !a.sso.enable || authelia.domain == null || lib.hasSuffix ".${authelia.domain}" a.domain
         ) (lib.attrValues cfg);
-        message = "systemSettings.apps : une application `expose = \"sso\"` doit être servie sous systemSettings.authelia.domain (${toString authelia.domain}), sinon le cookie du portail ne la couvre pas.";
+        message = "systemSettings.apps : une application derrière le portail (`sso.enable`) doit être servie sous systemSettings.authelia.domain (${toString authelia.domain}), sinon le cookie du portail ne la couvre pas.";
+      }
+      {
+        assertion = lib.length (lib.unique domains) == lib.length domains;
+        message = "systemSettings.apps : deux applications servent la même adresse : ${toString (dupes domains)}.";
+      }
+      {
+        # Un nom déjà servi par un autre module (Nextcloud, Grafana…) : nginx fusionnerait les deux.
+        assertion = takenElsewhere == [ ];
+        message = "systemSettings.apps : ${toString takenElsewhere} est déjà servi par un autre service de ce host. Choisis un autre sous-domaine.";
       }
       {
         assertion = lib.all (a: a.allowedNetworks != [ ]) (lib.attrValues cfg);

@@ -71,35 +71,27 @@ in
               type = lib.types.enum [
                 "public"
                 "vpn"
-                "sso"
               ];
-              default = if config.public == false then "vpn" else "public";
-              defaultText = lib.literalExpression ''"public"'';
+              default = "public";
               description = ''
                 Qui atteint l'application :
                 - `public` : tout internet, par le tunnel ;
                 - `vpn` : mes appareils WireGuard seulement, sans route dans le tunnel
-                  (nom sous `.vpn.`, que le joker DNS résout vers le tunnel WireGuard) ;
-                - `sso` : internet par le tunnel, derrière le portail Authelia.
+                  (nom sous `.vpn.`, que le joker DNS résout vers le tunnel WireGuard).
+                Le portail Authelia s'ajoute dans les deux cas (`sso.enable`).
               '';
             };
 
-            # Remplacée par `expose` ; gardée pour les déclarations du dépôt privé.
-            public = lib.mkOption {
-              type = lib.types.nullOr lib.types.bool;
-              default = null;
-              visible = false;
-              description = "Obsolète : `expose`.";
-            };
-
             sso = {
+              enable = lib.mkEnableOption "le portail Authelia devant l'application, en plus de `expose`";
+
               policy = lib.mkOption {
                 type = lib.types.enum [
                   "one_factor"
                   "two_factor"
                 ];
                 default = "two_factor";
-                description = "Politique Authelia de l'application (`expose = \"sso\"`).";
+                description = "Politique Authelia de l'application.";
               };
 
               subject = lib.mkOption {
