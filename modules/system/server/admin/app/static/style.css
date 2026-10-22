@@ -235,3 +235,8 @@ svg.gh, .repo-logo svg, svg.fill { fill: currentColor; stroke: none; }
 .repo .small svg { width: 14px; height: 14px; }
 .repo .chev { color: var(--faint); }
 .repo .grow { flex: 1 1 auto; }
+
+/* Adresse qui change, dans l'aperçu */
+.addr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #151922; color: #E8EAEE; }
+.addr svg { width: 14px; height: 14px; color: #9DA6FF; }
+.strike { text-decoration: line-through; }

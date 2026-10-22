@@ -60,6 +60,7 @@ func main() {
 	mux.HandleFunc("POST /sites/{app}/apply", s.apply)
 	mux.HandleFunc("POST /sites/{app}/delete", s.remove)
 	mux.HandleFunc("GET /jobs/{id}", s.job)
+	mux.HandleFunc("GET /fragments/{name}", s.fragment)
 	mux.HandleFunc("GET /favicon/{app}", s.favicon)
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /fonts/{file}", s.font)

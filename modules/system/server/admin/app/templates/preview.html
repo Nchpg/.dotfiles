@@ -8,6 +8,7 @@
     {{range .Lines}}<div class="code-line {{.Kind}}"><span class="mark">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}
   </div>
   <div class="code-foot stack gap">
+    {{if .To}}<div class="addr small"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>{{if .From}}<span class="mono dim strike">{{.From}}</span><span>→</span>{{end}}<span class="mono">{{.To}}</span></div>{{end}}
     {{if .Errors}}<ul class="errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>{{end}}
     {{if .Dirty}}
       <label class="field dark"><span>Message du commit</span><input name="msg" form="site-form" value="{{.Message}}" class="mono" maxlength="100"></label>
@@ -47,8 +48,9 @@
     {{if .Done}}
       {{if .Failed}}<a class="btn btn-dark" href="">Revenir au formulaire</a>
       {{else if .Delete}}<a class="btn btn-primary" href="/sites">Retour aux sites</a>
+      <small data-reload-after="4000" data-reload-to="/sites">Retour à la liste dans quelques secondes…</small>
       {{else}}<div class="grid2"><a class="btn btn-dark" href="/sites">Retour aux sites</a><a class="btn btn-primary" href="https://{{.Domain}}">Ouvrir le site</a></div>
-      <small>Annoncé aussi sur Discord.</small>{{end}}
+      <small data-reload-after="4000" data-reload-to="/sites/{{.App}}">Annoncé aussi sur Discord. La page se met à jour dans quelques secondes…</small>{{end}}
     {{end}}
   </div>
 </section>

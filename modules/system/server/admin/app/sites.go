@@ -44,6 +44,25 @@ type ActivityItem struct {
 	Config                  bool
 }
 
+// sitesData : cartes et compteurs de la page Sites (aussi servis seuls, pour le rafraîchissement).
+func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
+	up := probes(ctx, s.cfg.Prometheus)
+	var cards []SiteCard
+	vpn, online := 0, 0
+	for _, name := range snap.Apps.Names() {
+		e := snap.Apps.Entries[name]
+		c := s.card(name, e, snap, up)
+		cards = append(cards, c)
+		if e.VPN() {
+			vpn++
+		}
+		if c.Up {
+			online++
+		}
+	}
+	return map[string]any{"Nav": "sites", "Cards": cards, "Total": len(cards), "Online": online, "VPN": vpn, "Public": len(cards) - vpn}
+}
+
 func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	snap, err := s.snapshot(ctx)
@@ -51,26 +70,44 @@ func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err)
 		return
 	}
-	up := probes(ctx, s.cfg.Prometheus)
-	var cards []SiteCard
-	vpn := 0
-	for _, name := range snap.Apps.Names() {
-		e := snap.Apps.Entries[name]
-		cards = append(cards, s.card(name, e, snap, up))
-		if e.VPN() {
-			vpn++
-		}
+	data := s.sitesData(ctx, snap)
+	data["State"] = s.stateCard(ctx, snap.Head)
+	data["Activity"] = s.activity(ctx)
+	s.render(w, "sites", data)
+}
+
+// fragment : un bloc de la page, rafraîchi par htmx sans recharger le reste.
+func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		// Panne passagère (GitHub) : on garde l'affichage en place, nouvel essai au prochain tour.
+		w.WriteHeader(http.StatusNoContent)
+		return
 	}
-	online := 0
-	for _, c := range cards {
-		if c.Up {
-			online++
+	switch r.PathValue("name") {
+	case "state":
+		s.render(w, "state-card", s.stateCard(ctx, snap.Head))
+	case "cards":
+		s.render(w, "site-cards", s.sitesData(ctx, snap))
+	case "online":
+		s.render(w, "online", s.sitesData(ctx, snap))
+	case "activity":
+		s.render(w, "activity", s.activity(ctx))
+	case "status":
+		name := r.URL.Query().Get("app")
+		e, ok := snap.Apps.Entries[name]
+		if !ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
+		up := probes(ctx, s.cfg.Prometheus)
+		domain := domainOf(name, e, s.cfg.Domain)
+		on, probed := up[domain]
+		s.render(w, "site-status", map[string]any{"App": name, "Up": on, "Probed": probed})
+	default:
+		http.NotFound(w, r)
 	}
-	s.render(w, "sites", map[string]any{
-		"Nav": "sites", "Cards": cards, "Total": len(cards), "Online": online, "VPN": vpn, "Public": len(cards) - vpn,
-		"State": s.stateCard(ctx, snap.Head), "Activity": s.activity(ctx),
-	})
 }
 
 func (s *Server) card(name string, e Entry, snap *Snapshot, up map[string]bool) SiteCard {
@@ -252,6 +289,9 @@ var funcs = template.FuncMap{
 	"lower": strings.ToLower,
 	"join":  strings.Join,
 	"add":   func(a, b int) int { return a + b },
+	"status": func(app string, up, probed bool) map[string]any {
+		return map[string]any{"App": app, "Up": up, "Probed": probed}
+	},
 	// Logo GitHub (Octicons, MIT), en un seul tracé rempli.
 	"githubMark": func() string {
 		return "M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.5-2.6-.3-5.2-1.3-5.2-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3 .7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.1v3.2c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.7 18.3.5 12 .5z"

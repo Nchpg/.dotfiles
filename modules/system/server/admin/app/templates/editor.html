@@ -8,7 +8,7 @@
   <div class="line hero">
     <span class="avatar avatar-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" data-fallback></span>
     <div class="stack tight">
-      <div class="line"><h1>{{.Name}}</h1>{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{end}}</div>
+      <div class="line"><h1>{{.Name}}</h1>{{template "site-status" (status .Name .Up .Probed)}}</div>
       <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>
     </div>
   </div>

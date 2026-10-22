@@ -73,6 +73,8 @@ type PreviewVM struct {
 	Dirty    bool
 	Message  string
 	New      bool
+	// Adresse avant / après, quand elle change (sous-domaine, exposition).
+	From, To string
 }
 
 var reTag = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
@@ -356,6 +358,15 @@ func (s *Server) previewOf(name string, e *Entry, snap *Snapshot, isNew bool, ms
 		after = entryLines(name, b)
 	}
 	p.Lines, p.Adds, p.Dels = diffLines(before, after)
+	if e != nil {
+		p.To = domainOf(name, *e, s.cfg.Domain)
+		if old, ok := snap.Apps.Entries[name]; ok && !isNew {
+			p.From = domainOf(name, old, s.cfg.Domain)
+		}
+		if p.From == p.To {
+			p.From, p.To = "", ""
+		}
+	}
 	p.Dirty = p.Adds+p.Dels > 0
 	p.Message = msg
 	if p.Message == "" && p.Dirty {

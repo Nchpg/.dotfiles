@@ -5,19 +5,21 @@ document.addEventListener("error", (ev) => {
   if (ev.target.matches && ev.target.matches("img[data-fallback]")) ev.target.remove();
 }, true);
 
-function refresh(root) {
-  // Filtre de la liste des sites.
-  root.querySelectorAll(".segmented [data-filter]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const f = btn.dataset.filter;
-      btn.parentElement.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
-      document.querySelectorAll(".card.site").forEach((c) => {
-        const vpn = c.dataset.vpn === "true";
-        c.hidden = f === "vpn" ? !vpn : f === "public" ? vpn : false;
-      });
-    });
+// Filtre de la liste des sites, réappliqué quand les cartes se rafraîchissent.
+let filter = "all";
+function applyFilter() {
+  document.querySelectorAll(".segmented [data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
+  document.querySelectorAll(".card.site").forEach((c) => {
+    const vpn = c.dataset.vpn === "true";
+    c.hidden = filter === "vpn" ? !vpn : filter === "public" ? vpn : false;
   });
 }
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest && ev.target.closest(".segmented [data-filter]");
+  if (!btn) return;
+  filter = btn.dataset.filter;
+  applyFilter();
+});
 
 // Exposition : appareils et suffixe d'adresse suivent le choix public / VPN.
 document.addEventListener("change", (ev) => {
@@ -27,8 +29,6 @@ document.addEventListener("change", (ev) => {
   form.querySelectorAll("[data-vpn-only]").forEach((el) => (el.hidden = !vpn));
   form.querySelectorAll("[data-suffix]").forEach((el) => (el.textContent = vpn ? el.dataset.vpn : el.dataset.public));
 });
-
-document.addEventListener("DOMContentLoaded", () => refresh(document));
 
 // Choix du dépôt : filtre et sélection visibles (le formulaire arrive par htmx).
 document.addEventListener("input", (ev) => {
@@ -49,3 +49,14 @@ document.addEventListener("click", (ev) => {
   a.target = "_blank";
   a.rel = "noopener noreferrer";
 }, true);
+
+// Après un rafraîchissement par htmx : filtre gardé, et rechargement demandé par le serveur
+// (application réussie : la page repart des nouvelles valeurs, empreinte comprise).
+document.addEventListener("htmx:afterSwap", () => {
+  applyFilter();
+  const r = document.querySelector("[data-reload-after]");
+  if (r && !r.dataset.armed) {
+    r.dataset.armed = "1";
+    setTimeout(() => location.assign(r.dataset.reloadTo || location.href), Number(r.dataset.reloadAfter));
+  }
+});

@@ -14,67 +14,85 @@
   </div>
 
   <div class="layout">
-    {{with .State}}
-    <section class="card state" aria-label="État de think">
-      <span class="tile tile-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
-      <div class="stack">
-        <div class="line"><strong class="big">{{.Title}}</strong><span class="chip" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Chip}}</span></div>
-        {{if .Text}}<p class="muted">{{.Text}}</p>{{end}}
-        <div class="line mono small muted"><span>think <b>{{.Think}}</b></span><span>main <b>{{.Main}}</b></span></div>
-        {{if .Pending}}<ul class="pending mono small">{{range .Pending}}<li>{{.}}</li>{{end}}</ul>{{end}}
-        {{if .Checkout}}<div class="folder small"><svg viewBox="0 0 24 24" aria-hidden="true" style="color: {{.CheckoutInk}}"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="mono muted">~/.dotfiles</span><span style="color: {{.CheckoutInk}}">{{.Checkout}}</span></div>{{end}}
-      </div>
-    </section>
-    {{end}}
-    <div class="card stat">
-      <span class="small muted line"><svg viewBox="0 0 24 24" aria-hidden="true" class="ok"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>En ligne</span>
-      <span class="huge">{{.Online}} <small>/ {{.Total}}</small></span>
-      <span class="small muted">sondes Prometheus</span>
-    </div>
-
-    <section aria-label="Sites">
-      <div class="cards">
-        {{range .Cards}}
-        <article class="card site" data-vpn="{{.VPN}}">
-          <div class="line top">
-            <span class="avatar" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" loading="lazy" data-fallback></span>
-            <div class="stack grow tight">
-              <strong>{{.Name}}</strong>
-              <a class="mono small" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a>
-            </div>
-            {{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}
-          </div>
-          <div class="chips">
-            {{if .Frozen}}<span class="chip amber" title="Ne suit plus main"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>figé · {{.Frozen}}</span>{{end}}
-            {{if .VPN}}<span class="chip amber"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{else}}<span class="chip blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
-            {{if .SSO}}<span class="chip green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
-            <span class="chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>{{.Containers}}</span>
-            <span class="chip">{{.Memory}}</span>
-          </div>
-          <div class="line foot">
-            <span class="mono small muted line"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M3 12h6M15 12h6"/></svg>{{.Rev}}</span>
-            <a class="btn btn-soft btn-sm" href="/sites/{{.Name}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/></svg>Modifier</a>
-          </div>
-        </article>
-        {{end}}
-      </div>
-    </section>
-
-    <aside class="card activity" aria-label="Changements récents">
-      <div class="line between"><h2>Changements</h2><a class="small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique</a></div>
-      <ol>
-        {{range .Activity}}
-        <li>
-          {{if .Config}}<span class="tile tile-sm" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg></span>
-          {{else}}<span class="tile tile-sm" style="--tint: #E9F8EF; --ink: #15803D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg></span>{{end}}
-          <div class="stack tight">
-            <a href="{{.URL}}" class="plain">{{.Subject}}</a>
-            <span class="mono small muted">{{.Rev}} · {{.When}}</span>
-          </div>
-        </li>
-        {{else}}<li class="muted small">Historique indisponible.</li>{{end}}
-      </ol>
-    </aside>
+    {{template "state-card" .State}}
+    {{template "online" .}}
+    {{template "site-cards" .}}
+    {{template "activity" .Activity}}
   </div>
 </main>
 {{template "bottom" .}}{{end}}
+
+{{/* Blocs rafraîchis seuls (GET /fragments/<nom>) : chacun se redemande à intervalle fixe. */}}
+
+{{define "state-card"}}
+<section class="card state" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
+  <span class="tile tile-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
+  <div class="stack">
+    <div class="line"><strong class="big">{{.Title}}</strong><span class="chip" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Chip}}</span></div>
+    {{if .Text}}<p class="muted">{{.Text}}</p>{{end}}
+    <div class="line mono small muted"><span>think <b>{{.Think}}</b></span><span>main <b>{{.Main}}</b></span></div>
+    {{if .Pending}}<ul class="pending mono small">{{range .Pending}}<li>{{.}}</li>{{end}}</ul>{{end}}
+    {{if .Checkout}}<div class="folder small"><svg viewBox="0 0 24 24" aria-hidden="true" style="color: {{.CheckoutInk}}"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="mono muted">~/.dotfiles</span><span style="color: {{.CheckoutInk}}">{{.Checkout}}</span></div>{{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "online"}}
+<div class="card stat" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
+  <span class="small muted line"><svg viewBox="0 0 24 24" aria-hidden="true" class="ok"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>En ligne</span>
+  <span class="huge">{{.Online}} <small>/ {{.Total}}</small></span>
+  <span class="small muted">sondes Prometheus</span>
+</div>
+{{end}}
+
+{{define "site-cards"}}
+<section aria-label="Sites" id="site-cards" hx-get="/fragments/cards" hx-trigger="every 30s" hx-swap="outerHTML">
+  <div class="cards">
+    {{range .Cards}}
+    <article class="card site" data-vpn="{{.VPN}}">
+      <div class="line top">
+        <span class="avatar" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" loading="lazy" data-fallback></span>
+        <div class="stack grow tight">
+          <strong>{{.Name}}</strong>
+          <a class="mono small" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a>
+        </div>
+        {{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}
+      </div>
+      <div class="chips">
+        {{if .Frozen}}<span class="chip amber" title="Ne suit plus main"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>figé · {{.Frozen}}</span>{{end}}
+        {{if .VPN}}<span class="chip amber"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{else}}<span class="chip blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
+        {{if .SSO}}<span class="chip green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
+        <span class="chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>{{.Containers}}</span>
+        <span class="chip">{{.Memory}}</span>
+      </div>
+      <div class="line foot">
+        <span class="mono small muted line"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M3 12h6M15 12h6"/></svg>{{.Rev}}</span>
+        <a class="btn btn-soft btn-sm" href="/sites/{{.Name}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM13 7l4 4"/></svg>Modifier</a>
+      </div>
+    </article>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "activity"}}
+<aside class="card activity" id="activity" aria-label="Changements récents" hx-get="/fragments/activity" hx-trigger="every 60s" hx-swap="outerHTML">
+  <div class="line between"><h2>Changements</h2><a class="small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique</a></div>
+  <ol>
+    {{range .}}
+    <li>
+      {{if .Config}}<span class="tile tile-sm" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg></span>
+      {{else}}<span class="tile tile-sm" style="--tint: #E9F8EF; --ink: #15803D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg></span>{{end}}
+      <div class="stack tight">
+        <a href="{{.URL}}" class="plain">{{.Subject}}</a>
+        <span class="mono small muted">{{.Rev}} · {{.When}}</span>
+      </div>
+    </li>
+    {{else}}<li class="muted small">Historique indisponible.</li>{{end}}
+  </ol>
+</aside>
+{{end}}
+
+{{define "site-status"}}
+<span id="site-status" hx-get="/fragments/status?app={{.App}}" hx-trigger="every 30s" hx-swap="outerHTML">{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}</span>
+{{end}}
