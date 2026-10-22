@@ -13,7 +13,9 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 14.5px/1.5 var(--sans); }
+/* Pas de rebond au-delà de la page : il découvrait un fond blanc. */
+html { background: var(--bg); overscroll-behavior: none; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14.5px/1.5 var(--sans); overscroll-behavior: none; }
 a { color: var(--accent-ink); text-decoration: none; }
 a:hover { color: #28319A; }
 button, input, select { font: inherit; color: inherit; }
