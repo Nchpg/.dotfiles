@@ -4,12 +4,16 @@
   <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
 </header>
 <main class="page">
-  <div class="intro">
+  <div class="line between title-row">
     <h1>Sites</h1>
-    <p>Les sites d'apps.json. Une nouvelle image ou un réglage changé ici part seul en production ; tout autre changement attend ton rebuild.</p>
+    <div class="segmented" role="group" aria-label="Filtrer">
+      <button type="button" data-filter="all" aria-pressed="true">Tous · {{.Total}}</button>
+      <button type="button" data-filter="public" aria-pressed="false">Publics · {{.Public}}</button>
+      <button type="button" data-filter="vpn" aria-pressed="false">VPN · {{.VPN}}</button>
+    </div>
   </div>
 
-  <div class="row">
+  <div class="layout">
     {{with .State}}
     <section class="card state" aria-label="État de think">
       <span class="tile tile-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
@@ -27,15 +31,8 @@
       <span class="huge">{{.Online}} <small>/ {{.Total}}</small></span>
       <span class="small muted">sondes Prometheus</span>
     </div>
-  </div>
 
-  <div class="row top">
-    <section class="grow" aria-label="Sites">
-      <div class="segmented" role="group" aria-label="Filtrer">
-        <button type="button" data-filter="all" aria-pressed="true">Tous · {{.Total}}</button>
-        <button type="button" data-filter="public" aria-pressed="false">Publics · {{.Public}}</button>
-        <button type="button" data-filter="vpn" aria-pressed="false">VPN · {{.VPN}}</button>
-      </div>
+    <section aria-label="Sites">
       <div class="cards">
         {{range .Cards}}
         <article class="card site" data-vpn="{{.VPN}}">
@@ -43,7 +40,7 @@
             <span class="avatar" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" loading="lazy" data-fallback></span>
             <div class="stack grow tight">
               <strong>{{.Name}}</strong>
-              <a class="mono small" href="{{.URL}}">{{.Domain}}</a>
+              <a class="mono small" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a>
             </div>
             {{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}
           </div>

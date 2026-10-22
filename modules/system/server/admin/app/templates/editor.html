@@ -18,15 +18,15 @@
 {{template "bottom" .}}{{end}}
 
 {{define "form"}}
-<div class="row top">
-<form id="site-form" class="grow stack gap-lg" hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
+<div class="layout layout-edit">
+<form id="site-form" class="stack gap-lg" hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
   <input type="hidden" name="base" value="{{.Base}}">
   {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}"><input type="hidden" name="containers" value="{{.CtrList}}">{{end}}
 
   <section class="card stack gap">
     <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Adresse et accès</h2>
     {{if .New}}
-    <label class="field"><span>Nom du site <small class="muted">— identifiant interne, 12 caractères au plus, définitif</small></span>
+    <label class="field"><span>Nom du site <small class="muted">(identifiant interne, 12 caractères au plus, définitif)</small></span>
       <input name="name" value="{{.Name}}" class="mono" required></label>
     {{end}}
     <label class="field"><span>Sous-domaine</span>
@@ -66,12 +66,12 @@
       <div class="stack tight">
         <span class="small strong">Données</span>
         {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{end}}
-        <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Nouveau dossier de données"><small class="muted">→ {{.DataHost}}/…, gardé entre deux versions</small></span>
+        <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Nouveau dossier de données"><small class="muted">gardé dans {{.DataHost}}/…</small></span>
       </div>
       <div class="stack tight">
         <span class="small strong">Secrets</span>
         {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
-        {{else}}<small class="muted">Aucun secret rangé sous {{$.Name}}/. Pour en créer un : <code>secrets edit {{$.Name}}/env</code> (lignes NOM=valeur), puis rebuild.</small>{{end}}
+        {{else}}<small class="muted">Aucun secret sous {{$.Name}}/ : <code>secrets edit {{$.Name}}/env</code> pour en créer un.</small>{{end}}
       </div>
     </div>
     {{end}}
@@ -101,9 +101,8 @@
   </section>
   {{end}}
 </form>
-{{if .Exists}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML"><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
 
-<aside class="side-col stack gap-lg">
+<aside class="stack gap-lg sticky">
   {{if .Exists}}
   <section class="card stack gap">
     <div class="line between"><h2>Version</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit main</span>{{end}}</div>
@@ -116,4 +115,5 @@
   {{template "preview" .Preview}}
 </aside>
 </div>
+{{if .Exists}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
 {{end}}
