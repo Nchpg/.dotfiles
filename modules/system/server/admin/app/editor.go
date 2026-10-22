@@ -325,7 +325,8 @@ func (s *Server) entryFromForm(r *http.Request, names []string, current *Entry, 
 			path, on, _ := strings.Cut(v, "\t")
 			c.Data = append(c.Data, Data{Path: path, On: on})
 		}
-		if p := strings.TrimSpace(r.FormValue("newdata_" + n)); p != "" {
+		// Plusieurs dossiers d'un coup, séparés par des espaces.
+		for _, p := range strings.Fields(r.FormValue("newdata_" + n)) {
 			c.Data = append(c.Data, Data{Path: p})
 		}
 		c.Secrets = r.Form["sec_"+n]
