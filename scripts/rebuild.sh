@@ -141,8 +141,8 @@ if [[ -n "$branch" && "$origin" == https://* ]] \
         echo
         if [[ "$YES" -eq 1 ]]; then
             echo "${WARN}(--yes) Poursuite sans les récupérer.${R}"
-        elif confirm "Les récupérer maintenant (git pull --rebase) ?" yes; then
-            git pull --rebase "$origin" "$branch" || {
+        elif confirm "Les récupérer maintenant (git pull --rebase --autostash) ?" yes; then
+            git pull --rebase --autostash "$origin" "$branch" || {
                 err "git pull --rebase a échoué : résous-le, puis relance rebuild."
                 exit 1
             }

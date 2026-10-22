@@ -26,7 +26,11 @@ in
     watch.enable = true;
 
     # Puis déploie seul ces épinglages, et rien d'autre : le reste attend un `rebuild` à la main.
-    deploy.enable = true;
+    deploy = {
+      enable = true;
+      # Avancé avec eux : le prochain `rebuild` à la main repart des sites à jour.
+      checkout = "/home/nchpg/.dotfiles";
+    };
 
     # Un message Discord par site mis à jour.
     announce = true;

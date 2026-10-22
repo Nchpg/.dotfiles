@@ -153,9 +153,17 @@ Discord ce qui attend (« 📦 nouveaux commits … `rebuild` à la main », ou
 que par ton `rebuild`, avec son retour habituel, et une version locale n'est
 jamais écrasée par une mise à jour de site.
 
+Ce qui compte, c'est la version qui tourne, pas l'état du dossier : des
+changements en cours dans `~/.dotfiles`, jamais rebuildés, n'empêchent pas un
+déploiement. Après chaque déploiement, think avance aussi ce dossier jusqu'au
+commit déployé, en avance rapide et au nom de son propriétaire. Seul le lock
+change, et tes changements non commités restent tels quels, ni ajoutés ni
+commités. Si c'est impossible (commits locaux pas poussés, lock modifié à la
+main, autre branche), les sites sont quand même déployés et Discord le signale.
+
 `rebuild` vérifie de son côté que ton dépôt n'est pas en retard sur GitHub : des
 bumps de sites absents en local reviendraient en arrière. Il propose alors un
-`git pull --rebase` avant de construire.
+`git pull --rebase --autostash` avant de construire.
 
 Un déploiement automatique qui échoue signale l'unité `apps-deploy` sur Discord
 (`journalctl -u apps-deploy`) et n'est pas retenté pour ce commit : think reste
