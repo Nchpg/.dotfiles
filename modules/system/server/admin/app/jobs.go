@@ -195,7 +195,7 @@ func (s *Server) startJob(req Request, domain string) *Job {
 	j.Steps = []Step{
 		{Label: "Config vérifiée", Sub: "évaluation sur think", State: "active"},
 		{Label: "Commit sur main", Sub: "apps.yml", State: "todo"},
-		{Label: "think applique", Sub: "apps-deploy, sans rebuild", State: "todo"},
+		{Label: "think applique", Sub: "apps-deploy, dans la minute", State: "todo"},
 		{Label: "Le site répond", Sub: domain, State: "todo"},
 	}
 	if j.Delete {
