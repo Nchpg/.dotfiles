@@ -127,7 +127,7 @@ if command -v secrets > /dev/null; then
     fi
 fi
 
-# Des commits sur GitHub absents ici (bumps de sites par apps-bump.yml) : un rebuild en l'état
+# Des commits sur GitHub absents ici (changements de sites par apps.yml) : un rebuild en l'état
 # les annulerait. Lecture en HTTPS, sans clé : le dépôt est public. Hors ligne, rien n'est vérifié.
 branch=$(git symbolic-ref --quiet --short HEAD || true)
 origin=$(git remote get-url origin 2> /dev/null | sed -E 's#^git@github\.com:#https://github.com/#')

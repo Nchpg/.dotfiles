@@ -47,7 +47,7 @@ if [ "$ext_count" -gt 0 ]; then
     echo
 fi
 
-# Rattrapage : d'ordinaire, la CI de l'app épingle elle-même par apps-bump.yml.
+# Rattrapage : d'ordinaire, la CI de l'app épingle par apps.yml (think).
 if [ "$(jq '.appImages // [] | length' "$facts_file")" -gt 0 ]; then
     echo "## Images des apps"
     echo

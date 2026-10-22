@@ -5,7 +5,7 @@
   ...
 }:
 
-# think repère lui-même une nouvelle image de ses apps et demande son épinglage (apps-bump.yml) :
+# think repère lui-même une nouvelle image de ses apps et demande son épinglage (apps.yml, action pin) :
 # rien à poser dans les dépôts des apps, un seul jeton, ici.
 let
   cfg = config.systemSettings.appImages;
@@ -13,7 +13,7 @@ let
   images = cfg.helpers;
   notify = config.systemSettings.notify.discord;
 
-  # Le même que deploy.nix et apps-bump.yml.
+  # Le même que deploy.nix et apps.yml.
   lockPath = "profiles/server/apps.lock.json";
 
   owner = lib.toLower (lib.elemAt (lib.splitString "/" (toString cfg.registry)) 1);
@@ -131,25 +131,25 @@ let
           continue
         fi
 
-        # Une demande par jeu de digests et par quart d'heure : apps-bump a le temps de passer, et
+        # Une demande par jeu de digests et par quart d'heure : apps.yml a le temps de passer, et
         # un appel perdu (workflow en échec, GitHub indisponible) est refait.
         key=$(jq -r 'map(.digest) | sort | join(",")' <<< "$found" | sha256sum | cut -c1-16)
         last_key="" last_at=0
         [ -f "$state/$app" ] && read -r last_key last_at < "$state/$app"
         if [ "$last_key" = "$key" ]; then
           [ $((now - ''${last_at:-0})) -lt 900 ] && continue
-          warn "$app" "épinglage demandé il y a plus d'un quart d'heure, toujours absent du lock (\`apps-bump\` en échec ?). Nouvel essai tous les quarts d'heure."
+          warn "$app" "épinglage demandé il y a plus d'un quart d'heure, toujours absent du lock (\`apps.yml\` en échec ?). Nouvel essai tous les quarts d'heure."
         fi
         echo "$key $now" > "$state/$app"
 
         # Révision gardée seulement si elle vient d'un dépôt à soi (sinon : label hérité de l'image de base).
         payload=$(jq -c --arg owner "github.com/${owner}/" 'map({ref, digest, port,
           revision: (if (.source // "" | ascii_downcase | contains($owner)) then .revision else null end)})' <<< "$found")
-        body=$(jq -nc --arg images "$payload" '{ref: "main", inputs: {images: $images, source: "think"}}')
+        body=$(jq -nc --arg images "$payload" '{ref: "main", inputs: {action: "pin", images: $images, source: "think"}}')
 
         if curl -fsS --max-time 20 --config "$REG_WORK/github" -X POST \
              -H "Accept: application/vnd.github+json" --data "$body" \
-             "https://api.github.com/repos/$repo/actions/workflows/apps-bump.yml/dispatches"; then
+             "https://api.github.com/repos/$repo/actions/workflows/apps.yml/dispatches"; then
           echo "$app : nouvelle version, épinglage demandé"
         else
           warn "$app" "épinglage refusé par GitHub (jeton \`${watch.tokenKey}\` expiré ?). Nouvel essai tous les quarts d'heure ; rattrapage à la main : \`dots update apps\`."
@@ -165,7 +165,7 @@ in
     repository = lib.mkOption {
       type = lib.types.str;
       default = "Nchpg/.dotfiles";
-      description = "Dépôt qui porte le lock et apps-bump.yml.";
+      description = "Dépôt qui porte le lock et apps.yml.";
     };
 
     tokenKey = lib.mkOption {
@@ -173,7 +173,7 @@ in
       default = "github/dispatch_token";
       description = ''
         Clé sops d'un PAT fine-grained limité à `repository`, permission
-        « Actions: Read and write » seule : il ne fait que lancer apps-bump.yml.
+        « Actions: Read and write » seule : il ne fait que lancer apps.yml.
       '';
     };
 

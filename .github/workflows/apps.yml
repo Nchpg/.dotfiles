@@ -1,0 +1,97 @@
+name: apps
+
+# Seul chemin d'écriture des sites sur main, déclenché par think avec son jeton « Actions » :
+# - pin  : apps-watch a vu une nouvelle image, son digest entre dans le lock ;
+# - edit : le dashboard modifie, ajoute ou supprime un site dans apps.json (et le lock).
+# think applique seul ces commits (apps-deploy : ils ne touchent qu'apps.json et le lock).
+# Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
+# d'appeler, et apps.sh vérifie chaque entrée.
+# Runner GitHub et non self-hosted : il doit passer même machine éteinte.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: pin ou edit
+        required: true
+        type: choice
+        options:
+          - pin
+          - edit
+      images:
+        description: 'JSON [{"ref": "ghcr.io/…:tag", "digest": "sha256:…", "revision": "<sha>", "port": 8080}]'
+        required: false
+        default: "[]"
+        type: string
+      app:
+        description: "edit : nom du site"
+        required: false
+        type: string
+      entry:
+        description: "edit : entrée JSON du site, ou null pour le supprimer"
+        required: false
+        type: string
+      base:
+        description: "edit : empreinte de l'entrée lue par la page (new si absente)"
+        required: false
+        type: string
+      message:
+        description: "edit : message de commit (facultatif)"
+        required: false
+        type: string
+      source:
+        description: Origine de la demande (think, dashboard)
+        required: false
+        type: string
+
+# Les appels s'enchaînent sans s'annuler : deux demandes donnent deux commits.
+concurrency:
+  group: apps
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  apps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: main
+
+      # Entrées par l'environnement, jamais interpolées dans le script (injection de commande).
+      # Si main bouge pendant le run, tout est refait sur la nouvelle tête : l'empreinte est
+      # revérifiée, jamais un rebase qui fusionnerait en silence une modification concurrente.
+      - name: écrire et pousser
+        env:
+          ACTION: ${{ inputs.action }}
+          IMAGES: ${{ inputs.images }}
+          APP: ${{ inputs.app }}
+          ENTRY: ${{ inputs.entry }}
+          BASE: ${{ inputs.base }}
+          MESSAGE: ${{ inputs.message }}
+          SOURCE: ${{ inputs.source }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "$ACTION, appel de ${SOURCE:-inconnu}"
+          export REGISTRY="ghcr.io/${OWNER,,}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch --quiet origin main
+            git reset --quiet --hard origin/main
+            out=$(.github/scripts/apps.sh "$ACTION")
+            subject=$(sed -n 's/^subject=//p' <<< "$out")
+            if [ -z "$subject" ]; then
+              echo "rien à changer"
+              exit 0
+            fi
+            git commit --quiet -m "$subject" -- profiles/server/apps.json profiles/server/apps.lock.json
+            if git push --quiet origin HEAD:main; then
+              echo "### $subject" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::warning::push refusé (essai $attempt), nouvel essai sur la nouvelle tête de main"
+          done
+          echo "::error::push impossible après trois essais"
+          exit 1

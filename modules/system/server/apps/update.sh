@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Suit le tag de chaque image de profiles/server/apps.lock.json et y reporte son digest et son port exposé.
-# Filet de sécurité : d'ordinaire, think repère lui-même une nouvelle image et déclenche apps-bump.yml.
+# Filet de sécurité : d'ordinaire, think repère lui-même une nouvelle image et déclenche apps.yml (action pin).
 # Image privée : GHCR_TOKEN (portée read:packages), sinon elle est signalée et laissée telle quelle.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
@@ -72,7 +72,7 @@ for ref in "${!latest[@]}"; do
         echo "✓ $ref est à jour ($(short "$current"))"
         continue
     fi
-    # La révision source n'est connue que du chemin CI (apps-bump.yml).
+    # La révision source n'est connue que du chemin CI (apps.yml).
     # shellcheck disable=SC2016 # $r, $d et $p sont du jq
     um_replace "$lock" jq --sort-keys --indent 2 --arg r "$ref" --arg d "${latest[$ref]}" \
         --argjson p "${exposed[$ref]}" '.[$r] = {digest: $d, port: $p, revision: null}' "$lock"

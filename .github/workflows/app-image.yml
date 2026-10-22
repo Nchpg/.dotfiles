@@ -2,7 +2,7 @@ name: app-image
 
 # Workflow partagé des apps servies par think (cf. docs/apps.md) : construit l'image, la contrôle
 # (jamais root, port >= 1024) et ne la publie sur ghcr.io qu'ensuite. Rien d'autre à faire :
-# think repère le nouveau tag dans la minute et en demande l'épinglage (apps-bump.yml).
+# think repère le nouveau tag dans la minute et en demande l'épinglage (apps.yml).
 #
 # Appel, dans le dépôt de l'app :
 #   jobs:
