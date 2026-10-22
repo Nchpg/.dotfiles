@@ -73,7 +73,7 @@
           }
         ],
         "image": "stage:main",
-        "memory": "512m",
+        "memory": "256m",
         "secrets": [
           "stage/gemini_env"
         ]
