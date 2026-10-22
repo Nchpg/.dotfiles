@@ -77,6 +77,12 @@ let
       # Lu par le dashboard (lisible par tous, sans secret) : refait à chaque passage.
       publish() {
         local clone=null raw
+        # Copie locale de main à jour d'abord : sans elle, un push fait depuis une autre machine
+        # compterait encore comme des commits « pas poussés ».
+        if [ -n "$checkout" ] && [ -d "$checkout/.git" ] && [ -n "$head" ] \
+          && [ "$(as_owner rev-parse --quiet --verify "refs/remotes/origin/$branch" 2> /dev/null || true)" != "$head" ]; then
+          as_owner fetch --quiet "https://github.com/$repo.git" "+refs/heads/$branch:refs/remotes/origin/$branch" 2> /dev/null || true
+        fi
         if [ -n "$checkout" ] && [ -d "$checkout/.git" ] \
           && raw=$(as_owner status --porcelain=v2 --branch 2> /dev/null); then
           clone=$(jq -Rn '[inputs] as $l | {
