@@ -41,3 +41,11 @@ document.addEventListener("click", (ev) => {
   if (!repo) return;
   document.querySelectorAll(".repo").forEach((r) => r.setAttribute("aria-selected", String(r === repo)));
 });
+
+// Liens vers l'extérieur (sites, GitHub) : nouvel onglet ; la navigation du dashboard reste ici.
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest && ev.target.closest("a[href]");
+  if (!a || a.host === location.host || !/^https?:$/.test(a.protocol)) return;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+}, true);
