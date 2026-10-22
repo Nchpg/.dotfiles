@@ -49,6 +49,11 @@ func loadConfig() (*Config, error) {
 		Htmx:         env("ADMIN_HTMX", ""),
 		Fonts:        env("ADMIN_FONTS", ""),
 	}
+	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse
+	// d'évaluer un dépôt à travers un lien. On travaille sur le chemin réel.
+	if real, err := filepath.EvalSymlinks(c.StateDir); err == nil {
+		c.StateDir = real
+	}
 	if c.GitURL == "" {
 		c.GitURL = "https://github.com/" + c.Repo + ".git"
 	}
