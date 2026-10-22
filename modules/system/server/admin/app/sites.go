@@ -138,27 +138,30 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 	st, err := readDeployStatus(s.cfg.DeployStatus)
 	switch {
 	case err != nil || !st.Fresh():
-		set("État d'apps-deploy inconnu", "inconnu", "Aucun passage récent d'apps-deploy : systemctl status apps-deploy.timer.", iconQuest, gray)
+		set("État inconnu", "inconnu", "apps-deploy ne passe plus : systemctl status apps-deploy.timer", iconQuest, gray)
 	case think == head:
-		set("think est à jour", "à jour", "Il tourne exactement le dernier commit de main.", iconCheck, green)
+		set("think est à jour", "à jour", "", iconCheck, green)
 	case st.State == "deploiement":
-		set("Changements de sites en cours d'application", "en cours", "apps-deploy active le dernier commit de main.", iconSync, blue)
+		set("Application en cours", "en cours", "", iconSync, blue)
 	case st.State == "attente":
-		set("Des commits attendent ton rebuild", "rebuild à faire", "main contient d'autres changements que des sites : think ne les applique pas seul.", iconClock, amber)
+		set("Rebuild à faire", "en attente", "Pas que des sites sur main : rebuild à la main.", iconClock, amber)
 	case st.State == "local":
-		set("Version locale non commitée", "modifié", "Tu as rebuildé avec des changements non commités : les sites ne se mettent plus à jour seuls jusqu'au prochain rebuild propre.", iconWarn, red)
+		set("Version locale non commitée", "modifié", "Les sites attendent un rebuild propre.", iconWarn, red)
 	case st.State == "non_pousse":
-		set("Commits pas encore poussés", "à pousser", "think tourne une version que GitHub ne connaît pas : git push, puis rebuild.", iconWarn, red)
+		set("Commits pas poussés", "à pousser", "git push, puis rebuild.", iconWarn, red)
 	case st.State == "diverge":
-		set("main a divergé", "à vérifier", "main n'est plus dans la lignée de la version de think : rebuild à la main.", iconWarn, red)
+		set("main a divergé", "à vérifier", "Rebuild à la main.", iconWarn, red)
 	case st.State == "echec":
-		set("Le dernier déploiement a échoué", "échec", "La version d'avant tourne toujours : journalctl -u apps-deploy.", iconWarn, red)
+		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", iconWarn, red)
 	default:
-		set("main a avancé", "à appliquer", "apps-deploy le traitera à son prochain passage, dans la minute.", iconSync, blue)
+		set("main a avancé", "à appliquer", "Appliqué dans la minute.", iconSync, blue)
 	}
-	if st != nil && st.Fresh() && (st.State == "attente" || st.State == "diverge" || st.State == "echec") {
-		for _, p := range st.Pending {
-			c.Pending = append(c.Pending, shortRev(p.SHA)+" "+p.Subject)
+	// Ce qui attend, seulement quand quelque chose attend : le dernier commit, et combien d'autres.
+	if think != head && st != nil && st.Fresh() && len(st.Pending) > 0 && (st.State == "attente" || st.State == "diverge" || st.State == "echec") {
+		last := st.Pending[len(st.Pending)-1]
+		c.Pending = append(c.Pending, shortRev(last.SHA)+" "+last.Subject)
+		if n := len(st.Pending) - 1; n > 0 {
+			c.Pending = append(c.Pending, plural(n, "autre commit", "autres commits"))
 		}
 	}
 	if st != nil && st.Checkout != nil {
@@ -180,7 +183,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 			parts = append(parts, plural(*co.Behind, "commit en retard", "commits en retard"))
 		}
 		if len(parts) == 0 {
-			c.Checkout, c.CheckoutInk = "propre, à jour avec main", "#15803D"
+			c.Checkout, c.CheckoutInk = "propre", "#15803D"
 		} else {
 			c.Checkout, c.CheckoutInk = strings.Join(parts, ", "), "#9A4A07"
 		}

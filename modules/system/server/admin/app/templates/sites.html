@@ -19,8 +19,8 @@
       <span class="tile tile-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
       <div class="stack">
         <div class="line"><strong class="big">{{.Title}}</strong><span class="chip" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Chip}}</span></div>
-        <p class="muted">{{.Text}}</p>
-        <div class="line mono small muted"><span>think <b>{{.Think}}</b></span><span>main sur GitHub <b>{{.Main}}</b></span></div>
+        {{if .Text}}<p class="muted">{{.Text}}</p>{{end}}
+        <div class="line mono small muted"><span>think <b>{{.Think}}</b></span><span>main <b>{{.Main}}</b></span></div>
         {{if .Pending}}<ul class="pending mono small">{{range .Pending}}<li>{{.}}</li>{{end}}</ul>{{end}}
         {{if .Checkout}}<div class="folder small"><svg viewBox="0 0 24 24" aria-hidden="true" style="color: {{.CheckoutInk}}"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="mono muted">~/.dotfiles</span><span style="color: {{.CheckoutInk}}">{{.Checkout}}</span></div>{{end}}
       </div>

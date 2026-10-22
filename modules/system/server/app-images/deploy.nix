@@ -94,7 +94,8 @@ let
           }' <<< "$raw")
         fi
         local pending=[]
-        if [ -f "$state/decision.json" ] && [ "$(jq -r .head "$state/decision.json")" = "$head" ]; then
+        # À jour : plus rien n'attend, même si la décision d'avant le rebuild en listait.
+        if [ "$decision" != a_jour ] && [ -f "$state/decision.json" ] && [ "$(jq -r .head "$state/decision.json")" = "$head" ]; then
           pending=$(jq -c .pending "$state/decision.json")
         fi
         jq -n --arg head "$head" --arg deployed "$deployed" --arg state "$decision" \
