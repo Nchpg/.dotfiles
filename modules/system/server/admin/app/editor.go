@@ -62,6 +62,9 @@ type FormVM struct {
 	Initial      string
 	Tint, Ink    string
 	Preview      PreviewVM
+	// Demande en cours (étapes à la place de l'aperçu, formulaire grisé) ou échec récent.
+	Running *JobView
+	Failed  *JobBadge
 }
 
 type PreviewVM struct {
@@ -444,6 +447,11 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 	}
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
+		// Site en cours d'ajout : pas encore dans apps.json, on montre sa demande.
+		if j := s.jobs.latest(name); j != nil {
+			s.render(w, "job-page", map[string]any{"Nav": "sites", "Job": j.Snapshot()})
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}
@@ -453,6 +461,17 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 	up := probes(ctx, s.cfg.Prometheus)
 	f.Up, f.Probed = up[f.Domain]
 	f.Preview = s.previewOf(name, &e, snap, false, "", nil)
+	if j := s.jobs.latest(name); j != nil {
+		snapJob := j.Snapshot()
+		if b := badgeOf(snapJob); b != nil {
+			switch b.Kind {
+			case "running":
+				f.Running = &snapJob
+			case "failed":
+				f.Failed = b
+			}
+		}
+	}
 	s.render(w, "editor", map[string]any{"Nav": "sites", "F": f})
 }
 
@@ -528,6 +547,9 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, err)
 		return
 	}
+	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
+		p.Errors = append(p.Errors, "Une modification de "+name+" est déjà en cours : attends qu'elle se termine.")
+	}
 	if len(p.Errors) > 0 || !p.Dirty {
 		s.render(w, "preview", p)
 		return
@@ -566,6 +588,10 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
 		s.renderError(w, fmt.Errorf("%s n'existe plus sur main", name))
+		return
+	}
+	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
+		s.renderError(w, fmt.Errorf("une modification de %s est déjà en cours : attends qu'elle se termine", name))
 		return
 	}
 	if r.FormValue("confirm") != name {

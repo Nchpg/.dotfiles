@@ -46,8 +46,18 @@
 {{end}}
 
 {{define "site-cards"}}
-<section aria-label="Sites" id="site-cards" hx-get="/fragments/cards" hx-trigger="every 30s" hx-swap="outerHTML">
+<section aria-label="Sites" id="site-cards" hx-get="/fragments/cards" hx-trigger="every {{.Every}}s" hx-swap="outerHTML">
   <div class="cards">
+    {{range .Adding}}
+    <article class="card site adding">
+      <div class="line top">
+        <span class="avatar" style="--tint: #EEF0FD; --ink: #3B47C4">+</span>
+        <div class="stack grow tight"><strong>{{.App}}</strong><span class="small muted">nouveau site</span></div>
+      </div>
+      <div class="chips">{{template "job-badge" .}}</div>
+      {{if .Detail}}<span class="small muted">{{.Detail}}</span>{{end}}
+    </article>
+    {{end}}
     {{range .Cards}}
     <article class="card site" data-vpn="{{.VPN}}">
       <div class="line top">
@@ -59,6 +69,7 @@
         {{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}
       </div>
       <div class="chips">
+        {{with .Job}}{{template "job-badge" .}}{{end}}
         {{if .Frozen}}<span class="chip amber" title="Ne suit plus main"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>figé · {{.Frozen}}</span>{{end}}
         {{if .VPN}}<span class="chip amber"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{else}}<span class="chip blue"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
         {{if .SSO}}<span class="chip green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
@@ -96,3 +107,5 @@
 {{define "site-status"}}
 <span id="site-status" hx-get="/fragments/status?app={{.App}}" hx-trigger="every 30s" hx-swap="outerHTML">{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}</span>
 {{end}}
+
+{{define "job-badge"}}<a class="chip job job-{{.Kind}}" href="/sites/{{.App}}" title="{{.Detail}}"><span class="pulse"></span>{{.Label}}</a>{{end}}

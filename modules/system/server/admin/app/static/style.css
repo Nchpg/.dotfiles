@@ -240,3 +240,16 @@ svg.gh, .repo-logo svg, svg.fill { fill: currentColor; stroke: none; }
 .addr { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px; background: #151922; color: #E8EAEE; }
 .addr svg { width: 14px; height: 14px; color: #9DA6FF; }
 .strike { text-decoration: line-through; }
+
+/* Demande en cours */
+.alert-blue { background: var(--accent-soft); color: #2A3290; }
+form[inert] { opacity: .55; }
+.narrow { max-width: 520px; }
+.chip.job { text-decoration: none; }
+.job .pulse { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.job-running { --tint: var(--accent-soft); --ink: var(--accent-ink); }
+.job-running .pulse { animation: pulse 1.2s ease-in-out infinite; }
+.job-done { --tint: var(--ok-soft); --ink: var(--ok); }
+.job-failed { --tint: var(--bad-soft); --ink: var(--bad); }
+.card.site.adding { border-style: dashed; }
+@media (prefers-reduced-motion: reduce) { .job-running .pulse { animation: none; } }

@@ -29,6 +29,7 @@ type SiteCard struct {
 	Memory                                string
 	Rev                                   string
 	Frozen                                string
+	Job                                   *JobBadge
 }
 
 type StateCard struct {
@@ -49,9 +50,16 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	up := probes(ctx, s.cfg.Prometheus)
 	var cards []SiteCard
 	vpn, online := 0, 0
+	running := false
 	for _, name := range snap.Apps.Names() {
 		e := snap.Apps.Entries[name]
 		c := s.card(name, e, snap, up)
+		if j := s.jobs.latest(name); j != nil {
+			c.Job = badgeOf(j.Snapshot())
+		}
+		if c.Job != nil && c.Job.Kind == "running" {
+			running = true
+		}
 		cards = append(cards, c)
 		if e.VPN() {
 			vpn++
@@ -60,7 +68,23 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			online++
 		}
 	}
-	return map[string]any{"Nav": "sites", "Cards": cards, "Total": len(cards), "Online": online, "VPN": vpn, "Public": len(cards) - vpn}
+	// Sites en cours d'ajout : pas encore dans apps.json, montrés à part.
+	var adding []JobBadge
+	for _, j := range s.jobs.all() {
+		if _, ok := snap.Apps.Entries[j.App]; ok || !j.New {
+			continue
+		}
+		if b := badgeOf(j); b != nil {
+			adding = append(adding, *b)
+			running = running || b.Kind == "running"
+		}
+	}
+	// Une demande en cours : les cartes se rafraîchissent plus souvent.
+	every := 30
+	if running {
+		every = 5
+	}
+	return map[string]any{"Nav": "sites", "Cards": cards, "Adding": adding, "Every": every, "Total": len(cards), "Online": online, "VPN": vpn, "Public": len(cards) - vpn}
 }
 
 func (s *Server) sites(w http.ResponseWriter, r *http.Request) {

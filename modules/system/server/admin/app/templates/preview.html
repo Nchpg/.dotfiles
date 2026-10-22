@@ -55,3 +55,13 @@
   </div>
 </section>
 {{end}}
+
+{{define "job-page"}}{{template "top" .}}
+<header class="topbar">
+  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><a href="/sites">Sites</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Job.App}}</strong></nav>
+</header>
+<main class="page">
+  <h1>{{.Job.App}}</h1>
+  <div class="narrow">{{template "job" .Job}}</div>
+</main>
+{{template "bottom" .}}{{end}}

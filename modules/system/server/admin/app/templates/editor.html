@@ -12,6 +12,8 @@
       <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>
     </div>
   </div>
+  {{if .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong> Le formulaire reprendra quand elle sera terminée ; tu peux quitter la page, elle continue sur think.</p></div>{{end}}
+  {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
   {{template "form" .}}
 </main>
 {{end}}
@@ -19,7 +21,7 @@
 
 {{define "form"}}
 <div class="layout layout-edit">
-<form id="site-form" class="stack gap-lg" hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
+<form id="site-form" class="stack gap-lg" {{if .Running}}inert{{end}} hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
   <input type="hidden" name="base" value="{{.Base}}">
   {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}"><input type="hidden" name="containers" value="{{.CtrList}}">{{end}}
 
@@ -107,12 +109,12 @@
   <section class="card stack gap">
     <div class="line between"><h2>Version</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit main</span>{{end}}</div>
     <label class="field"><span>Images à faire tourner</span>
-      <select name="version" form="site-form" hx-post="{{.PreviewURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" hx-trigger="change">{{range .Versions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      <select name="version" form="site-form" {{if .Running}}disabled{{end}} hx-post="{{.PreviewURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" hx-trigger="change">{{range .Versions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
     {{if .VersionNote}}<small class="muted">{{.VersionNote}}</small>{{end}}
     <small class="muted">Revenir à un commit fige le site dessus : les nouvelles images de main attendent qu'il suive main de nouveau.</small>
   </section>
   {{end}}
-  {{template "preview" .Preview}}
+  {{if .Running}}{{template "job" .Running}}{{else}}{{template "preview" .Preview}}{{end}}
 </aside>
 </div>
 {{if .Exists}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}

@@ -29,16 +29,18 @@ type Step struct {
 }
 
 type Job struct {
-	mu      sync.Mutex
-	ID      string
-	App     string
-	Delete  bool
-	Message string
-	Steps   []Step
-	Done    bool
-	Failed  bool
-	Created time.Time
-	Domain  string
+	mu       sync.Mutex
+	ID       string
+	App      string
+	Delete   bool
+	Message  string
+	Steps    []Step
+	Done     bool
+	Failed   bool
+	Created  time.Time
+	Finished time.Time
+	Domain   string
+	New      bool // site ajouté : absent d'apps.json tant que le commit n'est pas fait
 }
 
 type Jobs struct {
@@ -63,11 +65,19 @@ func (js *Jobs) add(j *Job) {
 	js.m[j.ID] = j
 }
 
+// JobView : copie d'une demande, lisible sans verrou (templates, badges).
+type JobView struct {
+	ID, App, Message, Domain  string
+	Delete, New, Done, Failed bool
+	Steps                     []Step
+	Created, Finished         time.Time
+}
+
 // Snapshot : copie lisible par un template sans tenir le verrou.
-func (j *Job) Snapshot() Job {
+func (j *Job) Snapshot() JobView {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return Job{ID: j.ID, App: j.App, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain}
+	return JobView{ID: j.ID, App: j.App, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain, New: j.New, Created: j.Created, Finished: j.Finished}
 }
 
 func (j *Job) set(i int, state, detail, link string) {
@@ -79,12 +89,14 @@ func (j *Job) set(i int, state, detail, link string) {
 	}
 	if state == "failed" {
 		j.Failed, j.Done = true, true
+		j.Finished = time.Now()
 	}
 }
 
 func (j *Job) finish() {
 	j.mu.Lock()
 	j.Done = true
+	j.Finished = time.Now()
 	j.mu.Unlock()
 }
 
@@ -191,7 +203,7 @@ func (s *Server) candidate(ctx context.Context, apps *AppsFile, lockRaw []byte, 
 }
 
 func (s *Server) startJob(req Request, domain string) *Job {
-	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain}
+	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new"}
 	j.Steps = []Step{
 		{Label: "Config vérifiée", Sub: "évaluation sur think", State: "active"},
 		{Label: "Commit sur main", Sub: "apps.yml", State: "todo"},
@@ -390,4 +402,71 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 			return ctx.Err()
 		}
 	}
+}
+
+// JobBadge : la dernière demande d'un site, résumée pour la liste et la page du site.
+type JobBadge struct {
+	ID, App string
+	Kind    string // running, done, failed
+	Label   string
+	Detail  string
+	New     bool
+	Delete  bool
+}
+
+// latest : la demande la plus récente d'un site, quelle qu'elle soit.
+func (js *Jobs) latest(app string) *Job {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	var last *Job
+	for _, j := range js.m {
+		if j.App == app && (last == nil || j.Created.After(last.Created)) {
+			last = j
+		}
+	}
+	return last
+}
+
+// all : copie de toutes les demandes connues.
+func (js *Jobs) all() []JobView {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	out := make([]JobView, 0, len(js.m))
+	for _, j := range js.m {
+		out = append(out, j.Snapshot())
+	}
+	return out
+}
+
+// badgeOf : en cours, ou terminée depuis peu (réussite 5 min, échec 30 min) ; nil sinon.
+func badgeOf(j JobView) *JobBadge {
+	b := &JobBadge{ID: j.ID, App: j.App, New: j.New, Delete: j.Delete}
+	switch {
+	case !j.Done:
+		n := 1
+		for i, s := range j.Steps {
+			if s.State == "active" {
+				n = i + 1
+				b.Detail = s.Label
+			}
+		}
+		b.Kind, b.Label = "running", fmt.Sprintf("en cours · %d/%d", n, len(j.Steps))
+	case j.Failed && time.Since(j.Finished) < 30*time.Minute:
+		b.Kind, b.Label = "failed", "échec"
+		for _, s := range j.Steps {
+			if s.State == "failed" {
+				b.Detail = s.Label + " : " + s.Detail
+			}
+		}
+	case !j.Failed && time.Since(j.Finished) < 5*time.Minute:
+		b.Kind, b.Label = "done", "appliqué"
+		if j.Delete {
+			b.Label = "supprimé"
+		} else if j.New {
+			b.Label = "en ligne"
+		}
+	default:
+		return nil
+	}
+	return b
 }
