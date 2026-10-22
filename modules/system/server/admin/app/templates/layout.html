@@ -1,0 +1,57 @@
+{{define "top"}}<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{block "title" .}}admin think{{end}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/htmx.min.js" defer></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+<aside class="side">
+  <a class="brand" href="/sites">
+    <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"/></svg></span>
+    <span class="brand-text"><strong>think</strong><small>admin.vpn</small></span>
+  </a>
+  <nav aria-label="Navigation principale">
+    <span class="nav-title">Serveur</span>
+    <a href="/sites" {{if eq .Nav "sites"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 9h18M7 7h.01"/></svg>Sites</a>
+    <a href="/vpn" {{if eq .Nav "vpn"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg>VPN<small>bientôt</small></a>
+    <a href="/ssh" {{if eq .Nav "ssh"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg>SSH<small>bientôt</small></a>
+    <a href="/metrics" {{if eq .Nav "metrics"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>Métriques<small>bientôt</small></a>
+  </nav>
+  <nav aria-label="Liens">
+    <span class="nav-title">Ailleurs</span>
+    <a href="https://github.com/Nchpg/.dotfiles"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Nchpg/.dotfiles</a>
+  </nav>
+</aside>
+<div class="content">
+{{end}}
+
+{{define "bottom"}}
+</div>
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "soon"}}{{template "top" .}}
+<main class="page">
+  <h1>{{.Title}}</h1>
+  <div class="empty">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"/></svg>
+    <strong>Bientôt</strong>
+    <p>{{.Text}}</p>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "error"}}{{template "top" .}}
+<main class="page">
+  <h1>Erreur</h1>
+  <div class="alert alert-red"><p>{{.Error}}</p></div>
+  <p><a href="">Réessayer</a></p>
+</main>
+{{template "bottom" .}}{{end}}

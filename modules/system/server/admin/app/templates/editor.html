@@ -1,0 +1,119 @@
+{{define "editor"}}{{template "top" .}}
+{{with .F}}
+<header class="topbar">
+  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><a href="/sites">Sites</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Name}}</strong></nav>
+  <a class="btn" href="https://{{.Domain}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir le site</a>
+</header>
+<main class="page">
+  <div class="line hero">
+    <span class="avatar avatar-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" data-fallback></span>
+    <div class="stack tight">
+      <div class="line"><h1>{{.Name}}</h1>{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{end}}</div>
+      <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>
+    </div>
+  </div>
+  {{template "form" .}}
+</main>
+{{end}}
+{{template "bottom" .}}{{end}}
+
+{{define "form"}}
+<div class="row top">
+<form id="site-form" class="grow stack gap-lg" hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
+  <input type="hidden" name="base" value="{{.Base}}">
+  {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}"><input type="hidden" name="containers" value="{{.CtrList}}">{{end}}
+
+  <section class="card stack gap">
+    <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Adresse et accès</h2>
+    {{if .New}}
+    <label class="field"><span>Nom du site <small class="muted">— identifiant interne, 12 caractères au plus, définitif</small></span>
+      <input name="name" value="{{.Name}}" class="mono" required></label>
+    {{end}}
+    <label class="field"><span>Sous-domaine</span>
+      <span class="affix"><input name="sub" value="{{.Sub}}" class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
+    <div class="choices" role="radiogroup" aria-label="Exposition">
+      <label class="choice"><input type="radio" name="expose" value="public" {{if not .VPN}}checked{{end}}>
+        <span class="tile" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></span>
+        <span class="stack tight"><strong>Public</strong><small class="muted">tunnel Cloudflare</small></span></label>
+      <label class="choice"><input type="radio" name="expose" value="vpn" {{if .VPN}}checked{{end}}>
+        <span class="tile" style="--tint: #FEF3E2; --ink: #9A4A07"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg></span>
+        <span class="stack tight"><strong>VPN</strong><small class="muted">appareils choisis</small></span></label>
+    </div>
+    <fieldset class="devices" data-vpn-only {{if not .VPN}}hidden{{end}}>
+      <legend>Appareils autorisés</legend>
+      <div class="pills">{{range .Peers}}<label class="pill"><input type="checkbox" name="dev" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>
+    </fieldset>
+    <label class="toggle">
+      <span class="line"><span class="tile" style="--tint: #E9F8EF; --ink: #15803D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg></span>
+      <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">En plus, public ou VPN : compte et 2FA exigés.</small></span></span>
+      <input type="checkbox" name="sso" {{if .SSO}}checked{{end}}></label>
+  </section>
+
+  <section class="card stack gap">
+    <div class="line between"><h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>Conteneurs</h2>{{if .Repo}}<span class="small muted">images du dépôt {{.Repo}}</span>{{end}}</div>
+    {{$multi := .Multi}}
+    {{range .Containers}}{{$c := .Name}}
+    <div class="subcard stack gap">
+      <div class="line between">
+        <span class="line"><strong class="mono">{{.Name}}</strong>{{if .Info}}<small class="mono muted">{{.Info}}</small>{{end}}</span>
+        {{if $multi}}<label class="line small"><input type="radio" name="entry" value="{{.Name}}" {{if .Entry}}checked{{end}}>Reçoit le trafic</label>{{end}}
+      </div>
+      <div class="grid3">
+        <label class="field"><span>Image</span><select name="img_{{.Name}}" class="mono">{{range .Images}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+        <label class="field"><span>Mémoire max</span><select name="mem_{{.Name}}">{{range .Memory}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      </div>
+      {{if .Deps}}<div class="line wrap small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
+      <div class="stack tight">
+        <span class="small strong">Données</span>
+        {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{end}}
+        <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Nouveau dossier de données"><small class="muted">→ {{.DataHost}}/…, gardé entre deux versions</small></span>
+      </div>
+      <div class="stack tight">
+        <span class="small strong">Secrets</span>
+        {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
+        {{else}}<small class="muted">Aucun secret rangé sous {{$.Name}}/. Pour en créer un : <code>secrets edit {{$.Name}}/env</code> (lignes NOM=valeur), puis rebuild.</small>{{end}}
+      </div>
+    </div>
+    {{end}}
+  </section>
+
+  <section class="card stack">
+    <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg>Options</h2>
+    <label class="toggle"><span class="stack tight"><strong>Accès à internet</strong><small class="muted">Pour appeler une API externe. Le réseau local reste fermé.</small></span><input type="checkbox" name="internet" {{if .Internet}}checked{{end}}></label>
+    <div class="toggle-group">
+      <label class="toggle"><span class="stack tight"><strong>Limite de débit</strong><small class="muted">Par adresse IP, sur les chemins listés (vide : tout le site).</small></span><input type="checkbox" name="rl" {{if .RL}}checked{{end}}></label>
+      <input name="rlpaths" value="{{.RLPaths}}" class="mono" placeholder="/api /generate" aria-label="Chemins limités, séparés par des espaces">
+    </div>
+    <label class="toggle"><span class="stack tight"><strong>Page de santé</strong><small class="muted">Chemin sondé pour savoir si le site répond.</small></span><input name="probe" value="{{if .Probe}}{{.Probe}}{{else}}/{{end}}" class="mono input-sm"></label>
+  </section>
+
+  {{if .Exists}}
+  <section class="card danger stack gap">
+    <div class="line between wrap">
+      <span class="stack tight"><strong class="bad">Supprimer le site</strong><small class="muted">Retire {{.Name}} d'apps.json : conteneurs et adresse disparaissent dans la minute. Ses données restent sur think.</small></span>
+      <details><summary class="btn btn-danger-ghost">Supprimer…</summary>
+        <div class="stack gap confirm">
+          <label class="field"><span>Tape <b class="mono">{{.Name}}</b> pour confirmer</span><input name="confirm" class="mono" form="delete-form" required></label>
+          <button class="btn btn-danger" form="delete-form">Supprimer {{.Name}}</button>
+        </div>
+      </details>
+    </div>
+  </section>
+  {{end}}
+</form>
+{{if .Exists}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML"><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
+
+<aside class="side-col stack gap-lg">
+  {{if .Exists}}
+  <section class="card stack gap">
+    <div class="line between"><h2>Version</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit main</span>{{end}}</div>
+    <label class="field"><span>Images à faire tourner</span>
+      <select name="version" form="site-form" hx-post="{{.PreviewURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" hx-trigger="change">{{range .Versions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    {{if .VersionNote}}<small class="muted">{{.VersionNote}}</small>{{end}}
+    <small class="muted">Revenir à un commit fige le site dessus : les nouvelles images de main attendent qu'il suive main de nouveau.</small>
+  </section>
+  {{end}}
+  {{template "preview" .Preview}}
+</aside>
+</div>
+{{end}}

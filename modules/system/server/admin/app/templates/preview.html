@@ -1,0 +1,55 @@
+{{define "preview"}}
+<section id="preview" class="card code">
+  <div class="code-head">
+    <span class="line"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/></svg>profiles/server/apps.json</span>
+    {{if .Dirty}}<span class="mono small warn">+{{.Adds}} −{{.Dels}}</span>{{else}}<span class="mono small okc">à jour</span>{{end}}
+  </div>
+  <div class="code-body">
+    {{range .Lines}}<div class="code-line {{.Kind}}"><span class="mark">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}
+  </div>
+  <div class="code-foot stack gap">
+    {{if .Errors}}<ul class="errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>{{end}}
+    {{if .Dirty}}
+      <label class="field dark"><span>Message du commit</span><input name="msg" form="site-form" value="{{.Message}}" class="mono" maxlength="100"></label>
+      <div class="grid2">
+        <a class="btn btn-dark" href="">Annuler</a>
+        <button type="button" class="btn btn-primary" hx-post="{{.ApplyURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" {{if .Errors}}disabled{{end}}>{{if .New}}Mettre en ligne{{else}}Appliquer{{end}}</button>
+      </div>
+      <small>Vérifié sur think, puis commité sur main par apps.yml : think l'applique seul dans la minute.</small>
+    {{else if not .Errors}}
+      <small>Modifie un réglage : le fichier suit, ligne par ligne.</small>
+    {{end}}
+  </div>
+</section>
+{{end}}
+
+{{define "job"}}
+<section id="preview" class="card code" {{if not .Done}}hx-get="/jobs/{{.ID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+  <div class="code-head">
+    <span class="line"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M3 12h6M15 12h6"/></svg>{{if .Delete}}Suppression de {{.App}}{{else}}Application{{end}}</span>
+    {{if .Failed}}<span class="mono small bad">échec</span>{{else if .Done}}<span class="mono small okc">terminé</span>{{else}}<span class="mono small accent">en cours</span>{{end}}
+  </div>
+  <div class="code-foot stack gap">
+    <span class="mono small dim">{{.Message}}</span>
+    <ol class="steps">
+      {{range .Steps}}
+      <li class="step {{.State}}">
+        <span class="dot">{{if eq .State "done"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg>{{else if eq .State "failed"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>{{end}}</span>
+        <span class="stack tight">
+          <strong>{{.Label}}</strong>
+          <small>{{.Sub}}</small>
+          {{if .Detail}}<span class="detail">{{.Detail}}</span>{{end}}
+          {{if .Link}}<a class="small" href="{{.Link}}">voir sur GitHub</a>{{end}}
+        </span>
+      </li>
+      {{end}}
+    </ol>
+    {{if .Done}}
+      {{if .Failed}}<a class="btn btn-dark" href="">Revenir au formulaire</a>
+      {{else if .Delete}}<a class="btn btn-primary" href="/sites">Retour aux sites</a>
+      {{else}}<div class="grid2"><a class="btn btn-dark" href="/sites">Retour aux sites</a><a class="btn btn-primary" href="https://{{.Domain}}">Ouvrir le site</a></div>
+      <small>Annoncé aussi sur Discord.</small>{{end}}
+    {{end}}
+  </div>
+</section>
+{{end}}

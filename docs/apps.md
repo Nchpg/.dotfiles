@@ -1,40 +1,58 @@
 # Apps servies par think
 
-Un push sur `main` d'une app la met en ligne quelques minutes plus tard, sans
-rien toucher à la main. Ce document dit comment ça marche, comment ajouter une
-app et quoi faire quand ça casse.
+Un push sur `main` d'une app la met en ligne quelques minutes plus tard, et un
+réglage changé dans le dashboard (`admin.vpn.nathanchampagne.com`) part seul
+lui aussi. Ce document dit comment ça marche, comment ajouter une app et quoi
+faire quand ça casse.
 
-## Le chemin d'un push
+## Les pièces
+
+| Où | Pièce | Rôle |
+|---|---|---|
+| dépôt d'app | `.github/workflows/images.yml` | appelle le build partagé à chaque push |
+| ici | `app-image.yml` | construit, contrôle (non-root, un port), publie `:main` et `:sha-<commit>` |
+| ici | `apps.yml` | **seul** à écrire les sites sur `main` : action `pin` (nouveau digest) ou `edit` (une entrée d'`apps.json`) |
+| ici | `profiles/server/apps.json` | les sites : adresse, accès, images suivies, données, secrets |
+| ici | `profiles/server/apps.lock.json` | la version exacte de chaque image suivie (digest, port, commit) |
+| think | `apps-watch` (chaque minute) | voit une nouvelle image et demande à `apps.yml` de l'épingler |
+| think | `apps-deploy` (chaque minute) | applique seul un commit qui ne touche qu'`apps.json` et le lock |
+| think | `apps-announce` | après chaque changement de site, Discord quand il répond |
+| think | `admin` | le dashboard : modifie un site par `apps.yml`, après avoir évalué la config |
+
+## Les trois chemins
+
+**Une nouvelle version d'un site**, environ 3 à 5 minutes après le push :
 
 ```
-push sur l'app
-  └─ CI de l'app : app-image.yml (partagé, dans ce dépôt)
-       └─ build, contrôle, push ghcr.io/nchpg/<image>:main et :sha-<commit>
-            └─ think (apps-watch, toutes les minutes) voit le tag bouger
-                 └─ apps-bump.yml ici (runner GitHub) : met à jour profiles/server/apps.lock.json,
-                    commit « chore(apps): bump … » sur main
-                      └─ think (apps-deploy) : commit qui ne touche que le lock → déployé seul
-                           └─ Discord : « 🚀 rlkart mis à jour … répond (200) »
+push sur l'app ─► app-image.yml publie :main et :sha-<commit>
+  ─► apps-watch le voit ─► apps.yml « pin » : commit du lock (chore(apps): bump …)
+  ─► apps-deploy l'applique ─► Discord : « 🚀 rlkart mis à jour … répond (200) »
 ```
 
 think attend que toutes les images d'une app issues d'un même dépôt portent le
 même commit (label `org.opencontainers.image.revision`) avant de demander leur
-épinglage, en un seul commit. Le frontend et le backend de RLkart ne tournent
-donc jamais à des versions différentes. Rien n'est à poser dans les dépôts des
-apps : le seul jeton est sur think.
+épinglage, en un seul commit : le frontend et le backend de RLkart ne tournent
+jamais à des versions différentes.
 
-`apps.nix` ne donne que l'image et sa branche (`portfolio:main`, lu `ghcr.io/nchpg/portfolio:main`).
-Le digest et le port exposé (`EXPOSE` du Dockerfile) sont dans `apps.lock.json` :
-c'est ce digest que podman tire. Un tag
-qui bouge dans le registre ne change rien en production tant que le lock n'a pas
-bougé.
+**Un réglage changé dans le dashboard** :
+
+```
+« Appliquer » ─► think évalue la config avec le nouvel apps.json (refus si erreur)
+  ─► apps.yml « edit » : commit d'apps.json (et du lock) ─► apps-deploy l'applique
+  ─► la page passe au vert quand le site répond ; Discord : « ⚙️ réglages appliqués »
+```
+
+**Tout le reste de la config** : `apps-deploy` ne l'applique pas, Discord dit
+« 📦 `rebuild` à la main », et c'est ton `rebuild` qui l'applique.
+
+Le digest est ce que podman tire : un tag qui bouge dans le registre ne change
+rien en production tant que le lock n'a pas bougé.
 
 ## Ajouter une app
 
-1. Créer le dépôt depuis le template `Nchpg/app-template` (bouton « Use this
-   template », ou `gh repo create Nchpg/monapp --template Nchpg/app-template --private --clone`).
-   Il contient déjà le workflow ci-dessous, un Dockerfile d'exemple qui respecte
-   les règles, et sa propre marche à suivre. Le workflow, pour un dépôt existant :
+1. Créer le dépôt depuis le template `Nchpg/app-template` (« Use this template »,
+   ou `gh repo create Nchpg/monapp --template Nchpg/app-template --private --clone`).
+   Pour un dépôt existant, copier son `.github/workflows/images.yml` :
 
    ```yaml
    name: images
@@ -56,53 +74,60 @@ bougé.
    ce n'est pas la racine), par exemple
    `[{"name": "monapp-front", "dockerfile": "front/Dockerfile"}, {"name": "monapp-api", "dockerfile": "api/Dockerfile"}]`.
 
-2. Pousser une première fois, pour que l'image existe sur ghcr.io. Le workflow
-   partagé refuse de publier une image qui tourne en root ou écoute sous le port
-   1024 (voir « Règles des images »). Le Dockerfile déclare aussi son port
-   (`EXPOSE 3000`). Un package privé ne demande rien de plus :
-   le login `appImages.login` (secret `ghcr/token`) vaut pour toutes les images de
-   `ghcr.io/nchpg`.
+2. Pousser une première fois, pour que l'image existe sur ghcr.io (voir « Règles
+   des images »).
 
-3. Ici, déclarer l'app dans `profiles/server/apps.nix` :
+3. Dans le dashboard, **Ajouter un site** : choisir le dépôt (la liste vient des
+   packages ghcr, privés compris), l'adresse et l'accès, puis **Mettre en ligne**.
+   Le dashboard écrit l'entrée et le digest, think la met en ligne seul.
 
-   ```nix
-   monapp.container.image = "monapp:main";
-   ```
-
-   C'est tout : l'app est publique sur `monapp.nathanchampagne.com`, sondée sur `/`,
-   et son port vient de l'image. Pour s'écarter de ces défauts : `subdomain = "autre"`
-   (`"@"` pour le domaine nu), `expose`, `probe = null`, ou `port` sur le conteneur
-   si l'image n'a pas d'`EXPOSE`.
-
-   Puis `dots update apps`, qui ajoute l'image au lock avec son digest et son port
-   (image privée : `GHCR_TOKEN=… dots update apps`).
-   Commit, push. Les pushes suivants de l'app passent ensuite tout seuls.
+   Sans le dashboard : ajouter l'entrée à `apps.json`, puis `dots update apps`
+   (qui met l'image dans le lock), commit, push, `rebuild`.
 
 Aucun DNS à créer : le joker `*.nathanchampagne.com` mène au tunnel Cloudflare,
-et seule la route du tunnel (posée par le module) décide si le nom est servi. Un nom sous `.vpn.` n'a besoin de
-rien : le joker `*.vpn.nathanchampagne.com` pointe déjà sur le tunnel WireGuard.
+et seule la route du tunnel (posée par le module) décide si le nom est servi. Un
+nom sous `.vpn.` n'a besoin de rien : `*.vpn.nathanchampagne.com` pointe déjà sur
+le tunnel WireGuard.
 
-## Qui atteint l'app : `expose`
+## Le format d'apps.json
 
-| `expose` | Accès | Ce que le module pose |
-|---|---|---|
-| `public` (défaut) | tout internet | route dans le tunnel Cloudflare |
-| `vpn` | les appareils listés dans `devices`, et think | pas de route ; nom `<subdomain>.vpn.nathanchampagne.com` ; nginx refuse les autres sources |
-| `sso` | internet, après connexion Authelia | route, `auth_request` sur le vhost, règle Authelia (`sso.policy`, `sso.subject`) |
-
-En `vpn`, `devices` est obligatoire et nomme les peers de `profiles/server/vpn.nix` :
-
-```nix
-monapp = {
-  expose = "vpn";
-  devices = mesAppareils;          # ou [ "gram" "xiaomi_17t" ]
-  containers.web = { … };
-};
+```json
+{
+  "rlkart": {
+    "entrypoint": "frontend",
+    "containers": {
+      "frontend": { "image": "rlkart-frontend:main", "dependsOn": ["backend"] },
+      "backend": { "image": "rlkart-backend:main" }
+    },
+    "rateLimit": ["/generate", "/simulate"]
+  }
+}
 ```
 
-Un nom inconnu fait échouer l'évaluation, et renommer un peer sans mettre à
-jour la liste aussi : pas de 403 silencieux. Une sonde (`probe = { }`) choisit
-toute seule `http_authelia` pour une app en `sso`.
+| Clé | Défaut | Sens |
+|---|---|---|
+| (nom) | | identifiant interne : unités `podman-<nom>-<conteneur>`, réseau, port, données. 12 caractères au plus ; le changer recrée le site |
+| `subdomain` | le nom | adresse sous le domaine (`"@"` : le domaine lui-même) |
+| `expose` | `"public"` | `"vpn"` : seulement les appareils de `devices` |
+| `devices` | | noms des peers de `profiles/server/vpn.nix`, en `vpn` |
+| `sso` | `false` | le portail Authelia en plus, public ou VPN |
+| `internetAccess` | `false` | connexions sortantes vers internet (jamais vers le LAN) |
+| `probe` | `"/"` | chemin sondé |
+| `entrypoint` | | conteneur servi par nginx, s'il y en a plusieurs |
+| `rateLimit` | | chemins limités par IP (`[]` : tout le site) |
+| `containers.<c>.image` | | `nom:tag`, sous `ghcr.io/nchpg` ; le tag est `main` (suit la branche) ou `sha-<commit>` (figé) |
+| `containers.<c>.memory` | | plafond, `256m`, `1g`… |
+| `containers.<c>.dependsOn` | | conteneurs du même site à démarrer avant |
+| `containers.<c>.data` | | `[{"path": "/data"}]` : dossier gardé entre deux versions, dans `/var/lib/apps/<site>/<conteneur>/data`, donné à l'utilisateur de l'image. `"on"` choisit l'emplacement : `/var/lib/<site>…` ou un volume podman `<site>-…` |
+| `containers.<c>.secrets` | | secrets sops rangés sous `<site>/` (lignes `NOM=valeur`), donnés en variables d'environnement |
+
+Une clé inconnue fait échouer l'évaluation. Ce que le format ne couvre pas
+(healthcheck, commande, capacités) se complète en Nix dans `apps.nix`, sur la
+même app : `systemSettings.apps.stage.containers.web.healthcheck.command = …`.
+Le Nix complète, il ne remplace jamais ce que dit le JSON.
+
+Un secret se crée avec `secrets edit <site>/env`, puis `secrets sync` et
+`rebuild` (il change `flake.lock`). Il apparaît alors dans le dashboard.
 
 ## Règles des images
 
@@ -115,103 +140,95 @@ toute seule `http_authelia` pour une app en `sso`.
 
 Sur think, chaque conteneur tourne en plus sans aucune capacité
 (`--cap-drop=ALL`), sans nouveaux privilèges, dans un réseau à lui et sans accès
-au LAN. Une image tierce qui exige root passe par `allow-root: true` dans le
-workflow, ou par `user` et `capabilities` sur le conteneur.
+au LAN. Un `HEALTHCHECK` dans le Dockerfile est repris par podman tel quel.
 
 ## Plusieurs conteneurs
 
-`container = { … }` est le raccourci d'une app à un conteneur. Au-delà, chaque
-conteneur porte un nom choisi (`containers.front`, `containers.api`…), qui nomme
-son unité `podman-<app>-<nom>`. Chaque app a son réseau ; les conteneurs s'y
-joignent par leur nom (`http://api:8000`). `entrypoint` désigne celui que nginx sert, `dependsOn`
-fixe l'ordre de démarrage, et avec un `healthcheck` une unité n'est prête que
-quand le conteneur répond. Une base de données a besoin d'un `healthcheck` pour
-que l'API attende vraiment qu'elle soit prête.
-
-Les images tierces (`docker.io/library/postgres:17`) passent aussi par le lock,
-mais aucune CI ne les pousse : elles avancent par `dots update apps` et par la
-PR du lundi, donc toujours avec relecture. Garder la version majeure dans le tag
-(`postgres:17`, jamais `latest`) : changer de majeure demande une migration des
-données que rien ne fait à ta place.
-
-Les migrations de schéma restent du ressort de l'app, et un retour en arrière
-ne restaure pas les données. Les volumes podman ne sont sauvegardés par rien.
+Chaque site a son réseau ; ses conteneurs s'y joignent par leur nom
+(`http://backend:8000`). `entrypoint` désigne celui que nginx sert, `dependsOn`
+fixe l'ordre de démarrage. Les migrations de schéma restent du ressort de l'app,
+et un retour en arrière ne restaure pas les données.
 
 ## Ce qui se déploie seul, et ce qui attend
 
-think (`appImages.deploy`) regarde `main` toutes les minutes. Il déploie seul un
-nouveau commit si, et seulement si :
+`apps-deploy` regarde `main` toutes les minutes. Il applique seul un nouveau
+commit si, et seulement si :
 
 - les commits depuis la version qui tourne ne touchent que
-  `profiles/server/apps.lock.json`, c'est-à-dire des mises à jour de sites ;
+  `profiles/server/apps.json` et `profiles/server/apps.lock.json` ;
 - la version qui tourne est un commit poussé sur `main` (pas de changements
   locaux non commités, pas de commits locaux pas encore poussés).
 
 Dans tous les autres cas, il ne touche à rien et poste une seule fois sur
-Discord ce qui attend (« 📦 nouveaux commits … `rebuild` à la main », ou
-« ⏸️ think tourne une version locale … »). Une modif de config ne part donc
-que par ton `rebuild`, avec son retour habituel, et une version locale n'est
-jamais écrasée par une mise à jour de site.
+Discord ce qui attend. Une modif de config ne part donc que par ton `rebuild`,
+et une version locale n'est jamais écrasée par un changement de site. Il tient
+`/var/lib/apps-deploy/status.json` à jour (décision, versions, état de
+`~/.dotfiles`) : c'est ce que montre la carte « État de think » du dashboard.
 
-Ce qui compte, c'est la version qui tourne, pas l'état du dossier : des
-changements en cours dans `~/.dotfiles`, jamais rebuildés, n'empêchent pas un
-déploiement. Après chaque déploiement, think avance aussi ce dossier jusqu'au
-commit déployé, en avance rapide et au nom de son propriétaire. Seul le lock
-change, et tes changements non commités restent tels quels, ni ajoutés ni
-commités. Si c'est impossible (commits locaux pas poussés, lock modifié à la
-main, autre branche), les sites sont quand même déployés et Discord le signale.
+Après chaque déploiement, think avance aussi `~/.dotfiles` jusqu'au commit
+déployé (avance rapide, à ton nom, changements en cours conservés). Si c'est
+impossible, les sites sont quand même déployés et Discord le signale. `rebuild`
+vérifie de son côté que le dépôt n'est pas en retard sur GitHub, et propose un
+`git pull --rebase --autostash`.
 
-`rebuild` vérifie de son côté que ton dépôt n'est pas en retard sur GitHub : des
-bumps de sites absents en local reviendraient en arrière. Il propose alors un
-`git pull --rebase --autostash` avant de construire.
+Un déploiement qui échoue (build refusé) laisse la version précédente, signale
+l'unité `apps-deploy` sur Discord et n'est pas retenté pour ce commit.
 
-Un déploiement automatique qui échoue signale l'unité `apps-deploy` sur Discord
-(`journalctl -u apps-deploy`) et n'est pas retenté pour ce commit : think reste
-sur la version précédente jusqu'au commit suivant ou au prochain `rebuild`.
-
-En amont, `apps-watch` compare les images au lock **sur GitHub** : une image
-déjà épinglée, mais pas encore déployée, ne redemande rien. Il prévient sur
-Discord, une fois par problème, quand :
-
-- l'épinglage demandé n'apparaît pas dans le lock au bout d'un quart d'heure
-  (`apps-bump` en échec). Il redemande alors tous les quarts d'heure ;
-- GitHub refuse la demande (jeton expiré) ;
-- une image reste illisible, ou les images d'une app viennent de commits
-  différents (une CI ratée), pendant plus d'une demi-heure.
+En amont, `apps-watch` compare les images au lock **sur GitHub**. Il prévient
+sur Discord, une fois par problème, quand l'épinglage n'apparaît pas au bout
+d'un quart d'heure (`apps.yml` en échec : il redemande tous les quarts d'heure),
+quand GitHub refuse la demande (jeton expiré), ou quand une image reste illisible
+ou incomplète plus d'une demi-heure.
 
 ## Revenir en arrière
 
-`git revert` du commit `chore(apps): bump …`, puis pousser : ce commit ne touche
-que le lock, think remet l'ancien digest tout seul. Pour le reste du système,
-revert du commit fautif puis `rebuild`.
+Dans le dashboard, menu **Version** du site : choisir un commit. Les images
+passent de `:main` à `:sha-<commit>` (le même pour toutes celles du site), le
+site est **figé** et think l'applique seul. Un tag `sha-…` ne bouge jamais :
+les nouvelles images de `main` attendent jusqu'à ce que le site suive `main` de
+nouveau. Seules les images construites par le template ont ces tags.
+
+Sans le dashboard : même changement dans `apps.json` (`"image": "rlkart-frontend:sha-<commit>"`),
+puis `dots update apps` pour le lock. Un `git revert` d'un commit `bump` ne tient
+pas : `apps-watch` redemanderait aussitôt la dernière image de `main`.
+
+Pour le reste du système : revert du commit fautif puis `rebuild`.
+
+## Le dashboard
+
+`admin.vpn.nathanchampagne.com`, joignable depuis les appareils de
+`profiles/server/admin.nix` **et** derrière Authelia en 2FA. Il ne tourne pas en
+root et n'a aucun droit d'écriture sur un dépôt : chaque modification passe par
+`apps.yml`, qui revérifie l'entrée, refuse si le site a changé depuis
+l'ouverture de la page (empreinte de l'entrée), puis commite. Avant d'envoyer,
+il évalue toute la config de think avec le nouvel `apps.json` : une adresse
+prise ou un appareil inconnu ne part jamais sur `main`. Il suit ensuite le
+commit, l'application par think et la réponse du site.
 
 ## Jetons
 
 - `github/dispatch_token`, secret sops de think : PAT *fine-grained*, dépôt
   `Nchpg/.dotfiles` seul, permission **Actions: Read and write** et rien
-  d'autre. think s'en sert pour déclencher `apps-bump.yml`, qui commite avec son
-  propre jeton. Note sa date d'expiration : un refus de GitHub déclenche une
-  alerte Discord, puis un nouvel essai tous les quarts d'heure.
+  d'autre. think s'en sert pour lancer `apps.yml`, qui commite avec son propre
+  jeton. Note sa date d'expiration : un refus de GitHub déclenche une alerte
+  Discord.
 - `ghcr/token`, secret sops de think : PAT classique `read:packages`, pour tirer
-  et surveiller les images privées.
+  et surveiller les images privées, et lister les dépôts dans le dashboard.
 - `GHCR_READ_TOKEN`, facultatif, dans ce dépôt : PAT classique `read:packages`,
   pour que la PR du lundi vérifie aussi les images privées. Localement :
   `GHCR_TOKEN=… dots update apps`.
 
-Si think ne peut pas déclencher l'épinglage, `dots update apps` ou la PR du
-lundi rattrapent : ils lisent les mêmes tags.
-
 ## Annonces
 
-À chaque déploiement qui change l'image d'une app, `apps-announce` attend
-qu'elle réponde (2 min au plus) puis poste sur le webhook Discord des alertes :
-lien, commit, code HTTP. Une app qui ne répond pas est annoncée avec ⚠️.
+Après chaque déploiement, `apps-announce` poste sur le webhook Discord des
+alertes, une ligne par site changé, une fois qu'il répond (2 min au plus) :
+🆕 en ligne, 🚀 nouvelle image, ⚙️ réglages appliqués, 🗑️ supprimé, ⚠️ s'il ne
+répond pas. Un site qui devient public, ou qui perd le portail, le dit en clair
+(🔓).
 
 ## App privée
 
 Une app dont le dépôt est privé (stage, MyETF) se déclare comme les autres. Son
 package ghcr reste privé : la CI le crée privé et refuse de publier s'il est passé
 en public. Le lock public n'en montre que le nom et les digests ; l'image ne se
-télécharge qu'avec le jeton `ghcr/token`, que think utilise pour la tirer et la
-surveiller. Domaine, appareils admis et secrets (sops) ne révèlent rien de plus
-que pour les autres apps.
+télécharge qu'avec le jeton `ghcr/token`.

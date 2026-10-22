@@ -1,0 +1,30 @@
+{{define "new"}}{{template "top" .}}
+<header class="topbar">
+  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><a href="/sites">Sites</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Ajouter un site</strong></nav>
+  <a class="btn" href="/sites">Annuler</a>
+</header>
+<main class="page">
+  <div class="intro">
+    <h1>Ajouter un site</h1>
+    <p>Un dépôt qui publie son image sur ghcr.io/nchpg, une adresse. Le site entre dans apps.json et think le met en ligne seul.</p>
+  </div>
+  {{if .Error}}<div class="alert alert-red"><p>{{.Error}}</p></div>{{end}}
+  <section class="card stack gap">
+    <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9c0 6-12 3-12 9"/></svg>Dépôt</h2>
+    <label class="field"><span>Dépôts qui publient une image</span>
+      <select name="repo" hx-get="/sites/new/form" hx-target="#config" hx-trigger="change" class="mono">
+        <option value="">Choisir un dépôt…</option>
+        {{range .Repos}}<option value="{{.FullName}}">{{.FullName}}{{if .Private}} (privé){{end}} — {{join .Images ", "}}{{if .Live}} (déjà en ligne : {{.Live}}){{end}}</option>{{end}}
+      </select></label>
+    <small class="muted">Absent de la liste ? Il n'a pas encore d'image : copie <code>.github/workflows/images.yml</code> du <a href="https://github.com/Nchpg/app-template">template</a> et un Dockerfile (non-root, un seul port), pousse sur main, puis recharge cette page.</small>
+  </section>
+  <div id="config"></div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "newform"}}
+{{if .Error}}<div class="alert alert-amber"><p>{{.Error}}</p></div>{{else}}
+{{range .Notes}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+{{template "form" .F}}
+{{end}}
+{{end}}

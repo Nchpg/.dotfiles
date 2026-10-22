@@ -13,6 +13,7 @@ in
     ./nextcloud.nix
     ./vaultwarden.nix
     ./apps.nix
+    ./admin.nix
   ];
 
   config = {
