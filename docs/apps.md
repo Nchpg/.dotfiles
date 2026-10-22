@@ -169,6 +169,16 @@ Un déploiement automatique qui échoue signale l'unité `apps-deploy` sur Disco
 (`journalctl -u apps-deploy`) et n'est pas retenté pour ce commit : think reste
 sur la version précédente jusqu'au commit suivant ou au prochain `rebuild`.
 
+En amont, `apps-watch` compare les images au lock **sur GitHub** : une image
+déjà épinglée, mais pas encore déployée, ne redemande rien. Il prévient sur
+Discord, une fois par problème, quand :
+
+- l'épinglage demandé n'apparaît pas dans le lock au bout d'un quart d'heure
+  (`apps-bump` en échec). Il redemande alors tous les quarts d'heure ;
+- GitHub refuse la demande (jeton expiré) ;
+- une image reste illisible, ou les images d'une app viennent de commits
+  différents (une CI ratée), pendant plus d'une demi-heure.
+
 ## Revenir en arrière
 
 `git revert` du commit `chore(apps): bump …`, puis pousser : ce commit ne touche
@@ -181,7 +191,7 @@ revert du commit fautif puis `rebuild`.
   `Nchpg/.dotfiles` seul, permission **Actions: Read and write** et rien
   d'autre. think s'en sert pour déclencher `apps-bump.yml`, qui commite avec son
   propre jeton. Note sa date d'expiration : un refus de GitHub déclenche une
-  alerte Discord (`apps-watch` en échec), une seule fois par nouvelle image.
+  alerte Discord, puis un nouvel essai tous les quarts d'heure.
 - `ghcr/token`, secret sops de think : PAT classique `read:packages`, pour tirer
   et surveiller les images privées.
 - `GHCR_READ_TOKEN`, facultatif, dans ce dépôt : PAT classique `read:packages`,

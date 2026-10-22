@@ -11,6 +11,10 @@ let
   cfg = config.systemSettings.appImages;
   watch = cfg.watch;
   images = cfg.helpers;
+  notify = config.systemSettings.notify.discord;
+
+  # Le même que deploy.nix et apps-bump.yml.
+  lockPath = "profiles/server/apps.lock.json";
 
   owner = lib.toLower (lib.elemAt (lib.splitString "/" (toString cfg.registry)) 1);
 
@@ -35,10 +39,13 @@ let
       gnused
       gnugrep
       coreutils
+      git
     ];
     text = builtins.readFile ../../../../scripts/lib/registry.sh + ''
       apps=${watchedFile}
+      repo=${lib.escapeShellArg watch.repository}
       state="$STATE_DIRECTORY"
+      now=$(date +%s)
 
       umask 077
       REG_WORK=$(mktemp -d)
@@ -46,38 +53,94 @@ let
 
       GHCR_TOKEN=$(cat "$CREDENTIALS_DIRECTORY/ghcr" 2>/dev/null || true)
       printf 'header = "Authorization: Bearer %s"\n' "$(cat "$CREDENTIALS_DIRECTORY/dispatch")" > "$REG_WORK/github"
+      # URL via un fichier de config curl, pas argv (lisible par tous).
+      printf 'url = "%s"\n' "$(cat "$CREDENTIALS_DIRECTORY/webhook")" > "$REG_WORK/webhook"
 
-      status=0
+      # Un message par app tant que le problème dure : `$app.alerted` tombe avec lui (unstuck).
+      warn() {
+        [ -e "$state/$1.alerted" ] && return 0
+        if jq -n --arg c "⚠️ **$1** : $2" '{content: $c, flags: 4}' \
+          | curl --silent --show-error --max-time 20 --config "$REG_WORK/webhook" \
+              --header 'Content-Type: application/json' --data @- > /dev/null; then
+          touch "$state/$1.alerted"
+        else
+          echo "envoi Discord en échec" >&2
+        fi
+      }
+
+      # Bloqué : silence la première demi-heure (une CI qui publie, un registre qui hoquette), puis alerte.
+      stuck() {
+        [ -f "$state/$1.stuck" ] || echo "$now" > "$state/$1.stuck"
+        since=$(cat "$state/$1.stuck")
+        echo "$1 : $2" >&2
+        if [ $((now - since)) -ge 1800 ]; then
+          warn "$1" "$2, depuis $(((now - since) / 60)) min : le site n'est pas mis à jour."
+        fi
+      }
+
+      unstuck() {
+        rm -f "$state/$1" "$state/$1.stuck" "$state/$1.alerted"
+      }
+
+      # Lock de la tête de ${watch.repository}, lu par son commit : pas de cache périmé.
+      github_lock() {
+        [ -s "$REG_WORK/lock" ] && return 0
+        rev=$(git ls-remote "https://github.com/$repo.git" refs/heads/main | cut -f1)
+        [ -n "$rev" ] || return 1
+        curl -fsS --max-time 20 -o "$REG_WORK/lock" \
+          "https://raw.githubusercontent.com/$repo/$rev/${lockPath}"
+      }
+
       for app in $(jq -r 'keys[]' "$apps"); do
         # Une requête HEAD par image tant que rien ne bouge.
         changed=0
-        readable=1
         while read -r ref deployed; do
           if ! current=$(reg_digest "$ref" 2> /dev/null); then
-            echo "$app : $ref illisible, nouvel essai au prochain passage" >&2
-            readable=0
-            break
+            stuck "$app" "image \`$ref\` illisible sur le registre (jeton \`ghcr/token\` ?)"
+            continue 2
           fi
           [ "$current" = "$deployed" ] || changed=1
         done < <(jq -r --arg a "$app" '.[$a][] | "\(.ref) \(.digest)"' "$apps")
-        [ "$readable" = 1 ] && [ "$changed" = 1 ] || continue
+        if [ "$changed" = 0 ]; then
+          unstuck "$app"
+          continue
+        fi
 
         found="[]"
         for ref in $(jq -r --arg a "$app" '.[$a][].ref' "$apps"); do
-          info=$(reg_inspect "$ref") || continue 2
+          if ! info=$(reg_inspect "$ref"); then
+            stuck "$app" "image \`$ref\` illisible sur le registre"
+            continue 2
+          fi
           found=$(jq -c --arg ref "$ref" --argjson i "$info" '. + [$i + {$ref}]' <<< "$found")
         done
 
         # Les images d'un même dépôt partent ensemble : on attend qu'elles portent toutes le même commit.
         if ! jq -e 'group_by(.source) | all(map(.revision) | unique | length == 1)' <<< "$found" > /dev/null; then
-          echo "$app : images de commits différents, la CI n'a pas fini de les publier"
+          stuck "$app" "ses images viennent de commits différents (une CI a échoué ?)"
           continue
         fi
 
-        # Une seule demande par jeu de digests, réussie ou non : pas de rafale si GitHub refuse.
+        # Déjà épinglé sur GitHub : le déploiement est l'affaire d'apps-deploy.
+        if ! github_lock; then
+          stuck "$app" "lock illisible sur GitHub"
+          continue
+        fi
+        if jq -e --argjson f "$found" '. as $l | $f | all(.[]; $l[.ref].digest == .digest)' "$REG_WORK/lock" > /dev/null; then
+          unstuck "$app"
+          continue
+        fi
+
+        # Une demande par jeu de digests et par quart d'heure : apps-bump a le temps de passer, et
+        # un appel perdu (workflow en échec, GitHub indisponible) est refait.
         key=$(jq -r 'map(.digest) | sort | join(",")' <<< "$found" | sha256sum | cut -c1-16)
-        [ "$(cat "$state/$app" 2> /dev/null || true)" = "$key" ] && continue
-        echo "$key" > "$state/$app"
+        last_key="" last_at=0
+        [ -f "$state/$app" ] && read -r last_key last_at < "$state/$app"
+        if [ "$last_key" = "$key" ]; then
+          [ $((now - ''${last_at:-0})) -lt 900 ] && continue
+          warn "$app" "épinglage demandé il y a plus d'un quart d'heure, toujours absent du lock (\`apps-bump\` en échec ?). Nouvel essai tous les quarts d'heure."
+        fi
+        echo "$key $now" > "$state/$app"
 
         # Révision gardée seulement si elle vient d'un dépôt à soi (sinon : label hérité de l'image de base).
         payload=$(jq -c --arg owner "github.com/${owner}/" 'map({ref, digest, port,
@@ -86,15 +149,12 @@ let
 
         if curl -fsS --max-time 20 --config "$REG_WORK/github" -X POST \
              -H "Accept: application/vnd.github+json" --data "$body" \
-             "https://api.github.com/repos/${watch.repository}/actions/workflows/apps-bump.yml/dispatches"; then
+             "https://api.github.com/repos/$repo/actions/workflows/apps-bump.yml/dispatches"; then
           echo "$app : nouvelle version, épinglage demandé"
         else
-          echo "$app : épinglage refusé par GitHub (jeton ${watch.tokenKey} expiré ?) ; rattrapage : dots update apps" >&2
-          status=1
+          warn "$app" "épinglage refusé par GitHub (jeton \`${watch.tokenKey}\` expiré ?). Nouvel essai tous les quarts d'heure ; rattrapage à la main : \`dots update apps\`."
         fi
       done
-
-      exit "$status"
     '';
   };
 in
@@ -130,6 +190,10 @@ in
         assertion = cfg.registry != null && cfg.lockFile != null;
         message = "systemSettings.appImages.watch exige `registry` et `lockFile`.";
       }
+      {
+        assertion = notify.enable;
+        message = "systemSettings.appImages.watch prévient sur le webhook de systemSettings.notify.discord : active-le.";
+      }
     ];
 
     sops.secrets.${watch.tokenKey} = { };
@@ -144,6 +208,7 @@ in
         StateDirectory = "apps-watch";
         LoadCredential = [
           "dispatch:${config.sops.secrets.${watch.tokenKey}.path}"
+          "webhook:${config.sops.secrets.${notify.webhookKey}.path}"
         ]
         ++ lib.optional (cfg.login != null) "ghcr:${config.sops.secrets.${cfg.login.passwordKey}.path}";
 
