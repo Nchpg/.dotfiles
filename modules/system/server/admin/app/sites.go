@@ -164,7 +164,11 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 			c.Pending = append(c.Pending, plural(n, "autre commit", "autres commits"))
 		}
 	}
-	if st != nil && st.Checkout != nil {
+	// Ligne calculée par apps-deploy contre un autre main que l'actuel (push dans la dernière minute) :
+	// elle serait fausse, on attend son prochain passage.
+	if st != nil && st.Checkout != nil && st.Head != head {
+		c.Checkout, c.CheckoutInk = "vérification…", "#5D6573"
+	} else if st != nil && st.Checkout != nil {
 		co := st.Checkout
 		var parts []string
 		if co.Branch != "" && co.Branch != s.cfg.Branch {
