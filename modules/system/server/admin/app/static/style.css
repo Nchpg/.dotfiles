@@ -213,3 +213,25 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
   .page, .topbar { padding-left: 16px; padding-right: 16px; }
   .page { padding-top: 20px; }
 }
+
+/* Compteurs du filtre */
+.segmented button { display: inline-flex; align-items: center; gap: 8px; }
+.count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: #E1E4EA; color: var(--muted); font-size: 12px; font-weight: 500; display: inline-grid; place-items: center; }
+.segmented button[aria-pressed="true"] .count { background: var(--accent-soft); color: var(--accent-ink); }
+
+/* Logo GitHub : un tracé rempli, pas un trait. */
+svg.gh, .repo-logo svg, svg.fill { fill: currentColor; stroke: none; }
+
+/* Choix du dépôt */
+.search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 1px solid #E1E4EA; border-radius: 10px; background: #F8F9FB; color: var(--muted); min-width: 220px; }
+.search input { border: 0 !important; height: 36px !important; padding: 0 !important; background: transparent !important; outline: 0; width: 100%; }
+.search:focus-within { outline: 3px solid #C7CCF7; }
+.repos { display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
+.repo { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); cursor: pointer; text-align: left; }
+.repo:hover { border-color: #C9CED6; background: #FBFBFC; }
+.repo[aria-selected="true"] { border: 2px solid var(--accent); background: #F7F8FE; padding: 11px 13px; }
+.repo-logo { width: 38px; height: 38px; border-radius: 10px; background: #10141B; color: #FFFFFF; display: grid; place-items: center; flex-shrink: 0; }
+.repo-logo svg { width: 20px; height: 20px; }
+.repo .small svg { width: 14px; height: 14px; }
+.repo .chev { color: var(--faint); }
+.repo .grow { flex: 1 1 auto; }

@@ -7,9 +7,9 @@
   <div class="line between title-row">
     <h1>Sites</h1>
     <div class="segmented" role="group" aria-label="Filtrer">
-      <button type="button" data-filter="all" aria-pressed="true">Tous · {{.Total}}</button>
-      <button type="button" data-filter="public" aria-pressed="false">Publics · {{.Public}}</button>
-      <button type="button" data-filter="vpn" aria-pressed="false">VPN · {{.VPN}}</button>
+      <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.Total}}</span></button>
+      <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.Public}}</span></button>
+      <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.VPN}}</span></button>
     </div>
   </div>
 

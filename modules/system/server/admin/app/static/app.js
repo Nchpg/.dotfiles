@@ -29,3 +29,15 @@ document.addEventListener("change", (ev) => {
 });
 
 document.addEventListener("DOMContentLoaded", () => refresh(document));
+
+// Choix du dépôt : filtre et sélection visibles (le formulaire arrive par htmx).
+document.addEventListener("input", (ev) => {
+  if (!ev.target.matches || !ev.target.matches("[data-repo-filter]")) return;
+  const q = ev.target.value.trim().toLowerCase();
+  document.querySelectorAll(".repo").forEach((r) => (r.hidden = q !== "" && !r.dataset.name.includes(q)));
+});
+document.addEventListener("click", (ev) => {
+  const repo = ev.target.closest && ev.target.closest(".repo");
+  if (!repo) return;
+  document.querySelectorAll(".repo").forEach((r) => r.setAttribute("aria-selected", String(r === repo)));
+});
