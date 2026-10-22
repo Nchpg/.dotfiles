@@ -29,6 +29,12 @@
         "image": "myetf:main"
       }
     },
+    "devices": [
+      "gram",
+      "windows_gram",
+      "xiaomi_17t"
+    ],
+    "expose": "vpn",
     "internetAccess": true,
     "subdomain": "etf"
   },
