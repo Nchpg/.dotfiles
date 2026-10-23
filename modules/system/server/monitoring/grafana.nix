@@ -145,6 +145,14 @@ in
             proxy_set_header X-WEBAUTH-USER $authelia_user;
             proxy_set_header X-WEBAUTH-NAME $authelia_name;
             proxy_set_header X-WEBAUTH-EMAIL $authelia_email;
+          ''
+          + lib.optionalString admin.enable ''
+            # Intégré au dashboard admin : pas de rebond élastique au bout du défilement (il faisait
+            # réapparaître le bas rogné de l'iframe). Ajouté aux pages HTML, que Grafana sert alors
+            # sans compression pour que nginx puisse les modifier.
+            proxy_set_header Accept-Encoding "";
+            sub_filter '</head>' '<style>html, body, * { overscroll-behavior: none !important; }</style></head>';
+            sub_filter_once on;
           '';
         };
       })
