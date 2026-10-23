@@ -262,7 +262,10 @@ func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, stri
 	return dd, note
 }
 
-// branchOpts : branches qui publient une image (les tags de l'image, hors sha-…).
+// Tags de commit : `sha-<commit>` du template, ou le hash nu publié par d'anciens workflows.
+var reCommitTag = regexp.MustCompile(`^(sha-)?[0-9a-f]{7,40}$`)
+
+// branchOpts : branches qui publient une image (les tags de l'image, hors tags de commit).
 func (s *Server) branchOpts(ctx context.Context, image, current string) []DDOpt {
 	var tags []string
 	if image != "" && s.reg != nil {
@@ -272,7 +275,7 @@ func (s *Server) branchOpts(ctx context.Context, image, current string) []DDOpt 
 	var opts []DDOpt
 	found := false
 	for _, t := range tags {
-		if strings.HasPrefix(t, "sha-") || t == "latest" {
+		if reCommitTag.MatchString(t) || t == "latest" {
 			continue
 		}
 		opts = append(opts, ddOpt(t, t, "image "+untag(image)+":"+t+" publiée", icBranch, colGreen, t == current))
