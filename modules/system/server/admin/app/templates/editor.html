@@ -211,20 +211,21 @@
   {{if and .Exists (not .Child)}}
   <section class="sec sec-danger">
     <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Les données restent sur think.</small></span>
-    <details><summary class="btn btn-danger-ghost">Supprimer…</summary>
-      <div class="stack gap confirm">
-        <label class="field"><span>Tape <b class="mono">{{.Name}}</b> pour confirmer</span><input name="confirm" class="mono" form="delete-form" required></label>
-        <button class="btn btn-danger" form="delete-form">Supprimer {{.Name}}</button>
+    <details><summary class="btn btn-danger-ghost"><span class="if-closed">Supprimer…</span><span class="if-open">Annuler</span></summary>
+      <div class="confirm">
+        <input name="confirm" class="mono" form="delete-form" required placeholder="tape {{.Name}}" aria-label="Tape {{.Name}} pour confirmer">
+        <button class="btn btn-danger" form="delete-form">Supprimer</button>
       </div>
     </details>
   </section>
   {{end}}
   {{if .RemoveEnvURL}}
   <section class="sec sec-danger">
-    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} hériteront de son parent. {{end}}Les données restent sur think.</small></span>
-    <details><summary class="btn btn-danger-ghost">Retirer…</summary>
-      <div class="stack gap confirm">
-        <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML">Retirer {{.EnvLabel}}</button>
+    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} {{if eq (len .Children) 1}}héritera{{else}}hériteront{{end}} de son parent. {{end}}Les données restent sur think.</small></span>
+    <details><summary class="btn btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary>
+      <div class="confirm">
+        <span class="small">Retirer {{.EnvLabel}} ?</span>
+        <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML">Retirer</button>
       </div>
     </details>
   </section>

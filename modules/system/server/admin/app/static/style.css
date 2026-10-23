@@ -164,7 +164,6 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
 .data-row svg { width: 14px; height: 14px; color: var(--faint); }
 .danger { border-color: #F3C9C5; }
 .danger details { position: relative; }
-.confirm { margin-top: 12px; padding: 14px; border-radius: 0; background: var(--bad-soft); min-width: 260px; }
 
 /* Aperçu et suivi : bloc sombre */
 .code { padding: 0; background: var(--side); border-color: var(--side); color: #C9CED6; overflow: hidden; box-shadow: none; }
@@ -288,8 +287,6 @@ a.plain { color: var(--text); }
 .sec-head { flex: 1 1 170px; max-width: 210px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .sec-body { flex: 999 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .sec-danger { align-items: center; justify-content: space-between; background: #FCFCFD; border-radius: 0; }
-.sec-danger details { position: relative; }
-.sec-danger .confirm { position: absolute; right: 0; z-index: 10; }
 .fields { display: flex; flex-wrap: wrap; gap: 14px; }
 .fields > .field { flex: 1 1 180px; min-width: 0; }
 .fields > .grow2 { flex: 2 1 220px; }
@@ -503,3 +500,13 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 @keyframes nav-load { from { transform: scaleX(0); } to { transform: scaleX(.9); } }
 @media (prefers-reduced-motion: reduce) { .nav-loading::before { animation: none; transform: scaleX(.6); } }
 .row-job { margin-top: 6px; }
+
+/* Zone de suppression : la confirmation prend la place du texte, sur la même ligne ;
+   le bouton devient « Annuler ». */
+.sec-danger { position: relative; }
+.sec-danger summary .if-open, .sec-danger details[open] summary .if-closed { display: none; }
+.sec-danger details[open] summary .if-open { display: inline; }
+.sec-danger details[open] summary { color: var(--muted); border-color: var(--line); }
+.sec-danger:has(details[open]) > .stack { visibility: hidden; }
+.sec-danger .confirm { position: absolute; left: 24px; right: 136px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.sec-danger .confirm input { width: min(220px, 100%); }
