@@ -112,7 +112,7 @@ summary.btn::-webkit-details-marker { display: none; }
 .side nav a[aria-current="page"] { background: var(--side-2); color: #FFFFFF; font-weight: 500; }
 .side nav a[aria-current="page"] svg { color: #9DA6FF; }
 
-.topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--line); background: var(--card); }
+.topbar { min-height: 69px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--line); background: var(--card); }
 .crumbs { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
 .crumbs svg { width: 14px; height: 14px; }
 .crumbs a { color: var(--muted); }
@@ -384,7 +384,7 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-mark svg { width: 17px; height: 17px; }
   .nav-title, .side nav a small, .side .nav-links { display: none; }
-  .side nav:not(.nav-links) { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid #1F2531; }
+  .side nav:not(.nav-links) { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid #1F2531; }
   .side nav a { flex-direction: column; justify-content: center; gap: 3px; min-height: 54px; padding: 0; font-size: 11.5px; }
   .side nav a[aria-current="page"] { background: transparent; }
   .side nav a svg { width: 20px; height: 20px; }
@@ -475,3 +475,33 @@ table.services td.site-td { vertical-align: middle; }
 .grafana-pane { position: fixed; z-index: 10; overflow: hidden; background: var(--bg); }
 .grafana-pane iframe { display: block; width: 100%; height: calc(100% + 36px); border: 0; }
 @media (max-width: 800px) { .grafana-slot { height: calc(100vh - 69px - 56px - 64px - 16px); min-height: 480px; } }
+
+/* Tableaux simples (VPN, SSH, Comptes) : même aspect que celui des sites ; empilés sur téléphone. */
+table.list { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.list th { text-align: left; font-size: 12.5px; font-weight: 500; color: var(--muted); padding: 11px 12px; background: #F8F9FB; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.list td { padding: 11px 12px; vertical-align: middle; border-top: 1px solid var(--line-soft); }
+table.list tr:first-child td { border-top: 0; }
+table.list th:first-child, table.list td:first-child { padding-left: 18px; }
+table.list th:last-child, table.list td:last-child { padding-right: 18px; }
+table.list td.end { text-align: right; white-space: nowrap; }
+table.list .ellipsis-cell { max-width: 0; width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.inline-confirm details { display: inline-flex; gap: 8px; align-items: center; }
+.inline-confirm details[open] summary { color: var(--muted); border-color: var(--line); }
+@media (max-width: 720px) {
+  table.list thead { display: none; }
+  table.list, table.list tbody, table.list tr, table.list td { display: block; }
+  table.list tr { padding: 10px 16px; border-top: 1px solid var(--line-soft); }
+  table.list tr:first-child { border-top: 0; }
+  table.list td { padding: 2px 0 !important; border: 0; }
+  table.list td.end { text-align: left; }
+  table.list .ellipsis-cell { max-width: none; width: auto; }
+}
+
+/* Nouvel appareil VPN : QR code à côté des explications, configuration et secret à copier. */
+.vpn-conf { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.qr { width: 220px; flex-shrink: 0; background: #FFFFFF; border: 1px solid var(--line); padding: 8px; }
+/* Pas le style des icônes (contour, sans remplissage) : il brouillait les modules du QR code. */
+.qr svg { display: block; width: 100%; height: auto; stroke: none; }
+pre.conf { margin: 8px 0 0; padding: 10px 12px; background: #F8F9FB; border: 1px solid var(--line); overflow-x: auto; white-space: pre; user-select: all; }
+.steps-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }

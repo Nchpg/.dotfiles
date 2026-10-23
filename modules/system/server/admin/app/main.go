@@ -70,9 +70,12 @@ func main() {
 	mux.HandleFunc("GET /fragments/{name}", s.fragment)
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /fonts/{file}", s.font)
-	for _, p := range []string{"vpn", "ssh"} {
-		mux.HandleFunc("GET /"+p, s.soon(p))
-	}
+	mux.HandleFunc("GET /vpn", s.vpn)
+	mux.HandleFunc("GET /vpn/new", s.vpnNew)
+	mux.HandleFunc("POST /vpn/new", s.vpnCreate)
+	mux.HandleFunc("POST /vpn/{name}/remove", s.vpnRemove)
+	mux.HandleFunc("GET /ssh", s.ssh)
+	mux.HandleFunc("GET /accounts", s.accounts)
 	if cfg.MetricsURL != "" {
 		mux.HandleFunc("GET /metrics", s.metrics)
 	} else {
@@ -173,8 +176,6 @@ func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) soon(page string) http.HandlerFunc {
 	titles := map[string][2]string{
-		"vpn":     {"VPN", "Les appareils WireGuard : qui est connecté, et l'ajout d'un appareil avec son QR code."},
-		"ssh":     {"SSH", "Les clés autorisées sur think, leur ajout et leur retrait."},
 		"metrics": {"Métriques", "Le tableau de bord Grafana, intégré ici."},
 	}
 	return func(w http.ResponseWriter, r *http.Request) {

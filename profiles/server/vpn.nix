@@ -5,7 +5,7 @@ let
 in
 {
   systemSettings = {
-    # Appairage : `sudo wg-new-peer <nom> <adresse>`.
+    # Appairage : page VPN du dashboard (« Ajouter un appareil »), ou `sudo wg-new-peer <nom> <adresse>`.
     vpn.wireguard = {
       enable = true;
       # "DNS only" côté Cloudflare : leur proxy ne relaie pas l'UDP.

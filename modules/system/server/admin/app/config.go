@@ -27,6 +27,10 @@ type Config struct {
 	Peers        []string
 	SecretKeys   []string
 	Services     []Service // services de think hors apps.json (lecture seule)
+	VPN          VPNInfo   // tunnel et appareils (page VPN)
+	SSH          []SSHUser // clés autorisées (page SSH)
+	AccountsFile string    // résumé des comptes Authelia, écrit par admin-accounts (root)
+	WGPubkeyFile string    // clé publique du serveur WireGuard, dérivée au démarrage
 	RecopyStatus string    // résultats d'admin-recopy (root), lus seulement
 	MetricsURL   string    // tableau de bord Grafana de la page Métriques (vide : page « bientôt »)
 
@@ -53,6 +57,8 @@ func loadConfig() (*Config, error) {
 		Fonts:        env("ADMIN_FONTS", ""),
 		RecopyStatus: env("ADMIN_RECOPY_STATUS", "/var/lib/admin-recopy"),
 		MetricsURL:   os.Getenv("ADMIN_METRICS_URL"),
+		AccountsFile: env("ADMIN_ACCOUNTS_FILE", "/var/lib/admin-accounts/accounts.json"),
+		WGPubkeyFile: env("ADMIN_WG_PUBKEY", "/run/admin/wg-server.pub"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse
 	// d'évaluer un dépôt à travers un lien. On travaille sur le chemin réel.
@@ -75,6 +81,12 @@ func loadConfig() (*Config, error) {
 	}
 	if err := readJSON(os.Getenv("ADMIN_SERVICES_FILE"), &c.Services); err != nil {
 		return nil, fmt.Errorf("services : %w", err)
+	}
+	if err := readJSON(os.Getenv("ADMIN_VPN_FILE"), &c.VPN); err != nil {
+		return nil, fmt.Errorf("vpn : %w", err)
+	}
+	if err := readJSON(os.Getenv("ADMIN_SSH_FILE"), &c.SSH); err != nil {
+		return nil, fmt.Errorf("ssh : %w", err)
 	}
 
 	// Credentials systemd : jamais dans l'environnement (lisible dans /proc).

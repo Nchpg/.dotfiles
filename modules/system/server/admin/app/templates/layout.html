@@ -20,8 +20,9 @@
   <nav aria-label="Navigation principale" id="main-nav">
     <span class="nav-title">Serveur</span>
     <a href="/sites" {{if eq .Nav "sites"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 9h18M7 7h.01"/></svg>Sites</a>
-    <a href="/vpn" {{if eq .Nav "vpn"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg>VPN<small>bientôt</small></a>
-    <a href="/ssh" {{if eq .Nav "ssh"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg>SSH<small>bientôt</small></a>
+    <a href="/vpn" {{if eq .Nav "vpn"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg>VPN</a>
+    <a href="/ssh" {{if eq .Nav "ssh"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg>SSH</a>
+    <a href="/accounts" {{if eq .Nav "accounts"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Comptes</a>
     <a href="/metrics" {{if eq .Nav "metrics"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>Métriques{{if not metricsReady}}<small>bientôt</small>{{end}}</a>
   </nav>
   <nav aria-label="Liens" class="nav-links">

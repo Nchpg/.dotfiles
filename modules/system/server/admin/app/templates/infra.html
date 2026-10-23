@@ -1,0 +1,157 @@
+{{/* Pages VPN, SSH et Comptes : même forme que Sites (titre, blocs, tableaux). */}}
+
+{{define "crumbs"}}<nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{if .Link}}<a href="{{.Link}}">{{.Title}}</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Sub}}</strong>{{else}}<strong>{{.Title}}</strong>{{end}}</nav>{{end}}
+
+{{define "vpn"}}{{template "top" .}}
+<header class="topbar">
+  {{template "crumbs" (args "Title" "VPN")}}
+  <a class="btn btn-primary" href="/vpn/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un appareil</a>
+</header>
+<main class="page">
+  <h1>VPN</h1>
+  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  <div class="overview">
+    <section class="strip" aria-label="État du VPN">
+      <div class="strip-cell">
+        <span class="strip-label">Connectés</span>
+        <span class="strip-value line"><span class="sq" style="background: {{if .Connected}}#22C55E{{else}}#C4C9D2{{end}}"></span>{{.Connected}} sur {{.Total}}</span>
+        <span class="mono small muted">poignée de main de moins de 3 min</span>
+      </div>
+      <div class="strip-cell">
+        <span class="strip-label">Point d'accès</span>
+        <span class="strip-value mono">{{.Endpoint}}</span>
+        <span class="mono small muted">UDP, depuis internet</span>
+      </div>
+      <div class="strip-cell">
+        <span class="strip-label">Réseau du tunnel</span>
+        <span class="strip-value mono">{{.Subnet}}</span>
+        <span class="mono small muted">une adresse par appareil</span>
+      </div>
+    </section>
+    <section class="block" aria-labelledby="devices-title">
+      <div class="block-head"><h2 id="devices-title">Appareils</h2></div>
+      <section class="card table-card" aria-label="Liste des appareils">
+        <table class="list">
+          <thead><tr><th scope="col">Appareil</th><th scope="col">Adresse</th><th scope="col">État</th><th scope="col">Trafic</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+            {{range .Rows}}
+            <tr>
+              <td><span class="stack tight"><span class="line">{{.Name}}{{if .Trusted}}<span class="chip green">de confiance</span>{{end}}</span><small class="mono muted">{{slice .PublicKey 0 10}}…</small></span></td>
+              <td class="mono small">{{.Address}}</td>
+              <td>{{if .Pending}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="warn-ink">en attente : secret puis rebuild</span></span>
+                {{else if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connecté</span>
+                {{else if .Seen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vu {{.LastSeen}}</span></span>
+                {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">jamais vu</span></span>{{end}}</td>
+              <td class="mono small muted">{{if .Seen}}↓ {{.Received}} ↑ {{.Sent}}{{else}}—{{end}}</td>
+              <td class="end">{{if .Added}}<form method="post" action="/vpn/{{.Name}}/remove" class="inline-confirm"><details><summary class="btn btn-sm btn-danger-ghost">Retirer…</summary><button class="btn btn-sm btn-danger">Retirer {{.Name}}</button></details></form>{{end}}</td>
+            </tr>
+            {{else}}<tr><td colspan="5" class="muted">Aucun appareil.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "vpn-new"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" "Nouvel appareil")}}</header>
+<main class="page">
+  <h1>Nouvel appareil</h1>
+  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  <form method="post" action="/vpn/new" class="card stack gap narrow">
+    <label class="field"><span>Nom de l'appareil</span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9_]{1,24}" placeholder="pixel_9" autofocus></label>
+    <label class="row-toggle"><span class="stack tight"><strong>De confiance</strong><small class="muted">Accès aux services réservés aux appareils de confiance.</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
+    {{with .Address}}<small class="muted">Adresse dans le tunnel : <span class="mono">{{.}}</span></small>{{end}}
+    <button class="btn btn-primary">Créer l'appareil</button>
+    <small class="muted">Les clés sont créées ici et ne sont gardées nulle part : la page suivante est la seule à les montrer.</small>
+  </form>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "vpn-added"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" .Name)}}</header>
+<main class="page">
+  <h1>{{.Name}}</h1>
+  <div class="alert alert-amber"><p><strong>Page unique.</strong> Les clés ne sont gardées nulle part : enregistre la configuration sur l'appareil avant de quitter.</p></div>
+  <div class="overview">
+    <section class="block" aria-labelledby="conf-title">
+      <div class="block-head"><h2 id="conf-title">1. Sur l'appareil</h2><a class="btn btn-sm" href="{{.Download}}" download="{{.Name}}.conf">Télécharger {{.Name}}.conf</a></div>
+      <div class="card vpn-conf">
+        {{if .QR}}<div class="qr" aria-label="QR code de la configuration">{{.QR}}</div>{{end}}
+        <div class="stack gap grow">
+          <p class="small muted">Application WireGuard : « + », puis scanner le QR code, ou importer le fichier.</p>
+          <details><summary class="small">Afficher la configuration</summary><pre class="conf mono small">{{.Conf}}</pre></details>
+        </div>
+      </div>
+    </section>
+    <section class="block" aria-labelledby="steps-title">
+      <div class="block-head"><h2 id="steps-title">2. Sur think, dans ~/.dotfiles</h2></div>
+      <div class="card stack gap">
+        <p class="small">L'appareil est inscrit dans <span class="mono">vpn-peers.json</span> (commit sur main dans la minute), mais il n'est autorisé qu'avec sa clé pré-partagée, puis un rebuild :</p>
+        <ol class="steps-list">
+          <li><code>git pull</code></li>
+          <li><code>secrets edit {{.SecretKey}}</code>, puis coller :
+            <pre class="conf mono small">{{.Secret}}</pre></li>
+          <li><code>rebuild</code></li>
+        </ol>
+      </div>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "ssh"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "SSH")}}</header>
+<main class="page">
+  <h1>SSH</h1>
+  <div class="overview">
+    <section class="block" aria-labelledby="keys-title">
+      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think, déclarées dans la config (systemSettings.users). Elles se changent dans le code Nix, puis un rebuild.")}}</h2></div>
+      <section class="card table-card" aria-label="Liste des clés">
+        <table class="list">
+          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Empreinte</th></tr></thead>
+          <tbody>
+            {{range .Rows}}
+            <tr>
+              <td>{{.User}}</td>
+              <td><span class="stack tight"><span>{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}</span><small class="mono muted">{{.Type}}</small></span></td>
+              <td class="mono small muted ellipsis-cell" title="{{.Fingerprint}}">{{.Fingerprint}}</td>
+            </tr>
+            {{else}}<tr><td colspan="3" class="muted">Aucune clé.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "accounts"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "Comptes")}}</header>
+<main class="page">
+  <h1>Comptes</h1>
+  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  <div class="overview">
+    <section class="block" aria-labelledby="accounts-title">
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes Authelia{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ».")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <section class="card table-card" aria-label="Liste des comptes">
+        <table class="list">
+          <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th></tr></thead>
+          <tbody>
+            {{range .Rows}}
+            <tr>
+              <td><span class="stack tight"><span class="line">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}{{if .Disabled}}<span class="chip">désactivé</span>{{end}}</span><small class="muted">{{.Name}}{{with .Email}}, {{.}}{{end}}</small></span></td>
+              <td><span class="line wrap">{{range .Groups}}<span class="chip">{{.}}</span>{{else}}<span class="muted">aucun</span>{{end}}</span></td>
+              <td>{{if or .TOTP .SecurityKeys}}<span class="line"><span class="dot up" aria-hidden="true"></span>{{if .TOTP}}code{{end}}{{if and .TOTP .SecurityKeys}}, {{end}}{{if .SecurityKeys}}{{.SecurityKeys}} clé{{if gt .SecurityKeys 1}}s{{end}}{{end}}</span>{{else}}<span class="line"><span class="dot down" aria-hidden="true"></span><span class="bad">aucune</span></span>{{end}}</td>
+              <td class="muted">{{.Last}}</td>
+              <td>{{if .Failures24h}}<span class="bad">{{.Failures24h}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
+            </tr>
+            {{else}}<tr><td colspan="5" class="muted">Aucun compte lu.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}

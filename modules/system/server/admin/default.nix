@@ -70,6 +70,66 @@ let
       authelia = behindAuthelia domain;
     }) (lib.filterAttrs (domain: _: !lib.elem domain appDomains) config.systemSettings.proxy.sites);
 
+  # Page VPN : paramètres du tunnel (pour la config d'un nouvel appareil) et appareils connus ;
+  # `added` : inscrit par le dashboard (vpn-peers.json), les autres viennent de vpn.nix.
+  addedPeers =
+    if wireguard.peersFile == null then [ ] else lib.attrNames (lib.importJSON wireguard.peersFile);
+  vpnInfo = {
+    endpoint = "${toString wireguard.host}:${toString wireguard.port}";
+    inherit (wireguard)
+      dns
+      allowedIPs
+      subnet
+      serverAddress
+      ;
+    peers = map (p: {
+      inherit (p)
+        name
+        address
+        publicKey
+        trusted
+        ;
+      added = lib.elem p.name addedPeers;
+    }) wireguard.peers;
+  };
+
+  # Page SSH : clés autorisées de chaque compte (publiques).
+  sshInfo = map (u: {
+    inherit (u) name;
+    keys = u.sshKeys;
+  }) (lib.filter (u: u.sshKeys != [ ]) config.systemSettings.users);
+
+  # Page Comptes : résumé des comptes Authelia, sans aucun secret (le fichier d'utilisateurs et la
+  # base sont à root). Une table absente (autre version d'Authelia) donne une liste vide.
+  accountsSummary = pkgs-stable.writeShellApplication {
+    name = "admin-accounts";
+    runtimeInputs = [
+      pkgs-stable.yq-go
+      pkgs-stable.sqlite
+      pkgs-stable.jq
+      pkgs-stable.coreutils
+    ];
+    text = ''
+      dir=/var/lib/authelia-main
+      out="$STATE_DIRECTORY/accounts.json"
+      users=$(yq -o=json '.users // {} | to_entries | map({"name": .key, "displayName": (.value.displayname // ""), "email": (.value.email // ""), "groups": (.value.groups // []), "disabled": (.value.disabled // false)})' "$dir/users.yml" 2> /dev/null || echo '[]')
+      q() { sqlite3 -readonly -json "$dir/db.sqlite3" "$1" 2> /dev/null | grep . || echo '[]'; }
+      totp=$(q "SELECT username FROM totp_configurations")
+      keys=$(q "SELECT username, COUNT(*) AS n FROM webauthn_credentials GROUP BY username")
+      last=$(q "SELECT username, MAX(time) AS time FROM authentication_logs WHERE successful = 1 GROUP BY username")
+      fails=$(q "SELECT username, COUNT(*) AS n FROM authentication_logs WHERE successful = 0 AND time > datetime('now', '-1 day') GROUP BY username")
+      jq -n --argjson u "$users" --argjson t "$totp" --argjson k "$keys" --argjson l "$last" --argjson f "$fails" '
+        $u | map(. as $x | . + {
+          totp: ([$t[] | select(.username == $x.name)] | length > 0),
+          securityKeys: ([$k[] | select(.username == $x.name) | .n] | add // 0),
+          lastLogin: ([$l[] | select(.username == $x.name) | .time] | first // null),
+          failures24h: ([$f[] | select(.username == $x.name) | .n] | add // 0)
+        })' > "$out.new"
+      chmod 644 "$out.new"
+      mv -f "$out.new" "$out"
+    '';
+  };
+
   # Noms des secrets disponibles (jamais leur valeur) : la page propose ceux rangés sous un site.
   secretKeys =
     let
@@ -140,6 +200,8 @@ in
         pkgs-stable.git
         config.nix.package
         config.systemd.package
+        # QR code de la config d'un nouvel appareil VPN.
+        pkgs-stable.qrencode
       ];
       environment = {
         ADMIN_LISTEN = "127.0.0.1:${toString cfg.port}";
@@ -160,11 +222,24 @@ in
         ADMIN_SECRETS_FILE = pkgs-stable.writeText "admin-secrets.json" (builtins.toJSON secretKeys);
         ADMIN_SERVICES_FILE = pkgs-stable.writeText "admin-services.json" (builtins.toJSON services);
         ADMIN_RECOPY_STATUS = "/var/lib/admin-recopy";
+        ADMIN_VPN_FILE = pkgs-stable.writeText "admin-vpn.json" (builtins.toJSON vpnInfo);
+        ADMIN_SSH_FILE = pkgs-stable.writeText "admin-ssh.json" (builtins.toJSON sshInfo);
+        ADMIN_ACCOUNTS_FILE = "/var/lib/admin-accounts/accounts.json";
+        ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
         ADMIN_METRICS_URL = lib.optionalString config.systemSettings.monitoring.enable "https://${config.systemSettings.monitoring.grafana.hostName}/d/${target.host}-systeme/systeme?orgId=1&from=now-6h&to=now&timezone=browser&var-gravite=error&var-gravite=warn&var-unite=$__all&var-contient=&refresh=1m";
       };
       serviceConfig = {
         ExecStart = lib.getExe package;
+        # Clé publique du serveur WireGuard (pour la config d'un nouvel appareil), dérivée en root de
+        # sa clé privée, que le dashboard ne lit jamais.
+        ExecStartPre = lib.optional wireguard.enable "+${pkgs-stable.writeShellScript "admin-wg-pubkey" ''
+          ${pkgs-stable.wireguard-tools}/bin/wg pubkey < ${
+            config.sops.secrets.${wireguard.privateKeyKey}.path
+          } > /run/admin/wg-server.pub
+          chmod 444 /run/admin/wg-server.pub
+        ''}";
+        RuntimeDirectory = "admin";
         Restart = "on-failure";
         DynamicUser = true;
         StateDirectory = "admin";
@@ -188,6 +263,24 @@ in
           "AF_INET"
           "AF_INET6"
         ];
+      };
+    };
+
+    systemd.services.admin-accounts = lib.mkIf config.systemSettings.authelia.enable {
+      description = "Résumé des comptes Authelia pour le dashboard (sans secret)";
+      after = [ "authelia-main.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe accountsSummary;
+        StateDirectory = "admin-accounts";
+        StateDirectoryMode = "0755";
+      };
+    };
+    systemd.timers.admin-accounts = lib.mkIf config.systemSettings.authelia.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "5min";
       };
     };
 
