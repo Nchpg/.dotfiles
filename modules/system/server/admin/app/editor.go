@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -15,6 +18,52 @@ type Opt struct {
 	Selected           bool
 }
 
+// DD : liste déroulante maison (icône par option) ; la valeur part dans un champ caché `Name`.
+type DD struct {
+	Name, Value, Aria               string
+	Label, Icon, Tint, Ink          string
+	Options                         []DDOpt
+	Structural, Locked, Placeholder bool
+}
+
+type DDOpt struct {
+	Value, Label, Sub, SubInk string
+	Icon, Tint, Ink           string
+	Selected                  bool
+}
+
+const (
+	icBranch = "M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"
+	icEnv    = "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5"
+	icCommit = "M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6M3 12h6M15 12h6"
+	icFollow = "M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"
+	icImage  = "M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"
+	icMem    = "M7 4h10a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM9 8h6M9 12h6M9 16h3"
+)
+
+var (
+	colGreen  = [2]string{"#E9F8EF", "#15803D"}
+	colAmber  = [2]string{"#FEF3E2", "#9A4A07"}
+	colIndigo = [2]string{"#EEF0FD", "#4F5BD5"}
+	colGray   = [2]string{"#F1F2F5", "#4A515D"}
+	colRed    = [2]string{"#FDECEC", "#B42318"}
+)
+
+func ddOpt(value, label, sub, icon string, col [2]string, selected bool) DDOpt {
+	return DDOpt{Value: value, Label: label, Sub: sub, Icon: icon, Tint: col[0], Ink: col[1], Selected: selected}
+}
+
+// newDD : le bouton montre l'option choisie (ou `placeholder` si aucune).
+func newDD(name, aria string, opts []DDOpt, placeholder, icon string) DD {
+	d := DD{Name: name, Aria: aria, Options: opts, Label: placeholder, Icon: icon, Tint: colGray[0], Ink: "#8F98A6", Placeholder: true}
+	for _, o := range opts {
+		if o.Selected {
+			d.Value, d.Label, d.Icon, d.Tint, d.Ink, d.Placeholder = o.Value, o.Label, o.Icon, o.Tint, o.Ink, false
+		}
+	}
+	return d
+}
+
 type DataVM struct {
 	Value, Path, Host string
 	Auto              bool
@@ -23,14 +72,23 @@ type DataVM struct {
 type CtrVM struct {
 	Name     string
 	Entry    bool
-	Images   []Opt
-	Memory   []Opt
+	Image    DD
+	Memory   DD
 	Deps     []Opt
 	Data     []DataVM
 	Secrets  []Opt
 	Info     string
-	NewInfo  string
 	DataHost string
+	Locked   bool // conteneurs hérités : montrés, pas modifiables ici
+}
+
+type EnvTab struct {
+	ID, Label, Branch, Domain, URL string
+	Current, Root, New             bool
+}
+
+type RecopyVM struct {
+	State, Text string
 }
 
 type FormVM struct {
@@ -44,6 +102,7 @@ type FormVM struct {
 	PreviewURL   string
 	ApplyURL     string
 	DeleteURL    string
+	FormURL      string
 	Repo         string
 	Sub          string
 	VPN, SSO     bool
@@ -55,8 +114,10 @@ type FormVM struct {
 	Containers   []CtrVM
 	CtrList      string
 	Multi        bool
-	Versions     []Opt
+	NewImages    []Opt // images du dépôt sans conteneur : à ajouter
+	Version      DD
 	VersionNote  string
+	Branch       DD
 	Frozen       bool
 	Up, Probed   bool
 	Initial      string
@@ -65,6 +126,25 @@ type FormVM struct {
 	// Demande en cours (étapes à la place de l'aperçu, formulaire grisé) ou échec récent.
 	Running *JobView
 	Failed  *JobBadge
+
+	// Environnements.
+	Env, EnvLabel, Label     string // id édité ("" : la racine), nom affiché
+	EnvNew, Child            bool
+	Tabs                     []EnvTab
+	From                     DD
+	OwnAccess, OwnContainers bool
+	OwnOptions               bool
+	AccessFrom, CtrsFrom     string // « Comme preview », « Comme preview (réglé dans production) »
+	OptionsFrom              string
+	AccessSummary            string
+	OptionsSummary           string
+	DataModes                []DDOpt
+	Recopy                   *RecopyVM
+	RecopyURL, RemoveEnvURL  string
+	Noindex                  bool
+	Children                 []string // environnements qui en héritent
+	AddBranch, AddFrom       DD
+	AddError, AddName        string
 }
 
 type PreviewVM struct {
@@ -111,34 +191,41 @@ func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 	return info.Source
 }
 
-// versions : `main` et chaque commit dont toutes les images du site ont le tag `sha-…`.
-func (s *Server) versions(ctx context.Context, e Entry, repo string) ([]Opt, string) {
-	current := e.Version()
-	var names []string
-	for _, n := range e.ContainerNames() {
-		img, _ := splitImage(e.Containers[n].Image)
-		names = append(names, s.cfg.ref(img))
+// versionDD : suivre la branche, ou chaque commit dont toutes les images du déploiement ont le tag `sha-…`.
+func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, string) {
+	if s.reg == nil { // tests : pas de registre
+		opts := []DDOpt{ddOpt("", "suivre "+d.Branch, "", icFollow, colGreen, !d.Frozen())}
+		if d.Frozen() {
+			opts = append(opts, ddOpt(d.Tag, shortTag(d.Tag), "tag actuel", icCommit, colAmber, true))
+		}
+		return newDD("version", "Images à faire tourner", opts, "", icFollow), ""
 	}
-	opts := []Opt{{Value: "main", Label: "main · toujours la dernière"}}
-	tags, err := s.reg.ShaTags(ctx, names)
+	current := ""
+	if d.Frozen() {
+		current = d.Tag
+	}
+	var names []string
+	for _, c := range d.Ctrs.Containers {
+		names = append(names, s.cfg.ref(untag(c.Image)))
+	}
+	sort.Strings(names)
+	opts := []DDOpt{ddOpt("", "suivre "+d.Branch, "la dernière image de la branche", icFollow, colGreen, current == "")}
 	note := ""
+	tags, err := s.reg.ShaTags(ctx, names)
 	if err != nil {
 		note = "Versions illisibles sur le registre : " + err.Error()
 	}
 	type v struct {
-		tag  string
-		date time.Time
-		text string
+		tag, sub string
+		date     time.Time
 	}
 	var vs []v
 	for _, t := range tags {
-		sha := strings.TrimPrefix(t, "sha-")
-		item := v{tag: t, text: shortTag(t)}
-		if c, ok := s.gh.CommitOf(ctx, repo, sha); ok {
-			item.date = c.Date
-			item.text = shortTag(t) + " · " + c.Subject
+		item := v{tag: t, sub: "commit"}
+		if c, ok := s.gh.CommitOf(ctx, repo, strings.TrimPrefix(t, "sha-")); ok {
+			item.date, item.sub = c.Date, c.Subject
 			if !c.Date.IsZero() {
-				item.text += " (" + c.Date.Local().Format("02/01") + ")"
+				item.sub = c.Date.Local().Format("02/01") + " · " + c.Subject
 			}
 		}
 		vs = append(vs, item)
@@ -147,24 +234,44 @@ func (s *Server) versions(ctx context.Context, e Entry, repo string) ([]Opt, str
 	if len(vs) > 20 {
 		vs = vs[:20]
 	}
-	found := current == "main" || current == ""
+	found := current == ""
 	for _, x := range vs {
-		opts = append(opts, Opt{Value: x.tag, Label: x.text})
+		opts = append(opts, ddOpt(x.tag, shortTag(x.tag), x.sub, icCommit, colAmber, x.tag == current))
 		found = found || x.tag == current
 	}
 	if !found {
-		opts = append(opts, Opt{Value: current, Label: current + " (tag actuel)"})
-	}
-	if current == "" {
-		opts = append([]Opt{{Value: "", Label: "tags différents par conteneur"}}, opts...)
-	}
-	for i := range opts {
-		opts[i].Selected = opts[i].Value == current
+		opts = append(opts, ddOpt(current, shortTag(current), "tag actuel", icCommit, colAmber, true))
 	}
 	if len(vs) == 0 && note == "" {
 		note = "Aucun tag sha-… commun à toutes les images : seules les images construites par le template en ont."
 	}
-	return opts, note
+	dd := newDD("version", "Images à faire tourner", opts, "", icFollow)
+	dd.Structural = true
+	return dd, note
+}
+
+// branchOpts : branches qui publient une image (les tags de l'image, hors sha-…).
+func (s *Server) branchOpts(ctx context.Context, image, current string) []DDOpt {
+	var tags []string
+	if image != "" && s.reg != nil {
+		tags, _ = s.reg.Tags(ctx, s.cfg.ref(untag(image)))
+	}
+	sort.Strings(tags)
+	var opts []DDOpt
+	found := false
+	for _, t := range tags {
+		if strings.HasPrefix(t, "sha-") || t == "latest" {
+			continue
+		}
+		opts = append(opts, ddOpt(t, t, "image "+untag(image)+":"+t+" publiée", icBranch, colGreen, t == current))
+		found = found || t == current
+	}
+	if current != "" && !found {
+		o := ddOpt(current, current, "aucune image de cette branche sur ghcr", icBranch, colRed, true)
+		o.SubInk = colRed[1]
+		opts = append(opts, o)
+	}
+	return opts
 }
 
 func (s *Server) secretsFor(name string) []string {
@@ -179,67 +286,198 @@ func (s *Server) secretsFor(name string) []string {
 
 var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "256 Mo"}, {"512m", "512 Mo"}, {"1g", "1 Go"}, {"2g", "2 Go"}}
 
-// formVM : le formulaire pré-rempli avec une entrée.
+func contains(l []string, v string) bool {
+	for _, x := range l {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
 func (s *Server) formVM(ctx context.Context, name string, e Entry, isNew bool, repo string, images []string, snap *Snapshot) FormVM {
+	return s.formVMFor(ctx, name, e, "", isNew, repo, images, snap)
+}
+
+// formVMFor : le formulaire pré-rempli pour un déploiement (env vide : la racine).
+func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string, isNew bool, repo string, images []string, snap *Snapshot) FormVM {
+	d, err := e.Deploy(name, env)
+	if err != nil {
+		env = ""
+		d, _ = e.Deploy(name, "")
+	}
+	onMainEnvs := map[string]Env{}
+	if snap != nil {
+		onMainEnvs = snap.Apps.Entries[name].Environments
+	}
 	f := FormVM{
-		New: isNew, Exists: !isNew, Name: name, Repo: repo,
-		Sub: e.Subdomain, VPN: e.VPN(), SSO: e.SSO, Internet: e.InternetAccess, Probe: e.Probe,
-		Multi: len(e.Containers) > 1, Initial: strings.ToUpper(name[:1]),
+		New: isNew, Exists: !isNew, Name: name, Repo: repo, Env: env, Child: d.Child, EnvLabel: d.Label,
+		VPN: d.VPN(), SSO: d.Access.SSO, Internet: d.Options.Internet, Probe: d.Options.Probe,
+		Multi: len(d.Ctrs.Containers) > 1, Initial: strings.ToUpper(name[:1]),
+		OwnAccess: true, OwnContainers: true, OwnOptions: true,
 	}
 	f.Tint, f.Ink = colorsOf(name)
+	f.Sub = d.Subdomain
 	if f.Sub == "" {
-		f.Sub = name
+		f.Sub = d.App
 	}
-	f.Domain = domainOf(name, e, s.cfg.Domain)
+	f.Label = d.Label
+	f.Domain = d.Domain(s.cfg.Domain)
 	f.SuffixPublic, f.SuffixVPN = "."+s.cfg.Domain, ".vpn."+s.cfg.Domain
 	f.Suffix = f.SuffixPublic
-	if e.VPN() {
+	if d.VPN() {
 		f.Suffix = f.SuffixVPN
 	}
+	f.Noindex = d.Child && !d.VPN()
 	if isNew {
-		f.Base, f.PreviewURL, f.ApplyURL = "new", "/sites/new/preview", "/sites/new/apply"
+		f.Base, f.PreviewURL, f.ApplyURL, f.FormURL = "new", "/sites/new/preview", "/sites/new/apply", "/sites/new/form"
 	} else {
 		f.Base = snap.Apps.Fingerprint(name)
-		f.PreviewURL, f.ApplyURL, f.DeleteURL = "/sites/"+name+"/preview", "/sites/"+name+"/apply", "/sites/"+name+"/delete"
+		f.PreviewURL, f.ApplyURL, f.DeleteURL, f.FormURL = "/sites/"+name+"/preview", "/sites/"+name+"/apply", "/sites/"+name+"/delete", "/sites/"+name+"/form"
 	}
-	if e.RateLimit != nil {
-		f.RL, f.RLPaths = true, strings.Join(*e.RateLimit, " ")
+	if d.Options.RateLimit != nil {
+		f.RL, f.RLPaths = true, strings.Join(*d.Options.RateLimit, " ")
 	}
 	devices := map[string]bool{}
-	for _, d := range e.Devices {
-		devices[d] = true
+	for _, dv := range d.Access.Devices {
+		devices[dv] = true
 	}
 	for _, p := range s.cfg.Peers {
 		f.Peers = append(f.Peers, Opt{Value: p, Label: p, Selected: devices[p]})
 	}
+
+	if d.Child {
+		v := e.Environments[env]
+		f.OwnAccess, f.OwnContainers, f.OwnOptions = v.OwnAccess(), v.OwnContainers(), v.OwnOptions()
+		mv, onMain := onMainEnvs[env]
+		f.EnvNew = !onMain
+		// « Comme preview », et d'où vient vraiment la valeur quand le parent hérite lui-même.
+		origin := func(own func(Env) bool) string {
+			p := v.From
+			for n := 0; p != "" && n < 17 && !own(e.Environments[p]); n++ {
+				p = e.Environments[p].From
+			}
+			text := "Comme " + e.labelOf(v.From)
+			if p != v.From {
+				text += " (réglé dans " + e.labelOf(p) + ")"
+			}
+			return text
+		}
+		f.AccessFrom = origin(Env.OwnAccess)
+		f.CtrsFrom = origin(Env.OwnContainers)
+		f.OptionsFrom = origin(Env.OwnOptions)
+		f.AccessSummary = "public"
+		if d.VPN() {
+			f.AccessSummary = "VPN · " + strings.Join(d.Access.Devices, ", ")
+		}
+		if d.Access.SSO {
+			f.AccessSummary += " · Authelia"
+		} else {
+			f.AccessSummary += " · sans Authelia"
+		}
+		f.OptionsSummary = "internet fermé"
+		if d.Options.Internet {
+			f.OptionsSummary = "internet ouvert"
+		}
+		if d.Options.RateLimit != nil {
+			f.OptionsSummary += " · débit limité"
+		}
+		probe := d.Options.Probe
+		if probe == "" {
+			probe = "/"
+		}
+		f.OptionsSummary += " · santé " + probe
+		var froms []DDOpt
+		for _, id := range append([]string{""}, e.EnvIDs()...) {
+			if id == env || (id != "" && e.inherits(id, env)) {
+				continue
+			}
+			pd, err := e.Deploy(name, id)
+			if err != nil {
+				continue
+			}
+			col, sub := colAmber, pd.Branch+" · "+pd.Domain(s.cfg.Domain)
+			if id == "" {
+				col, sub = colIndigo, "racine · "+sub
+			}
+			froms = append(froms, ddOpt(id, pd.Label, sub, icEnv, col, id == v.From))
+		}
+		f.From = newDD("from", "Hérite de", froms, "", icEnv)
+		f.From.Structural = true
+		parent := e.labelOf(v.From)
+		f.DataModes = []DDOpt{
+			{Value: "separate", Label: "Séparées", Sub: "Dossiers à lui, vides au départ.", Selected: v.DataMode() == "separate"},
+			{Value: "copy", Label: "Copie de " + parent, Sub: "Copiées une fois au premier démarrage, puis indépendantes.", Selected: v.DataMode() == "copy"},
+			{Value: "shared", Label: "Partagées avec " + parent, Sub: "Les mêmes dossiers : ce que l'un écrit, l'autre le voit.", Selected: v.DataMode() == "shared"},
+		}
+		if onMain && mv.DataMode() == "copy" && v.DataMode() == "copy" {
+			f.Recopy = s.recopyState(d.App, parent)
+			f.RecopyURL = "/sites/" + name + "/env/" + env + "/recopy"
+		}
+		if onMain {
+			f.RemoveEnvURL = "/sites/" + name + "/env/" + env + "/delete"
+		}
+		for _, id := range e.EnvIDs() {
+			if e.Environments[id].From == env {
+				f.Children = append(f.Children, e.labelOf(id))
+			}
+		}
+	}
+
+	// Onglets : la racine et chaque environnement (le nouveau compris).
+	if !isNew {
+		for _, dd := range e.Deploys(name) {
+			_, onMain := onMainEnvs[dd.ID]
+			url := "/sites/" + name
+			if dd.ID != "" {
+				url += "?env=" + dd.ID
+			}
+			f.Tabs = append(f.Tabs, EnvTab{ID: dd.ID, Label: dd.Label, Branch: dd.Branch, Domain: dd.Domain(s.cfg.Domain), URL: url,
+				Current: dd.ID == env, Root: !dd.Child, New: dd.Child && !onMain})
+		}
+	}
+
 	secrets := s.secretsFor(name)
-	names := e.ContainerNames()
+	names := d.containerNames()
 	f.CtrList = strings.Join(names, ",")
+	used := map[string]bool{}
 	for _, n := range names {
-		c := e.Containers[n]
-		img, _ := splitImage(c.Image)
-		vm := CtrVM{Name: n, Entry: n == e.EntryPoint(), DataHost: "/var/lib/apps/" + name + "/" + n}
+		c := d.Ctrs.Containers[n]
+		img := untag(c.Image)
+		used[img] = true
+		vm := CtrVM{Name: n, Entry: n == d.EntryPoint(), DataHost: "/var/lib/apps/" + d.App + "/" + n, Locked: !f.OwnContainers}
 		choices := append([]string{}, images...)
 		if !contains(choices, img) {
 			choices = append(choices, img)
 		}
+		var io []DDOpt
 		for _, i := range choices {
-			vm.Images = append(vm.Images, Opt{Value: i, Label: i, Selected: i == img})
+			io = append(io, ddOpt(i, i, s.cfg.Registry+"/"+i, icImage, colIndigo, i == img))
 		}
+		vm.Image = newDD("img_"+n, "Image de "+n, io, "", icImage)
+		vm.Image.Locked = vm.Locked
+		var mo []DDOpt
 		for _, m := range memories {
-			vm.Memory = append(vm.Memory, Opt{Value: m[0], Label: m[1], Selected: m[0] == c.Memory})
+			sub := "mémoire maximale"
+			if m[0] == "" {
+				sub = "aucune limite"
+			}
+			mo = append(mo, ddOpt(m[0], m[1], sub, icMem, colGray, m[0] == c.Memory))
 		}
+		vm.Memory = newDD("mem_"+n, "Mémoire de "+n, mo, "", icMem)
+		vm.Memory.Locked = vm.Locked
 		for _, o := range names {
 			if o != n {
 				vm.Deps = append(vm.Deps, Opt{Value: o, Label: o, Selected: contains(c.DependsOn, o)})
 			}
 		}
-		for _, d := range c.Data {
-			host := d.On
+		for _, dt := range c.Data {
+			host := dt.On
 			if host == "" {
-				host = vm.DataHost + d.Path
+				host = e.DataHost(name, env, n, dt.Path)
 			}
-			vm.Data = append(vm.Data, DataVM{Value: d.Path + "\t" + d.On, Path: d.Path, Host: host, Auto: d.On == ""})
+			vm.Data = append(vm.Data, DataVM{Value: dt.Path + "\t" + dt.On, Path: dt.Path, Host: host, Auto: dt.On == ""})
 		}
 		opts := map[string]bool{}
 		for _, k := range secrets {
@@ -261,70 +499,134 @@ func (s *Server) formVM(ctx context.Context, name string, e Entry, isNew bool, r
 		}
 		f.Containers = append(f.Containers, vm)
 	}
-	f.Frozen = e.Version() != "main"
+	// Une image publiée par le dépôt sans conteneur : proposée (à la création, toutes y sont).
+	if f.OwnContainers {
+		for _, i := range images {
+			if !used[i] {
+				f.NewImages = append(f.NewImages, Opt{Value: i, Label: i, Note: containerName(repo, i, false)})
+			}
+		}
+	}
+	f.Frozen = d.Frozen()
+	if !isNew {
+		f.Version, f.VersionNote = s.versionDD(ctx, d, repo)
+		entry := d.Ctrs.Containers[d.EntryPoint()].Image
+		f.Branch = newDD("branch", "Branche du dépôt", s.branchOpts(ctx, entry, d.Branch), "choisir une branche…", icBranch)
+		f.Branch.Structural = true
+		// Ajouter un environnement : une branche qui a une image, un parent.
+		f.AddBranch = newDD("branch", "Branche", s.branchOpts(ctx, entry, ""), "choisir une branche…", icBranch)
+		var froms []DDOpt
+		for _, id := range append([]string{""}, e.EnvIDs()...) {
+			if pd, err := e.Deploy(name, id); err == nil {
+				col := colAmber
+				if id == "" {
+					col = colIndigo
+				}
+				froms = append(froms, ddOpt(id, pd.Label, pd.Branch+" · "+pd.Domain(s.cfg.Domain), icEnv, col, id == env))
+			}
+		}
+		f.AddFrom = newDD("from", "Hérite de", froms, "", icEnv)
+	}
 	return f
 }
 
-func contains(l []string, v string) bool {
-	for _, x := range l {
-		if x == v {
-			return true
-		}
+func (d Deploy) containerNames() []string {
+	names := make([]string, 0, len(d.Ctrs.Containers))
+	for n := range d.Ctrs.Containers {
+		names = append(names, n)
 	}
-	return false
+	ep := d.EntryPoint()
+	sort.Slice(names, func(i, j int) bool {
+		if (names[i] == ep) != (names[j] == ep) {
+			return names[i] == ep
+		}
+		return names[i] < names[j]
+	})
+	return names
 }
 
-// entryFromForm : l'entrée décrite par le formulaire. `allowed` : images permises (celles du dépôt).
-func (s *Server) entryFromForm(r *http.Request, names []string, current *Entry, allowed []string) (Entry, []string) {
-	var errs []string
-	e := Entry{Containers: map[string]Container{}}
-	if sub := strings.TrimSpace(r.FormValue("sub")); sub != "" && sub != r.FormValue("name") && sub != r.PathValue("app") {
-		e.Subdomain = strings.ToLower(sub)
-	}
-	if r.FormValue("expose") == "vpn" {
-		e.Expose = "vpn"
-		e.Devices = r.Form["dev"]
-		sort.Strings(e.Devices)
-	}
-	e.SSO = r.FormValue("sso") == "on"
-	e.InternetAccess = r.FormValue("internet") == "on"
-	if p := strings.TrimSpace(r.FormValue("probe")); p != "" && p != "/" {
-		e.Probe = p
-	}
-	if r.FormValue("rl") == "on" {
-		paths := strings.Fields(r.FormValue("rlpaths"))
-		if paths == nil {
-			paths = []string{}
+func (e Entry) labelOf(id string) string {
+	if id == "" {
+		if e.Name != "" {
+			return e.Name
 		}
-		e.RateLimit = &paths
+		return "production"
 	}
-	version := r.FormValue("version")
-	if version != "" && !reTag.MatchString(version) {
-		errs = append(errs, "Version invalide.")
-		version = ""
+	if v, ok := e.Environments[id]; ok && v.Name != "" {
+		return v.Name
 	}
+	return id
+}
+
+// recopyState : dernier résultat d'admin-recopy pour cette app, ou demande en attente.
+func (s *Server) recopyState(app, parent string) *RecopyVM {
+	vm := &RecopyVM{Text: "Remplace ses données par celles de " + parent + " ; l'environnement est arrêté pendant la copie."}
+	var st struct {
+		State  string `json:"state"`
+		Detail string `json:"detail"`
+		At     int64  `json:"at"`
+	}
+	if b, err := os.ReadFile(filepath.Join(s.cfg.RecopyStatus, app+".json")); err == nil && json.Unmarshal(b, &st) == nil {
+		when := time.Unix(st.At, 0).Local().Format("02/01 15:04")
+		switch st.State {
+		case "running":
+			vm.State, vm.Text = "running", "Recopie en cours (depuis "+when+")…"
+		case "done":
+			vm.State, vm.Text = "done", "Dernière recopie : "+when+"."
+		case "failed":
+			vm.State, vm.Text = "failed", "La recopie du "+when+" a échoué : "+st.Detail
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.cfg.StateDir, "recopy", app+".want")); err == nil {
+		vm.State, vm.Text = "running", "Recopie demandée…"
+	}
+	return vm
+}
+
+// containersFromForm : conteneurs du formulaire. `tag` vide : images sans tag (environnement).
+func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, allowed []string, repo, tag string) (map[string]Container, string, []string) {
+	var errs []string
+	var names []string
+	for _, n := range strings.Split(r.FormValue("containers"), ",") {
+		if n = strings.TrimSpace(n); n != "" && n != r.FormValue("rmctr") {
+			names = append(names, n)
+		}
+	}
+	added := ""
+	if img := r.FormValue("addctr"); img != "" && contains(allowed, img) {
+		stem := containerName(repo, img, false)
+		added = stem
+		for i := 2; contains(names, added); i++ {
+			added = fmt.Sprintf("%s%d", stem, i)
+		}
+		names = append(names, added)
+	}
+	out := map[string]Container{}
 	for _, n := range names {
 		var c Container
-		if current != nil {
-			c.Image = current.Containers[n].Image
+		if p, ok := prev[n]; ok {
+			c.Image = p.Image
 		}
 		img := r.FormValue("img_" + n)
+		if n == added {
+			img = r.FormValue("addctr")
+		}
 		if img == "" {
-			img, _ = splitImage(c.Image)
+			img = untag(c.Image)
 		}
 		if !contains(allowed, img) {
 			errs = append(errs, fmt.Sprintf("%s : image %s hors du dépôt du site.", n, img))
 		}
-		_, tag := splitImage(c.Image)
-		if version != "" {
-			tag = version
+		c.Image = img
+		if tag != "" {
+			c.Image = img + ":" + tag
 		}
-		if tag == "" {
-			tag = "main"
-		}
-		c.Image = img + ":" + tag
 		c.Memory = r.FormValue("mem_" + n)
-		c.DependsOn = r.Form["dep_"+n]
+		for _, dp := range r.Form["dep_"+n] {
+			if contains(names, dp) && dp != n {
+				c.DependsOn = append(c.DependsOn, dp)
+			}
+		}
 		sort.Strings(c.DependsOn)
 		for _, v := range r.Form["data_"+n] {
 			path, on, _ := strings.Cut(v, "\t")
@@ -336,12 +638,185 @@ func (s *Server) entryFromForm(r *http.Request, names []string, current *Entry, 
 		}
 		c.Secrets = r.Form["sec_"+n]
 		sort.Strings(c.Secrets)
-		e.Containers[n] = c
+		out[n] = c
 	}
+	entry := ""
 	if len(names) > 1 {
-		e.Entrypoint = r.FormValue("entry")
+		entry = r.FormValue("entry")
+		if !contains(names, entry) {
+			entry = names[0]
+		}
 	}
+	return out, entry, errs
+}
+
+func accessFromForm(r *http.Request) (expose string, devices []string, sso bool) {
+	expose = "public"
+	if r.FormValue("expose") == "vpn" {
+		expose = "vpn"
+		devices = r.Form["dev"]
+		sort.Strings(devices)
+	}
+	return expose, devices, r.FormValue("sso") == "on"
+}
+
+func optionsFromForm(r *http.Request) (internet bool, probe string, rl *[]string) {
+	internet = r.FormValue("internet") == "on"
+	if p := strings.TrimSpace(r.FormValue("probe")); p != "" && p != "/" {
+		probe = p
+	}
+	if r.FormValue("rl") == "on" {
+		paths := strings.Fields(r.FormValue("rlpaths"))
+		if paths == nil {
+			paths = []string{}
+		}
+		rl = &paths
+	}
+	return
+}
+
+// entryFromForm : l'entrée du site avec le déploiement `env` tel que décrit par le formulaire ;
+// les autres déploiements restent ceux de `current`. `allowed` : images permises (celles du dépôt).
+func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env string, allowed []string, repo string) (Entry, []string) {
+	var errs []string
+	e := cloneEntry(current)
+	label := strings.TrimSpace(r.FormValue("label"))
+	sub := strings.ToLower(strings.TrimSpace(r.FormValue("sub")))
+	version := r.FormValue("version")
+	if version != "" && !reTag.MatchString(version) {
+		errs = append(errs, "Version invalide.")
+		version = ""
+	}
+
+	if env == "" {
+		e.Name = ""
+		if label != "" && label != "production" {
+			e.Name = label
+		}
+		e.Subdomain = ""
+		if sub != "" && sub != name {
+			e.Subdomain = sub
+		}
+		expose, devices, sso := accessFromForm(r)
+		e.Expose, e.Devices, e.SSO = "", nil, sso
+		if expose == "vpn" {
+			e.Expose, e.Devices = "vpn", devices
+		}
+		e.InternetAccess, e.Probe, e.RateLimit = optionsFromForm(r)
+		branch := r.FormValue("branch")
+		if branch == "" || !reTag.MatchString(branch) {
+			branch = "main"
+			if v := current.Version(); v != "" && !strings.HasPrefix(v, "sha-") {
+				branch = v
+			}
+		}
+		tag := branch
+		if version != "" {
+			tag = version
+		}
+		var cerrs []string
+		e.Containers, e.Entrypoint, cerrs = s.containersFromForm(r, current.Containers, allowed, repo, tag)
+		return e, append(errs, cerrs...)
+	}
+
+	v := e.Environments[env]
+	v.Name = ""
+	if label != "" && label != env {
+		v.Name = label
+	}
+	v.Branch = r.FormValue("branch")
+	v.From = r.FormValue("from")
+	v.Data = r.FormValue("data")
+	if v.Data == "separate" {
+		v.Data = ""
+	}
+	v.Pin = version
+	v.Subdomain = ""
+	if sub != "" && sub != name+"-"+env {
+		v.Subdomain = sub
+	}
+	// Sections du parent : point de départ d'une section qui devient propre.
+	tmp := cloneEntry(e)
+	tmp.Environments[env] = v
+	pa, pc, po, err := tmp.sections(v.From, 0)
+	if err != nil {
+		errs = append(errs, err.Error())
+	}
+	if r.FormValue("own_access") == "1" {
+		if _, shown := r.Form["expose"]; shown && v.OwnAccess() {
+			v.Expose, v.Devices, v.SSO = accessFromForm(r)
+		} else if !v.OwnAccess() {
+			v.Expose, v.Devices, v.SSO = pa.Expose, pa.Devices, pa.SSO
+		}
+	} else {
+		v.Expose, v.Devices, v.SSO = "", nil, false
+	}
+	if r.FormValue("own_containers") == "1" {
+		if !v.OwnContainers() {
+			v.Containers = map[string]Container{}
+			for n, c := range pc.Containers {
+				c.Image = untag(c.Image)
+				v.Containers[n] = c
+			}
+			v.Entrypoint = pc.Entrypoint
+		} else if _, shown := r.Form["containers"]; shown {
+			var cerrs []string
+			v.Containers, v.Entrypoint, cerrs = s.containersFromForm(r, v.Containers, allowed, repo, "")
+			errs = append(errs, cerrs...)
+		}
+	} else {
+		v.Containers, v.Entrypoint = nil, ""
+	}
+	if r.FormValue("own_options") == "1" {
+		if _, shown := r.Form["options_shown"]; shown && v.OwnOptions() {
+			internet, probe, rl := optionsFromForm(r)
+			v.InternetAccess, v.Probe, v.RateLimit = &internet, probe, rl
+		} else if !v.OwnOptions() {
+			internet := po.Internet
+			v.InternetAccess, v.Probe, v.RateLimit = &internet, po.Probe, po.RateLimit
+		}
+	} else {
+		v.InternetAccess, v.Probe, v.RateLimit = nil, "", nil
+	}
+	e.Environments[env] = v
 	return e, errs
+}
+
+// cloneEntry : copie profonde (par JSON) : le formulaire ne touche jamais l'entrée lue sur main.
+func cloneEntry(e Entry) Entry {
+	var out Entry
+	b, _ := json.Marshal(e)
+	_ = json.Unmarshal(b, &out)
+	if out.Environments == nil {
+		out.Environments = map[string]Env{}
+	}
+	return out
+}
+
+// newEnv : un environnement neuf, en VPN et données séparées ; le reste hérite du parent.
+func (s *Server) newEnv(e Entry, branch, from string) Env {
+	v := Env{Branch: branch, From: from, Expose: "vpn"}
+	if pa, _, _, err := e.sections(from, 0); err == nil && pa.Expose == "vpn" {
+		v.Devices, v.SSO = pa.Devices, pa.SSO
+	} else {
+		v.Devices = append([]string(nil), s.cfg.Peers...)
+		sort.Strings(v.Devices)
+	}
+	return v
+}
+
+// withoutEnv : l'entrée sans un environnement ; ceux qui en héritaient héritent de son parent.
+func withoutEnv(e Entry, id string) Entry {
+	out := cloneEntry(e)
+	from := out.Environments[id].From
+	delete(out.Environments, id)
+	for k, v := range out.Environments {
+		if v.From == id {
+			v.From = from
+			out.Environments[k] = v
+		}
+	}
+	return out
 }
 
 // previewOf : diff de l'entrée, erreurs et message de commit proposé.
@@ -352,22 +827,28 @@ func (s *Server) previewOf(name string, e *Entry, snap *Snapshot, isNew bool, ms
 	} else {
 		p.ApplyURL = "/sites/" + name + "/apply"
 	}
+	// L'avant est relu puis réécrit comme le ferait la page : une écriture à la main équivalente
+	// (`"sso": false`, ordre des clés) ne compte pas comme un changement.
 	var before, after []string
-	if raw, ok := snap.Apps.Raw[name]; ok && !isNew {
-		before = entryLines(name, raw)
+	if old, ok := snap.Apps.Entries[name]; ok && !isNew {
+		b, _ := entryJSON(old)
+		before = entryLines(name, b)
 	}
 	if e != nil {
 		b, _ := entryJSON(*e)
 		after = entryLines(name, b)
 	}
 	p.Lines, p.Adds, p.Dels = diffLines(before, after)
-	if e != nil {
-		p.To = domainOf(name, *e, s.cfg.Domain)
-		if old, ok := snap.Apps.Entries[name]; ok && !isNew {
-			p.From = domainOf(name, old, s.cfg.Domain)
+	if e != nil && !isNew {
+		// Adresse qui change, environnements compris.
+		old := map[string]string{}
+		for _, d := range snap.Apps.Entries[name].Deploys(name) {
+			old[d.App] = d.Domain(s.cfg.Domain)
 		}
-		if p.From == p.To {
-			p.From, p.To = "", ""
+		for _, d := range e.Deploys(name) {
+			if o, ok := old[d.App]; ok && o != d.Domain(s.cfg.Domain) {
+				p.From, p.To = o, d.Domain(s.cfg.Domain)
+			}
 		}
 	}
 	p.Dirty = p.Adds+p.Dels > 0
@@ -387,54 +868,147 @@ func (s *Server) summary(name string, snap *Snapshot, e *Entry, isNew bool) stri
 		return "feat(" + name + "): remove site"
 	}
 	old := snap.Apps.Entries[name]
-	var parts []string
-	if ov, nv := old.Version(), e.Version(); ov != nv {
-		if nv == "main" {
-			parts = append(parts, "follow main again")
-		} else {
-			parts = append(parts, "roll back to "+shortTag(nv))
+	var parts, touched []string
+	if p := s.deployChanges(name, old, *e, ""); len(p) > 0 {
+		parts = append(parts, p...)
+		touched = append(touched, old.labelOf(""))
+	}
+	ids := map[string]bool{}
+	for id := range old.Environments {
+		ids[id] = true
+	}
+	for id := range e.Environments {
+		ids[id] = true
+	}
+	var sorted []string
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	for _, id := range sorted {
+		_, was := old.Environments[id]
+		_, is := e.Environments[id]
+		switch {
+		case !was:
+			parts = append(parts, "add "+id+" environment")
+		case !is:
+			parts = append(parts, "remove "+id+" environment")
+		default:
+			p := s.deployChanges(name, old, *e, id)
+			if len(p) == 0 {
+				continue
+			}
+			parts = append(parts, id+": "+strings.Join(p, ", "))
+		}
+		touched = append(touched, id)
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "update site")
+	}
+	msg := "feat(" + name + "): " + strings.Join(parts, ", ")
+	if len(msg) > 100 {
+		msg = "feat(" + name + "): update " + strings.Join(touched, ", ")
+		if len(msg) > 100 {
+			msg = "feat(" + name + "): update site"
 		}
 	}
-	if domainOf(name, old, s.cfg.Domain) != domainOf(name, *e, s.cfg.Domain) && old.Expose == e.Expose {
-		parts = append(parts, "move to "+domainOf(name, *e, s.cfg.Domain))
+	return msg
+}
+
+// deployChanges : ce qui change pour un déploiement entre deux entrées.
+func (s *Server) deployChanges(name string, old, cur Entry, id string) []string {
+	a, err1 := old.Deploy(name, id)
+	b, err2 := cur.Deploy(name, id)
+	if err1 != nil || err2 != nil {
+		return nil
 	}
-	if old.Expose != e.Expose {
-		if e.VPN() {
+	var parts []string
+	if id != "" {
+		ov, nv := old.Environments[id], cur.Environments[id]
+		if ov.Branch != nv.Branch {
+			parts = append(parts, "track "+nv.Branch)
+		}
+		if ov.From != nv.From {
+			parts = append(parts, "inherit from "+cur.labelOf(nv.From))
+		}
+		if ov.Name != nv.Name {
+			parts = append(parts, "rename to "+b.Label)
+		}
+		if ov.DataMode() != nv.DataMode() {
+			parts = append(parts, map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.DataMode()])
+		}
+		for _, x := range []struct {
+			was, is bool
+			what    string
+		}{{ov.OwnAccess(), nv.OwnAccess(), "access"}, {ov.OwnContainers(), nv.OwnContainers(), "containers"}, {ov.OwnOptions(), nv.OwnOptions(), "options"}} {
+			if x.was != x.is {
+				if x.is {
+					parts = append(parts, "own "+x.what)
+				} else {
+					parts = append(parts, "inherit "+x.what)
+				}
+			}
+		}
+	} else if old.Name != cur.Name {
+		parts = append(parts, "rename to "+b.Label)
+	}
+	if a.Tag != b.Tag {
+		switch {
+		case b.Frozen():
+			parts = append(parts, "roll back to "+shortTag(b.Tag))
+		case a.Frozen():
+			parts = append(parts, "follow "+b.Branch+" again")
+		case id == "":
+			parts = append(parts, "track "+b.Branch)
+		}
+	}
+	if a.Domain(s.cfg.Domain) != b.Domain(s.cfg.Domain) && a.Access.Expose == b.Access.Expose {
+		parts = append(parts, "move to "+b.Domain(s.cfg.Domain))
+	}
+	if a.Access.Expose != b.Access.Expose {
+		if b.VPN() {
 			parts = append(parts, "restrict to vpn")
 		} else {
 			parts = append(parts, "make public")
 		}
-	} else if e.VPN() && strings.Join(old.Devices, ",") != strings.Join(e.Devices, ",") {
+	} else if b.VPN() && strings.Join(a.Access.Devices, ",") != strings.Join(b.Access.Devices, ",") {
 		parts = append(parts, "update devices")
 	}
-	if old.SSO != e.SSO {
-		if e.SSO {
+	if a.Access.SSO != b.Access.SSO {
+		if b.Access.SSO {
 			parts = append(parts, "require login")
 		} else {
 			parts = append(parts, "drop login")
 		}
 	}
-	if old.InternetAccess != e.InternetAccess {
-		if e.InternetAccess {
+	if a.Options.Internet != b.Options.Internet {
+		if b.Options.Internet {
 			parts = append(parts, "allow internet")
 		} else {
 			parts = append(parts, "block internet")
 		}
 	}
-	if fmt.Sprint(old.RateLimit) != fmt.Sprint(e.RateLimit) && !(old.RateLimit != nil && e.RateLimit != nil && strings.Join(*old.RateLimit, " ") == strings.Join(*e.RateLimit, " ")) {
+	if fmt.Sprint(a.Options.RateLimit) != fmt.Sprint(b.Options.RateLimit) && !(a.Options.RateLimit != nil && b.Options.RateLimit != nil && strings.Join(*a.Options.RateLimit, " ") == strings.Join(*b.Options.RateLimit, " ")) {
 		parts = append(parts, "update rate limit")
 	}
-	if old.Probe != e.Probe {
+	if a.Options.Probe != b.Options.Probe {
 		parts = append(parts, "change health path")
 	}
-	if len(parts) == 0 {
+	ac, _ := json.Marshal(stripTags(a.Ctrs))
+	bc, _ := json.Marshal(stripTags(b.Ctrs))
+	if string(ac) != string(bc) {
 		parts = append(parts, "update containers")
 	}
-	msg := "feat(" + name + "): " + strings.Join(parts, ", ")
-	if len(msg) > 100 {
-		msg = "feat(" + name + "): update site"
+	return parts
+}
+
+func stripTags(c Ctrs) Ctrs {
+	out := Ctrs{Containers: map[string]Container{}, Entrypoint: c.Entrypoint}
+	for n, ct := range c.Containers {
+		ct.Image = untag(ct.Image)
+		out.Containers[n] = ct
 	}
-	return msg
+	return out
 }
 
 func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
@@ -455,12 +1029,47 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	q := r.URL.Query()
+	env := q.Get("env")
+	addErr := ""
+	if q.Get("new") == "1" {
+		// Nouvel environnement : un brouillon, rien n'est écrit avant « Appliquer ».
+		from := q.Get("from")
+		_, exists := e.Environments[env]
+		_, parentOK := e.Environments[from]
+		switch {
+		case !reEnvID.MatchString(env):
+			addErr = "Nom : minuscules, chiffres et tirets, 16 caractères au plus, commençant par une lettre."
+		case exists:
+			addErr = env + " existe déjà."
+		case !reTag.MatchString(q.Get("branch")):
+			addErr = "Choisis la branche à déployer."
+		case from != "" && !parentOK:
+			addErr = "Parent inconnu."
+		}
+		if addErr == "" {
+			e = cloneEntry(e)
+			e.Environments[env] = s.newEnv(e, q.Get("branch"), from)
+		} else {
+			env = ""
+			if parentOK {
+				env = from
+			}
+		}
+	}
+	if _, known := e.Environments[env]; env != "" && !known {
+		http.Redirect(w, r, "/sites/"+name, http.StatusFound)
+		return
+	}
 	repo := s.sourceRepo(ctx, e)
-	f := s.formVM(ctx, name, e, false, repo, s.repoImages(ctx, repo), snap)
-	f.Versions, f.VersionNote = s.versions(ctx, e, repo)
+	f := s.formVMFor(ctx, name, e, env, false, repo, s.repoImages(ctx, repo), snap)
+	f.AddError = addErr
+	if addErr != "" {
+		f.AddName = q.Get("env")
+	}
 	up := probes(ctx, s.cfg.Prometheus)
 	f.Up, f.Probed = up[f.Domain]
-	f.Preview = s.previewOf(name, &e, snap, false, "", nil)
+	f.Preview = s.previewOf(name, &e, snap, false, "", validate(s.cfg, name, e, snap.Apps.Entries))
 	if j := s.jobs.latest(name); j != nil {
 		snapJob := j.Snapshot()
 		if b := badgeOf(snapJob); b != nil {
@@ -475,50 +1084,49 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "editor", map[string]any{"Nav": "sites", "F": f})
 }
 
-// formRequest : nom, conteneurs et images permises de la requête ; vérifie que le site existe (ou pas).
-func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapshot) (name string, names []string, current *Entry, allowed []string, isNew bool, err error) {
+// formRequest : nom, entrée de départ, images permises et dépôt de la requête.
+func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapshot) (name string, current Entry, allowed []string, repo string, isNew bool, err error) {
 	name = r.PathValue("app")
 	isNew = name == ""
 	if isNew {
 		name = strings.TrimSpace(r.FormValue("name"))
-		names = strings.Split(r.FormValue("containers"), ",")
-		repo := r.FormValue("repo")
+		repo = r.FormValue("repo")
 		allowed = s.repoImages(ctx, repo)
-		if !reName.MatchString(name) {
-			return name, names, nil, allowed, true, nil
-		}
-		return name, names, nil, allowed, true, nil
+		return name, Entry{}, allowed, repo, true, nil
 	}
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
-		return "", nil, nil, nil, false, fmt.Errorf("%s n'existe plus sur main", name)
+		return "", Entry{}, nil, "", false, fmt.Errorf("%s n'existe plus sur main", name)
 	}
-	repo := s.sourceRepo(ctx, e)
+	repo = s.sourceRepo(ctx, e)
 	allowed = s.repoImages(ctx, repo)
 	for _, c := range e.Containers {
-		img, _ := splitImage(c.Image)
-		if !contains(allowed, img) {
+		if img := untag(c.Image); !contains(allowed, img) {
 			allowed = append(allowed, img)
 		}
 	}
-	return name, e.ContainerNames(), &e, allowed, false, nil
+	return name, e, allowed, repo, false, nil
 }
 
 // requestEntry : entrée et erreurs d'une soumission du formulaire.
-func (s *Server) requestEntry(r *http.Request) (string, *Entry, *Snapshot, PreviewVM, bool, error) {
+func (s *Server) requestEntry(r *http.Request) (string, string, *Entry, *Snapshot, PreviewVM, bool, error) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		return "", nil, nil, PreviewVM{}, false, err
+		return "", "", nil, nil, PreviewVM{}, false, err
 	}
 	snap, err := s.snapshot(ctx)
 	if err != nil {
-		return "", nil, nil, PreviewVM{}, false, err
+		return "", "", nil, nil, PreviewVM{}, false, err
 	}
-	name, names, current, allowed, isNew, err := s.formRequest(ctx, r, snap)
+	name, current, allowed, repo, isNew, err := s.formRequest(ctx, r, snap)
 	if err != nil {
-		return "", nil, nil, PreviewVM{}, false, err
+		return "", "", nil, nil, PreviewVM{}, false, err
 	}
-	e, errs := s.entryFromForm(r, names, current, allowed)
+	env := r.FormValue("env")
+	if isNew || !reEnvID.MatchString(env) {
+		env = ""
+	}
+	e, errs := s.entryFromForm(r, name, current, env, allowed, repo)
 	if isNew {
 		if _, exists := snap.Apps.Entries[name]; exists {
 			errs = append(errs, "Un site s'appelle déjà "+name+".")
@@ -527,13 +1135,16 @@ func (s *Server) requestEntry(r *http.Request) (string, *Entry, *Snapshot, Previ
 			errs = append(errs, "Aucune image trouvée pour ce dépôt.")
 		}
 	}
+	if len(e.Environments) == 0 {
+		e.Environments = nil
+	}
 	errs = append(errs, validate(s.cfg, name, e, snap.Apps.Entries)...)
 	p := s.previewOf(name, &e, snap, isNew, strings.TrimSpace(r.FormValue("msg")), errs)
-	return name, &e, snap, p, isNew, nil
+	return name, env, &e, snap, p, isNew, nil
 }
 
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
-	_, _, _, p, _, err := s.requestEntry(r)
+	_, _, _, _, p, _, err := s.requestEntry(r)
 	if err != nil {
 		s.renderError(w, err)
 		return
@@ -541,12 +1152,38 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "preview", p)
 }
 
-func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
-	name, e, snap, p, isNew, err := s.requestEntry(r)
+// reform : le formulaire refait à partir de ce qui est saisi (section propre ou héritée, conteneur
+// ajouté ou retiré, parent ou branche changés) : la page ne calcule rien elle-même.
+func (s *Server) reform(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name, env, e, snap, p, isNew, err := s.requestEntry(r)
 	if err != nil {
 		s.renderError(w, err)
 		return
 	}
+	repo := r.FormValue("repo")
+	if !isNew {
+		repo = s.sourceRepo(ctx, snap.Apps.Entries[name])
+	}
+	f := s.formVMFor(ctx, name, *e, env, isNew, repo, s.repoImages(ctx, repo), snap)
+	f.Base = r.FormValue("base")
+	if isNew {
+		f.Base = "new"
+	}
+	f.Preview = p
+	s.render(w, "form", f)
+}
+
+func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
+	name, _, e, snap, p, isNew, err := s.requestEntry(r)
+	if err != nil {
+		s.renderError(w, err)
+		return
+	}
+	s.startApply(w, r, name, e, snap, p, isNew)
+}
+
+func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string, e *Entry, snap *Snapshot, p PreviewVM, isNew bool) {
 	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
 		p.Errors = append(p.Errors, "Une modification de "+name+" est déjà en cours : attends qu'elle se termine.")
 	}
@@ -569,8 +1206,64 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "preview", p)
 		return
 	}
-	j := s.startJob(Request{App: name, Entry: e, Base: base, Message: msg}, domainOf(name, *e, s.cfg.Domain))
+	var old *Entry
+	if o, ok := snap.Apps.Entries[name]; ok {
+		old = &o
+	}
+	j := s.startJob(Request{App: name, Entry: e, Old: old, Base: base, Message: msg})
 	s.render(w, "job", j.Snapshot())
+}
+
+// removeEnv : retire un environnement (ceux qui en héritaient passent à son parent).
+func (s *Server) removeEnv(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name, id := r.PathValue("app"), r.PathValue("env")
+	if err := r.ParseForm(); err != nil {
+		s.renderError(w, err)
+		return
+	}
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		s.renderError(w, err)
+		return
+	}
+	cur, ok := snap.Apps.Entries[name]
+	if _, has := cur.Environments[id]; !ok || !has {
+		s.renderError(w, fmt.Errorf("%s n'a pas d'environnement %s sur main", name, id))
+		return
+	}
+	e := withoutEnv(cur, id)
+	if len(e.Environments) == 0 {
+		e.Environments = nil
+	}
+	p := s.previewOf(name, &e, snap, false, "feat("+name+"): remove "+id+" environment", validate(s.cfg, name, e, snap.Apps.Entries))
+	s.startApply(w, r, name, &e, snap, p, false)
+}
+
+// recopy : demande à admin-recopy (root) de recopier les données du parent.
+func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name, id := r.PathValue("app"), r.PathValue("env")
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		s.renderError(w, err)
+		return
+	}
+	e := snap.Apps.Entries[name]
+	v, ok := e.Environments[id]
+	if !ok || v.DataMode() != "copy" {
+		http.Error(w, "environnement inconnu ou sans données « copie »", http.StatusBadRequest)
+		return
+	}
+	dir := filepath.Join(s.cfg.StateDir, "recopy")
+	if err = os.MkdirAll(dir, 0o755); err == nil {
+		err = os.WriteFile(filepath.Join(dir, name+"-"+id+".want"), nil, 0o644)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "From": e.labelOf(v.From), "R": s.recopyState(name+"-"+id, e.labelOf(v.From))})
 }
 
 func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
@@ -603,7 +1296,7 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, fmt.Errorf("%s a changé sur main depuis l'ouverture de la page : recharge-la", name))
 		return
 	}
-	j := s.startJob(Request{App: name, Entry: nil, Base: base, Message: "feat(" + name + "): remove site"}, domainOf(name, e, s.cfg.Domain))
+	j := s.startJob(Request{App: name, Entry: nil, Old: &e, Base: base, Message: "feat(" + name + "): remove site"})
 	s.render(w, "job", j.Snapshot())
 }
 
@@ -618,4 +1311,21 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, "job", j.Snapshot())
+}
+
+// recopyStatus : l'état de la recopie, redemandé par la page tant qu'elle tourne.
+func (s *Server) recopyStatus(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.snapshot(r.Context())
+	if err != nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	name, id := r.PathValue("app"), r.PathValue("env")
+	e := snap.Apps.Entries[name]
+	v, ok := e.Environments[id]
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "R": s.recopyState(name+"-"+id, e.labelOf(v.From))})
 }

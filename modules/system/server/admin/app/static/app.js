@@ -9,9 +9,9 @@ document.addEventListener("error", (ev) => {
 let filter = "all";
 function applyFilter() {
   document.querySelectorAll(".segmented [data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
-  document.querySelectorAll(".card.site").forEach((c) => {
-    const vpn = c.dataset.vpn === "true";
-    c.hidden = filter === "vpn" ? !vpn : filter === "public" ? vpn : false;
+  // Un site reste groupé : visible dès qu'un de ses environnements correspond au filtre.
+  document.querySelectorAll("table.sites tbody[data-vpn]").forEach((g) => {
+    g.hidden = filter === "vpn" ? g.dataset.vpn !== "true" : filter === "public" ? g.dataset.public !== "true" : false;
   });
 }
 document.addEventListener("click", (ev) => {
@@ -27,6 +27,7 @@ document.addEventListener("change", (ev) => {
   if (!form || ev.target.name !== "expose") return;
   const vpn = ev.target.value === "vpn";
   form.querySelectorAll("[data-vpn-only]").forEach((el) => (el.hidden = !vpn));
+  form.querySelectorAll("[data-public-only]").forEach((el) => (el.hidden = vpn));
   form.querySelectorAll("[data-suffix]").forEach((el) => (el.textContent = vpn ? el.dataset.vpn : el.dataset.public));
 });
 
@@ -59,4 +60,60 @@ document.addEventListener("htmx:afterSwap", () => {
     r.dataset.armed = "1";
     setTimeout(() => location.assign(r.dataset.reloadTo || location.href), Number(r.dataset.reloadAfter));
   }
+});
+
+// Listes déroulantes maison (icône par option) : la valeur va dans le champ caché, qui émet
+// `change` comme un vrai champ (htmx s'en sert pour l'aperçu, ou pour refaire le formulaire).
+function ddClose(dd, focus) {
+  const list = dd.querySelector(".dd-list");
+  if (!list || list.hidden) return;
+  list.hidden = true;
+  dd.querySelector(".dd-btn").setAttribute("aria-expanded", "false");
+  if (focus) dd.querySelector(".dd-btn").focus();
+}
+function ddOpen(dd) {
+  document.querySelectorAll("[data-dd]").forEach((o) => o !== dd && ddClose(o));
+  const list = dd.querySelector(".dd-list");
+  list.hidden = false;
+  dd.querySelector(".dd-btn").setAttribute("aria-expanded", "true");
+  (list.querySelector('[aria-selected="true"]') || list.querySelector("[role=option]"))?.focus();
+}
+function ddPick(dd, opt) {
+  const input = dd.querySelector('input[type="hidden"]');
+  dd.querySelectorAll("[role=option]").forEach((o) => o.setAttribute("aria-selected", String(o === opt)));
+  const btn = dd.querySelector(".dd-btn");
+  btn.querySelector(".dd-label").textContent = opt.dataset.label;
+  btn.querySelector(".dd-label").classList.remove("muted");
+  const ic = btn.querySelector(".dd-ic");
+  ic.style.setProperty("--tint", opt.dataset.tint);
+  ic.style.setProperty("--ink", opt.dataset.ink);
+  ic.querySelector("path").setAttribute("d", opt.dataset.icon);
+  ddClose(dd, true);
+  if (input.value === opt.dataset.value) return;
+  input.value = opt.dataset.value;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest ? ev.target : null;
+  const btn = t && t.closest(".dd-btn");
+  const opt = t && t.closest(".dd-list [role=option]");
+  if (btn) {
+    const dd = btn.closest("[data-dd]");
+    dd.querySelector(".dd-list").hidden ? ddOpen(dd) : ddClose(dd, true);
+  } else if (opt) {
+    ddPick(opt.closest("[data-dd]"), opt);
+  } else {
+    document.querySelectorAll("[data-dd]").forEach((d) => ddClose(d));
+  }
+});
+document.addEventListener("keydown", (ev) => {
+  const dd = ev.target.closest && ev.target.closest("[data-dd]");
+  if (!dd) return;
+  const opts = [...dd.querySelectorAll("[role=option]")];
+  const i = opts.indexOf(ev.target);
+  if (ev.key === "Escape") { ddClose(dd, true); }
+  else if (ev.key === "ArrowDown") { ev.preventDefault(); if (i < 0) ddOpen(dd); else opts[Math.min(i + 1, opts.length - 1)].focus(); }
+  else if (ev.key === "ArrowUp") { ev.preventDefault(); if (i > 0) opts[i - 1].focus(); }
+  else if ((ev.key === "Enter" || ev.key === " ") && i >= 0) { ev.preventDefault(); ddPick(dd, opts[i]); }
+  else return;
 });

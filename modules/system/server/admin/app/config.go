@@ -26,6 +26,7 @@ type Config struct {
 	Fonts        string
 	Peers        []string
 	SecretKeys   []string
+	RecopyStatus string // résultats d'admin-recopy (root), lus seulement
 
 	DispatchToken string // lance apps.yml, rien d'autre
 	RegistryToken string // lit les images et la liste des packages
@@ -48,6 +49,7 @@ func loadConfig() (*Config, error) {
 		StateDir:     env("STATE_DIRECTORY", "/tmp/admin"),
 		Htmx:         env("ADMIN_HTMX", ""),
 		Fonts:        env("ADMIN_FONTS", ""),
+		RecopyStatus: env("ADMIN_RECOPY_STATUS", "/var/lib/admin-recopy"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse
 	// d'évaluer un dépôt à travers un lien. On travaille sur le chemin réel.

@@ -110,6 +110,7 @@ func newID() string {
 type Request struct {
 	App     string
 	Entry   *Entry // nil : suppression
+	Old     *Entry // entrée lue sur main (nil : nouveau site)
 	Base    string // empreinte lue par la page
 	Message string
 }
@@ -159,10 +160,13 @@ func (s *Server) candidate(ctx context.Context, apps *AppsFile, lockRaw []byte, 
 	if err := json.Unmarshal(lockRaw, &lock); err != nil {
 		return nil, nil, nil, fmt.Errorf("lock illisible : %w", err)
 	}
+	// Images de chaque déploiement : la racine et les environnements (tag de leur branche ou figé).
 	used := map[string]bool{}
-	for _, e := range next.Entries {
-		for _, c := range e.Containers {
-			used[s.cfg.ref(c.Image)] = true
+	for name, e := range next.Entries {
+		for _, d := range e.Deploys(name) {
+			for _, c := range d.Ctrs.Containers {
+				used[s.cfg.ref(c.Image)] = true
+			}
 		}
 	}
 	refs := make([]string, 0, len(used))
@@ -202,16 +206,75 @@ func (s *Server) candidate(ctx context.Context, apps *AppsFile, lockRaw []byte, 
 	return appsOut, append(lockOut, '\n'), images, err
 }
 
-func (s *Server) startJob(req Request, domain string) *Job {
+// Target : un déploiement que le commit change, à voir répondre (ou disparaître).
+type Target struct {
+	App, Domain, Probe, Entry string
+	Port, Code                int
+	Remove                    bool
+}
+
+// targets : déploiements ajoutés, changés (héritiers compris) ou retirés par la demande.
+func (req Request) targets(base string) []Target {
+	sig := func(d Deploy) string { b, _ := json.Marshal(d); return string(b) }
+	old := map[string]Deploy{}
+	if req.Old != nil {
+		for _, d := range req.Old.Deploys(req.App) {
+			old[d.App] = d
+		}
+	}
+	var out []Target
+	seen := map[string]bool{}
+	if req.Entry != nil {
+		for _, d := range req.Entry.Deploys(req.App) {
+			seen[d.App] = true
+			if o, ok := old[d.App]; ok && sig(o) == sig(d) {
+				continue
+			}
+			probe := d.Options.Probe
+			if probe == "" {
+				probe = "/"
+			}
+			out = append(out, Target{App: d.App, Domain: d.Domain(base), Probe: probe, Entry: d.EntryPoint(), Port: hostPort(d.App)})
+		}
+	}
+	for app, d := range old {
+		if !seen[app] {
+			out = append(out, Target{App: app, Domain: d.Domain(base), Probe: "/", Port: hostPort(app), Remove: true})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].App < out[j].App })
+	return out
+}
+
+func (s *Server) startJob(req Request) *Job {
+	targets := req.targets(s.cfg.Domain)
+	domain := ""
+	var doms []string
+	for _, t := range targets {
+		doms = append(doms, t.Domain)
+	}
+	if req.Entry != nil {
+		if d, err := req.Entry.Deploy(req.App, ""); err == nil {
+			domain = d.Domain(s.cfg.Domain)
+		}
+	} else if len(doms) > 0 {
+		domain = doms[0]
+	}
 	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new"}
+	last := Step{Label: "Le site répond", Sub: strings.Join(doms, ", "), State: "todo"}
+	switch {
+	case j.Delete:
+		last.Label = "Le site est retiré"
+	case len(targets) > 1:
+		last.Label = fmt.Sprintf("Les %d adresses répondent", len(targets))
+	case len(targets) == 0:
+		last.Sub = "rien à relancer"
+	}
 	j.Steps = []Step{
 		{Label: "Config vérifiée", Sub: "évaluation sur think", State: "active"},
 		{Label: "Commit sur main", Sub: "apps.yml", State: "todo"},
 		{Label: "think applique", Sub: "apps-deploy, dans la minute", State: "todo"},
-		{Label: "Le site répond", Sub: domain, State: "todo"},
-	}
-	if j.Delete {
-		j.Steps[3] = Step{Label: "Le site est retiré", Sub: domain, State: "todo"}
+		last,
 	}
 	s.jobs.add(j)
 	go func() {
@@ -291,35 +354,46 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request) error {
 	}
 	j.set(2, "done", "", "")
 
-	// 4. Le site répond (ou ne répond plus, s'il est supprimé).
+	// 4. Les déploiements touchés répondent (ou ne répondent plus, s'ils sont retirés).
 	j.set(3, "active", "", "")
-	port, probe := hostPort(req.App), "/"
-	if req.Entry != nil && req.Entry.Probe != "" {
-		probe = req.Entry.Probe
-	}
 	deadline := time.Now().Add(3 * time.Minute)
-	for {
-		code, ok := answers(ctx, port, probe)
-		if req.Entry == nil && code == 0 {
-			j.set(3, "done", "", "")
-			break
+	pending := append([]Target(nil), req.targets(s.cfg.Domain)...)
+	var answered []string
+	for len(pending) > 0 {
+		var still []Target
+		for _, t := range pending {
+			code, ok := answers(ctx, t.Port, t.Probe)
+			switch {
+			case t.Remove && code == 0:
+				answered = append(answered, t.Domain+" retiré")
+			case !t.Remove && ok:
+				answered = append(answered, fmt.Sprintf("%s · HTTP %d", t.Domain, code))
+			default:
+				t.Code = code
+				still = append(still, t)
+			}
 		}
-		if req.Entry != nil && ok {
-			j.set(3, "done", fmt.Sprintf("HTTP %d", code), "")
+		pending = still
+		if len(pending) == 0 {
 			break
 		}
 		if time.Now().After(deadline) {
-			if req.Entry == nil {
-				j.set(3, "failed", "le port répond encore après 3 minutes", "")
-			} else {
-				j.set(3, "failed", fmt.Sprintf("pas de réponse correcte après 3 minutes (HTTP %d) : journalctl -u podman-%s-%s", code, req.App, req.Entry.EntryPoint()), "")
+			var why []string
+			for _, t := range pending {
+				if t.Remove {
+					why = append(why, t.Domain+" répond encore")
+				} else {
+					why = append(why, fmt.Sprintf("%s : pas de réponse correcte (HTTP %d), journalctl -u podman-%s-%s", t.Domain, t.Code, t.App, t.Entry))
+				}
 			}
+			j.set(3, "failed", strings.Join(why, "\n")+"\n(après 3 minutes)", "")
 			return errors.New("site")
 		}
 		if !sleep(ctx, 5*time.Second) {
 			return ctx.Err()
 		}
 	}
+	j.set(3, "done", strings.Join(answered, "\n"), "")
 	j.finish()
 	return nil
 }

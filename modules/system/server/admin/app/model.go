@@ -29,6 +29,7 @@ type Container struct {
 }
 
 type Entry struct {
+	Name           string               `json:"name,omitempty"` // nom affiché de la racine (production)
 	Subdomain      string               `json:"subdomain,omitempty"`
 	Expose         string               `json:"expose,omitempty"`
 	Devices        []string             `json:"devices,omitempty"`
@@ -38,6 +39,7 @@ type Entry struct {
 	Entrypoint     string               `json:"entrypoint,omitempty"`
 	RateLimit      *[]string            `json:"rateLimit,omitempty"` // [] : toute l'app
 	Containers     map[string]Container `json:"containers"`
+	Environments   map[string]Env       `json:"environments,omitempty"`
 }
 
 func (e Entry) VPN() bool { return e.Expose == "vpn" }
@@ -341,48 +343,11 @@ func validate(cfg *Config, name string, e Entry, others map[string]Entry) []stri
 			}
 		}
 	}
-	if len(e.Containers) == 0 || len(e.Containers) > 5 {
-		add("Un site a de 1 à 5 conteneurs.")
+	if len(e.Name) > 32 {
+		add("Nom affiché : 32 caractères au plus.")
 	}
-	if len(e.Containers) > 1 {
-		if _, ok := e.Containers[e.Entrypoint]; !ok {
-			add("Choisis le conteneur qui reçoit le trafic.")
-		}
-	}
-	for cn, c := range e.Containers {
-		if !reContainer.MatchString(cn) {
-			add("Nom de conteneur invalide : %s.", cn)
-		}
-		if !reImage.MatchString(c.Image) {
-			add("%s : image invalide (%s).", cn, c.Image)
-		}
-		if c.Memory != "" && !reMemory.MatchString(c.Memory) {
-			add("%s : mémoire invalide.", cn)
-		}
-		for _, d := range c.DependsOn {
-			if _, ok := e.Containers[d]; !ok || d == cn {
-				add("%s : dépend d'un conteneur inconnu (%s).", cn, d)
-			}
-		}
-		for _, d := range c.Data {
-			if !reDataPath.MatchString(d.Path) || strings.Contains(d.Path, "..") {
-				add("%s : dossier de données invalide (%s).", cn, d.Path)
-			}
-			if d.On != "" && !(d.On == "/var/lib/"+name || strings.HasPrefix(d.On, "/var/lib/"+name+"/") || strings.HasPrefix(d.On, name+"-")) {
-				add("%s : emplacement %s hors du site.", cn, d.On)
-			}
-		}
-		for _, s := range c.Secrets {
-			if !strings.HasPrefix(s, name+"/") || !reSecret.MatchString(strings.TrimPrefix(s, name+"/")) {
-				add("%s : le secret %s n'est pas rangé sous %s/.", cn, s, name)
-			}
-		}
-	}
-	mine := domainOf(name, e, cfg.Domain)
-	for other, oe := range others {
-		if other != name && domainOf(other, oe, cfg.Domain) == mine {
-			add("%s est déjà servi par %s.", mine, other)
-		}
-	}
+	errs = append(errs, validateContainers(name, "", e.Containers, e.Entrypoint, false)...)
+	// Environnements, noms servis et adresses (racine comprise).
+	errs = append(errs, validateEnvs(cfg, name, e, others)...)
 	return errs
 }

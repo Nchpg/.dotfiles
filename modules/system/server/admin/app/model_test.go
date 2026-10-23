@@ -116,7 +116,6 @@ func TestFormRoundTrip(t *testing.T) {
 			images = append(images, img)
 		}
 		f := s.formVM(context.Background(), name, e, false, "", images, snap)
-		f.Versions = []Opt{{Value: e.Version(), Label: e.Version(), Selected: true}}
 		var buf bytes.Buffer
 		if err := s.tmpl.ExecuteTemplate(&buf, "form", f); err != nil {
 			t.Fatal(err)
@@ -128,7 +127,7 @@ func TestFormRoundTrip(t *testing.T) {
 		if err := req.ParseForm(); err != nil {
 			t.Fatal(err)
 		}
-		got, errs := s.entryFromForm(req, e.ContainerNames(), &e, images)
+		got, errs := s.entryFromForm(req, name, e, "", images, "")
 		if len(errs) > 0 {
 			t.Errorf("%s : erreurs %v", name, errs)
 		}
@@ -229,12 +228,12 @@ func TestCandidateLock(t *testing.T) {
 func TestSeveralDataFolders(t *testing.T) {
 	s, snap := testServer(t)
 	e := snap.Apps.Entries["mnist"]
-	vals := url.Values{"img_web": {"mnist-cnn-cpp"}, "newdata_web": {"/data  /uploads"}}
+	vals := url.Values{"containers": {"web"}, "img_web": {"mnist-cnn-cpp"}, "newdata_web": {"/data  /uploads"}}
 	req := httptest.NewRequest("POST", "/sites/mnist/preview", strings.NewReader(vals.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetPathValue("app", "mnist")
 	_ = req.ParseForm()
-	got, errs := s.entryFromForm(req, e.ContainerNames(), &e, []string{"mnist-cnn-cpp"})
+	got, errs := s.entryFromForm(req, "mnist", e, "", []string{"mnist-cnn-cpp"}, "")
 	if len(errs) > 0 || len(got.Containers["web"].Data) != 2 || got.Containers["web"].Data[1].Path != "/uploads" {
 		t.Fatalf("attendu /data et /uploads : %+v %v", got.Containers["web"].Data, errs)
 	}

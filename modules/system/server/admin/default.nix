@@ -10,7 +10,8 @@
 
 # Dashboard d'administration (onglet Sites) : lit l'état de think et des sites, et modifie
 # apps.json par le seul workflow apps.yml. Il n'écrit nulle part ailleurs : pas de jeton
-# d'écriture sur un dépôt, pas de root. Derrière le VPN ET Authelia (cf. docs/apps.md).
+# d'écriture sur un dépôt, pas de root ; il peut seulement demander la recopie des données d'un
+# environnement (admin-recopy). Derrière le VPN ET Authelia (cf. docs/apps.md).
 let
   cfg = config.systemSettings.admin;
   images = config.systemSettings.appImages;
@@ -130,6 +131,7 @@ in
           builtins.toJSON (map (p: p.name) wireguard.peers)
         );
         ADMIN_SECRETS_FILE = pkgs-stable.writeText "admin-secrets.json" (builtins.toJSON secretKeys);
+        ADMIN_RECOPY_STATUS = "/var/lib/admin-recopy";
       };
       serviceConfig = {
         ExecStart = lib.getExe package;
@@ -157,6 +159,64 @@ in
           "AF_INET6"
         ];
       };
+    };
+
+    # « Recopier depuis le parent » : le dashboard (sans droits) dépose `<app>.want` ; root ne
+    # traite qu'un environnement en données « copie » connu de la config, et écrit son résultat
+    # dans son propre dossier (jamais dans celui du dashboard : pas de lien piégé à suivre).
+    systemd.paths.admin-recopy = {
+      wantedBy = [ "multi-user.target" ];
+      pathConfig.PathExistsGlob = "/var/lib/private/admin/recopy/*.want";
+    };
+
+    systemd.services.admin-recopy = {
+      description = "Recopie des données d'un environnement depuis son parent";
+      path = [
+        pkgs-stable.jq
+        pkgs-stable.coreutils
+        config.systemd.package
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        StateDirectory = "admin-recopy";
+        StateDirectoryMode = "0755";
+      };
+      script = ''
+        map=${pkgs-stable.writeText "admin-copies.json" (builtins.toJSON images.copies)}
+        status_dir=$STATE_DIRECTORY
+        shopt -s nullglob dotglob
+        for want in /var/lib/private/admin/recopy/*.want; do
+          app=$(basename "$want" .want)
+          rm -f -- "$want"
+          if ! [[ "$app" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || ! jq -e --arg a "$app" 'has($a)' "$map" > /dev/null; then
+            echo "demande ignorée : $app n'est pas un environnement en données « copie »" >&2
+            continue
+          fi
+          write() {
+            jq -n --arg s "$1" --arg d "$2" '{state: $s, detail: $d, at: (now | floor)}' > "$status_dir/$app.json.tmp"
+            mv "$status_dir/$app.json.tmp" "$status_dir/$app.json"
+          }
+          write "running" ""
+          mapfile -t units < <(jq -r --arg a "$app" '.[$a].units[]' "$map")
+          ok=1
+          systemctl stop "''${units[@]}" || ok=0
+          while IFS=$'\t' read -r from to; do
+            rm -rf --one-file-system -- "$to"
+            mkdir -p "$(dirname "$to")"
+            if [ -e "$from" ]; then
+              cp -a -- "$from" "$to" || ok=0
+            else
+              mkdir -p "$to"
+            fi
+          done < <(jq -r --arg a "$app" '.[$a].pairs[] | [.from, .to] | @tsv' "$map")
+          systemctl start "''${units[@]}" || ok=0
+          if [ "$ok" = 1 ]; then
+            write "done" ""
+          else
+            write "failed" "journalctl -u admin-recopy"
+          fi
+        done
+      '';
     };
 
     # Appareils choisis, puis le portail : les deux, toujours.

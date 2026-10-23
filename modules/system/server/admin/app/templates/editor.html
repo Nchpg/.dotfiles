@@ -2,7 +2,7 @@
 {{with .F}}
 <header class="topbar">
   <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><a href="/sites">Sites</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Name}}</strong></nav>
-  <a class="btn" href="https://{{.Domain}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir le site</a>
+  <a class="btn" href="https://{{.Domain}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir {{.EnvLabel}}</a>
 </header>
 <main class="page">
   <div class="line hero">
@@ -14,92 +14,219 @@
   </div>
   {{if .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong> Le formulaire reprendra quand elle sera terminée ; tu peux quitter la page, elle continue sur think.</p></div>{{end}}
   {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
+
+  <nav class="envs" aria-label="Environnements">
+    <div class="segmented env-tabs">
+      {{range .Tabs}}
+      <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="{{if .Root}}accent{{else}}warn-ink{{end}}"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg>
+        <span class="stack tight"><span class="line tight-line"><span>{{.Label}}</span>{{if .Root}}<small class="muted">racine</small>{{end}}{{if .New}}<span class="chip amber">nouveau</span>{{end}}</span><small class="mono muted">{{.Branch}} · {{.Domain}}</small></span>
+      </a>
+      {{end}}
+    </div>
+    {{if not .EnvNew}}
+    <details class="add-env" {{if .AddError}}open{{end}}>
+      <summary class="btn btn-dashed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Environnement</summary>
+      <form method="get" action="/sites/{{.Name}}" class="card add-env-form">
+        <input type="hidden" name="new" value="1">
+        <label class="field"><span>Nom</span><input name="env" value="{{.AddName}}" placeholder="staging" class="mono" required pattern="[a-z][a-z0-9\-]{0,15}"></label>
+        <div class="field"><span>Branche</span>{{template "dd" (args "D" .AddBranch)}}</div>
+        <div class="field"><span>Hérite de</span>{{template "dd" (args "D" .AddFrom)}}</div>
+        <button class="btn btn-primary">Créer</button>
+        {{if .AddError}}<p class="small bad grow-all">{{.AddError}}</p>{{else}}<p class="small muted grow-all">En VPN et données séparées au départ ; le reste hérite du parent. Rien n'est écrit avant « Appliquer ».</p>{{end}}
+      </form>
+    </details>
+    {{end}}
+  </nav>
   {{template "form" .}}
 </main>
 {{end}}
 {{template "bottom" .}}{{end}}
 
+{{/* Liste déroulante maison : .D (DD), .URL (formulaire refait si structurelle), .Form (champ hors du formulaire). */}}
+{{define "dd"}}
+<div class="dd{{if .D.Locked}} dd-locked{{end}}" data-dd {{if and .D.Structural .URL}}data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change"{{end}}>
+  <input type="hidden" name="{{.D.Name}}" value="{{.D.Value}}" {{with .Form}}form="{{.}}"{{end}}>
+  <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="{{.D.Aria}}" {{if .D.Locked}}disabled{{end}}>
+    <span class="dd-ic" style="--tint: {{.D.Tint}}; --ink: {{.D.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.D.Icon}}"/></svg></span>
+    <span class="dd-label mono{{if .D.Placeholder}} muted{{end}}">{{.D.Label}}</span>
+    <svg viewBox="0 0 24 24" aria-hidden="true" class="dd-chev"><path d="M6 9l6 6 6-6"/></svg>
+  </button>
+  <ul class="dd-list" role="listbox" aria-label="{{.D.Aria}}" hidden>
+    {{range .D.Options}}
+    <li role="option" tabindex="-1" aria-selected="{{.Selected}}" data-value="{{.Value}}" data-label="{{.Label}}" data-icon="{{.Icon}}" data-tint="{{.Tint}}" data-ink="{{.Ink}}">
+      <span class="dd-ic" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
+      <span class="stack tight grow"><span class="mono">{{.Label}}</span>{{if .Sub}}<small {{with .SubInk}}style="color: {{.}}"{{else}}class="muted"{{end}}>{{.Sub}}</small>{{end}}</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="dd-check"><path d="M5 12l5 5L20 7"/></svg>
+    </li>
+    {{end}}
+  </ul>
+</div>
+{{end}}
+
+{{/* Section héritée ou propre (environnement) : radios qui refont le formulaire. */}}
+{{define "own"}}
+<div class="seg-own" role="radiogroup" aria-label="{{.Aria}}" data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
+  <label><input type="radio" name="{{.Name}}" value="0" {{if not .Own}}checked{{end}}><span>hérité</span></label>
+  <label><input type="radio" name="{{.Name}}" value="1" {{if .Own}}checked{{end}}><span>propre</span></label>
+</div>
+{{end}}
+
 {{define "form"}}
-<div class="layout layout-edit">
-<form id="site-form" class="stack gap-lg" {{if .Running}}inert{{end}} hx-post="{{.PreviewURL}}" hx-trigger="change, input delay:500ms" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
+<div class="layout layout-edit" id="editor-body">
+<form id="site-form" class="panel" {{if .Running}}inert{{end}} hx-post="{{.PreviewURL}}" hx-trigger="change[!target.closest('[data-structural]')], input delay:500ms[!target.closest('[data-structural]')]" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
   <input type="hidden" name="base" value="{{.Base}}">
-  {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}"><input type="hidden" name="containers" value="{{.CtrList}}">{{end}}
+  <input type="hidden" name="env" value="{{.Env}}">
+  {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}">{{end}}
 
-  <section class="card stack gap">
-    <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Adresse et accès</h2>
-    {{if .New}}
-    <label class="field"><span>Nom du site <small class="muted">(identifiant interne, 12 caractères au plus, définitif)</small></span>
-      <input name="name" value="{{.Name}}" class="mono" required></label>
-    {{end}}
-    <label class="field"><span>Sous-domaine</span>
-      <span class="affix"><input name="sub" value="{{.Sub}}" class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
-    <div class="choices" role="radiogroup" aria-label="Exposition">
-      <label class="choice"><input type="radio" name="expose" value="public" {{if not .VPN}}checked{{end}}>
-        <span class="tile" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></span>
-        <span class="stack tight"><strong>Public</strong><small class="muted">tunnel Cloudflare</small></span></label>
-      <label class="choice"><input type="radio" name="expose" value="vpn" {{if .VPN}}checked{{end}}>
-        <span class="tile" style="--tint: #FEF3E2; --ink: #9A4A07"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg></span>
-        <span class="stack tight"><strong>VPN</strong><small class="muted">appareils choisis</small></span></label>
+  <section class="sec">
+    <div class="sec-head">
+      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent">{{if .Child}}<path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/>{{else}}<path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/>{{end}}</svg>{{if .Child}}Environnement{{else}}Adresse{{end}}</h2>
     </div>
-    <fieldset class="devices" data-vpn-only {{if not .VPN}}hidden{{end}}>
-      <legend>Appareils autorisés</legend>
-      <div class="pills">{{range .Peers}}<label class="pill"><input type="checkbox" name="dev" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>
-    </fieldset>
-    <label class="toggle">
-      <span class="line"><span class="tile" style="--tint: #E9F8EF; --ink: #15803D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg></span>
-      <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">En plus, public ou VPN : compte et 2FA exigés.</small></span></span>
-      <input type="checkbox" name="sso" {{if .SSO}}checked{{end}}></label>
+    <div class="sec-body">
+      {{if .New}}
+      <label class="field"><span>Nom du site <small class="muted">(identifiant interne, 12 caractères au plus, définitif)</small></span>
+        <input name="name" value="{{.Name}}" class="mono" required></label>
+      {{else}}
+      <div class="fields">
+        <label class="field"><span>Nom affiché</span><input name="label" value="{{.Label}}" maxlength="32"></label>
+        <div class="field"><span>Branche du dépôt</span>{{template "dd" (args "D" .Branch "URL" .FormURL)}}</div>
+        {{if .Child}}<div class="field"><span>Hérite de</span>{{template "dd" (args "D" .From "URL" .FormURL)}}</div>{{end}}
+      </div>
+      {{if .Child}}<small class="muted">Servi comme <span class="mono">{{.Name}}-{{.Env}}</span> : ce nom interne ne change pas si tu renommes l'environnement.</small>{{end}}
+      {{end}}
+      <label class="field"><span>Sous-domaine</span>
+        <span class="affix"><input name="sub" value="{{.Sub}}" class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
+    </div>
   </section>
 
-  <section class="card stack gap">
-    <div class="line between"><h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>Conteneurs</h2>{{if .Repo}}<span class="small muted">images du dépôt {{.Repo}}</span>{{end}}</div>
-    {{$multi := .Multi}}
-    {{range .Containers}}{{$c := .Name}}
-    <div class="subcard stack gap">
-      <div class="line between">
-        <span class="line"><strong class="mono">{{.Name}}</strong>{{if .Info}}<small class="mono muted">{{.Info}}</small>{{end}}</span>
-        {{if $multi}}<label class="line small"><input type="radio" name="entry" value="{{.Name}}" {{if .Entry}}checked{{end}}>Reçoit le trafic</label>{{end}}
-      </div>
-      <div class="grid3">
-        <label class="field"><span>Image</span><select name="img_{{.Name}}" class="mono">{{range .Images}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
-        <label class="field"><span>Mémoire max</span><select name="mem_{{.Name}}">{{range .Memory}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
-      </div>
-      {{if .Deps}}<div class="line wrap small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
-      <div class="stack tight">
-        <span class="small strong">Données</span>
-        {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{end}}
-        <span class="line"><input name="newdata_{{.Name}}" placeholder="/data /uploads" class="mono input-sm" aria-label="Nouveaux dossiers de données, séparés par des espaces"><small class="muted">séparés par des espaces, gardés dans {{.DataHost}}/…</small></span>
-      </div>
-      <div class="stack tight">
-        <span class="small strong">Secrets</span>
-        {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
-        {{else}}<small class="muted">Aucun secret sous {{$.Name}}/. Pour en ajouter un : <code>secrets edit {{$.Name}}/env</code>, <code>secrets sync</code>, rebuild ; il apparaît ici. La valeur ne passe jamais par cette page.</small>{{end}}
-      </div>
+  <section class="sec">
+    <div class="sec-head">
+      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg>Accès</h2>
+      {{if .Child}}{{template "own" (args "Name" "own_access" "Own" .OwnAccess "URL" .FormURL "Aria" "Accès hérité ou propre")}}{{end}}
     </div>
-    {{end}}
+    <div class="sec-body">
+      {{if .OwnAccess}}
+      <div class="choices" role="radiogroup" aria-label="Exposition">
+        <label class="choice"><input type="radio" name="expose" value="public" {{if not .VPN}}checked{{end}}>
+          <span class="tile" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></span>
+          <span class="stack tight"><strong>Public</strong><small class="muted">tunnel Cloudflare</small></span></label>
+        <label class="choice"><input type="radio" name="expose" value="vpn" {{if .VPN}}checked{{end}}>
+          <span class="tile" style="--tint: #FEF3E2; --ink: #9A4A07"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg></span>
+          <span class="stack tight"><strong>VPN</strong><small class="muted">appareils choisis</small></span></label>
+      </div>
+      <fieldset class="devices" data-vpn-only {{if not .VPN}}hidden{{end}}>
+        <legend>Appareils autorisés</legend>
+        <div class="pills">{{range .Peers}}<label class="pill"><input type="checkbox" name="dev" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>
+      </fieldset>
+      {{if .Child}}<small class="muted" data-public-only {{if .VPN}}hidden{{end}}>Public mais pas la racine : les moteurs de recherche ne l'indexent pas (<span class="mono">X-Robots-Tag: noindex</span>).</small>{{end}}
+      <label class="row-toggle">
+        <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">En plus, public ou VPN : compte et 2FA exigés.</small></span>
+        <input type="checkbox" name="sso" {{if .SSO}}checked{{end}}></label>
+      {{else}}
+      <p class="inherited">{{.AccessFrom}} · <span class="mono">{{.AccessSummary}}</span></p>
+      {{end}}
+    </div>
   </section>
 
-  <section class="card stack">
-    <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg>Options</h2>
-    <label class="toggle"><span class="stack tight"><strong>Accès à internet</strong><small class="muted">Pour appeler une API externe. Le réseau local reste fermé.</small></span><input type="checkbox" name="internet" {{if .Internet}}checked{{end}}></label>
-    <div class="toggle-group">
-      <label class="toggle"><span class="stack tight"><strong>Limite de débit</strong><small class="muted">Par adresse IP, sur les chemins listés (vide : tout le site).</small></span><input type="checkbox" name="rl" {{if .RL}}checked{{end}}></label>
-      <input name="rlpaths" value="{{.RLPaths}}" class="mono" placeholder="/api /generate" aria-label="Chemins limités, séparés par des espaces">
+  <section class="sec">
+    <div class="sec-head">
+      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg>Conteneurs</h2>
+      {{if .Child}}{{template "own" (args "Name" "own_containers" "Own" .OwnContainers "URL" .FormURL "Aria" "Conteneurs hérités ou propres")}}{{end}}
     </div>
-    <label class="toggle"><span class="stack tight"><strong>Page de santé</strong><small class="muted">Chemin sondé pour savoir si le site répond.</small></span><input name="probe" value="{{if .Probe}}{{.Probe}}{{else}}/{{end}}" class="mono input-sm"></label>
-  </section>
-
-  {{if .Exists}}
-  <section class="card danger stack gap">
-    <div class="line between wrap">
-      <span class="stack tight"><strong class="bad">Supprimer le site</strong><small class="muted">Retire {{.Name}} d'apps.json : conteneurs et adresse disparaissent dans la minute. Ses données restent sur think.</small></span>
-      <details><summary class="btn btn-danger-ghost">Supprimer…</summary>
-        <div class="stack gap confirm">
-          <label class="field"><span>Tape <b class="mono">{{.Name}}</b> pour confirmer</span><input name="confirm" class="mono" form="delete-form" required></label>
-          <button class="btn btn-danger" form="delete-form">Supprimer {{.Name}}</button>
+    <div class="sec-body">
+      {{if .OwnContainers}}<input type="hidden" name="containers" value="{{.CtrList}}">{{end}}
+      {{$f := .}}
+      {{range .Containers}}{{$c := .Name}}{{$locked := .Locked}}
+      <div class="ctr{{if .Locked}} locked{{end}}">
+        <div class="line between">
+          <span class="line"><strong class="mono">{{.Name}}</strong>{{if .Info}}<small class="mono muted">{{.Info}}</small>{{end}}</span>
+          <span class="line">
+            {{if $f.Multi}}<label class="line small"><input type="radio" name="entry" value="{{.Name}}" {{if .Entry}}checked{{end}} {{if .Locked}}disabled{{end}}>Reçoit le trafic</label>{{end}}
+            {{if and $f.Multi (not .Locked)}}<button type="button" class="btn btn-sm btn-ghost-bad" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"rmctr": "{{.Name}}"}' hx-target="#editor-body" hx-swap="outerHTML">Retirer</button>{{end}}
+          </span>
         </div>
-      </details>
+        <div class="fields">
+          <div class="field grow2"><span>Image</span>{{template "dd" (args "D" .Image)}}</div>
+          <div class="field"><span>Mémoire max</span>{{template "dd" (args "D" .Memory)}}</div>
+        </div>
+        {{if .Deps}}<div class="line wrap small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
+        <div class="stack tight">
+          <span class="small strong">Données</span>
+          {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{else}}<small class="muted">Aucune : tout est perdu au redémarrage.</small>{{end}}
+          {{if not .Locked}}<span class="line"><input name="newdata_{{.Name}}" placeholder="/data /uploads" class="mono input-sm" aria-label="Nouveaux dossiers de données, séparés par des espaces"><small class="muted">séparés par des espaces</small></span>{{end}}
+        </div>
+        <div class="stack tight">
+          <span class="small strong">Secrets</span>
+          {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
+          {{else}}<small class="muted">Aucun secret sous {{$f.Name}}/. Pour en ajouter un : <code>secrets edit {{$f.Name}}/env</code>, <code>secrets sync</code>, rebuild ; il apparaît ici. La valeur ne passe jamais par cette page.</small>{{end}}
+        </div>
+      </div>
+      {{end}}
+      {{range .NewImages}}
+      <div class="new-image">
+        <span class="small">Nouvelle image publiée par le dépôt : <span class="mono">{{.Label}}</span></span>
+        <button type="button" class="btn btn-primary btn-sm" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"addctr": "{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML">Ajouter le conteneur {{.Note}}</button>
+      </div>
+      {{end}}
+      {{if not .OwnContainers}}<p class="inherited">{{.CtrsFrom}}. Passe en « propre » pour changer images, mémoire, données ou secrets ici seulement.</p>{{end}}
     </div>
+  </section>
+
+  {{if .Child}}
+  <section class="sec">
+    <div class="sec-head">
+      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Données</h2>
+    </div>
+    <div class="sec-body">
+      <div class="radio-list" role="radiogroup" aria-label="Données de l'environnement">
+        {{range .DataModes}}<label><input type="radio" name="data" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="stack tight"><strong>{{.Label}}</strong><small class="muted">{{.Sub}}</small></span></label>{{end}}
+      </div>
+      {{with .Recopy}}{{template "recopy" (args "URL" $f.RecopyURL "R" .)}}{{end}}
+    </div>
+  </section>
+  {{end}}
+
+  <section class="sec">
+    <div class="sec-head">
+      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg>Options</h2>
+      {{if .Child}}{{template "own" (args "Name" "own_options" "Own" .OwnOptions "URL" .FormURL "Aria" "Options héritées ou propres")}}{{end}}
+    </div>
+    <div class="sec-body">
+      {{if .OwnOptions}}
+      <input type="hidden" name="options_shown" value="1">
+      <label class="row-toggle"><span class="stack tight"><strong>Accès à internet</strong><small class="muted">Pour appeler une API externe. Le réseau local reste fermé.</small></span><input type="checkbox" name="internet" {{if .Internet}}checked{{end}}></label>
+      <div class="row-toggle-group">
+        <label class="row-toggle"><span class="stack tight"><strong>Limite de débit</strong><small class="muted">Par adresse IP, sur les chemins listés (vide : tout le site).</small></span><input type="checkbox" name="rl" {{if .RL}}checked{{end}}></label>
+        <input name="rlpaths" value="{{.RLPaths}}" class="mono input-sm wide" placeholder="/api /generate" aria-label="Chemins limités, séparés par des espaces">
+      </div>
+      <label class="row-toggle"><span class="stack tight"><strong>Page de santé</strong><small class="muted">Chemin sondé pour savoir si le site répond.</small></span><input name="probe" value="{{if .Probe}}{{.Probe}}{{else}}/{{end}}" class="mono input-sm"></label>
+      {{else}}
+      <p class="inherited">{{.OptionsFrom}} · <span class="mono">{{.OptionsSummary}}</span></p>
+      {{end}}
+    </div>
+  </section>
+
+  {{if and .Exists (not .Child)}}
+  <section class="sec sec-danger">
+    <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Retire {{.Name}}{{if gt (len .Tabs) 1}} et ses environnements{{end}} d'apps.json : conteneurs et adresses disparaissent dans la minute. Les données restent sur think.</small></span>
+    <details><summary class="btn btn-danger-ghost">Supprimer…</summary>
+      <div class="stack gap confirm">
+        <label class="field"><span>Tape <b class="mono">{{.Name}}</b> pour confirmer</span><input name="confirm" class="mono" form="delete-form" required></label>
+        <button class="btn btn-danger" form="delete-form">Supprimer {{.Name}}</button>
+      </div>
+    </details>
+  </section>
+  {{end}}
+  {{if .RemoveEnvURL}}
+  <section class="sec sec-danger">
+    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} hériteront de son parent. {{end}}Ses données restent sur think.</small></span>
+    <details><summary class="btn btn-danger-ghost">Retirer…</summary>
+      <div class="stack gap confirm">
+        <small>Retirer {{.EnvLabel}} de {{.Name}} ? Le commit part tout de suite.</small>
+        <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML">Retirer {{.EnvLabel}}</button>
+      </div>
+    </details>
   </section>
   {{end}}
 </form>
@@ -107,15 +234,21 @@
 <aside class="stack gap-lg sticky">
   {{if .Exists}}
   <section class="card stack gap">
-    <div class="line between"><h2>Version</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit main</span>{{end}}</div>
-    <label class="field"><span>Images à faire tourner</span>
-      <select name="version" form="site-form" {{if .Running}}disabled{{end}} hx-post="{{.PreviewURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" hx-trigger="change">{{range .Versions}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+    <div class="line between"><h2>Version de {{.EnvLabel}}</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit {{.Branch.Value}}</span>{{end}}</div>
+    {{template "dd" (args "D" .Version "URL" .FormURL "Form" "site-form")}}
     {{if .VersionNote}}<small class="muted">{{.VersionNote}}</small>{{end}}
-    <small class="muted">Revenir à un commit fige le site dessus : les nouvelles images de main attendent qu'il suive main de nouveau.</small>
+    <small class="muted">Un commit précis fige {{.EnvLabel}} : les nouvelles images de la branche attendent qu'il la suive de nouveau.</small>
   </section>
   {{end}}
   {{if .Running}}{{template "job" .Running}}{{else}}{{template "preview" .Preview}}{{end}}
 </aside>
 </div>
-{{if .Exists}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
+{{if and .Exists (not .Child)}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
+{{end}}
+
+{{define "recopy"}}
+<div id="recopy" class="recopy" {{if eq .R.State "running"}}hx-get="{{.URL}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
+  <button type="button" class="btn btn-sm" hx-post="{{.URL}}" hx-target="#recopy" hx-swap="outerHTML" {{if eq .R.State "running"}}disabled{{end}}>Recopier depuis le parent</button>
+  <small class="{{if eq .R.State "failed"}}bad{{else}}muted{{end}}">{{.R.Text}}</small>
+</div>
 {{end}}

@@ -22,16 +22,6 @@ func colorsOf(name string) (string, string) {
 	return c[0], c[1]
 }
 
-type SiteCard struct {
-	Name, Domain, URL, Initial, Tint, Ink string
-	VPN, SSO, Up, Probed                  bool
-	Containers                            string
-	Memory                                string
-	Rev                                   string
-	Frozen                                string
-	Job                                   *JobBadge
-}
-
 type StateCard struct {
 	Title, Chip, Text, Tint, Ink, Icon string
 	Think, Main                        string
@@ -45,28 +35,62 @@ type ActivityItem struct {
 	Config                  bool
 }
 
-// sitesData : cartes et compteurs de la page Sites (aussi servis seuls, pour le rafraîchissement).
+// SiteRow : une ligne du tableau, un déploiement (la racine d'abord, puis les environnements).
+type SiteRow struct {
+	Name, Label, Branch, Domain, URL, EditURL string
+	VPN, SSO, Up, Probed                      bool
+	Memory, Rev, Frozen                       string
+	First                                     bool
+	Span                                      int
+	Initial, Tint, Ink                        string
+	Repo                                      string
+	Job                                       *JobBadge
+}
+
+// SiteGroup : les lignes d'un site, filtrées ensemble.
+type SiteGroup struct {
+	Rows        []SiteRow
+	Public, VPN bool
+}
+
+// sitesData : tableau et compteurs de la page Sites (aussi servis seuls, pour le rafraîchissement).
 func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	up := probes(ctx, s.cfg.Prometheus)
-	var cards []SiteCard
-	vpn, online := 0, 0
+	var groups []SiteGroup
+	vpn, public, online, total := 0, 0, 0, 0
 	running := false
 	for _, name := range snap.Apps.Names() {
 		e := snap.Apps.Entries[name]
-		c := s.card(name, e, snap, up)
+		g := SiteGroup{}
+		var job *JobBadge
 		if j := s.jobs.latest(name); j != nil {
-			c.Job = badgeOf(j.Snapshot())
+			job = badgeOf(j.Snapshot())
 		}
-		if c.Job != nil && c.Job.Kind == "running" {
+		if job != nil && job.Kind == "running" {
 			running = true
 		}
-		cards = append(cards, c)
-		if e.VPN() {
+		deploys := e.Deploys(name)
+		for i, d := range deploys {
+			r := s.row(name, e, d, snap, up)
+			r.First, r.Span = i == 0, len(deploys)
+			if i == 0 {
+				r.Job = job
+			}
+			g.Rows = append(g.Rows, r)
+			g.VPN = g.VPN || r.VPN
+			g.Public = g.Public || !r.VPN
+			total++
+			if r.Up {
+				online++
+			}
+		}
+		if g.VPN {
 			vpn++
 		}
-		if c.Up {
-			online++
+		if g.Public {
+			public++
 		}
+		groups = append(groups, g)
 	}
 	// Sites en cours d'ajout : pas encore dans apps.json, montrés à part.
 	var adding []JobBadge
@@ -79,12 +103,13 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			running = running || b.Kind == "running"
 		}
 	}
-	// Une demande en cours : les cartes se rafraîchissent plus souvent.
+	// Une demande en cours : le tableau se rafraîchit plus souvent.
 	every := 30
 	if running {
 		every = 5
 	}
-	return map[string]any{"Nav": "sites", "Cards": cards, "Adding": adding, "Every": every, "Total": len(cards), "Online": online, "VPN": vpn, "Public": len(cards) - vpn}
+	return map[string]any{"Nav": "sites", "Groups": groups, "Adding": adding, "Every": every,
+		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public}
 }
 
 func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
@@ -134,32 +159,29 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) card(name string, e Entry, snap *Snapshot, up map[string]bool) SiteCard {
-	domain := domainOf(name, e, s.cfg.Domain)
+func (s *Server) row(name string, e Entry, d Deploy, snap *Snapshot, up map[string]bool) SiteRow {
+	domain := d.Domain(s.cfg.Domain)
 	tint, ink := colorsOf(name)
-	c := SiteCard{
-		Name: name, Domain: domain, URL: "https://" + domain, Initial: strings.ToUpper(name[:1]),
-		Tint: tint, Ink: ink, VPN: e.VPN(), SSO: e.SSO,
+	r := SiteRow{
+		Name: name, Label: d.Label, Branch: d.Branch, Domain: domain, URL: "https://" + domain,
+		Initial: strings.ToUpper(name[:1]), Tint: tint, Ink: ink, VPN: d.VPN(), SSO: d.Access.SSO,
+		EditURL: "/sites/" + name,
 	}
-	c.Up, c.Probed = up[domain]
-	if n := len(e.Containers); n > 1 {
-		c.Containers = fmt.Sprintf("%d conteneurs", n)
-	} else {
-		c.Containers = "1 conteneur"
+	if d.Child {
+		r.EditURL += "?env=" + d.ID
 	}
-	main := e.Containers[e.EntryPoint()]
-	c.Memory = memoryLabel(main.Memory)
-	img, _ := splitImage(main.Image)
-	c.Rev = img
+	r.Up, r.Probed = up[domain]
+	main := d.Ctrs.Containers[d.EntryPoint()]
+	r.Memory = memoryLabel(main.Memory)
 	if le, ok := snap.Lock[s.cfg.ref(main.Image)]; ok && le.Revision != nil && len(*le.Revision) >= 7 {
-		c.Rev += " · " + (*le.Revision)[:7]
+		r.Rev = (*le.Revision)[:7]
 	}
-	if v := e.Version(); v != "" && v != "main" {
-		c.Frozen = shortTag(v)
-	} else if v == "" {
-		c.Frozen = "mixte"
+	if d.Frozen() {
+		r.Frozen = shortTag(d.Tag)
+	} else if !d.Child && e.Version() == "" {
+		r.Frozen = "mixte"
 	}
-	return c
+	return r
 }
 
 func memoryLabel(m string) string {
@@ -313,6 +335,14 @@ var funcs = template.FuncMap{
 	"lower": strings.ToLower,
 	"join":  strings.Join,
 	"add":   func(a, b int) int { return a + b },
+	// args : paramètres nommés d'un sous-template (`{{template "dd" (args "D" .Branch "URL" $.FormURL)}}`).
+	"args": func(kv ...any) map[string]any {
+		m := map[string]any{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i].(string)] = kv[i+1]
+		}
+		return m
+	},
 	"status": func(app string, up, probed bool) map[string]any {
 		return map[string]any{"App": app, "Up": up, "Probed": probed}
 	},
