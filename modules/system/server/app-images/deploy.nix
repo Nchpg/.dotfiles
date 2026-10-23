@@ -200,6 +200,14 @@ let
         200) compare=$(cat "$conf.compare") ;;
         404)
           decide non_pousse
+          # main déjà contenu dans la version de think (rebuild fait avant le push) : rien n'attend,
+          # pas de message. Vu dans le clone local, après l'avoir mis à jour.
+          if [ -z "$quiet" ] && [ -n "$checkout" ] && [ -d "$checkout/.git" ]; then
+            as_owner fetch --quiet "https://github.com/$repo.git" "+refs/heads/$branch:refs/remotes/origin/$branch" 2> /dev/null || true
+            if as_owner merge-base --is-ancestor "$head" "$deployed" 2> /dev/null; then
+              quiet=1
+            fi
+          fi
           [ -n "$quiet" ] || say "⏸️ la version de think (\`''${deployed:0:7}\`) est inconnue de GitHub (commits pas encore poussés ?) : \`$short\` n'est pas déployé. \`rebuild\` à la main."
           exit 0
           ;;
