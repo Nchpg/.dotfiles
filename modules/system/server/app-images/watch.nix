@@ -44,6 +44,8 @@ let
     text = builtins.readFile ../../../../scripts/lib/registry.sh + ''
       apps=${watchedFile}
       repo=${lib.escapeShellArg watch.repository}
+      # La branche que suit apps-deploy : lock lu et épinglage demandé sur elle.
+      branch=${lib.escapeShellArg cfg.deploy.branch}
       state="$STATE_DIRECTORY"
       now=$(date +%s)
 
@@ -85,7 +87,7 @@ let
       # Lock de la tête de ${watch.repository}, lu par son commit : pas de cache périmé.
       github_lock() {
         [ -s "$REG_WORK/lock" ] && return 0
-        rev=$(git ls-remote "https://github.com/$repo.git" refs/heads/main | cut -f1)
+        rev=$(git ls-remote "https://github.com/$repo.git" "refs/heads/$branch" | cut -f1)
         [ -n "$rev" ] || return 1
         curl -fsS --max-time 20 -o "$REG_WORK/lock" \
           "https://raw.githubusercontent.com/$repo/$rev/${lockPath}"
@@ -145,7 +147,7 @@ let
         # Révision gardée seulement si elle vient d'un dépôt à soi (sinon : label hérité de l'image de base).
         payload=$(jq -c --arg owner "github.com/${owner}/" 'map({ref, digest, port,
           revision: (if (.source // "" | ascii_downcase | contains($owner)) then .revision else null end)})' <<< "$found")
-        body=$(jq -nc --arg images "$payload" '{ref: "main", inputs: {action: "pin", images: $images, source: "think"}}')
+        body=$(jq -nc --arg images "$payload" --arg ref "$branch" '{$ref, inputs: {action: "pin", images: $images, source: "think"}}')
 
         if curl -fsS --max-time 20 --config "$REG_WORK/github" -X POST \
              -H "Accept: application/vnd.github+json" --data "$body" \
