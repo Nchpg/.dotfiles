@@ -43,10 +43,21 @@ check_images() {
     [ -z "$bad" ] || die "image(s) refusée(s) (référence, digest, révision ou port mal formés$([ "$1" = known ] && echo ", ou absente du lock")) : $bad"
 }
 
-# Référence complète d'une image d'apps.json : un nom court est sous le registre des apps.
+# Référence complète de chaque image d'apps.json, environnements compris : un environnement
+# prend les conteneurs de sa section (les siens ou ceux d'un parent) avec le tag de sa branche
+# (`feat/charts` -> `feat-charts`) ou son `pin`. Mêmes règles que apps-file.nix.
 refs_of_apps() {
-    jq -r --arg reg "$REGISTRY" '[.[] | .containers[] | .image
-        | if test("/") then . else "\($reg)/\(.)" end] | unique[]' "$apps"
+    jq -r --arg reg "$REGISTRY" '
+        def tagof: gsub("[^A-Za-z0-9._-]"; "-");
+        def untag: split("/") | (.[:-1] + [.[-1] | split(":")[0]]) | join("/");
+        def ctrs($s; $id; $n): if $id == null then $s.containers
+            elif $n > 16 then {}
+            else $s.environments[$id] as $v | if $v.containers then $v.containers else ctrs($s; $v.from; $n + 1) end end;
+        [.[] as $s
+         | ($s.containers[] | .image),
+           (($s.environments // {}) | to_entries[] | .key as $id | .value as $v
+            | ctrs($s; $id; 0)[] | "\(.image | untag):\($v.pin // ($v.branch | tagof))")
+         | if test("/") then . else "\($reg)/\(.)" end] | unique[]' "$apps"
 }
 
 pin() {
@@ -75,37 +86,68 @@ validate_entry() {
     jq -r --arg app "$APP" '
         def strs($re): type == "array" and all(.[]; type == "string" and test($re));
         def path: "^/[A-Za-z0-9._~/-]*$";
-        def keys_in($ok): (keys - $ok) as $x | if $x == [] then empty else "clé(s) inconnue(s) \($x | join(", "))" end;
+        def keys_in($ok; $w): (keys - $ok) as $x | if $x == [] then empty else "\($w)clé(s) inconnue(s) \($x | join(", "))" end;
+        def named($w): if has("name") and ((.name | type) != "string" or (.name | length) == 0 or (.name | length) > 32 or (.name | explode | any(. < 32))) then "\($w)name : 32 caractères au plus" else empty end;
+        def access($w):
+            (if has("expose") and (.expose | IN("public", "vpn") | not) then "\($w)expose : public ou vpn" else empty end),
+            (if .expose == "vpn" and ((.devices | type) != "array" or (.devices | length) == 0) then "\($w)vpn : au moins un appareil dans devices" else empty end),
+            (if has("devices") and .expose != "vpn" then "\($w)devices : seulement avec expose = vpn" else empty end),
+            (if has("devices") and (.devices | strs("^[A-Za-z0-9_-]{1,32}$") | not) then "\($w)devices : noms invalides" else empty end),
+            (if has("sso") and (.sso | type) != "boolean" then "\($w)sso : booléen" else empty end);
+        def options($w):
+            (if has("internetAccess") and (.internetAccess | type) != "boolean" then "\($w)internetAccess : booléen" else empty end),
+            (if has("probe") and ((.probe | type) != "string" or (.probe | test(path) | not)) then "\($w)probe : chemin invalide" else empty end),
+            (if has("rateLimit") and ((.rateLimit | strs(path) | not) or (.rateLimit | length) > 20) then "\($w)rateLimit : chemins invalides" else empty end);
+        def subdomain($w): if has("subdomain") and ((.subdomain | type) != "string" or (.subdomain | test("^(@|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)$") | not)) then "\($w)subdomain invalide" else empty end;
+        # $child : image sans tag (il vient de la branche), pas de data.on.
+        def containers($w; $child):
+            if (.containers | type) != "object" or (.containers | length) == 0 or (.containers | length) > 5 then "\($w)containers : de 1 à 5 conteneurs" else
+                (.containers | keys) as $names
+                | (if all($names[]; test("^[a-z][a-z0-9-]{0,15}$")) then empty else "\($w)noms de conteneurs invalides" end),
+                  (if ($names | length) > 1 and (has("entrypoint") | not) then "\($w)entrypoint requis avec plusieurs conteneurs" else empty end),
+                  (if has("entrypoint") and (.entrypoint | IN($names[]) | not) then "\($w)entrypoint : conteneur inconnu" else empty end),
+                  (.containers | to_entries[] | .key as $c | .value
+                    | if type != "object" then "\($w)\($c) : objet attendu" else
+                      keys_in(["image", "memory", "dependsOn", "data", "secrets"]; "\($w)\($c) : "),
+                      (if $child then
+                          (if (.image | type) != "string" or (.image | test("^[a-z0-9][a-z0-9._/-]*$") | not) then "\($w)\($c) : image invalide (nom sans tag)" else empty end)
+                       else
+                          (if (.image | type) != "string" or (.image | test("^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]{1,128}$") | not) then "\($w)\($c) : image invalide (nom:tag)" else empty end)
+                       end),
+                      (if has("memory") and ((.memory | type) != "string" or (.memory | test("^[1-9][0-9]{0,4}[mg]$") | not)) then "\($w)\($c) : memory invalide" else empty end),
+                      (if has("dependsOn") and ((.dependsOn | strs("^[a-z][a-z0-9-]{0,15}$") | not) or any(.dependsOn[]; . == $c or (IN($names[]) | not))) then "\($w)\($c) : dependsOn invalide" else empty end),
+                      (if has("secrets") and (.secrets | strs("^\($app)/[A-Za-z0-9._-]+$") | not) then "\($w)\($c) : secrets hors de \($app)/" else empty end),
+                      (if has("data") and ((.data | type) != "array" or any(.data[];
+                          type != "object" or (keys - ["path", "on"]) != []
+                          or (.path | type) != "string" or (.path | test("^/[A-Za-z0-9._/-]+$") | not) or (.path | test("\\.\\."))
+                          or (has("on") and ($child or (.on | type) != "string" or (.on | test("^(/var/lib/\($app)(/[A-Za-z0-9._-]+)*|\($app)-[A-Za-z0-9._-]+)$") | not) or (.on | test("\\.\\."))))))
+                        then "\($w)\($c) : data invalide (chemin absolu ; on = /var/lib/\($app)/… ou volume \($app)-…, à la racine seulement)" else empty end)
+                      end)
+            end;
+        # Un environnement remonte ses parents sans boucle (16 niveaux au plus).
+        def rooted($envs; $id; $n): if $id == null then true elif $n > 16 or ($envs[$id] | type) != "object" then false else rooted($envs; $envs[$id].from; $n + 1) end;
         if type != "object" then "entrée : objet attendu" else
-        keys_in(["subdomain", "expose", "devices", "sso", "internetAccess", "probe", "entrypoint", "rateLimit", "containers"]),
-        (if has("subdomain") and ((.subdomain | type) != "string" or (.subdomain | test("^(@|[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)$") | not)) then "subdomain invalide" else empty end),
-        (if has("expose") and (.expose | IN("public", "vpn") | not) then "expose : public ou vpn" else empty end),
-        (if .expose == "vpn" and ((.devices | type) != "array" or (.devices | length) == 0) then "vpn : au moins un appareil dans devices" else empty end),
-        (if has("devices") and .expose != "vpn" then "devices : seulement avec expose = vpn" else empty end),
-        (if has("devices") and (.devices | strs("^[A-Za-z0-9_-]{1,32}$") | not) then "devices : noms invalides" else empty end),
-        (if has("sso") and (.sso | type) != "boolean" then "sso : booléen" else empty end),
-        (if has("internetAccess") and (.internetAccess | type) != "boolean" then "internetAccess : booléen" else empty end),
-        (if has("probe") and ((.probe | type) != "string" or (.probe | test(path) | not)) then "probe : chemin invalide" else empty end),
-        (if has("rateLimit") and ((.rateLimit | strs(path) | not) or (.rateLimit | length) > 20) then "rateLimit : chemins invalides" else empty end),
-        (if (.containers | type) != "object" or (.containers | length) == 0 or (.containers | length) > 5 then "containers : de 1 à 5 conteneurs" else
-            (.containers | keys) as $names
-            | (if all($names[]; test("^[a-z][a-z0-9-]{0,15}$")) then empty else "noms de conteneurs invalides" end),
-              (if ($names | length) > 1 and (has("entrypoint") | not) then "entrypoint requis avec plusieurs conteneurs" else empty end),
-              (if has("entrypoint") and (.entrypoint | IN($names[]) | not) then "entrypoint : conteneur inconnu" else empty end),
-              (.containers | to_entries[] | .key as $c | .value
-                | if type != "object" then "\($c) : objet attendu" else
-                  keys_in(["image", "memory", "dependsOn", "data", "secrets"]) // empty,
-                  (if (.image | type) != "string" or (.image | test("^[a-z0-9][a-z0-9._/-]*:[A-Za-z0-9._-]{1,128}$") | not) then "\($c) : image invalide (nom:tag)" else empty end),
-                  (if has("memory") and ((.memory | type) != "string" or (.memory | test("^[1-9][0-9]{0,4}[mg]$") | not)) then "\($c) : memory invalide" else empty end),
-                  (if has("dependsOn") and ((.dependsOn | strs("^[a-z][a-z0-9-]{0,15}$") | not) or any(.dependsOn[]; . == $c or (IN($names[]) | not))) then "\($c) : dependsOn invalide" else empty end),
-                  (if has("secrets") and (.secrets | strs("^\($app)/[A-Za-z0-9._-]+$") | not) then "\($c) : secrets hors de \($app)/" else empty end),
-                  (if has("data") and ((.data | type) != "array" or any(.data[];
-                      type != "object" or (keys - ["path", "on"]) != []
-                      or (.path | type) != "string" or (.path | test("^/[A-Za-z0-9._/-]+$") | not) or (.path | test("\\.\\."))
-                      or (has("on") and ((.on | type) != "string" or (.on | test("^(/var/lib/\($app)(/[A-Za-z0-9._-]+)*|\($app)-[A-Za-z0-9._-]+)$") | not) or (.on | test("\\.\\."))))))
-                    then "\($c) : data invalide (chemin absolu ; on = /var/lib/\($app)/… ou volume \($app)-…)" else empty end)
+        keys_in(["name", "subdomain", "expose", "devices", "sso", "internetAccess", "probe", "entrypoint", "rateLimit", "containers", "environments"]; ""),
+        named(""), subdomain(""), access(""), options(""), containers(""; false),
+        (if has("environments") then
+            if (.environments | type) != "object" or (.environments | length) > 8 then "environments : 8 environnements au plus" else
+            .environments as $envs
+            | ($envs | to_entries[] | .key as $id | "\($id) : " as $w | .value
+                | if ($id | test("^[a-z][a-z0-9-]{0,15}$") | not) then "environnement « \($id) » : identifiant invalide"
+                  elif type != "object" then "\($w)objet attendu" else
+                  keys_in(["name", "branch", "from", "data", "pin", "subdomain", "expose", "devices", "sso", "containers", "entrypoint", "internetAccess", "probe", "rateLimit"]; $w),
+                  named($w), subdomain($w),
+                  (if (.branch | type) != "string" or (.branch | test("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$") | not) then "\($w)branch manquante ou invalide" else empty end),
+                  (if has("from") and ((.from | type) != "string" or .from == $id or (.from as $f | $envs | has($f) | not)) then "\($w)from : un autre environnement du site" else empty end),
+                  (if rooted($envs; $id; 0) | not then "\($w)boucle d'\''héritage (from)" else empty end),
+                  (if has("data") and (.data | IN("separate", "copy", "shared") | not) then "\($w)data : separate, copy ou shared" else empty end),
+                  (if has("pin") and ((.pin | type) != "string" or (.pin | test("^sha-[0-9a-f]{7,40}$") | not)) then "\($w)pin : un tag sha-<commit>" else empty end),
+                  (if has("expose") then access($w) elif has("devices") or has("sso") then "\($w)devices et sso vont avec expose" else empty end),
+                  (if has("internetAccess") then options($w) elif has("probe") or has("rateLimit") then "\($w)probe et rateLimit vont avec internetAccess" else empty end),
+                  (if has("containers") then containers($w; true) elif has("entrypoint") then "\($w)entrypoint va avec containers" else empty end)
                   end)
-            end)
+            end
+         else empty end)
         end' <<<"$ENTRY"
 }
 
@@ -134,6 +176,10 @@ edit() {
         [ -z "$problems" ] || die "entrée refusée : $(paste -sd';' - <<<"$problems")"
         if [ "$current" = new ]; then subject="feat($APP): add site"; else subject="feat($APP): update site"; fi
         jq -S --indent 2 --arg a "$APP" --argjson e "$ENTRY" '.[$a] = $e' "$apps" | replace "$apps"
+        # Un environnement est servi comme l'app `<site>-<id>` : ce nom ne doit être celui de personne.
+        bad=$(jq -r '[to_entries[] | .key as $s | $s, ((.value.environments // {}) | keys[] | "\($s)-\(.)")]
+            | group_by(.) | map(select(length > 1) | .[0])[]' "$apps")
+        [ -z "$bad" ] || die "nom déjà pris : $bad (un environnement est servi sous le nom <site>-<id>)"
     fi
 
     # Lock : digests fournis pour les nouvelles références, puis ni manque ni orpheline.
