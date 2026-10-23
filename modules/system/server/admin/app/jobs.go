@@ -480,6 +480,7 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 		"non_pousse": "think tourne des commits pas encore poussés : `git push`, puis `rebuild`.",
 		"diverge":    "main n'est plus dans la lignée de la version de think : `rebuild` à la main.",
 		"attente":    "main contient aussi d'autres changements que des sites : `rebuild` à la main pour tout appliquer.",
+		"github":     "think n'arrive pas à joindre GitHub (quota d'API ou réseau) : nouvel essai chaque minute.",
 	}
 	for {
 		if rev := deployedRevision(ctx); rev != "" && !strings.HasSuffix(rev, "-dirty") {

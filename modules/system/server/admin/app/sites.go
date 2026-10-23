@@ -265,6 +265,8 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 		set("Commits pas poussés", "à pousser", "git push, puis rebuild.", iconWarn, red)
 	case st.State == "diverge":
 		set("main a divergé", "à vérifier", "Rebuild à la main.", iconWarn, red)
+	case st.State == "github":
+		set("GitHub injoignable", "GitHub ?", "apps-deploy réessaie chaque minute (quota d'API ou réseau).", iconWarn, amber)
 	case st.State == "echec":
 		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", iconWarn, red)
 	default:

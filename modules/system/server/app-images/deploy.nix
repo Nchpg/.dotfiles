@@ -77,6 +77,29 @@ let
           '{$head, $state, $pending}' > "$state/decision.json"
       }
 
+      # GitHub injoignable (réseau, quota d'API) : état `github` pour le dashboard, et Discord une
+      # fois au bout de 10 minutes ; un second message quand il répond de nouveau.
+      github_down() {
+        decision="github"
+        local now since
+        now=$(date +%s)
+        since=$(cat "$state/github_down" 2> /dev/null || true)
+        if [ -z "$since" ]; then
+          since=$now
+          echo "$now" > "$state/github_down"
+        fi
+        if [ $((now - since)) -ge 600 ] && [ ! -e "$state/github_down.alerted" ]; then
+          say "⚠️ think n'arrive plus à joindre GitHub depuis $(((now - since) / 60)) min ($1) : ce qui est poussé sur $branch n'est pas déployé. Nouvel essai chaque minute."
+          touch "$state/github_down.alerted"
+        fi
+      }
+      github_up() {
+        if [ -e "$state/github_down.alerted" ]; then
+          say "✅ GitHub répond de nouveau : les déploiements reprennent."
+        fi
+        rm -f "$state/github_down" "$state/github_down.alerted"
+      }
+
       # Lu par le dashboard (lisible par tous, sans secret) : refait à chaque passage.
       publish() {
         local clone=null raw
@@ -132,11 +155,15 @@ let
 
       deployed=$(/run/current-system/sw/bin/nixos-version --configuration-revision 2> /dev/null || true)
 
-      # Réseau ou GitHub indisponible : nouvel essai à la minute suivante, sans bruit.
-      head=$(git ls-remote "https://github.com/$repo.git" "refs/heads/$branch" | cut -f1) || exit 0
-      [ -n "$head" ] || exit 0
+      # Réseau ou GitHub indisponible : nouvel essai à la minute suivante.
+      if ! head=$(git ls-remote "https://github.com/$repo.git" "refs/heads/$branch" | cut -f1) || [ -z "$head" ]; then
+        head=""
+        github_down "git ls-remote en échec"
+        exit 0
+      fi
 
       if [ "$head" = "$deployed" ]; then
+        github_up
         decision="a_jour"
         exit 0
       fi
@@ -160,6 +187,9 @@ let
       code=$(curl -sS --max-time 20 --config "$auth" -o "$conf.compare" -w '%{http_code}' \
         "https://api.github.com/repos/$repo/compare/$deployed...$head" || true)
       case "$code" in
+        200 | 404) github_up ;;
+      esac
+      case "$code" in
         200) compare=$(cat "$conf.compare") ;;
         404)
           decide non_pousse
@@ -170,6 +200,7 @@ let
           # Quota, panne ou réseau : rien n'est tranché pour ce commit, nouvel essai à la minute suivante.
           echo "API GitHub en échec (''${code:-réseau}), nouvel essai" >&2
           rm -f "$state/seen"
+          github_down "API GitHub : HTTP ''${code:-réseau}"
           exit 0
           ;;
       esac
