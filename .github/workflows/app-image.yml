@@ -54,8 +54,14 @@ jobs:
           if [ -z "$TAG" ]; then
             TAG=$(printf %s "$GITHUB_REF_NAME" | tr -c "A-Za-z0-9._-" "-")
           fi
-          echo "repo=$repo" >> "$GITHUB_OUTPUT"
-          echo "ref=$repo:$TAG" >> "$GITHUB_OUTPUT"
+          # Sujet et date du commit : labels lus par le dashboard (versions d'une branche). Sans
+          # guillemets : la liste `labels` est lue comme du CSV.
+          {
+            echo "repo=$repo"
+            echo "ref=$repo:$TAG"
+            echo "subject=$(git log -1 --format=%s | tr -d '"' | cut -c1-200)"
+            echo "date=$(git log -1 --format=%cI)"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
@@ -138,6 +144,9 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.created=${{ steps.ref.outputs.date }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+            org.opencontainers.image.title=${{ steps.ref.outputs.subject }}
           cache-from: type=gha,scope=${{ matrix.image.name }}
 
       # Les images d'un dépôt portent le même commit (label `revision`) : think attend qu'elles
