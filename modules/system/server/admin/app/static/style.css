@@ -187,7 +187,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 /* Changements : une carte, titre et lien GitHub dans son en-tête, un journal par jour. */
 .activity { min-width: 0; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); }
 .layout > .activity { margin-top: 8px; }
-.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.activity-head, .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .gh-link { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); color: var(--text); }
 .gh-link:hover { border-color: #C9CED6; background: #F8F9FB; }
 .gh-link svg { width: 14px; height: 14px; }
@@ -434,3 +434,17 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
 .info summary:hover, .info[open] summary { color: var(--accent); }
 .info summary svg { width: 13px; height: 13px; }
 .info-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: -8px; width: min(300px, 80vw); margin: 0; padding: 10px 12px; background: var(--card); border: 1px solid #C9CED6; color: var(--text); font-size: 13px; line-height: 1.45; }
+
+/* Services de think : même tableau que les sites, en-tête dans la carte, sur téléphone le nom et
+   l'accès sur une ligne, l'adresse dessous. */
+.card-head h2 { gap: 8px; }
+table.services td { vertical-align: middle; }
+table.services td.site-td { width: 34%; vertical-align: middle; }
+table.services td.acc-td { width: 1%; white-space: nowrap; }
+@media (max-width: 720px) {
+  table.services tbody { padding: 4px 16px; }
+  table.services tr { grid-template-areas: "site acc" "addr addr"; padding: 10px 0; }
+  table.services tr + tr { border-top: 1px solid var(--line-soft); }
+  table.services td.site-td { width: auto; padding-bottom: 0 !important; align-self: center; }
+  table.services td.acc-td { width: auto; }
+}

@@ -43,6 +43,33 @@ let
     hash = "sha256-4gndpcgjVHnzFm3vx3UOHbzVpcGAi3eS/C5nM3aPtEc=";
   };
 
+  # Services de think qui ne viennent pas d'apps.json (cloud, coffre, métriques…) : montrés en
+  # lecture seule sous les sites. Tirés de proxy.sites, où tout nom servi se déclare.
+  # Authelia : repéré dans le vhost nginx (auth_request vers son point de contrôle).
+  services =
+    let
+      appDomains = map (a: a.domain) (lib.attrValues config.systemSettings.apps);
+      vhosts = config.services.nginx.virtualHosts;
+      behindAuthelia =
+        domain:
+        let
+          v = vhosts.${domain} or null;
+          text =
+            if v == null then
+              ""
+            else
+              lib.concatStrings ([ v.extraConfig ] ++ map (l: l.extraConfig) (lib.attrValues v.locations));
+        in
+        lib.hasInfix "auth_request /internal/authelia" text;
+    in
+    lib.mapAttrsToList (domain: site: {
+      inherit domain;
+      inherit (site) public;
+      name = lib.head (lib.attrNames site.probes ++ [ domain ]);
+      probed = site.probes != { };
+      authelia = behindAuthelia domain;
+    }) (lib.filterAttrs (domain: _: !lib.elem domain appDomains) config.systemSettings.proxy.sites);
+
   # Noms des secrets disponibles (jamais leur valeur) : la page propose ceux rangés sous un site.
   secretKeys =
     let
@@ -131,6 +158,7 @@ in
           builtins.toJSON (map (p: p.name) wireguard.peers)
         );
         ADMIN_SECRETS_FILE = pkgs-stable.writeText "admin-secrets.json" (builtins.toJSON secretKeys);
+        ADMIN_SERVICES_FILE = pkgs-stable.writeText "admin-services.json" (builtins.toJSON services);
         ADMIN_RECOPY_STATUS = "/var/lib/admin-recopy";
       };
       serviceConfig = {

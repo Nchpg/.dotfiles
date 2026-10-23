@@ -26,7 +26,8 @@ type Config struct {
 	Fonts        string
 	Peers        []string
 	SecretKeys   []string
-	RecopyStatus string // résultats d'admin-recopy (root), lus seulement
+	Services     []Service // services de think hors apps.json (lecture seule)
+	RecopyStatus string    // résultats d'admin-recopy (root), lus seulement
 
 	DispatchToken string // lance apps.yml, rien d'autre
 	RegistryToken string // lit les images et la liste des packages
@@ -70,6 +71,9 @@ func loadConfig() (*Config, error) {
 	if err := readJSON(os.Getenv("ADMIN_SECRETS_FILE"), &c.SecretKeys); err != nil {
 		return nil, fmt.Errorf("clés de secrets : %w", err)
 	}
+	if err := readJSON(os.Getenv("ADMIN_SERVICES_FILE"), &c.Services); err != nil {
+		return nil, fmt.Errorf("services : %w", err)
+	}
 
 	// Credentials systemd : jamais dans l'environnement (lisible dans /proc).
 	creds := os.Getenv("CREDENTIALS_DIRECTORY")
@@ -81,6 +85,15 @@ func loadConfig() (*Config, error) {
 		}
 	}
 	return c, nil
+}
+
+// Service : un nom servi par think hors apps.json (cf. `services` dans ../default.nix).
+type Service struct {
+	Name     string `json:"name"`
+	Domain   string `json:"domain"`
+	Public   bool   `json:"public"`
+	Authelia bool   `json:"authelia"`
+	Probed   bool   `json:"probed"`
 }
 
 func env(name, def string) string {

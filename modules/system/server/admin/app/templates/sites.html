@@ -19,6 +19,7 @@
       {{template "online" .}}
     </section>
     {{template "site-cards" .}}
+    {{template "services" .}}
     {{template "activity" .Activity}}
   </div>
 </main>
@@ -131,3 +132,30 @@
 {{end}}
 
 {{define "job-badge"}}<a class="chip job job-{{.Kind}}" href="/sites/{{.App}}" title="{{.Detail}}"><span class="pulse"></span>{{.Label}}</a>{{end}}
+
+{{/* Services de think hors apps.json (cloud, coffre, métriques…) : lecture seule, état des sondes. */}}
+{{define "services"}}
+{{if .Services}}
+<section aria-labelledby="services-title" id="services" class="card table-card" hx-get="/fragments/services" hx-trigger="every 30s" hx-swap="outerHTML">
+  <header class="card-head">
+    <h2 id="services-title" class="line">Services de think{{template "info" (args "ID" "info-services" "Text" "Les autres services servis par think (Nextcloud, Vaultwarden, Grafana, Authelia, ce dashboard). Ils se règlent dans le code Nix, puis un rebuild : rien à modifier ici.")}}</h2>
+  </header>
+  <table class="sites services">
+    <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
+    <tbody>
+      {{range .Services}}
+      <tr>
+        <td class="site-td">{{.Name}}</td>
+        <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
+        <td class="acc-td">
+          {{if .Public}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>
+          {{else}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{end}}
+          {{if .Authelia}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+{{end}}

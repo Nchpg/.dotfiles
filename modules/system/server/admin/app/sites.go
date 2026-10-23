@@ -136,7 +136,33 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 		every = 5
 	}
 	return map[string]any{"Nav": "sites", "Groups": groups, "Adding": adding, "Every": every,
-		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public}
+		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public,
+		"Services": s.serviceRows(up)}
+}
+
+// ServiceRow : une ligne des services de think (lecture seule), avec l'état de sa sonde.
+type ServiceRow struct {
+	Service
+	URL        string
+	Up, Probed bool
+}
+
+func (s *Server) serviceRows(up map[string]bool) []ServiceRow {
+	rows := make([]ServiceRow, 0, len(s.cfg.Services))
+	for _, sv := range s.cfg.Services {
+		r := ServiceRow{Service: sv, URL: "https://" + sv.Domain}
+		if sv.Probed {
+			r.Up, r.Probed = up[sv.Domain]
+		}
+		rows = append(rows, r)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Name != rows[j].Name {
+			return rows[i].Name < rows[j].Name
+		}
+		return rows[i].Domain < rows[j].Domain
+	})
+	return rows
 }
 
 func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +192,8 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "state-card", s.stateCard(ctx, snap.Head))
 	case "cards":
 		s.render(w, "site-cards", s.sitesData(ctx, snap))
+	case "services":
+		s.render(w, "services", s.sitesData(ctx, snap))
 	case "online":
 		s.render(w, "online", s.sitesData(ctx, snap))
 	case "activity":
