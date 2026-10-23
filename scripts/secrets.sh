@@ -462,10 +462,15 @@ cmd_edit() {
   applyPolicy quiet || policyRc=$?
   if [ "$policyRc" -ge 2 ] && [ ! -f "$file" ]; then exit 1; fi
 
-  if [ ! -f "$file" ] && ! grep -qF "path_regex: ^${2//./\\.}\\.ya?ml\$" "$sopsConfig"; then
+  # Règle du secret, ou celle de son site (`<site>/<clé>`, cf. lib/sops/policy.nix).
+  site="${2%%/*}"
+  if [ ! -f "$file" ] && ! grep -qF "path_regex: ^${2//./\\.}\\.ya?ml\$" "$sopsConfig" \
+    && ! { [ "$site/${2#*/}" = "$2" ] && [ "${2#*/}" = "${2##*/}" ] \
+      && grep -qF "path_regex: ^${site//./\\.}/[^/]+\\.ya?ml\$" "$sopsConfig"; }; then
     echo "secrets : aucune règle pour « $2 » : ce secret n'est déclaré dans aucun module." >&2
     echo "  Déclare d'abord sops.secrets.\"$2\" dans le module qui l'utilise (git add si" >&2
     echo "  le fichier est nouveau : un flake ne voit que les fichiers suivis), puis relance." >&2
+    echo "  Pour un site d'apps.json : « <site>/<clé> » (ex. myetf/env) se crée directement." >&2
     if [ -n "$(git -C "$store" status --porcelain)" ]; then
       sync "chore: regenerate sops policy" || true
     fi

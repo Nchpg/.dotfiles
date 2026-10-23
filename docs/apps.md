@@ -132,7 +132,10 @@ même app : `systemSettings.apps.stage.containers.web.healthcheck.command = …`
 Le Nix complète, il ne remplace jamais ce que dit le JSON.
 
 Un secret se crée avec `secrets edit <site>/env`, puis `secrets sync` et
-`rebuild` (il change `flake.lock`). Il apparaît alors dans le dashboard.
+`rebuild` (il change `flake.lock`). Il apparaît alors dans le dashboard, où on le
+coche sur un conteneur. Inutile qu'un conteneur le cite d'abord : tout
+`<site>/<clé>` d'un site d'`apps.json` a sa règle, scellée pour la machine qui
+fait tourner le site (`lib/sops/policy.nix`).
 
 
 ## Environnements

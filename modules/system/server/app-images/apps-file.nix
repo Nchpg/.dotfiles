@@ -319,6 +319,14 @@ in
       '';
     };
 
+    sites = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      readOnly = true;
+      internal = true;
+      default = lib.attrNames entries;
+      description = "Noms des sites d'apps.json : lib/sops/policy.nix scelle pour cette machine tout secret `<site>/…`.";
+    };
+
     copies = lib.mkOption {
       type = lib.types.attrsOf lib.types.raw;
       readOnly = true;
