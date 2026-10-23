@@ -71,6 +71,18 @@ let
           git -C "$checkout" -c core.hooksPath=/dev/null "$@"
       }
 
+      # Discord ne prévient que d'un changement de SITE qui attend : les commits de main depuis `$1`
+      # touchent-ils apps.json ou le lock ? Vu dans le clone local, mis à jour d'abord. Dans le doute
+      # (pas de clone, commit introuvable) : oui, un message de trop vaut mieux qu'un site bloqué.
+      sites_waiting() {
+        local base files
+        [ -n "$1" ] && [ -n "$checkout" ] && [ -d "$checkout/.git" ] || return 0
+        as_owner fetch --quiet "https://github.com/$repo.git" "+refs/heads/$branch:refs/remotes/origin/$branch" 2> /dev/null || true
+        base=$(as_owner merge-base "$1" "$head" 2> /dev/null) || return 0
+        files=$(as_owner diff --name-only "$base" "$head" -- ${lib.escapeShellArgs sitePaths} 2> /dev/null) || return 0
+        [ -n "$files" ]
+      }
+
       # Décision retenue pour un commit de tête : `seen` ne la fait prendre qu'une fois.
       decide() {
         decision=$1
@@ -186,7 +198,7 @@ let
       case "$deployed" in
         "" | *-dirty)
           decide local
-          [ -n "$quiet" ] || say "⏸️ think tourne une version locale non commitée : \`$short\` sur $branch n'est pas déployé. \`rebuild\` à la main pour l'appliquer."
+          [ -n "$quiet" ] || ! sites_waiting "''${deployed%-dirty}" || say "⏸️ think tourne une version locale non commitée : \`$short\` sur $branch n'est pas déployé. \`rebuild\` à la main pour l'appliquer."
           exit 0
           ;;
       esac
@@ -213,7 +225,7 @@ let
             exit 0
           fi
           decide non_pousse
-          [ -n "$quiet" ] || say "⏸️ think (\`''${deployed:0:7}\`) a des commits pas poussés, et $branch (\`$short\`) des commits que think n'a pas : rien n'est déployé. \`git pull --rebase\`, \`git push\`, puis \`rebuild\`."
+          [ -n "$quiet" ] || ! sites_waiting "$deployed" || say "⏸️ think (\`''${deployed:0:7}\`) a des commits pas poussés, et $branch (\`$short\`) des commits que think n'a pas : rien n'est déployé. \`git pull --rebase\`, \`git push\`, puis \`rebuild\`."
           exit 0
           ;;
         *)
@@ -226,6 +238,7 @@ let
       esac
 
       pending=$(jq -c '[.commits[] | {sha, subject: (.commit.message | split("\n")[0])}]' <<< "$compare")
+      touches_sites=$(jq --argjson s ${lib.escapeShellArg (builtins.toJSON sitePaths)} '[.files[].filename] | any(IN($s[]))' <<< "$compare")
 
       # `behind` : think, déjà sur GitHub (une autre branche), contient main : rien n'attend.
       case "$(jq -r .status <<< "$compare")" in
@@ -236,13 +249,15 @@ let
       esac
       if [ "$(jq -r .status <<< "$compare")" != ahead ]; then
         decide diverge "$pending"
-        [ -n "$quiet" ] || say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
+        [ -n "$quiet" ] || [ "$touches_sites" = false ] || say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
         exit 0
       fi
 
       if ! jq -e --argjson ok ${lib.escapeShellArg (builtins.toJSON sitePaths)} \
         '[.files[].filename] - $ok | length == 0' <<< "$compare" > /dev/null; then
         decide attente "$pending"
+        # Que du code (pas de site qui attend) : le bandeau du dashboard suffit.
+        [ "$touches_sites" = true ] || exit 0
         commits=$(jq -r '.[] | "• `\(.sha[0:7])` \(.subject)"' <<< "$pending")
         say "📦 nouveaux commits sur $branch, pas que des sites : \`rebuild\` à la main pour les appliquer.
       $commits"
@@ -260,6 +275,49 @@ let
       deployed=$head
       decide a_jour
       [ -z "$checkout" ] || sync_checkout
+    '';
+  };
+
+  watchdog = pkgs-stable.writeShellApplication {
+    name = "apps-deploy-watchdog";
+    runtimeInputs = [
+      pkgs-stable.curl
+      pkgs-stable.jq
+      pkgs-stable.coreutils
+      pkgs-stable.systemd
+    ];
+    text = ''
+      status=/var/lib/apps-deploy/status.json
+      alerted="$STATE_DIRECTORY/alerted"
+
+      umask 077
+      conf=$(mktemp)
+      trap 'rm -f "$conf"' EXIT
+      printf 'url = "%s"\n' "$(cat "$CREDENTIALS_DIRECTORY/webhook")" > "$conf"
+      say() {
+        jq -n --arg c "$1" '{content: $c, flags: 4}' \
+          | curl --silent --show-error --max-time 20 --config "$conf" \
+              --header 'Content-Type: application/json' --data @- > /dev/null
+      }
+
+      checked=$(jq -r '.checked // 0' "$status" 2> /dev/null || echo 0)
+      age=$(($(date +%s) - checked))
+      if [ "$age" -lt 1200 ]; then
+        if [ -e "$alerted" ]; then
+          say "✅ apps-deploy passe de nouveau : les mises à jour de sites reprennent."
+          rm -f "$alerted"
+        fi
+        exit 0
+      fi
+      # En cours (un switch peut être long) : son délai maximal le fera échouer s'il se bloque.
+      if systemctl is-active --quiet apps-deploy.service; then
+        exit 0
+      fi
+      if [ ! -e "$alerted" ]; then
+        timer=$(systemctl is-active apps-deploy.timer || true)
+        say "⚠️ apps-deploy ne passe plus depuis $((age / 60)) min (timer : $timer) : les sites poussés sur ${deploy.branch} ne sont plus déployés. \`systemctl status apps-deploy.timer apps-deploy\`."
+        touch "$alerted"
+      fi
     '';
   };
 in
@@ -319,6 +377,31 @@ in
           # Le jeton d'apps-watch : lire l'API (compare) avec le quota d'un jeton.
           "github:${config.sops.secrets.${cfg.watch.tokenKey}.path}"
         ];
+        # Un passage bloqué empêcherait tous les suivants sans rien signaler : au-delà, il échoue
+        # (et notify prévient). Large : un switch peut télécharger beaucoup.
+        TimeoutStartSec = "45min";
+      };
+    };
+
+    # Gardien : apps-deploy arrêté (timer coupé, unité masquée…) ne signale rien de lui-même. Si son
+    # status.json n'a pas bougé depuis 20 minutes alors qu'il ne tourne pas, Discord une fois ; et
+    # une fois quand il repart.
+    systemd.services.apps-deploy-watchdog = {
+      description = "Vérifie qu'apps-deploy passe toujours";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe watchdog;
+        StateDirectory = "apps-deploy-watchdog";
+        LoadCredential = "webhook:${config.sops.secrets.${notify.webhookKey}.path}";
+      };
+    };
+
+    systemd.timers.apps-deploy-watchdog = {
+      description = "Vérification régulière d'apps-deploy";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "15min";
+        OnUnitActiveSec = "5min";
       };
     };
 
@@ -331,6 +414,9 @@ in
       };
     };
 
-    systemSettings.notify.discord.units = [ "apps-deploy" ];
+    systemSettings.notify.discord.units = [
+      "apps-deploy"
+      "apps-deploy-watchdog"
+    ];
   };
 }
