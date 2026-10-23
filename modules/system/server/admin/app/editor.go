@@ -1082,7 +1082,7 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 	if addErr != "" {
 		f.AddName = q.Get("env")
 	}
-	up := probes(ctx, s.cfg.Prometheus)
+	up := s.probes(ctx)
 	f.Up, f.Probed = up[f.Domain]
 	f.Preview = s.previewOf(name, &e, snap, false, "", validate(s.cfg, name, e, snap.Apps.Entries))
 	if j := s.jobs.latest(name); j != nil {

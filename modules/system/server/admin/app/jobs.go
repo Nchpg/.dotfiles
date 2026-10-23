@@ -44,8 +44,32 @@ type Job struct {
 }
 
 type Jobs struct {
-	mu sync.Mutex
-	m  map[string]*Job
+	mu       sync.Mutex
+	m        map[string]*Job
+	verified map[string]time.Time // domaine → dernière réponse vue par une demande (étape 4)
+}
+
+// markVerified : la demande vient de voir ce domaine répondre.
+func (js *Jobs) markVerified(domain string) {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	if js.verified == nil {
+		js.verified = map[string]time.Time{}
+	}
+	js.verified[domain] = time.Now()
+}
+
+// recentlyVerified : domaines vus répondre par une demande depuis moins de `d`.
+func (js *Jobs) recentlyVerified(d time.Duration) []string {
+	js.mu.Lock()
+	defer js.mu.Unlock()
+	var out []string
+	for dom, t := range js.verified {
+		if time.Since(t) < d {
+			out = append(out, dom)
+		}
+	}
+	return out
 }
 
 func (js *Jobs) get(id string) *Job {
@@ -367,6 +391,7 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request) error {
 			case t.Remove && code == 0:
 				answered = append(answered, t.Domain+" retiré")
 			case !t.Remove && ok:
+				s.jobs.markVerified(t.Domain)
 				answered = append(answered, fmt.Sprintf("%s · HTTP %d", t.Domain, code))
 			default:
 				t.Code = code

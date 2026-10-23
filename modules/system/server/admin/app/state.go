@@ -116,3 +116,16 @@ func answers(ctx context.Context, port int, path string) (int, bool) {
 	resp.Body.Close()
 	return resp.StatusCode, resp.StatusCode < 400
 }
+
+// probes, avec en plus les domaines qu'une demande vient de voir répondre : la sonde Prometheus
+// passe toutes les minutes, elle peut encore porter l'échec d'avant la modification.
+func (s *Server) probes(ctx context.Context) map[string]bool {
+	up := probes(ctx, s.cfg.Prometheus)
+	if up == nil {
+		up = map[string]bool{}
+	}
+	for _, d := range s.jobs.recentlyVerified(3 * time.Minute) {
+		up[d] = true
+	}
+	return up
+}

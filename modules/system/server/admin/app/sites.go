@@ -63,7 +63,7 @@ type SiteGroup struct {
 
 // sitesData : tableau et compteurs de la page Sites (aussi servis seuls, pour le rafraîchissement).
 func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
-	up := probes(ctx, s.cfg.Prometheus)
+	up := s.probes(ctx)
 	var groups []SiteGroup
 	vpn, public, online, total := 0, 0, 0, 0
 	running := false
@@ -159,7 +159,7 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		up := probes(ctx, s.cfg.Prometheus)
+		up := s.probes(ctx)
 		domain := domainOf(name, e, s.cfg.Domain)
 		on, probed := up[domain]
 		s.render(w, "site-status", map[string]any{"App": name, "Up": on, "Probed": probed})
