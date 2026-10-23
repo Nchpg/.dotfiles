@@ -137,6 +137,15 @@ in
               '';
             };
 
+            noindex = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Demande aux moteurs de recherche de ne pas indexer l'application
+                (`X-Robots-Tag`), pour une préversion publique.
+              '';
+            };
+
             internetAccess = lib.mkOption {
               type = lib.types.bool;
               default = false;
@@ -251,7 +260,12 @@ in
               type = lib.types.str;
               readOnly = true;
               internal = true;
-              default = "br-${name}";
+              # IFNAMSIZ (15) : un nom plus long que 12 (environnement `<site>-<env>`) prend un hash.
+              default =
+                if lib.stringLength name <= 12 then
+                  "br-${name}"
+                else
+                  "br-${lib.substring 0 12 (builtins.hashString "sha256" name)}";
               description = ''
                 Nom du pont imposé, pour les règles de pare-feu par application.
               '';

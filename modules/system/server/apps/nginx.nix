@@ -67,7 +67,10 @@ in
             lib.optionalString (app.allowedNetworks != null) ''
               ${myLib.server.nginxAllowOnly app.allowedNetworks}
             ''
-            + lib.optionalString app.sso.enable authelia.nginxProtect.extraConfig;
+            + lib.optionalString app.sso.enable authelia.nginxProtect.extraConfig
+            + lib.optionalString app.noindex ''
+              add_header X-Robots-Tag "noindex, nofollow" always;
+            '';
         }
       )
     ) cfg;
