@@ -49,11 +49,14 @@ jobs:
           NAME: ${{ matrix.image.name }}
           TAG: ${{ inputs.tag }}
         run: |
+          # Valeurs libres de l'appelant : refusées ici plutôt que par un `docker build` obscur.
+          [[ "${NAME,,}" =~ ^[a-z0-9][a-z0-9._/-]*$ ]] || { echo "::error::nom d'image invalide : $NAME"; exit 1; }
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${NAME,,}"
           # Une branche = un tag : `feat/charts` -> `feat-charts` (même règle que apps-file.nix).
           if [ -z "$TAG" ]; then
             TAG=$(printf %s "$GITHUB_REF_NAME" | tr -c "A-Za-z0-9._-" "-")
           fi
+          [[ "$TAG" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]] || { echo "::error::tag invalide : $TAG"; exit 1; }
           # Sujet et date du commit : labels lus par le dashboard (versions d'une branche). Sans
           # guillemets : la liste `labels` est lue comme du CSV.
           {

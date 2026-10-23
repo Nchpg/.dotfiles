@@ -25,6 +25,10 @@ replace() {
     mv "$tmp" "$file"
 }
 
+# Filtre jq : les images fournies entrent dans le lock (le port connu reste si l'image n'en donne pas).
+# shellcheck disable=SC2016  # $images, $i : variables jq
+put_images='reduce $images[] as $i (.; .[$i.ref] = {digest: $i.digest, port: ($i.port // .[$i.ref].port), revision: $i.revision})'
+
 # Entrées d'images : forme commune à pin et edit. $1 : `known` (déjà dans le lock) ou `free`.
 check_images() {
     local bad
@@ -71,9 +75,7 @@ pin() {
         return 0
     fi
 
-    jq --sort-keys --indent 2 --argjson images "$IMAGES" \
-        'reduce $images[] as $i (.; .[$i.ref] = {digest: $i.digest, port: ($i.port // .[$i.ref].port), revision: $i.revision})' \
-        "$lock" | replace "$lock"
+    jq --sort-keys --indent 2 --argjson images "$IMAGES" "$put_images" "$lock" | replace "$lock"
 
     # `ghcr.io/nchpg/rlkart-frontend:main` -> `rlkart-frontend`.
     names=$(sed -E 's#.*/##; s#:[^:]*$##' <<<"$changed" | sort -u | paste -sd, - | sed 's/,/, /g')
@@ -125,7 +127,7 @@ validate_entry() {
                       end)
             end;
         # Un environnement remonte ses parents sans boucle (16 niveaux au plus).
-        def rooted($envs; $id; $n): if $id == null then true elif $n > 16 or ($envs[$id] | type) != "object" then false else rooted($envs; $envs[$id].from; $n + 1) end;
+        def rooted($envs; $id; $n): if $id == null then true elif $n > 16 or ($id | type) != "string" or ($envs[$id] | type) != "object" then false else rooted($envs; $envs[$id].from; $n + 1) end;
         if type != "object" then "entrée : objet attendu" else
         keys_in(["name", "subdomain", "expose", "devices", "sso", "internetAccess", "probe", "entrypoint", "rateLimit", "containers", "environments"]; ""),
         named(""), subdomain(""), access(""), options(""), containers(""; false),
@@ -172,7 +174,7 @@ edit() {
         jq -S --indent 2 --arg a "$APP" 'del(.[$a])' "$apps" | replace "$apps"
     else
         jq -e . <<<"$ENTRY" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
-        problems=$(validate_entry)
+        problems=$(validate_entry) || die "validation de l'entrée impossible"
         [ -z "$problems" ] || die "entrée refusée : $(paste -sd';' - <<<"$problems")"
         if [ "$current" = new ]; then subject="feat($APP): add site"; else subject="feat($APP): update site"; fi
         jq -S --indent 2 --arg a "$APP" --argjson e "$ENTRY" '.[$a] = $e' "$apps" | replace "$apps"
@@ -187,9 +189,8 @@ edit() {
     refs=$(refs_of_apps)
     bad=$(jq -r --arg refs "$refs" '.[].ref | select(IN($refs | split("\n")[]) | not)' <<<"$IMAGES")
     [ -z "$bad" ] || die "image(s) fournie(s) mais pas utilisées par apps.json : $bad"
-    jq --sort-keys --indent 2 --argjson images "$IMAGES" --arg refs "$refs" '
-        reduce $images[] as $i (.; .[$i.ref] = {digest: $i.digest, port: ($i.port // .[$i.ref].port), revision: $i.revision})
-        | with_entries(select(.key | IN($refs | split("\n")[])))' "$lock" | replace "$lock"
+    jq --sort-keys --indent 2 --argjson images "$IMAGES" --arg refs "$refs" \
+        "$put_images"' | with_entries(select(.key | IN($refs | split("\n")[])))' "$lock" | replace "$lock"
     missing=$(jq -r --arg refs "$refs" '($refs | split("\n")) - keys | .[]' "$lock")
     [ -z "$missing" ] || die "image(s) sans digest dans le lock : $missing (à fournir dans IMAGES)"
 

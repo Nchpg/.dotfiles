@@ -54,6 +54,7 @@ permissions:
 jobs:
   apps:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
@@ -73,7 +74,9 @@ jobs:
           SOURCE: ${{ inputs.source }}
           OWNER: ${{ github.repository_owner }}
         run: |
-          echo "$ACTION, appel de ${SOURCE:-inconnu}"
+          # Une ligne, sans retour : le texte libre ne doit pas former une commande de workflow (`::…`).
+          source=${SOURCE:-inconnu}
+          echo "$ACTION, appel de ${source//$'\n'/ }"
           export REGISTRY="ghcr.io/${OWNER,,}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
