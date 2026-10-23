@@ -10,7 +10,7 @@ function applyFilter() {
   });
 }
 document.addEventListener("click", (ev) => {
-  const btn = ev.target.closest && ev.target.closest("[data-filter]");
+  const btn = ev.target.closest?.("[data-filter]");
   if (!btn) return;
   filter = btn.dataset.filter;
   applyFilter();
@@ -18,7 +18,7 @@ document.addEventListener("click", (ev) => {
 
 // Exposition : appareils et suffixe d'adresse suivent le choix public / VPN.
 document.addEventListener("change", (ev) => {
-  const form = ev.target.closest && ev.target.closest("#site-form");
+  const form = ev.target.closest?.("#site-form");
   if (!form || ev.target.name !== "expose") return;
   const vpn = ev.target.value === "vpn";
   form.querySelectorAll("[data-vpn-only]").forEach((el) => (el.hidden = !vpn));
@@ -28,19 +28,19 @@ document.addEventListener("change", (ev) => {
 
 // Choix du dépôt : filtre et sélection visibles (le formulaire arrive par htmx).
 document.addEventListener("input", (ev) => {
-  if (!ev.target.matches || !ev.target.matches("[data-repo-filter]")) return;
+  if (!ev.target.matches?.("[data-repo-filter]")) return;
   const q = ev.target.value.trim().toLowerCase();
   document.querySelectorAll(".repo").forEach((r) => (r.hidden = q !== "" && !r.dataset.name.includes(q)));
 });
 document.addEventListener("click", (ev) => {
-  const repo = ev.target.closest && ev.target.closest(".repo");
+  const repo = ev.target.closest?.(".repo");
   if (!repo) return;
   document.querySelectorAll(".repo").forEach((r) => r.setAttribute("aria-selected", String(r === repo)));
 });
 
 // Liens vers l'extérieur (sites, GitHub) : nouvel onglet ; la navigation du dashboard reste ici.
 document.addEventListener("click", (ev) => {
-  const a = ev.target.closest && ev.target.closest("a[href]");
+  const a = ev.target.closest?.("a[href]");
   if (!a || a.host === location.host || !/^https?:$/.test(a.protocol)) return;
   a.target = "_blank";
   a.rel = "noopener noreferrer";
@@ -89,9 +89,8 @@ function ddPick(dd, opt) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 document.addEventListener("click", (ev) => {
-  const t = ev.target.closest ? ev.target : null;
-  const btn = t && t.closest(".dd-btn");
-  const opt = t && t.closest(".dd-list [role=option]");
+  const btn = ev.target.closest(".dd-btn");
+  const opt = ev.target.closest(".dd-list [role=option]");
   if (btn) {
     const dd = btn.closest("[data-dd]");
     dd.querySelector(".dd-list").hidden ? ddOpen(dd) : ddClose(dd, true);
@@ -102,7 +101,7 @@ document.addEventListener("click", (ev) => {
   }
 });
 document.addEventListener("keydown", (ev) => {
-  const dd = ev.target.closest && ev.target.closest("[data-dd]");
+  const dd = ev.target.closest?.("[data-dd]");
   if (!dd) return;
   const opts = [...dd.querySelectorAll("[role=option]")];
   const i = opts.indexOf(ev.target);
@@ -110,12 +109,11 @@ document.addEventListener("keydown", (ev) => {
   else if (ev.key === "ArrowDown") { ev.preventDefault(); if (i < 0) ddOpen(dd); else opts[Math.min(i + 1, opts.length - 1)].focus(); }
   else if (ev.key === "ArrowUp") { ev.preventDefault(); if (i > 0) opts[i - 1].focus(); }
   else if ((ev.key === "Enter" || ev.key === " ") && i >= 0) { ev.preventDefault(); ddPick(dd, opts[i]); }
-  else return;
 });
 
 // Entrée dans un champ à bouton (dossier de données) : clique le bouton au lieu d'envoyer le formulaire.
 document.addEventListener("keydown", (ev) => {
-  if (ev.key !== "Enter" || !ev.target.matches || !ev.target.matches("[data-enter-click]")) return;
+  if (ev.key !== "Enter" || !ev.target.matches?.("[data-enter-click]")) return;
   ev.preventDefault();
   ev.target.parentElement.querySelector("button")?.click();
 });
@@ -126,7 +124,7 @@ document.addEventListener("toggle", (ev) => {
 
 // Navigation : une barre de chargement en haut dès le clic, le temps que la page suivante arrive.
 document.addEventListener("click", (ev) => {
-  const a = ev.target.closest && ev.target.closest("a[href]");
+  const a = ev.target.closest?.("a[href]");
   if (!a || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
   if (a.target || a.hasAttribute("download") || a.origin !== location.origin || a.getAttribute("href").startsWith("#")) return;
   document.documentElement.classList.add("nav-loading");

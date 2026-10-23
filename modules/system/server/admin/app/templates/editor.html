@@ -8,7 +8,7 @@
   <div class="line hero">
     <div class="stack tight">
       <div class="line"><h1>{{.Name}}</h1>{{template "site-status" (status .Name .Up .Probed)}}</div>
-      <span class="line wrap hero-sub"><span class="mono muted">{{.Domain}}</span>{{if .Repo}}<a class="repo-link" href="https://github.com/{{.Repo}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.Repo}}</a>{{end}}</span>
+      <span class="line hero-sub"><span class="mono muted">{{.Domain}}</span>{{if .Repo}}<a class="repo-link" href="https://github.com/{{.Repo}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.Repo}}</a>{{end}}</span>
     </div>
   </div>
   {{with .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong>{{range .Steps}}{{if and (eq .State "active") .Detail}} En attente : {{.Detail}}{{end}}{{end}}</p></div>{{end}}
@@ -148,7 +148,7 @@
           <div class="field grow2"><span>Image</span>{{template "dd" (args "D" .Image)}}</div>
           <div class="field"><span>Mémoire max</span>{{template "dd" (args "D" .Memory)}}</div>
         </div>
-        {{if .Deps}}<div class="line wrap small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
+        {{if .Deps}}<div class="line small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
         <div class="stack tight">
           <span class="small strong">Données</span>
           {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{else}}<small class="muted">Aucune</small>{{end}}
