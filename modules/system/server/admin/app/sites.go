@@ -56,6 +56,7 @@ type SiteRow struct {
 
 // SiteGroup : les lignes d'un site, filtrées ensemble.
 type SiteGroup struct {
+	Name        string
 	Rows        []SiteRow
 	Public, VPN bool
 }
@@ -68,7 +69,7 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	running := false
 	for _, name := range snap.Apps.Names() {
 		e := snap.Apps.Entries[name]
-		g := SiteGroup{}
+		g := SiteGroup{Name: name}
 		var job *JobBadge
 		if j := s.jobs.latest(name); j != nil {
 			job = badgeOf(j.Snapshot())

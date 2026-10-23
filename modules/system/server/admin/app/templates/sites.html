@@ -1,12 +1,16 @@
 {{define "sites"}}{{template "top" .}}
 <header class="topbar">
   <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Sites</strong></nav>
-  <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
+  <div class="line">
+    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M20 20l-3.5-3.5"/></svg>
+      <input type="search" placeholder="Rechercher un site" aria-label="Rechercher un site" data-site-search></label>
+    <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
+  </div>
 </header>
 <main class="page">
   <div class="line between title-row">
-    <h1>Sites</h1>
-    <div class="segmented" role="group" aria-label="Filtrer">
+    <div class="stack tight"><h1>Sites</h1><span class="muted">{{.Sites}} sites · {{.Total}} environnements déployés</span></div>
+    <div class="tabs-line" role="group" aria-label="Filtrer">
       <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.Sites}}</span></button>
       <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.Public}}</span></button>
       <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.VPN}}</span></button>
@@ -14,8 +18,10 @@
   </div>
 
   <div class="layout">
-    {{template "state-card" .State}}
-    {{template "online" .}}
+    <section class="strip" aria-label="État">
+      {{template "state-card" .State}}
+      {{template "online" .}}
+    </section>
     {{template "site-cards" .}}
     {{template "activity" .Activity}}
   </div>
@@ -24,24 +30,33 @@
 
 {{/* Blocs rafraîchis seuls (GET /fragments/<nom>) : chacun se redemande à intervalle fixe. */}}
 
+{{/* État de think : deux cases du bandeau (think, ~/.dotfiles), plus une ligne d'explication s'il y a lieu. */}}
 {{define "state-card"}}
-<section class="card state" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
-  <span class="tile tile-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
-  <div class="stack">
-    <div class="line"><strong class="big">{{.Title}}</strong><span class="chip" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Chip}}</span></div>
-    {{if .Text}}<p class="muted">{{.Text}}</p>{{end}}
-    <div class="line mono small muted"><span>think <b>{{.Think}}</b></span><span>main <b>{{.Main}}</b></span></div>
-    {{if .Pending}}<ul class="pending mono small">{{range .Pending}}<li>{{.}}</li>{{end}}</ul>{{end}}
-    {{if .Checkout}}<div class="folder small"><svg viewBox="0 0 24 24" aria-hidden="true" style="color: {{.CheckoutInk}}"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="mono muted">~/.dotfiles</span><span style="color: {{.CheckoutInk}}">{{.Checkout}}</span></div>{{end}}
+<div class="strip-part" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
+  <div class="strip-cell">
+    <span class="strip-label">think</span>
+    <span class="strip-value line"><span class="sq" style="background: {{.Ink}}"></span>{{.Chip}}</span>
+    <span class="mono small muted">{{.Think}} · main {{.Main}}</span>
   </div>
-</section>
+  <div class="strip-cell">
+    <span class="strip-label">~/.dotfiles</span>
+    {{if .Checkout}}<span class="strip-value" style="color: {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
+    <span class="mono small muted">dépôt de think</span>
+  </div>
+  {{if or .Text .Pending}}
+  <div class="strip-note">
+    {{if .Text}}<span style="color: {{.Ink}}">{{.Title}} : {{.Text}}</span>{{else}}<span style="color: {{.Ink}}">{{.Title}}</span>{{end}}
+    {{range .Pending}}<span class="mono small">{{.}}</span>{{end}}
+  </div>
+  {{end}}
+</div>
 {{end}}
 
 {{define "online"}}
-<div class="card stat" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
-  <span class="small muted line"><svg viewBox="0 0 24 24" aria-hidden="true" class="ok"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>En ligne</span>
-  <span class="huge">{{.Online}} <small>/ {{.Total}}</small></span>
-  <span class="small muted">environnements, sondes Prometheus</span>
+<div class="strip-cell" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
+  <span class="strip-label">En ligne</span>
+  <span class="strip-value">{{.Online}} sur {{.Total}}</span>
+  <span class="mono small muted">sondes Prometheus</span>
 </div>
 {{end}}
 
@@ -56,7 +71,7 @@
     </tr></tbody>
     {{end}}
     {{range .Groups}}
-    <tbody data-vpn="{{.VPN}}" data-public="{{.Public}}">
+    <tbody data-vpn="{{.VPN}}" data-public="{{.Public}}" data-name="{{.Name}}">
       {{range .Rows}}
       <tr class="{{if .First}}first{{end}}">
         {{if .First}}

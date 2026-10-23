@@ -3,14 +3,16 @@
 // Filtre de la liste des sites, réappliqué quand les cartes se rafraîchissent.
 let filter = "all";
 function applyFilter() {
-  document.querySelectorAll(".segmented [data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
+  const q = (document.querySelector("[data-site-search]")?.value || "").trim().toLowerCase();
+  document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
   // Un site reste groupé : visible dès qu'un de ses environnements correspond au filtre.
   document.querySelectorAll("table.sites tbody[data-vpn]").forEach((g) => {
-    g.hidden = filter === "vpn" ? g.dataset.vpn !== "true" : filter === "public" ? g.dataset.public !== "true" : false;
+    g.hidden = (filter === "vpn" ? g.dataset.vpn !== "true" : filter === "public" ? g.dataset.public !== "true" : false)
+      || (q !== "" && !g.dataset.name.includes(q) && !g.textContent.toLowerCase().includes(q));
   });
 }
 document.addEventListener("click", (ev) => {
-  const btn = ev.target.closest && ev.target.closest(".segmented [data-filter]");
+  const btn = ev.target.closest && ev.target.closest("[data-filter]");
   if (!btn) return;
   filter = btn.dataset.filter;
   applyFilter();
@@ -111,4 +113,9 @@ document.addEventListener("keydown", (ev) => {
   else if (ev.key === "ArrowUp") { ev.preventDefault(); if (i > 0) opts[i - 1].focus(); }
   else if ((ev.key === "Enter" || ev.key === " ") && i >= 0) { ev.preventDefault(); ddPick(dd, opts[i]); }
   else return;
+});
+
+// Recherche : par nom de site, d'environnement ou d'adresse (le filtre s'applique en plus).
+document.addEventListener("input", (ev) => {
+  if (ev.target.matches && ev.target.matches("[data-site-search]")) applyFilter();
 });

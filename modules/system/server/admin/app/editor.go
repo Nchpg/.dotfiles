@@ -184,6 +184,14 @@ func (s *Server) repoImages(ctx context.Context, repo string) []string {
 // sourceRepo : dépôt GitHub d'un site, lu dans le label de son image.
 func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 	c := e.Containers[e.EntryPoint()]
+	// Le package ghcr connaît son dépôt ; le label de l'image vient en second.
+	if pkgs, err := s.gh.Packages(ctx); err == nil {
+		for _, p := range pkgs {
+			if p.Repository != nil && strings.EqualFold(p.Name, untag(c.Image)) {
+				return p.Repository.FullName
+			}
+		}
+	}
 	info, err := s.reg.Inspect(ctx, s.cfg.ref(c.Image))
 	if err != nil {
 		return ""

@@ -381,3 +381,18 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .day .when { display: flex; gap: 14px; }
 .day-empty { padding: 14px 18px; }
 .site-td a.go { font-weight: 600; }
+
+/* Bandeau d'état : think, ~/.dotfiles, en ligne ; une ligne en dessous quand il faut agir. */
+.strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); background: var(--card); border: 1px solid var(--line); }
+.strip-part { display: contents; }
+.strip-cell { display: flex; flex-direction: column; gap: 2px; padding: 14px 18px; min-width: 0; }
+.strip-cell + .strip-cell, .strip-part + .strip-cell { border-left: 1px solid #EEF0F3; }
+.strip-label { font-size: 12.5px; color: var(--muted); }
+.strip-value { font-weight: 500; }
+.sq { width: 8px; height: 8px; flex-shrink: 0; }
+.strip-note { order: 10; grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; padding: 12px 18px; border-top: 1px solid #EEF0F3; font-size: 13.5px; }
+/* Filtre : onglets soulignés. */
+.tabs-line { display: flex; gap: 20px; }
+.tabs-line button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; }
+.tabs-line button[aria-pressed="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.tabs-line .count { min-width: 0; height: auto; padding: 0; background: none; font-family: var(--mono); font-size: 12px; font-weight: 400; color: var(--muted); }
