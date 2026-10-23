@@ -112,6 +112,9 @@ in
       default = {
         ref = normalize;
 
+        # `ghcr.io/moi/app:main` -> `ghcr.io/moi/app`.
+        untag = withoutTag;
+
         # Image suivie par le lock et publiée sous `registry` : celles que think surveille.
         own =
           image:

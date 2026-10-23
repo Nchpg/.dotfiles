@@ -88,12 +88,7 @@ let
     );
 
   # `myetf:main` -> `myetf` (le registre peut contenir un port, pas le dernier segment).
-  untag =
-    image:
-    let
-      parts = lib.splitString "/" image;
-    in
-    lib.concatStringsSep "/" (lib.init parts ++ [ (lib.head (lib.splitString ":" (lib.last parts))) ]);
+  inherit (config.systemSettings.appImages.helpers) untag;
 
   # Emplacement par défaut des données : un dossier par app et par conteneur.
   dataDir =

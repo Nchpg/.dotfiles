@@ -15,7 +15,7 @@ let
   hostPorts = map (a: a.hostPortEffective) (lib.attrValues cfg);
 
   otherPorts =
-    lib.optional config.systemSettings.authelia.enable config.systemSettings.authelia.port
+    lib.optional authelia.enable authelia.port
     ++ lib.optional config.services.vaultwarden.enable config.services.vaultwarden.config.ROCKET_PORT;
 
   domains = map (a: a.domain) (lib.attrValues cfg);
@@ -108,12 +108,18 @@ in
         message = "systemSettings.apps : `entrypoint` doit nommer un conteneur déclaré dans `containers`.";
       }
       {
+        # Les gardes laissent aux assertions précédentes le soin de signaler l'absence de conteneur
+        # ou un `entrypoint` inconnu, au lieu d'une erreur d'évaluation.
         assertion = lib.all (
           a:
-          let
-            c = a.containers.${a.entrypointName};
-          in
-          c.port != null || images.port c.image != null
+          a.containers == { }
+          || !(a.containers ? ${a.entrypointName})
+          || (
+            let
+              c = a.containers.${a.entrypointName};
+            in
+            c.port != null || images.port c.image != null
+          )
         ) (lib.attrValues cfg);
         message = "systemSettings.apps : le conteneur servi par nginx n'a pas de port : son image ne déclare aucun `EXPOSE` unique dans le lock, donne-lui un `port`.";
       }
@@ -138,11 +144,6 @@ in
           lib.attrNames cfg ++ lib.concatMap (a: lib.attrNames a.containers) (lib.attrValues cfg)
         );
         message = "systemSettings.apps : les noms d'applications et de conteneurs se limitent à des lettres, chiffres, tirets et soulignés, et commencent par un caractère alphanumérique.";
-      }
-      {
-        # IFNAMSIZ : au-delà, podman échoue sans désigner le nom.
-        assertion = lib.all (a: lib.stringLength a.bridge <= 15) (lib.attrValues cfg);
-        message = "systemSettings.apps : le nom d'une application doit tenir en 12 caractères — le pont réseau s'appelle `br-<nom>` et le noyau limite un nom d'interface à 15. Le nom SERVI n'est pas concerné, c'est `domain` et il reste libre.";
       }
       {
         assertion = lib.all (

@@ -199,8 +199,9 @@ in
           write "running" ""
           mapfile -t units < <(jq -r --arg a "$app" '.[$a].units[]' "$map")
           ok=1
+          # Arrêt en échec : les données sont peut-être ouvertes, on n'y touche pas.
           systemctl stop "''${units[@]}" || ok=0
-          while IFS=$'\t' read -r from to; do
+          while [ "$ok" = 1 ] && IFS=$'\t' read -r from to; do
             rm -rf --one-file-system -- "$to"
             mkdir -p "$(dirname "$to")"
             if [ -e "$from" ]; then

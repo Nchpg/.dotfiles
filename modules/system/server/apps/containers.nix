@@ -285,16 +285,12 @@ in
 
           extraOptions = [
             "--cap-drop=ALL"
-
             "--security-opt=no-new-privileges"
-
             "--pids-limit=${toString c.container.pidsLimit}"
           ]
           ++ lib.optional (c.container.memory != null) "--memory=${c.container.memory}"
           ++ lib.optional (c.port != null && c.port < 1024) "--cap-add=NET_BIND_SERVICE"
-
           ++ map (cap: "--cap-add=${cap}") c.container.capabilities
-
           ++ lib.optionals (c.container.healthcheck.command != null) [
             "--health-cmd=${c.container.healthcheck.command}"
             "--health-interval=${c.container.healthcheck.interval}"
