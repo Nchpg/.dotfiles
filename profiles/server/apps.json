@@ -37,8 +37,9 @@
     "environments": {
       "preview": {
         "branch": "preview",
-        "data": "copy",
+        "data": "shared",
         "expose": "public",
+        "sso": true,
         "subdomain": "etf-prev"
       }
     },
