@@ -142,3 +142,30 @@ document.addEventListener("click", (ev) => {
 for (const ev of ["htmx:afterSettle", "htmx:responseError", "htmx:sendError"]) {
   document.addEventListener(ev, () => document.documentElement.classList.remove("nav-loading"));
 }
+
+// Grafana (page Métriques) : l'iframe vit dans un calque hors du contenu, créé une fois et posé sur
+// la place réservée de la page ; masqué ailleurs, il reste chargé et revient sans rechargement
+// tant qu'on navigue par le menu.
+function syncGrafana() {
+  const pane = document.getElementById("grafana-pane");
+  if (!pane) return;
+  const slot = document.querySelector(".grafana-slot");
+  if (!slot) {
+    pane.hidden = true;
+    return;
+  }
+  if (pane.dataset.src !== slot.dataset.grafanaSrc) {
+    const frame = document.createElement("iframe");
+    frame.src = slot.dataset.grafanaSrc;
+    frame.title = slot.title;
+    pane.replaceChildren(frame);
+    pane.dataset.src = slot.dataset.grafanaSrc;
+  }
+  const r = slot.getBoundingClientRect();
+  Object.assign(pane.style, { top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px` });
+  pane.hidden = false;
+}
+document.addEventListener("DOMContentLoaded", syncGrafana);
+document.addEventListener("htmx:afterSettle", syncGrafana);
+addEventListener("resize", syncGrafana);
+addEventListener("scroll", syncGrafana, { passive: true });

@@ -468,5 +468,9 @@ table.services td.site-td { vertical-align: middle; }
 }
 
 /* Page Métriques : Grafana sur toute la hauteur sous la barre du haut. */
-iframe.grafana { display: block; width: 100%; height: calc(100vh - 69px); border: 0; background: var(--bg); }
-@media (max-width: 800px) { iframe.grafana { height: calc(100vh - 69px - 56px - 64px); min-height: 480px; } }
+.grafana-slot { display: block; width: 100%; height: calc(100vh - 69px); }
+/* Calque fixe posé sur la place réservée ; l'iframe déborde de 36 px en bas pour cacher « Powered by
+   Grafana » (non masquable dans Grafana OSS). */
+.grafana-pane { position: fixed; z-index: 10; overflow: hidden; background: var(--bg); }
+.grafana-pane iframe { display: block; width: 100%; height: calc(100% + 36px); border: 0; }
+@media (max-width: 800px) { .grafana-slot { height: calc(100vh - 69px - 56px - 64px); min-height: 480px; } }

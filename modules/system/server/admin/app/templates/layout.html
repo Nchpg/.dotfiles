@@ -10,13 +10,14 @@
 </head>
 <body>
 <div class="shell">
-{{/* Navigation sans rechargement (hx-boost) : seul le contenu change, pas de page blanche entre deux. */}}
-<aside class="side" hx-boost="true">
+{{/* Navigation sans rechargement (hx-boost) : seul le contenu change (et le menu, pour la page
+     active), pas de page blanche entre deux ; le calque Grafana, hors du contenu, reste en vie. */}}
+<aside class="side" hx-boost="true" hx-target=".content" hx-select=".content" hx-select-oob="#main-nav" hx-swap="outerHTML">
   <a class="brand" href="/sites">
     <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"/></svg></span>
     <span class="brand-text"><strong>think</strong><small>admin.vpn</small></span>
   </a>
-  <nav aria-label="Navigation principale">
+  <nav aria-label="Navigation principale" id="main-nav">
     <span class="nav-title">Serveur</span>
     <a href="/sites" {{if eq .Nav "sites"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 9h18M7 7h.01"/></svg>Sites</a>
     <a href="/vpn" {{if eq .Nav "vpn"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4"/></svg>VPN<small>bientôt</small></a>
@@ -33,6 +34,8 @@
 
 {{define "bottom"}}
 </div>
+{{/* Grafana de la page Métriques : posé par app.js au-dessus de sa place, gardé ouvert ensuite. */}}
+<div id="grafana-pane" class="grafana-pane" hidden></div>
 </div>
 </body>
 </html>
@@ -54,7 +57,7 @@
   <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Métriques</strong></nav>
   <a class="btn" href="{{.URL}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir dans Grafana</a>
 </header>
-<iframe class="grafana" src="{{.Embed}}" title="Tableau de bord Grafana de think"></iframe>
+<div class="grafana-slot" data-grafana-src="{{.Embed}}" title="Tableau de bord Grafana de think"></div>
 {{template "bottom" .}}{{end}}
 
 {{define "error"}}{{template "top" .}}
