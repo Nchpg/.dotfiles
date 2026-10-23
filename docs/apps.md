@@ -58,7 +58,7 @@ rien en production tant que le lock n'a pas bougé.
    name: images
    on:
      push:
-       branches: [main]
+       branches: [main]   # ou [main, preview] : une image par branche (cf. Environnements)
      workflow_dispatch:
    jobs:
      image:
@@ -115,7 +115,9 @@ le tunnel WireGuard.
 | `probe` | `"/"` | chemin sondé |
 | `entrypoint` | | conteneur servi par nginx, s'il y en a plusieurs |
 | `rateLimit` | | chemins limités par IP (`[]` : tout le site) |
-| `containers.<c>.image` | | `nom:tag`, sous `ghcr.io/nchpg` ; le tag est `main` (suit la branche) ou `sha-<commit>` (figé) |
+| `containers.<c>.image` | | `nom:tag`, sous `ghcr.io/nchpg` ; le tag est la branche suivie (`main`) ou `sha-<commit>` (figé) |
+| `name` | `"production"` | nom affiché de la racine |
+| `environments` | | autres branches du site, cf. « Environnements » |
 | `containers.<c>.memory` | | plafond, `256m`, `1g`… |
 | `containers.<c>.dependsOn` | | conteneurs du même site à démarrer avant |
 | `containers.<c>.data` | | `[{"path": "/data"}]` : dossier gardé entre deux versions, dans `/var/lib/apps/<site>/<conteneur>/data`, donné à l'utilisateur de l'image. `"on"` choisit l'emplacement : `/var/lib/<site>…` ou un volume podman `<site>-…` |
@@ -129,6 +131,63 @@ Le Nix complète, il ne remplace jamais ce que dit le JSON.
 Un secret se crée avec `secrets edit <site>/env`, puis `secrets sync` et
 `rebuild` (il change `flake.lock`). Il apparaît alors dans le dashboard.
 
+
+## Environnements
+
+Un site peut tourner sur d'autres branches, chacune à sa propre adresse : c'est
+un environnement, sous `environments.<id>` de l'entrée. La racine (le site
+lui-même) reste au premier niveau et s'affiche « production » (`name` pour un
+autre nom).
+
+```json
+"myetf": {
+  "subdomain": "etf", "expose": "vpn", "devices": ["gram"],
+  "containers": { "web": { "image": "myetf:main", "data": [{ "path": "/app/data" }] } },
+  "environments": {
+    "preview": {
+      "branch": "preview", "data": "copy", "expose": "public",
+      "containers": { "web": { "image": "myetf", "memory": "256m", "data": [{ "path": "/app/data" }] } }
+    },
+    "staging": { "name": "Staging", "branch": "feat/charts", "from": "preview", "data": "shared" }
+  }
+}
+```
+
+- **Servi comme une app à part**, `<site>-<id>` (`myetf-preview`) : ses unités,
+  son réseau, son port, ses sondes et ses annonces. L'`id` est fixé à la
+  création ; `name` (le nom affiché) se change librement, sans rien redémarrer.
+  Adresse par défaut : `<site>-<id>.<domaine>` (`subdomain` pour une autre).
+- **Image** : celle du parent, au tag de la branche (`feat/charts` -> `feat-charts`,
+  ce que publie `app-image.yml`), ou `pin` (`sha-<commit>`) pour la figer. Dans
+  un environnement, une image se donne donc sans tag. Seule une branche qui a
+  déjà publié une image peut être choisie : une image absente du lock fait
+  échouer l'évaluation.
+- **Héritage**, section par section, du parent (`from`, la racine par défaut) :
+  une section est à l'environnement dès que sa clé repère est là.
+
+  | Section | Repère | Clés |
+  |---|---|---|
+  | accès | `expose` | `expose`, `devices`, `sso` |
+  | conteneurs | `containers` | `containers` (images, mémoire, données, secrets, `dependsOn`), `entrypoint` |
+  | options | `internetAccess` | `internetAccess`, `probe`, `rateLimit` |
+
+- **Données** (`data`) :
+  - `separate` (défaut) : `/var/lib/apps/<site>-<id>/…`, vides au départ ;
+  - `copy` : le même dossier, rempli au premier démarrage par une copie de
+    celui du parent (propriétaire compris), puis indépendant. Le dashboard
+    peut le **recopier** à la demande (`admin-recopy`, root, arrête
+    l'environnement le temps de la copie) ;
+  - `shared` : le dossier du parent lui-même (attention aux migrations de
+    schéma lancées par la branche).
+- **Secrets** : ceux du site (`<site>/…`), pour chaque environnement.
+- Un environnement public n'est pas indexé par les moteurs de recherche
+  (`X-Robots-Tag: noindex`).
+- Retirer un environnement : ceux qui en héritaient héritent de son parent ;
+  ses données restent sur think.
+
+Pour qu'une branche publie une image, le workflow du dépôt doit se déclencher
+sur elle (`on.push.branches`, par exemple `[main, preview]` ou `["**"]`) :
+`app-image.yml` publie alors `:<branche>` et `:sha-<commit>`.
 ## Règles des images
 
 `app-image.yml` construit l'image, la contrôle, et ne la publie que si elle passe :
@@ -203,7 +262,12 @@ root et n'a aucun droit d'écriture sur un dépôt : chaque modification passe p
 l'ouverture de la page (empreinte de l'entrée), puis commite. Avant d'envoyer,
 il évalue toute la config de think avec le nouvel `apps.json` : une adresse
 prise ou un appareil inconnu ne part jamais sur `main`. Il suit ensuite le
-commit, l'application par think et la réponse du site.
+commit, l'application par think et la réponse de chaque adresse touchée
+(environnements qui héritent du changement compris). Un onglet par
+environnement ; « + Environnement » en crée un (nom, branche publiée, parent).
+Sa seule action hors de `apps.yml` : demander la recopie des données d'un
+environnement en `copy`, que fait `admin-recopy` (root, environnements connus
+de la config seulement).
 
 ## Jetons
 
