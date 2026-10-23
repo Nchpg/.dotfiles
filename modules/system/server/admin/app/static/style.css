@@ -464,3 +464,7 @@ table.services td.site-td { vertical-align: middle; }
   table.services th:nth-child(2) { width: auto; }
   table.sites td.addr-td .line { min-width: 0; }
 }
+
+/* Page Métriques : Grafana sur toute la hauteur sous la barre du haut. */
+iframe.grafana { display: block; width: 100%; height: calc(100vh - 69px); border: 0; background: var(--bg); }
+@media (max-width: 800px) { iframe.grafana { height: calc(100vh - 69px - 56px - 64px); min-height: 480px; } }

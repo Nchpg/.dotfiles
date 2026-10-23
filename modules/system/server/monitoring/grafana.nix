@@ -9,6 +9,7 @@
 let
   cfg = config.systemSettings.monitoring;
   authelia = config.systemSettings.authelia;
+  admin = config.systemSettings.admin;
   inherit (cfg.internal) ports;
 in
 {
@@ -37,6 +38,10 @@ in
 
         # En `info`, des milliers de lignes par jour dans le journal.
         log.level = "warn";
+
+        # Intégré dans la page Métriques du dashboard admin, et nulle part ailleurs : nginx pose
+        # `frame-ancestors` (ci-dessous) à la place du `X-Frame-Options: deny` de Grafana.
+        security.allow_embedding = admin.enable;
 
         # Sûr tant que Grafana n'écoute que sur 127.0.0.1, que nginx écrase l'en-tête du client
         # (`proxy_set_header`) et que `whitelist` reste la boucle locale.
@@ -115,6 +120,11 @@ in
         # Adresse réelle plutôt que 127.0.0.1 (tout arrive par cloudflared).
         extraConfig = ''
           access_log /var/log/nginx/access.log cf_combined;
+        ''
+        + lib.optionalString admin.enable ''
+          # Un add_header ici masque ceux du niveau http : HSTS répété.
+          add_header Strict-Transport-Security "max-age=31536000" always;
+          add_header Content-Security-Policy "frame-ancestors https://${admin.subdomain}.vpn.${config.systemSettings.proxy.domain}" always;
         '';
 
         locations."/" = {

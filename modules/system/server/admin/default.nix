@@ -160,6 +160,8 @@ in
         ADMIN_SECRETS_FILE = pkgs-stable.writeText "admin-secrets.json" (builtins.toJSON secretKeys);
         ADMIN_SERVICES_FILE = pkgs-stable.writeText "admin-services.json" (builtins.toJSON services);
         ADMIN_RECOPY_STATUS = "/var/lib/admin-recopy";
+        # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
+        ADMIN_METRICS_URL = lib.optionalString config.systemSettings.monitoring.enable "https://${config.systemSettings.monitoring.grafana.hostName}/d/${target.host}-systeme/systeme?orgId=1&from=now-6h&to=now&timezone=browser&var-gravite=error&var-gravite=warn&var-unite=$__all&var-contient=&refresh=1m";
       };
       serviceConfig = {
         ExecStart = lib.getExe package;

@@ -28,6 +28,7 @@ type Config struct {
 	SecretKeys   []string
 	Services     []Service // services de think hors apps.json (lecture seule)
 	RecopyStatus string    // résultats d'admin-recopy (root), lus seulement
+	MetricsURL   string    // tableau de bord Grafana de la page Métriques (vide : page « bientôt »)
 
 	DispatchToken string // lance apps.yml, rien d'autre
 	RegistryToken string // lit les images et la liste des packages
@@ -51,6 +52,7 @@ func loadConfig() (*Config, error) {
 		Htmx:         env("ADMIN_HTMX", ""),
 		Fonts:        env("ADMIN_FONTS", ""),
 		RecopyStatus: env("ADMIN_RECOPY_STATUS", "/var/lib/admin-recopy"),
+		MetricsURL:   os.Getenv("ADMIN_METRICS_URL"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse
 	// d'évaluer un dépôt à travers un lien. On travaille sur le chemin réel.

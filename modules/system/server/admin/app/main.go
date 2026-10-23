@@ -70,9 +70,15 @@ func main() {
 	mux.HandleFunc("GET /fragments/{name}", s.fragment)
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /fonts/{file}", s.font)
-	for _, p := range []string{"vpn", "ssh", "metrics"} {
+	for _, p := range []string{"vpn", "ssh"} {
 		mux.HandleFunc("GET /"+p, s.soon(p))
 	}
+	if cfg.MetricsURL != "" {
+		mux.HandleFunc("GET /metrics", s.metrics)
+	} else {
+		mux.HandleFunc("GET /metrics", s.soon("metrics"))
+	}
+	metricsReady = cfg.MetricsURL != ""
 
 	if s.reg != nil {
 		go s.warm(context.Background())
@@ -155,6 +161,14 @@ func (s *Server) font(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "public, max-age=604800")
 	http.ServeFile(w, r, filepath.Join(s.cfg.Fonts, file))
+}
+
+// metricsReady : la page Métriques montre Grafana (le menu n'affiche plus « bientôt »).
+var metricsReady bool
+
+// metrics : le tableau de bord Grafana en kiosque, sur toute la page.
+func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
+	s.render(w, "metrics", map[string]any{"Nav": "metrics", "URL": s.cfg.MetricsURL, "Embed": s.cfg.MetricsURL + "&kiosk"})
 }
 
 func (s *Server) soon(page string) http.HandlerFunc {
