@@ -195,7 +195,8 @@ edit() {
     [ -z "$missing" ] || die "image(s) sans digest dans le lock : $missing (à fournir dans IMAGES)"
 
     if [ -n "${MESSAGE:-}" ]; then
-        [[ "$MESSAGE" =~ ^[[:print:]]{1,100}$ ]] || die "MESSAGE : une ligne de 100 caractères au plus"
+        # Accents compris (${#} compte les caractères en UTF-8) ; pas de retour ni de caractère de contrôle.
+        [[ ${#MESSAGE} -le 100 && "$MESSAGE" != *[[:cntrl:]]* ]] || die "MESSAGE : une ligne de 100 caractères au plus"
         subject=$MESSAGE
     fi
     if git diff --quiet -- "$apps" "$lock"; then

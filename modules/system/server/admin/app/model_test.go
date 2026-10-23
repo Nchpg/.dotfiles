@@ -283,3 +283,12 @@ func TestJobAbort(t *testing.T) {
 		t.Error("abort sur une demande terminée")
 	}
 }
+
+// Message de commit : une ligne, accents compris.
+func TestCommitMessage(t *testing.T) {
+	for m, want := range map[string]bool{"feat(myetf): préversion publique": true, "a\nb": false, "": false} {
+		if reCommitMessage.MatchString(m) != want {
+			t.Errorf("%q : %v attendu", m, want)
+		}
+	}
+}

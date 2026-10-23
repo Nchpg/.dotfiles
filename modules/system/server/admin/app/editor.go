@@ -1219,7 +1219,8 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 	s.startApply(w, r, name, e, snap, p, isNew)
 }
 
-var reCommitMessage = regexp.MustCompile(`^[[:print:]]{1,100}$`)
+// Une ligne de 100 caractères au plus, accents compris ; pas de caractère de contrôle.
+var reCommitMessage = regexp.MustCompile(`^[^\p{Cc}\p{Cf}]{1,100}$`)
 
 // startApply : lance la demande si l'aperçu est propre et que la page est à jour. Le verrou rend atomique
 // « aucune demande en cours » puis « lancer » : deux envois simultanés ne partent pas ensemble.
