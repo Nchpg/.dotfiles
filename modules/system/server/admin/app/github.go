@@ -204,30 +204,6 @@ func (g *GitHub) Commits(ctx context.Context, path string, n int) ([]Commit, err
 	return v.([]Commit), nil
 }
 
-// CommitOf : message et date d'un commit d'un dépôt d'app (public ; privé : inconnu, sans erreur).
-func (g *GitHub) CommitOf(ctx context.Context, repo, sha string) (Commit, bool) {
-	v, err := g.cached("commit:"+repo+"@"+sha, 24*time.Hour, func() (any, error) {
-		var raw struct {
-			Commit struct {
-				Message string `json:"message"`
-				Author  struct {
-					Date time.Time `json:"date"`
-				} `json:"author"`
-			} `json:"commit"`
-		}
-		if _, err := g.api(ctx, "GET", "https://api.github.com/repos/"+repo+"/commits/"+sha, "", nil, &raw); err != nil {
-			return Commit{}, nil
-		}
-		subject, _, _ := strings.Cut(raw.Commit.Message, "\n")
-		return Commit{SHA: sha, Subject: subject, Date: raw.Commit.Author.Date}, nil
-	})
-	if err != nil {
-		return Commit{}, false
-	}
-	c := v.(Commit)
-	return c, c.SHA != ""
-}
-
 type Package struct {
 	Name       string `json:"name"`
 	Visibility string `json:"visibility"`

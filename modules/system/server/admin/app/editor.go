@@ -204,7 +204,7 @@ func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 }
 
 // versionDD : suivre la branche, ou chaque commit dont toutes les images du déploiement ont le tag `sha-…`.
-func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, string) {
+func (s *Server) versionDD(ctx context.Context, d Deploy) (DD, string) {
 	if s.reg == nil { // tests : pas de registre
 		opts := []DDOpt{ddOpt("", "suivre "+d.Branch, "", icFollow, colGreen, !d.Frozen())}
 		if d.Frozen() {
@@ -227,20 +227,33 @@ func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, stri
 	if err != nil {
 		note = "Versions illisibles sur le registre : " + err.Error()
 	}
+	// Branche, sujet et date : labels de l'image d'entrée (app-image.yml). Seuls les commits de la
+	// branche suivie restent ; une image sans ces labels (construite avant) n'est pas proposée.
+	entry := s.cfg.ref(untag(d.Ctrs.Containers[d.EntryPoint()].Image))
+	refs := make([]string, len(tags))
+	for i, t := range tags {
+		refs[i] = entry + ":" + t
+	}
+	infos := s.reg.InspectAll(ctx, refs)
 	type v struct {
 		tag, sub string
 		date     time.Time
 	}
 	var vs []v
-	for _, t := range tags {
-		item := v{tag: t, sub: "commit"}
-		if c, ok := s.gh.CommitOf(ctx, repo, strings.TrimPrefix(t, "sha-")); ok {
-			item.date, item.sub = c.Date, c.Subject
-			if !c.Date.IsZero() {
-				item.sub = c.Subject + " (" + c.Date.Local().Format("02/01") + ")"
+	unlabeled := 0
+	for i, t := range tags {
+		info, ok := infos[refs[i]]
+		switch {
+		case !ok:
+		case info.Branch == "":
+			unlabeled++
+		case info.Branch == d.Branch:
+			sub := info.Subject
+			if !info.Created.IsZero() {
+				sub += " (" + info.Created.Local().Format("02/01") + ")"
 			}
+			vs = append(vs, v{tag: t, sub: sub, date: info.Created})
 		}
-		vs = append(vs, item)
 	}
 	sort.SliceStable(vs, func(i, j int) bool { return vs[i].date.After(vs[j].date) })
 	if len(vs) > 20 {
@@ -255,7 +268,10 @@ func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, stri
 		opts = append(opts, ddOpt(current, shortTag(current), "tag actuel", icCommit, colAmber, true))
 	}
 	if len(vs) == 0 && note == "" {
-		note = "Aucun tag sha-… : image pas construite par le template."
+		note = "Aucune version de " + d.Branch + " à figer pour l'instant."
+		if unlabeled > 0 {
+			note = "Les images construites avant l'ajout des labels de branche n'apparaissent pas : le prochain push de " + d.Branch + " en publiera une."
+		}
 	}
 	dd := newDD("version", "Images à faire tourner", opts, "", icFollow)
 	dd.Structural = true
@@ -519,7 +535,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 	}
 	f.Frozen = d.Frozen()
 	if !isNew {
-		f.Version, f.VersionNote = s.versionDD(ctx, d, repo)
+		f.Version, f.VersionNote = s.versionDD(ctx, d)
 		entry := d.Ctrs.Containers[d.EntryPoint()].Image
 		f.Branch = newDD("branch", "Branche du dépôt", s.branchOpts(ctx, entry, d.Branch), "choisir une branche…", icBranch)
 		f.Branch.Structural = true

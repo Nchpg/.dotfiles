@@ -23,6 +23,7 @@ type Registry struct {
 	mu      sync.Mutex
 	tokens  map[string]cacheItem
 	inspect map[string]ImageInfo // par digest : immuable
+	byRef   map[string]ImageInfo // tags `sha-…` : immuables aussi
 }
 
 type ImageInfo struct {
@@ -31,6 +32,9 @@ type ImageInfo struct {
 	User     string
 	Revision string
 	Source   string // dépôt GitHub (Nchpg/RLkart), d'après le label OCI
+	// Posés par app-image.yml (absents des images plus anciennes) : branche, sujet et date du commit.
+	Branch, Subject string
+	Created         time.Time
 }
 
 var manifestAccept = []string{
@@ -41,7 +45,7 @@ var manifestAccept = []string{
 }
 
 func newRegistry(cfg *Config) *Registry {
-	return &Registry{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, tokens: map[string]cacheItem{}, inspect: map[string]ImageInfo{}}
+	return &Registry{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, tokens: map[string]cacheItem{}, inspect: map[string]ImageInfo{}, byRef: map[string]ImageInfo{}}
 }
 
 // split : `ghcr.io/nchpg/rlkart-frontend:main` -> ("nchpg/rlkart-frontend", "main").
@@ -207,7 +211,10 @@ func (r *Registry) Inspect(ctx context.Context, ref string) (ImageInfo, error) {
 	if err := read("/blobs/"+manifest.Config.Digest, nil, &config); err != nil {
 		return ImageInfo{}, err
 	}
-	info := ImageInfo{Digest: digest, User: config.Config.User, Revision: config.Config.Labels["org.opencontainers.image.revision"]}
+	labels := config.Config.Labels
+	info := ImageInfo{Digest: digest, User: config.Config.User, Revision: labels["org.opencontainers.image.revision"],
+		Branch: labels["org.opencontainers.image.ref.name"], Subject: labels["org.opencontainers.image.title"]}
+	info.Created, _ = time.Parse(time.RFC3339, labels["org.opencontainers.image.created"])
 	var ports []int
 	for p := range config.Config.ExposedPorts {
 		if n, ok := strings.CutSuffix(p, "/tcp"); ok {
@@ -226,6 +233,42 @@ func (r *Registry) Inspect(ctx context.Context, ref string) (ImageInfo, error) {
 	r.inspect[repo+"@"+digest] = info
 	r.mu.Unlock()
 	return info, nil
+}
+
+// InspectAll : Inspect de plusieurs tags `sha-…` (immuables : gardés en mémoire par référence),
+// en parallèle ; un tag illisible est absent du résultat.
+func (r *Registry) InspectAll(ctx context.Context, refs []string) map[string]ImageInfo {
+	out := map[string]ImageInfo{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for _, ref := range refs {
+		r.mu.Lock()
+		info, ok := r.byRef[ref]
+		r.mu.Unlock()
+		if ok {
+			out[ref] = info
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			info, err := r.Inspect(ctx, ref)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			out[ref] = info
+			mu.Unlock()
+			r.mu.Lock()
+			r.byRef[ref] = info
+			r.mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	return out
 }
 
 // ShaTags : tags `sha-<commit>` présents pour TOUTES les images données (un retour cohérent).
