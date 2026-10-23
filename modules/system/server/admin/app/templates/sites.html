@@ -1,11 +1,7 @@
 {{define "sites"}}{{template "top" .}}
 <header class="topbar">
   <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Sites</strong></nav>
-  <div class="line">
-    <label class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M20 20l-3.5-3.5"/></svg>
-      <input type="search" placeholder="Rechercher un site" aria-label="Rechercher un site" data-site-search></label>
-    <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
-  </div>
+  <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
 </header>
 <main class="page">
   <div class="line between title-row">
@@ -71,7 +67,7 @@
     </tr></tbody>
     {{end}}
     {{range .Groups}}
-    <tbody data-vpn="{{.VPN}}" data-public="{{.Public}}" data-name="{{.Name}}">
+    <tbody data-vpn="{{.VPN}}" data-public="{{.Public}}">
       {{range .Rows}}
       <tr class="{{if .First}}first{{end}}">
         {{if .First}}
