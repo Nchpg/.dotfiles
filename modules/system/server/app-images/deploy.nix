@@ -83,6 +83,12 @@ let
         [ -n "$files" ]
       }
 
+      # Un changement de site attend sur main mais ne peut pas partir seul : un seul message,
+      # générique ; le bandeau du dashboard dit quoi faire.
+      blocked() {
+        say "⏸️ un changement de site attend sur $branch (\`$short\`), mais think ne peut pas l'appliquer seul ($1). À régler à la main."
+      }
+
       # Décision retenue pour un commit de tête : `seen` ne la fait prendre qu'une fois.
       decide() {
         decision=$1
@@ -198,7 +204,7 @@ let
       case "$deployed" in
         "" | *-dirty)
           decide local
-          [ -n "$quiet" ] || ! sites_waiting "''${deployed%-dirty}" || say "⏸️ think tourne une version locale non commitée : \`$short\` sur $branch n'est pas déployé. \`rebuild\` à la main pour l'appliquer."
+          [ -n "$quiet" ] || ! sites_waiting "''${deployed%-dirty}" || blocked "version locale non commitée"
           exit 0
           ;;
       esac
@@ -225,7 +231,7 @@ let
             exit 0
           fi
           decide non_pousse
-          [ -n "$quiet" ] || ! sites_waiting "$deployed" || say "⏸️ think (\`''${deployed:0:7}\`) a des commits pas poussés, et $branch (\`$short\`) des commits que think n'a pas : rien n'est déployé. \`git pull --rebase\`, \`git push\`, puis \`rebuild\`."
+          [ -n "$quiet" ] || ! sites_waiting "$deployed" || blocked "commits pas poussés sur think"
           exit 0
           ;;
         *)
@@ -249,7 +255,7 @@ let
       esac
       if [ "$(jq -r .status <<< "$compare")" != ahead ]; then
         decide diverge "$pending"
-        [ -n "$quiet" ] || [ "$touches_sites" = false ] || say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
+        [ -n "$quiet" ] || [ "$touches_sites" = false ] || blocked "historique divergé"
         exit 0
       fi
 
@@ -257,10 +263,7 @@ let
         '[.files[].filename] - $ok | length == 0' <<< "$compare" > /dev/null; then
         decide attente "$pending"
         # Que du code (pas de site qui attend) : le bandeau du dashboard suffit.
-        [ "$touches_sites" = true ] || exit 0
-        commits=$(jq -r '.[] | "• `\(.sha[0:7])` \(.subject)"' <<< "$pending")
-        say "📦 nouveaux commits sur $branch, pas que des sites : \`rebuild\` à la main pour les appliquer.
-      $commits"
+        [ -n "$quiet" ] || [ "$touches_sites" = false ] || blocked "main contient aussi d'autres changements"
         exit 0
       fi
 
@@ -275,49 +278,6 @@ let
       deployed=$head
       decide a_jour
       [ -z "$checkout" ] || sync_checkout
-    '';
-  };
-
-  watchdog = pkgs-stable.writeShellApplication {
-    name = "apps-deploy-watchdog";
-    runtimeInputs = [
-      pkgs-stable.curl
-      pkgs-stable.jq
-      pkgs-stable.coreutils
-      pkgs-stable.systemd
-    ];
-    text = ''
-      status=/var/lib/apps-deploy/status.json
-      alerted="$STATE_DIRECTORY/alerted"
-
-      umask 077
-      conf=$(mktemp)
-      trap 'rm -f "$conf"' EXIT
-      printf 'url = "%s"\n' "$(cat "$CREDENTIALS_DIRECTORY/webhook")" > "$conf"
-      say() {
-        jq -n --arg c "$1" '{content: $c, flags: 4}' \
-          | curl --silent --show-error --max-time 20 --config "$conf" \
-              --header 'Content-Type: application/json' --data @- > /dev/null
-      }
-
-      checked=$(jq -r '.checked // 0' "$status" 2> /dev/null || echo 0)
-      age=$(($(date +%s) - checked))
-      if [ "$age" -lt 1200 ]; then
-        if [ -e "$alerted" ]; then
-          say "✅ apps-deploy passe de nouveau : les mises à jour de sites reprennent."
-          rm -f "$alerted"
-        fi
-        exit 0
-      fi
-      # En cours (un switch peut être long) : son délai maximal le fera échouer s'il se bloque.
-      if systemctl is-active --quiet apps-deploy.service; then
-        exit 0
-      fi
-      if [ ! -e "$alerted" ]; then
-        timer=$(systemctl is-active apps-deploy.timer || true)
-        say "⚠️ apps-deploy ne passe plus depuis $((age / 60)) min (timer : $timer) : les sites poussés sur ${deploy.branch} ne sont plus déployés. \`systemctl status apps-deploy.timer apps-deploy\`."
-        touch "$alerted"
-      fi
     '';
   };
 in
@@ -383,28 +343,6 @@ in
       };
     };
 
-    # Gardien : apps-deploy arrêté (timer coupé, unité masquée…) ne signale rien de lui-même. Si son
-    # status.json n'a pas bougé depuis 20 minutes alors qu'il ne tourne pas, Discord une fois ; et
-    # une fois quand il repart.
-    systemd.services.apps-deploy-watchdog = {
-      description = "Vérifie qu'apps-deploy passe toujours";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe watchdog;
-        StateDirectory = "apps-deploy-watchdog";
-        LoadCredential = "webhook:${config.sops.secrets.${notify.webhookKey}.path}";
-      };
-    };
-
-    systemd.timers.apps-deploy-watchdog = {
-      description = "Vérification régulière d'apps-deploy";
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "15min";
-        OnUnitActiveSec = "5min";
-      };
-    };
-
     systemd.timers.apps-deploy = {
       description = "Surveillance de ${deploy.branch} pour les mises à jour de sites";
       wantedBy = [ "timers.target" ];
@@ -414,9 +352,6 @@ in
       };
     };
 
-    systemSettings.notify.discord.units = [
-      "apps-deploy"
-      "apps-deploy-watchdog"
-    ];
+    systemSettings.notify.discord.units = [ "apps-deploy" ];
   };
 }

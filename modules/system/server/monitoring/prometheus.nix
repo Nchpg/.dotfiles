@@ -47,6 +47,7 @@ let
         "HorlogeDerive"
         "MachineTropChaude"
         "TimerNeSeDeclenchePlus"
+        "AppsDeployArrete"
         "TunnelCloudflareCoupe"
         "TunnelCloudflareDegrade"
       ];

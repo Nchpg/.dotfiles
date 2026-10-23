@@ -181,6 +181,17 @@ in
             toString (seuils.timerSecondes / 3600)
           } h : ce qu'il devait faire ne se fait plus, et rien d'autre ne le dirait.";
         };
+      }
+      // lib.optionalAttrs config.systemSettings.appImages.deploy.enable {
+        # apps-deploy passe chaque minute, une minute après la fin du passage précédent : 20 minutes sans
+        # déclenchement, c'est un timer arrêté ou un passage bloqué. Les sites ne se déploient plus.
+        AppsDeployArrete = {
+          alert = "AppsDeployArrete";
+          expr = ''(time() - node_systemd_timer_last_trigger_seconds{name="apps-deploy.timer"} > 1200) or absent(node_systemd_timer_last_trigger_seconds{name="apps-deploy.timer"})'';
+          for = "5m";
+          labels.severity = "critical";
+          annotations.summary = "apps-deploy ne passe plus depuis plus de 20 minutes : les sites poussés sur main ne sont plus déployés. systemctl status apps-deploy.timer apps-deploy";
+        };
       };
 
       panels = {
