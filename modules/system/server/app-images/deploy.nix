@@ -53,6 +53,7 @@ let
       head=""
       deployed=""
       decision="inconnu"
+      quiet=""
 
       say() {
         jq -n --arg c "$1" '{content: $c, flags: 4}' \
@@ -168,18 +169,24 @@ let
         exit 0
       fi
 
-      # Un seul traitement par commit de tête : déployé, refusé ou signalé.
-      if [ "$(cat "$state/seen" 2> /dev/null || true)" = "$head" ]; then
+      # Un seul traitement par couple (tête de main, version de think) : déployé, refusé ou signalé.
+      # Un `rebuild` change la version de think : la situation est réexaminée, mais Discord n'est
+      # prévenu que si main a bougé (sinon rien n'attend d'être déployé).
+      seen=$(cat "$state/seen" 2> /dev/null || true)
+      if [ "$seen" = "$head $deployed" ]; then
         decision=$(jq -r '.state // "inconnu"' "$state/decision.json" 2> /dev/null || echo inconnu)
         exit 0
       fi
-      echo "$head" > "$state/seen"
+      echo "$head $deployed" > "$state/seen"
+      if [ "''${seen%% *}" = "$head" ]; then
+        quiet=1
+      fi
 
       short=''${head:0:7}
       case "$deployed" in
         "" | *-dirty)
           decide local
-          say "⏸️ think tourne une version locale non commitée : \`$short\` sur $branch n'est pas déployé. \`rebuild\` à la main pour l'appliquer."
+          [ -n "$quiet" ] || say "⏸️ think tourne une version locale non commitée : \`$short\` sur $branch n'est pas déployé. \`rebuild\` à la main pour l'appliquer."
           exit 0
           ;;
       esac
@@ -193,7 +200,7 @@ let
         200) compare=$(cat "$conf.compare") ;;
         404)
           decide non_pousse
-          say "⏸️ la version de think (\`''${deployed:0:7}\`) est inconnue de GitHub (commits pas encore poussés ?) : \`$short\` n'est pas déployé. \`rebuild\` à la main."
+          [ -n "$quiet" ] || say "⏸️ la version de think (\`''${deployed:0:7}\`) est inconnue de GitHub (commits pas encore poussés ?) : \`$short\` n'est pas déployé. \`rebuild\` à la main."
           exit 0
           ;;
         *)
@@ -209,7 +216,7 @@ let
 
       if [ "$(jq -r .status <<< "$compare")" != ahead ]; then
         decide diverge "$pending"
-        say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
+        [ -n "$quiet" ] || say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
         exit 0
       fi
 
