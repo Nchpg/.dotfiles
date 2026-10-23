@@ -25,7 +25,7 @@
       {{end}}
     </div>
     {{if not .EnvNew}}
-    <details class="add-env" {{if .AddError}}open{{end}}>
+    <details class="add-env" {{if .AddError}}open{{end}} {{if .Running}}inert{{end}}>
       <summary class="add-env-btn" aria-label="Ajouter un environnement"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="add-env-word">Environnement</span></summary>
       <form method="get" action="/sites/{{.Name}}" class="card add-env-form">
         <input type="hidden" name="new" value="1">
@@ -234,7 +234,7 @@
 
 <aside class="stack gap-lg sticky">
   {{if .Exists}}
-  <section class="card stack gap">
+  <section class="card stack gap" {{if .Running}}inert{{end}}>
     <div class="line between"><h2>Version de {{.EnvLabel}}</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit {{.Branch.Value}}</span>{{end}}</div>
     {{template "dd" (args "D" .Version "URL" .FormURL "Form" "site-form")}}
     {{if .VersionNote}}<small class="muted">{{.VersionNote}}</small>{{end}}

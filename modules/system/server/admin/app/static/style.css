@@ -236,7 +236,7 @@ svg.gh, .repo-logo svg, svg.fill { fill: currentColor; stroke: none; }
 
 /* Demande en cours */
 .alert-blue { background: var(--accent-soft); color: #2A3290; }
-form[inert] { opacity: .55; }
+[inert] { opacity: .55; }
 .narrow { max-width: 520px; }
 .chip.job { text-decoration: none; }
 .job .pulse { width: 7px; height: 7px; border-radius: 0; background: currentColor; }
