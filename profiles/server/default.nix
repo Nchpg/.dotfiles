@@ -39,6 +39,7 @@ in
         enable = true;
         # Hors du 22 : vide le journal du bruteforce automatisé, pas une sécurité.
         port = 3249;
+        x11Forwarding = true;
       };
 
       # `user` est l'identifiant technique Resend, distinct de l'adresse affichée.

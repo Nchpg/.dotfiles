@@ -2,6 +2,7 @@
   config,
   lib,
   myLib,
+  pkgs-stable,
   ...
 }:
 
@@ -26,6 +27,11 @@ in
         default = false;
         description = "Autorise la connexion par mot de passe. Faux : clés uniquement (systemSettings.users.*.sshKeys).";
       };
+
+      x11Forwarding = lib.mkEnableOption ''
+        le forwarding X11 et xclip : Ctrl+V d'image dans un Claude Code distant
+        lit le presse-papier local (client `ssh -Y`)
+      '';
 
       openFirewall = lib.mkOption {
         type = lib.types.bool;
@@ -62,9 +68,12 @@ in
             PermitRootLogin = "no";
             # COLORTERM ne traverse pas SSH : sans lui les TUI retombent en 256 couleurs.
             SetEnv = "COLORTERM=truecolor";
+            X11Forwarding = cfg.x11Forwarding;
           };
         };
       }
+
+      (lib.mkIf cfg.x11Forwarding { environment.systemPackages = [ pkgs-stable.xclip ]; })
     ]
   );
 }

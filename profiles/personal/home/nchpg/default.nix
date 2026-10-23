@@ -52,6 +52,15 @@
           User = "nchpg";
         };
 
+        # Session à part : un client X trusted voit le presse-papier et les fenêtres XWayland.
+        think-x = {
+          HostName = "10.8.0.1";
+          Port = 3249;
+          User = "nchpg";
+          ForwardX11 = "yes";
+          ForwardX11Trusted = "yes";
+        };
+
         think-lan = {
           HostName = "192.168.1.32";
           Port = 3249;
