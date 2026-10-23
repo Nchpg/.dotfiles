@@ -112,3 +112,14 @@ document.addEventListener("keydown", (ev) => {
   else if ((ev.key === "Enter" || ev.key === " ") && i >= 0) { ev.preventDefault(); ddPick(dd, opts[i]); }
   else return;
 });
+
+// Entrée dans un champ à bouton (dossier de données) : clique le bouton au lieu d'envoyer le formulaire.
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" || !ev.target.matches || !ev.target.matches("[data-enter-click]")) return;
+  ev.preventDefault();
+  ev.target.parentElement.querySelector("button")?.click();
+});
+// Le champ s'ouvre prêt à taper.
+document.addEventListener("toggle", (ev) => {
+  if (ev.target.matches && ev.target.matches(".data-adder") && ev.target.open) ev.target.querySelector("input")?.focus();
+}, true);

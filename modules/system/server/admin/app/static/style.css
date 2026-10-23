@@ -477,7 +477,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
   table.sites td.addr-td { grid-area: addr; margin-top: 4px; min-width: 0; }
   table.sites td.addr-td .line { min-width: 0; }
 }
-.data-add { width: min(320px, 100%); }
+
 
 /* Page d'un site sur téléphone : onglets d'environnement sur une ligne qui défile, fil d'Ariane court. */
 @media (max-width: 720px) {
@@ -488,3 +488,11 @@ a.go:hover { color: var(--text); text-decoration: underline; }
   .add-env-word { display: none; }
   .add-env-btn svg { width: 18px; height: 18px; }
 }
+
+/* Ajouter un dossier de données : un lien qui ouvre un champ et son bouton. */
+.data-adder { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.link-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); font-size: 13.5px; cursor: pointer; list-style: none; }
+.link-btn::-webkit-details-marker { display: none; }
+.link-btn svg { width: 14px; height: 14px; }
+.link-btn:hover { color: var(--accent); }
+.data-adder[open] .link-btn { display: none; }
