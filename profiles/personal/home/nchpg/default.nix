@@ -43,7 +43,10 @@
         tig.enable = true;
       };
 
-      ssh.waypipe.enable = true;
+      ssh.waypipe.hosts = [
+        "think"
+        "think-lan"
+      ];
 
       # Des adresses et non des noms DNS : ces alias servent quand dnsmasq est cassé.
       # `think-lan` (LAN seulement) sert de repli pour réparer le tunnel.
