@@ -20,10 +20,10 @@ on:
         required: true
         type: string
       tag:
-        description: Tag mobile publié, celui que suit think
+        description: "Tag mobile publié, celui que suit think (vide : la branche poussée, « / » devenant « - »)"
         required: false
         type: string
-        default: main
+        default: ""
       allow-root:
         description: Accepter une image qui tourne en root (à éviter ; cf. docs/apps.md)
         required: false
@@ -50,6 +50,10 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${NAME,,}"
+          # Une branche = un tag : `feat/charts` -> `feat-charts` (même règle que apps-file.nix).
+          if [ -z "$TAG" ]; then
+            TAG=$(printf %s "$GITHUB_REF_NAME" | tr -c "A-Za-z0-9._-" "-")
+          fi
           echo "repo=$repo" >> "$GITHUB_OUTPUT"
           echo "ref=$repo:$TAG" >> "$GITHUB_OUTPUT"
 
