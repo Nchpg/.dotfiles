@@ -204,9 +204,6 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
 .empty p { max-width: 520px; color: var(--muted); }
 
 @media (max-width: 720px) {
-  .side { padding: 14px; gap: 14px; }
-  .side nav { flex-direction: row; flex-wrap: wrap; }
-  .nav-title, .side nav a small, .nav-links { display: none; }
   .page, .topbar { padding-left: 16px; padding-right: 16px; }
   .page { padding-top: 20px; }
 }
@@ -444,3 +441,50 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .add-env-btn svg { width: 14px; height: 14px; }
 .add-env-btn:hover { color: var(--accent); }
 .add-env[open] .add-env-btn { color: var(--text); }
+
+/* Téléphone (menu au-dessus du contenu) : le logo seul en haut, la navigation en barre d'onglets
+   fixée en bas de l'écran. */
+@media (max-width: 800px) {
+  .shell { flex-direction: column; flex-wrap: nowrap; }
+  .side { flex: none; padding: 12px 16px; gap: 0; }
+  .brand { padding: 0; }
+  .brand-mark { width: 30px; height: 30px; }
+  .brand-mark svg { width: 17px; height: 17px; }
+  .nav-title, .side nav a small, .side .nav-links { display: none; }
+  .side nav:not(.nav-links) { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid #1F2531; }
+  .side nav a { flex-direction: column; justify-content: center; gap: 3px; min-height: 54px; padding: 0; font-size: 11.5px; }
+  .side nav a[aria-current="page"] { background: transparent; }
+  .side nav a svg { width: 20px; height: 20px; }
+  .content { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
+
+/* Tableau des sites sur téléphone : une liste empilée (site, puis par environnement : nom et
+   accès sur une ligne, adresse dessous), sans défilement horizontal. */
+@media (max-width: 720px) {
+  .table-card { overflow-x: visible; }
+  table.sites, table.sites tbody { display: block; }
+  table.sites thead { display: none; }
+  table.sites tbody { padding: 12px 16px; }
+  table.sites tbody + tbody { border-top: 1px solid var(--line); }
+  table.sites tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site site" "env acc" "addr addr"; column-gap: 12px; padding: 8px 0; }
+  table.sites tr.first { padding-top: 0; }
+  table.sites tr + tr { border-top: 1px solid var(--line-soft); }
+  table.sites td { display: block; padding: 0 !important; border: 0 !important; background: none !important; }
+  table.sites td.site-td { grid-area: site; padding-bottom: 8px !important; }
+  table.sites td.site-td .stack { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+  table.sites td.env-td { grid-area: env; }
+  table.sites td.acc-td { grid-area: acc; display: flex; flex-direction: column; align-items: flex-end; }
+  table.sites td.addr-td { grid-area: addr; margin-top: 4px; min-width: 0; }
+  table.sites td.addr-td .line { min-width: 0; }
+}
+.data-add { width: min(320px, 100%); }
+
+/* Page d'un site sur téléphone : onglets d'environnement sur une ligne qui défile, fil d'Ariane court. */
+@media (max-width: 720px) {
+  .envs { gap: 12px; }
+  .env-tabs { flex-wrap: nowrap; overflow-x: auto; gap: 20px; scrollbar-width: none; }
+  .env-tabs a { flex-shrink: 0; white-space: nowrap; }
+  .crumbs > span:first-child, .crumbs > span:first-child + svg { display: none; }
+  .add-env-word { display: none; }
+  .add-env-btn svg { width: 18px; height: 18px; }
+}

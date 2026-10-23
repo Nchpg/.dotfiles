@@ -79,9 +79,9 @@
           </span>
         </td>
         {{end}}
-        <td><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.EditURL}}">{{.Label}}</a><small class="mono muted">{{.Branch}}{{if .Frozen}} <span class="warn-ink">figé {{.Frozen}}</span>{{end}}</small></span></span></td>
+        <td class="env-td"><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.EditURL}}">{{.Label}}</a><small class="mono muted">{{.Branch}}{{if .Frozen}} <span class="warn-ink">figé {{.Frozen}}</span>{{end}}</small></span></span></td>
         <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
-        <td>
+        <td class="acc-td">
           {{if .VPN}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>
           {{else}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
           {{if .SSO}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
