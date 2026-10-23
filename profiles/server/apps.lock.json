@@ -14,6 +14,11 @@
     "port": 3000,
     "revision": "481f826e30c1ce1dd6c84ebf75467e2aadd88994"
   },
+  "ghcr.io/nchpg/myetf:preview": {
+    "digest": "sha256:20273026e4efd753acdec611e0219b5e7f9915190be3a102fb46199fef282455",
+    "port": 3000,
+    "revision": "1973b718bc0e5beebcd5f4d3a7e287858254ddde"
+  },
   "ghcr.io/nchpg/portfolio:main": {
     "digest": "sha256:a1c84a689aeb13142e83f185499c9fc72d81b0cd7a3feb17d58aee9c16d89c39",
     "port": 3000,

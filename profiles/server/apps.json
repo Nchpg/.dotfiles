@@ -34,6 +34,19 @@
       "windows_gram",
       "xiaomi_17t"
     ],
+    "environments": {
+      "preview": {
+        "branch": "preview",
+        "data": "copy",
+        "devices": [
+          "gram",
+          "windows_gram",
+          "xiaomi_17t"
+        ],
+        "expose": "vpn",
+        "subdomain": "etf-prev"
+      }
+    },
     "expose": "vpn",
     "internetAccess": true,
     "subdomain": "etf"
