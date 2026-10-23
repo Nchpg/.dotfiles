@@ -250,7 +250,7 @@ in
     repository = lib.mkOption {
       type = lib.types.str;
       default = "Nchpg/.dotfiles";
-      description = "Dépôt GitHub suivi (public : lu sans jeton).";
+      description = "Dépôt GitHub suivi (public ; l'API est lue avec le jeton d'apps-watch).";
     };
 
     branch = lib.mkOption {
