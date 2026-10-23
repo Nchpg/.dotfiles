@@ -186,7 +186,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 
 /* Changements : une carte, titre et lien GitHub dans son en-tête, un journal par jour. */
 .activity { min-width: 0; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); }
-.layout > .activity { margin-top: 8px; }
+
 .activity-head, .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
 .gh-link { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); color: var(--text); }
 .gh-link:hover { border-color: #C9CED6; background: #F8F9FB; }
@@ -439,12 +439,28 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
    l'accès sur une ligne, l'adresse dessous. */
 .card-head h2 { gap: 8px; }
 table.services td { vertical-align: middle; }
-table.services td.site-td { width: 34%; vertical-align: middle; }
-table.services td.acc-td { width: 1%; white-space: nowrap; }
+table.services td.site-td { vertical-align: middle; }
+
 @media (max-width: 720px) {
   table.services tbody { padding: 4px 16px; }
   table.services tr { grid-template-areas: "site acc" "addr addr"; padding: 10px 0; }
   table.services tr + tr { border-top: 1px solid var(--line-soft); }
   table.services td.site-td { width: auto; padding-bottom: 0 !important; align-self: center; }
   table.services td.acc-td { width: auto; }
+}
+
+/* Page Sites : des blocs de même forme (titre au-dessus, carte dessous), bien séparés. */
+.overview { display: flex; flex-direction: column; gap: 36px; }
+.block { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.block-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+.block-head h2 { font-size: 16px; gap: 8px; }
+.block > .card, .block > .activity { margin: 0; }
+/* Colonnes alignées d'un tableau à l'autre : l'adresse et l'accès tombent au même endroit. */
+@media (min-width: 721px) {
+  table.sites { table-layout: fixed; }
+  table.sites th:nth-child(1), table.sites th:nth-child(2) { width: 22%; }
+  table.sites th:last-child { width: 136px; }
+  table.services th:nth-child(1) { width: 44%; }
+  table.services th:nth-child(2) { width: auto; }
+  table.sites td.addr-td .line { min-width: 0; }
 }

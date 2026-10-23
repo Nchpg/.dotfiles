@@ -78,7 +78,7 @@ type SiteGroup struct {
 func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	up := s.probes(ctx)
 	var groups []SiteGroup
-	vpn, public, online, total := 0, 0, 0, 0
+	vpn, public, online, total, probed := 0, 0, 0, 0, 0
 	running := false
 	for _, name := range snap.Apps.Names() {
 		e := snap.Apps.Entries[name]
@@ -104,6 +104,9 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			g.VPN = g.VPN || r.VPN
 			g.Public = g.Public || !r.VPN
 			total++
+			if r.Probed {
+				probed++
+			}
 			if r.Up {
 				online++
 			}
@@ -135,9 +138,34 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	if running {
 		every = 5
 	}
+	services := s.serviceRows(up)
+	// Filtre et « En ligne » : sites et services ensemble.
+	svcUp, svcProbed, svcPublic := 0, 0, 0
+	for _, sv := range services {
+		if sv.Public {
+			svcPublic++
+		}
+		if sv.Probed {
+			svcProbed++
+			if sv.Up {
+				svcUp++
+			}
+		}
+	}
+	upCount, probedCount := online+svcUp, probed+svcProbed
+	onlineInk := "#8A919D" // rien de sondé
+	switch {
+	case probedCount > 0 && upCount == probedCount:
+		onlineInk = "#22C55E"
+	case probedCount > 0:
+		onlineInk = "#DC2626"
+	}
 	return map[string]any{"Nav": "sites", "Groups": groups, "Adding": adding, "Every": every,
 		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public,
-		"Services": s.serviceRows(up)}
+		"Services": services, "ServicesUp": svcUp,
+		"CountAll": len(groups) + len(services), "CountPublic": public + svcPublic, "CountVPN": vpn + len(services) - svcPublic,
+		"UpCount": upCount, "ProbedCount": probedCount, "OnlineInk": onlineInk,
+		"ProbedSites": probed, "ProbedServices": svcProbed}
 }
 
 // ServiceRow : une ligne des services de think (lecture seule), avec l'état de sa sonde.

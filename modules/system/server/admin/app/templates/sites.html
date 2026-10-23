@@ -7,20 +7,36 @@
   <div class="line between">
     <h1>Sites</h1>
     <div class="tabs-line" role="group" aria-label="Filtrer">
-      <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.Sites}}</span></button>
-      <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.Public}}</span></button>
-      <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.VPN}}</span></button>
+      <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.CountAll}}</span></button>
+      <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.CountPublic}}</span></button>
+      <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.CountVPN}}</span></button>
     </div>
   </div>
 
-  <div class="layout">
+  {{/* Même forme pour chaque bloc : un titre au-dessus, la carte dessous. Le filtre vaut pour les
+       sites et les services. */}}
+  <div class="overview">
     <section class="strip" aria-label="État">
       {{template "state-card" .State}}
       {{template "online" .}}
     </section>
-    {{template "site-cards" .}}
-    {{template "services" .}}
-    {{template "activity" .Activity}}
+    <section class="block" aria-labelledby="sites-title">
+      <div class="block-head"><h2 id="sites-title">Sites</h2></div>
+      {{template "site-cards" .}}
+    </section>
+    <section class="block" aria-labelledby="changes">
+      <div class="block-head">
+        <h2 id="changes">Changements</h2>
+        <a class="gh-link small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>Historique</a>
+      </div>
+      {{template "activity" .Activity}}
+    </section>
+    {{if .Services}}
+    <section class="block" aria-labelledby="services-title">
+      <div class="block-head"><h2 id="services-title" class="line">Services de think{{template "info" (args "ID" "info-services" "Text" "Les autres services servis par think (Nextcloud, Vaultwarden, Grafana, Authelia, ce dashboard). Ils se règlent dans le code Nix, puis un rebuild : rien à modifier ici.")}}</h2></div>
+      {{template "services" .}}
+    </section>
+    {{end}}
   </div>
 </main>
 {{template "bottom" .}}{{end}}
@@ -54,14 +70,14 @@
 
 {{define "online"}}
 <div class="strip-cell" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
-  <span class="strip-label line">En ligne{{template "info" (args "ID" "info-online" "Text" "Adresses qui répondent aux sondes de Prometheus, passées chaque minute sur chaque environnement de chaque site.")}}</span>
-  <span class="strip-value">{{.Online}} sur {{.Total}}</span>
-  <span class="mono small muted">sondes Prometheus</span>
+  <span class="strip-label line">En ligne{{template "info" (args "ID" "info-online" "Text" "Adresses qui répondent aux sondes de Prometheus, passées chaque minute sur chaque environnement des sites et sur chaque service de think. Vert : tout répond ; rouge : au moins une adresse ne répond pas.")}}</span>
+  <span class="strip-value line"><span class="sq" style="background: {{.OnlineInk}}"></span>{{.UpCount}} sur {{.ProbedCount}}</span>
+  <span class="mono small muted">{{.Online}}/{{.ProbedSites}} sites, {{.ServicesUp}}/{{.ProbedServices}} services</span>
 </div>
 {{end}}
 
 {{define "site-cards"}}
-<section aria-label="Sites" id="site-cards" class="card table-card" hx-get="/fragments/cards" hx-trigger="every {{.Every}}s" hx-swap="outerHTML">
+<section aria-label="Liste des sites" id="site-cards" class="card table-card" hx-get="/fragments/cards" hx-trigger="every {{.Every}}s" hx-swap="outerHTML">
   <table class="sites">
     <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
     {{range .Adding}}
@@ -99,11 +115,7 @@
 {{end}}
 
 {{define "activity"}}
-<section class="activity" id="activity" aria-labelledby="changes" hx-get="/fragments/activity?n={{.N}}" hx-trigger="every 60s" hx-swap="outerHTML">
-  <header class="activity-head">
-    <h2 id="changes">Changements</h2>
-    <a class="gh-link small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>Historique</a>
-  </header>
+<section class="activity" id="activity" aria-label="Changements récents" hx-get="/fragments/activity?n={{.N}}" hx-trigger="every 60s" hx-swap="outerHTML">
   {{range .Days}}
   <div class="day">
     <div class="day-label">{{.Label}}</div>
@@ -135,15 +147,11 @@
 
 {{/* Services de think hors apps.json (cloud, coffre, métriques…) : lecture seule, état des sondes. */}}
 {{define "services"}}
-{{if .Services}}
-<section aria-labelledby="services-title" id="services" class="card table-card" hx-get="/fragments/services" hx-trigger="every 30s" hx-swap="outerHTML">
-  <header class="card-head">
-    <h2 id="services-title" class="line">Services de think{{template "info" (args "ID" "info-services" "Text" "Les autres services servis par think (Nextcloud, Vaultwarden, Grafana, Authelia, ce dashboard). Ils se règlent dans le code Nix, puis un rebuild : rien à modifier ici.")}}</h2>
-  </header>
+<section aria-label="Liste des services" id="services" class="card table-card" hx-get="/fragments/services" hx-trigger="every 30s" hx-swap="outerHTML">
   <table class="sites services">
     <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
-    <tbody>
       {{range .Services}}
+    <tbody data-vpn="{{not .Public}}" data-public="{{.Public}}">
       <tr>
         <td class="site-td">{{.Name}}</td>
         <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
@@ -153,9 +161,8 @@
           {{if .Authelia}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
         </td>
       </tr>
-      {{end}}
     </tbody>
+      {{end}}
   </table>
 </section>
-{{end}}
 {{end}}
