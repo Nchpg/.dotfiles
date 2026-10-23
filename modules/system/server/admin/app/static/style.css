@@ -276,16 +276,11 @@ table.sites tbody.adding td { border-style: dashed; }
 a.plain { color: var(--text); }
 
 /* Environnements : onglets et ajout. */
-.envs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.env-tabs a { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 14px; border-radius: 0; color: var(--text); }
-.env-tabs a[aria-current="page"] { background: var(--card); font-weight: 600; box-shadow: none; }
-.env-tabs svg { width: 16px; height: 16px; }
-.env-tabs small { font-weight: 400; }
 .tight-line { gap: 6px; flex-wrap: nowrap; }
 .warn-ink { color: var(--warn); }
 .btn-dashed { border-style: dashed; color: var(--accent-ink); height: 44px; list-style: none; }
 .add-env { position: relative; }
-.add-env-form { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; width: min(640px, 90vw); display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; box-shadow: none; }
+.add-env-form { position: absolute; z-index: 20; top: calc(100% + 8px); right: 0; width: min(640px, 90vw); display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 14px; box-shadow: none; }
 .add-env-form .field { flex: 1 1 160px; }
 .grow-all { flex: 1 1 100%; }
 
@@ -435,3 +430,17 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .activity .more.htmx-request .spin, .activity .more.htmx-request .more-busy { display: inline-block; }
 .activity .more.htmx-request .more-label { display: none; }
 .activity .more.htmx-request { color: var(--muted); cursor: progress; }
+
+/* Environnements : onglets soulignés (comme le filtre des sites), « + Environnement » au bout de la ligne. */
+.envs { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }
+.env-tabs { display: flex; flex-wrap: wrap; gap: 26px; min-width: 0; }
+.env-tabs a { display: inline-flex; align-items: baseline; gap: 8px; padding: 8px 0 10px; margin-bottom: -1px; border-bottom: 2px solid transparent; color: var(--muted); }
+.env-tabs a:hover { color: var(--text); }
+.env-tabs a[aria-current="page"] { color: var(--text); font-weight: 600; border-bottom-color: var(--accent); }
+.env-branch { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 400; color: var(--muted); }
+.env-branch svg { width: 12px; height: 12px; stroke-width: 2; }
+.add-env-btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 0 10px; color: var(--accent-ink); cursor: pointer; list-style: none; font-size: 13.5px; white-space: nowrap; }
+.add-env-btn::-webkit-details-marker { display: none; }
+.add-env-btn svg { width: 14px; height: 14px; }
+.add-env-btn:hover { color: var(--accent); }
+.add-env[open] .add-env-btn { color: var(--text); }

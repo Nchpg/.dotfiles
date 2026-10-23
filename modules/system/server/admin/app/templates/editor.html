@@ -15,17 +15,18 @@
   {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
 
   <nav class="envs" aria-label="Environnements">
-    <div class="segmented env-tabs">
+    <div class="env-tabs">
       {{range .Tabs}}
       <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>
-        <svg viewBox="0 0 24 24" aria-hidden="true" class="{{if .Root}}accent{{else}}warn-ink{{end}}"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg>
-        <span class="stack tight"><span class="line tight-line"><span>{{.Label}}</span>{{if .Root}}<small class="muted">racine</small>{{end}}{{if .New}}<span class="chip amber">nouveau</span>{{end}}</span><small class="mono muted">{{.Branch}}</small></span>
+        <span>{{.Label}}</span>
+        <span class="env-branch mono"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg>{{.Branch}}</span>
+        {{if .New}}<span class="chip amber">nouveau</span>{{end}}
       </a>
       {{end}}
     </div>
     {{if not .EnvNew}}
     <details class="add-env" {{if .AddError}}open{{end}}>
-      <summary class="btn btn-dashed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Environnement</summary>
+      <summary class="add-env-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Environnement</summary>
       <form method="get" action="/sites/{{.Name}}" class="card add-env-form">
         <input type="hidden" name="new" value="1">
         <label class="field"><span>Nom</span><input name="env" value="{{.AddName}}" placeholder="staging" class="mono" required pattern="[a-z][a-z0-9\-]{0,15}"></label>
