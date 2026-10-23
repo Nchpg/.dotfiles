@@ -96,29 +96,32 @@
 
 {{define "activity"}}
 <section class="activity" id="activity" aria-labelledby="changes" hx-get="/fragments/activity?n={{.N}}" hx-trigger="every 60s" hx-swap="outerHTML">
-  <div class="line between"><h2 id="changes">Changements</h2><a class="small line" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique sur GitHub<svg viewBox="0 0 24 24" aria-hidden="true" class="ext"><path d="M7 17L17 7M8 7h9v9"/></svg></a></div>
-  <div class="days">
-    {{range .Days}}
-    <div class="day">
-      <div class="day-label">{{.Label}}</div>
-      <ol>
-        {{range .Items}}
-        <li>
-          <span class="kind" style="color: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
-          <span class="stack tight grow">
-            <span>{{if .Name}}<strong>{{.Name}}</strong> {{end}}<span class="what">{{.What}}</span></span>
-            <small class="muted">{{.Kind}}</small>
-          </span>
-          <span class="when mono small"><span class="muted">{{.Time}}</span><a href="{{.URL}}">{{.Rev}}</a></span>
-        </li>
-        {{end}}
-      </ol>
-    </div>
-    {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
+  <header class="activity-head">
+    <h2 id="changes">Changements</h2>
+    <a class="gh-link small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>Historique</a>
+  </header>
+  {{range .Days}}
+  <div class="day">
+    <div class="day-label">{{.Label}}</div>
+    <ol>
+      {{range .Items}}
+      <li>
+        <span class="time mono small muted">{{.Time}}</span>
+        <span class="kind" style="color: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
+        <span class="stack tight">
+          <span>{{if .Name}}<strong>{{.Name}}</strong> {{end}}<span class="what">{{.What}}</span></span>
+          <small class="muted">{{.Kind}}</small>
+        </span>
+        <a class="rev mono small" href="{{.URL}}">{{.Rev}}</a>
+      </li>
+      {{end}}
+    </ol>
   </div>
-  {{if .More}}<button type="button" class="btn btn-sm more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML">Voir plus</button>{{end}}
+  {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
+  {{if .More}}<button type="button" class="more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML">Voir plus</button>{{end}}
 </section>
 {{end}}
+
 
 {{define "site-status"}}
 <span id="site-status" hx-get="/fragments/status?app={{.App}}" hx-trigger="every 30s" hx-swap="outerHTML">{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}</span>

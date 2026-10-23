@@ -134,7 +134,7 @@ summary.btn::-webkit-details-marker { display: none; }
 .site .foot { justify-content: space-between; flex-wrap: nowrap; padding-top: 12px; border-top: 1px solid #EEF0F3; }
 .site .foot .line { flex-wrap: nowrap; gap: 6px; min-width: 0; }
 .site .foot svg { width: 14px; height: 14px; }
-.activity { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.activity { min-width: 0; display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); }
 
 /* Formulaire */
 .hero { gap: 16px; }
@@ -366,20 +366,6 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .acc-sso { margin-top: 6px; padding: 2px 7px; border: 1px solid #C9CED6; color: var(--text); }
 
 /* Changements : par jour, une icône par type (image, réglages, environnement). */
-.layout > .activity { display: flex; flex-direction: column; gap: 12px; }
-.activity .ext { width: 12px; height: 12px; stroke-width: 2; }
-.days { background: var(--card); border: 1px solid var(--line); }
-.day + .day .day-label { border-top: 1px solid var(--line); }
-.day-label { padding: 9px 18px; background: #F8F9FB; border-bottom: 1px solid #EEF0F3; font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.day ol { margin: 0; padding: 4px 18px; list-style: none; }
-.day li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 10px 0; border-bottom: 0; }
-.day li + li { border-top: 1px solid var(--line-soft); }
-.day .kind { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #E1E4EA; }
-.day .kind svg { width: 14px; height: 14px; stroke-width: 1.9; }
-.day strong { font-weight: 600; }
-.day .what { color: #4A515D; }
-.day .when { display: flex; gap: 14px; }
-.day-empty { padding: 14px 18px; }
 .site-td a.go { font-weight: 600; }
 
 /* Bandeau d'état : think, ~/.dotfiles, en ligne ; une ligne en dessous quand il faut agir. */
@@ -420,4 +406,26 @@ a.go:hover { color: var(--text); text-decoration: underline; }
   .strip { grid-template-columns: minmax(0, 1fr); }
   .strip-cell + .strip-cell, .strip-part + .strip-cell { border-left: 0; border-top: 1px solid #EEF0F3; }
 }
-.activity .more { align-self: flex-start; }
+
+/* Changements : une carte, titre et lien GitHub dans son en-tête, un journal par jour. */
+.layout > .activity { margin-top: 8px; }
+.activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.gh-link { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line); color: var(--text); }
+.gh-link:hover { border-color: #C9CED6; background: #F8F9FB; }
+.gh-link svg { width: 14px; height: 14px; }
+.day-label { padding: 14px 18px 2px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.day ol { margin: 0; padding: 0 18px 6px; list-style: none; }
+.day li { display: grid; grid-template-columns: 42px 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 9px 0; }
+.day li + li { border-top: 1px solid var(--line-soft); }
+.day .kind { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid #E1E4EA; }
+.day .kind svg { width: 14px; height: 14px; stroke-width: 1.9; }
+.day strong { font-weight: 600; }
+.day .what { color: #4A515D; }
+.day .rev { color: var(--muted); }
+.day .rev:hover { color: var(--accent); }
+.day + .day { border-top: 1px solid var(--line); }
+.day-empty { margin: 0; padding: 14px 18px; }
+.activity .more { padding: 11px 18px; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--accent); font: inherit; font-size: 13.5px; cursor: pointer; text-align: center; }
+.activity .more:hover { background: #F8F9FB; }
+@media (max-width: 720px) { .day li { grid-template-columns: 28px minmax(0, 1fr) auto; } .day .time { display: none; } }
+.day-label::first-letter { text-transform: uppercase; }
