@@ -95,10 +95,10 @@
 {{end}}
 
 {{define "activity"}}
-<section class="activity" id="activity" aria-labelledby="changes" hx-get="/fragments/activity" hx-trigger="every 60s" hx-swap="outerHTML">
+<section class="activity" id="activity" aria-labelledby="changes" hx-get="/fragments/activity?n={{.N}}" hx-trigger="every 60s" hx-swap="outerHTML">
   <div class="line between"><h2 id="changes">Changements</h2><a class="small line" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique sur GitHub<svg viewBox="0 0 24 24" aria-hidden="true" class="ext"><path d="M7 17L17 7M8 7h9v9"/></svg></a></div>
   <div class="days">
-    {{range .}}
+    {{range .Days}}
     <div class="day">
       <div class="day-label">{{.Label}}</div>
       <ol>
@@ -116,6 +116,7 @@
     </div>
     {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
   </div>
+  {{if .More}}<button type="button" class="btn btn-sm more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML">Voir plus</button>{{end}}
 </section>
 {{end}}
 

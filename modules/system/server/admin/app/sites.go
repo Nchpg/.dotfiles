@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +38,15 @@ type ActivityItem struct {
 	Name, What, Kind, Icon, Ink string
 	Rev, Time, URL              string
 }
+
+// Activity : les `N` derniers changements ; `More` s'il y en a sans doute d'autres (jusqu'à maxActivity).
+type Activity struct {
+	Days    []ActivityDay
+	N, Next int
+	More    bool
+}
+
+const activityStep, maxActivity = 10, 100
 
 type ActivityDay struct {
 	Label string
@@ -131,7 +141,7 @@ func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
 	}
 	data := s.sitesData(ctx, snap)
 	data["State"] = s.stateCard(ctx, snap.Head)
-	data["Activity"] = s.activity(ctx)
+	data["Activity"] = s.activity(ctx, activityStep)
 	s.render(w, "sites", data)
 }
 
@@ -152,7 +162,8 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 	case "online":
 		s.render(w, "online", s.sitesData(ctx, snap))
 	case "activity":
-		s.render(w, "activity", s.activity(ctx))
+		n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+		s.render(w, "activity", s.activity(ctx, n))
 	case "status":
 		name := r.URL.Query().Get("app")
 		e, ok := snap.Apps.Entries[name]
@@ -313,14 +324,15 @@ func shortRev(r string) string {
 	return r
 }
 
-// activity : derniers commits qui touchent apps.json (réglages) ou le lock (images), par jour.
-func (s *Server) activity(ctx context.Context) []ActivityDay {
+// activity : les `n` derniers commits qui touchent apps.json (réglages) ou le lock (images), par jour.
+func (s *Server) activity(ctx context.Context, n int) Activity {
+	n = min(max(n, activityStep), maxActivity)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	seen := map[string]int{}
 	var all []Commit
 	for _, path := range []string{appsPath, lockPath} {
-		commits, err := s.gh.Commits(ctx, path)
+		commits, err := s.gh.Commits(ctx, path, n+5)
 		if err != nil {
 			continue
 		}
@@ -337,7 +349,7 @@ func (s *Server) activity(ctx context.Context) []ActivityDay {
 		}
 		seen[c.SHA] = len(items)
 		items = append(items, c)
-		if len(items) == 10 {
+		if len(items) == n {
 			break
 		}
 	}
@@ -354,7 +366,7 @@ func (s *Server) activity(ctx context.Context) []ActivityDay {
 		d := &days[len(days)-1]
 		d.Items = append(d.Items, it)
 	}
-	return days
+	return Activity{Days: days, N: n, Next: min(n+activityStep, maxActivity), More: len(items) == n && n < maxActivity}
 }
 
 var reSubject = regexp.MustCompile(`^[a-z]+(?:\(([^)]*)\))?!?: (.+)$`)

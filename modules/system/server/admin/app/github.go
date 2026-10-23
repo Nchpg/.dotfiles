@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -175,8 +176,8 @@ type Commit struct {
 }
 
 // Commits récents qui touchent un fichier de main.
-func (g *GitHub) Commits(ctx context.Context, path string) ([]Commit, error) {
-	v, err := g.cached("commits:"+path, 2*time.Minute, func() (any, error) {
+func (g *GitHub) Commits(ctx context.Context, path string, n int) ([]Commit, error) {
+	v, err := g.cached(fmt.Sprintf("commits:%s:%d", path, n), 2*time.Minute, func() (any, error) {
 		var raw []struct {
 			SHA    string `json:"sha"`
 			Commit struct {
@@ -186,7 +187,7 @@ func (g *GitHub) Commits(ctx context.Context, path string) ([]Commit, error) {
 				} `json:"author"`
 			} `json:"commit"`
 		}
-		_, err := g.api(ctx, "GET", "https://api.github.com/repos/"+g.cfg.Repo+"/commits?sha="+g.cfg.Branch+"&per_page=15&path="+path, g.cfg.DispatchToken, nil, &raw)
+		_, err := g.api(ctx, "GET", "https://api.github.com/repos/"+g.cfg.Repo+"/commits?sha="+g.cfg.Branch+"&per_page="+strconv.Itoa(n)+"&path="+path, g.cfg.DispatchToken, nil, &raw)
 		if err != nil {
 			return nil, err
 		}

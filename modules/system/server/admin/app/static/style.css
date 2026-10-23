@@ -420,3 +420,4 @@ a.go:hover { color: var(--text); text-decoration: underline; }
   .strip { grid-template-columns: minmax(0, 1fr); }
   .strip-cell + .strip-cell, .strip-part + .strip-cell { border-left: 0; border-top: 1px solid #EEF0F3; }
 }
+.activity .more { align-self: flex-start; }
