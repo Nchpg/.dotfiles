@@ -28,9 +28,9 @@ in
         description = "Autorise la connexion par mot de passe. Faux : clés uniquement (systemSettings.users.*.sshKeys).";
       };
 
-      x11Forwarding = lib.mkEnableOption ''
-        le forwarding X11 et xclip : Ctrl+V d'image dans un Claude Code distant
-        lit le presse-papier local (client `ssh -Y`)
+      waypipe = lib.mkEnableOption ''
+        waypipe et wl-clipboard : sous `wssh`, `wl-paste` (et donc Ctrl+V d'image
+        dans Claude Code) lit le presse-papier du poste client
       '';
 
       openFirewall = lib.mkOption {
@@ -68,12 +68,16 @@ in
             PermitRootLogin = "no";
             # COLORTERM ne traverse pas SSH : sans lui les TUI retombent en 256 couleurs.
             SetEnv = "COLORTERM=truecolor";
-            X11Forwarding = cfg.x11Forwarding;
           };
         };
       }
 
-      (lib.mkIf cfg.x11Forwarding { environment.systemPackages = [ pkgs-stable.xclip ]; })
+      (lib.mkIf cfg.waypipe {
+        environment.systemPackages = with pkgs-stable; [
+          waypipe
+          wl-clipboard
+        ];
+      })
     ]
   );
 }

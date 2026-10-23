@@ -43,6 +43,8 @@
         tig.enable = true;
       };
 
+      ssh.waypipe.enable = true;
+
       # Des adresses et non des noms DNS : ces alias servent quand dnsmasq est cassé.
       # `think-lan` (LAN seulement) sert de repli pour réparer le tunnel.
       ssh.hosts = {
@@ -50,15 +52,6 @@
           HostName = "10.8.0.1";
           Port = 3249;
           User = "nchpg";
-        };
-
-        # Session à part : un client X trusted voit le presse-papier et les fenêtres XWayland.
-        think-x = {
-          HostName = "10.8.0.1";
-          Port = 3249;
-          User = "nchpg";
-          ForwardX11 = "yes";
-          ForwardX11Trusted = "yes";
         };
 
         think-lan = {
