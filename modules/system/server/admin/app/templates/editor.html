@@ -53,7 +53,7 @@
   </button>
   <ul class="dd-list" role="listbox" aria-label="{{.D.Aria}}" hidden>
     {{range .D.Options}}
-    <li role="option" tabindex="-1" aria-selected="{{.Selected}}" data-value="{{.Value}}" data-label="{{.Label}}" data-icon="{{.Icon}}" data-tint="{{.Tint}}" data-ink="{{.Ink}}">
+    <li role="option" tabindex="-1" aria-selected="{{.Selected}}" data-value="{{.Value}}" data-label="{{.Label}}" data-tint="{{.Tint}}" data-ink="{{.Ink}}">
       <span class="dd-ic" style="--tint: {{.Tint}}; --ink: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
       <span class="stack tight grow"><span class="mono">{{.Label}}</span>{{if .Sub}}<small {{with .SubInk}}style="color: {{.}}"{{else}}class="muted"{{end}}>{{.Sub}}</small>{{end}}</span>
       <svg viewBox="0 0 24 24" aria-hidden="true" class="dd-check"><path d="M5 12l5 5L20 7"/></svg>

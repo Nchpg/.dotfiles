@@ -84,7 +84,7 @@ function ddPick(dd, opt) {
   const ic = btn.querySelector(".dd-ic");
   ic.style.setProperty("--tint", opt.dataset.tint);
   ic.style.setProperty("--ink", opt.dataset.ink);
-  ic.querySelector("path").setAttribute("d", opt.dataset.icon);
+  ic.querySelector("path").setAttribute("d", opt.querySelector(".dd-ic path").getAttribute("d"));
   ddClose(dd, true);
   if (input.value === opt.dataset.value) return;
   input.value = opt.dataset.value;
