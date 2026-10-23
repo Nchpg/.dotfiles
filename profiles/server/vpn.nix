@@ -15,6 +15,9 @@ in
 
       allowedIPs = [ "10.8.0.0/24" ];
 
+      # Appareils ajoutés depuis le dashboard (page VPN), en plus de la liste ci-dessous.
+      peersFile = ./vpn-peers.json;
+
       # Retirer une entrée révoque l'appareil au prochain rebuild.
       peers = [
         {

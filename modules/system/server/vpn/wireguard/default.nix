@@ -3,6 +3,7 @@
   lib,
   myLib,
   pkgs-stable,
+  inputs,
   ...
 }:
 
@@ -11,6 +12,32 @@ let
   static = config.systemSettings.network.staticIPv4;
 
   privateKeyPath = config.sops.secrets.${cfg.privateKeyKey}.path;
+
+  # Appareils ajoutés par le dashboard (peersFile) : chacun a SA clé pré-partagée, rangée sous un
+  # nom fixe ; elle doit exister dans les secrets, sinon l'évaluation s'arrête (cf. assertions).
+  # Un appareil inscrit sans elle n'est donc jamais autorisé.
+  pskKeyOf = name: "wireguard/${name}_preshared_key";
+  filePeers =
+    if cfg.peersFile == null then
+      [ ]
+    else
+      lib.mapAttrsToList (name: p: {
+        inherit name;
+        inherit (p) publicKey address;
+        trusted = p.trusted or false;
+        presharedKeyKey = pskKeyOf name;
+      }) (lib.importJSON cfg.peersFile);
+  # /24 seulement : les trois premiers octets du sous-réseau, que toute adresse d'appareil partage.
+  subnetPrefix = lib.concatStringsSep "." (lib.take 3 (lib.splitString "." cfg.subnet));
+  badFilePeers = lib.filter (
+    p:
+    builtins.match "[a-z0-9_]{1,24}" p.name == null
+    || builtins.match "[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=" p.publicKey == null
+    || builtins.match "${lib.escapeRegex subnetPrefix}\.([0-9]{1,3})" p.address == null
+  ) filePeers;
+  missingPsk = lib.filter (
+    p: !builtins.pathExists "${inputs.secrets}/${p.presharedKeyKey}.yaml"
+  ) filePeers;
 
   peerAddresses = map (p: p.address) cfg.peers;
 
@@ -108,6 +135,16 @@ in
       description = "Clé sops de la clé privée du serveur.";
     };
 
+    peersFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "./vpn-peers.json";
+      description = ''
+        Appareils inscrits par le dashboard (`{"<nom>": {"publicKey", "address", "trusted"}}`), en plus de
+        `peers`. Chacun exige le secret `wireguard/<nom>_preshared_key`.
+      '';
+    };
+
     peers = lib.mkOption {
       default = [ ];
       description = "Appareils autorisés, par clé publique.";
@@ -198,7 +235,22 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    systemSettings.vpn.wireguard.peers = filePeers;
+
     assertions = [
+      {
+        assertion = badFilePeers == [ ];
+        message = "systemSettings.vpn.wireguard.peersFile : entrée invalide pour ${
+          lib.concatMapStringsSep ", " (p: p.name) badFilePeers
+        } (nom en [a-z0-9_], clé publique WireGuard, adresse dans ${cfg.subnet}).";
+      }
+      {
+        assertion = missingPsk == [ ];
+        message = lib.concatMapStringsSep "\n" (
+          p:
+          "Appareil VPN « ${p.name} » inscrit mais sans clé pré-partagée : `secrets edit ${p.presharedKeyKey}` (valeur donnée par le dashboard), puis relance."
+        ) missingPsk;
+      }
       {
         assertion = cfg.host != null;
         message = "systemSettings.vpn.wireguard.host n'est pas renseigné — les configurations clientes pointeraient dans le vide. Mets-y le nom public (ou l'IP publique) de ta connexion.";
