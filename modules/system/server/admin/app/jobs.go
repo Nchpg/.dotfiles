@@ -440,8 +440,12 @@ func (s *Server) waitCommit(ctx context.Context, j *Job, app, want, start string
 }
 
 // waitDeployed : la génération active contient l'entrée demandée ; sinon, pourquoi think attend.
+// Un `rebuild` à faire à la main n'est pas un échec : l'étape attend (2 h au plus) et repart seule
+// dès que think tourne une version qui contient l'entrée.
 func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) error {
 	deadline := time.Now().Add(10 * time.Minute)
+	manual := time.Now().Add(2 * time.Hour)
+	blocked := ""
 	reasons := map[string]string{
 		"local":      "think tourne une version locale non commitée : il n'applique rien seul. `rebuild` à la main.",
 		"non_pousse": "think tourne des commits pas encore poussés : `git push`, puis `rebuild`.",
@@ -460,15 +464,24 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 		head, _ := s.gh.Head(ctx)
 		if st, err := readDeployStatus(s.cfg.DeployStatus); err == nil && st.Fresh() && head != "" && st.Head == head {
 			if msg, ok := reasons[st.State]; ok {
-				j.set(2, "failed", msg, "")
-				return errors.New(st.State)
+				if msg != blocked {
+					j.set(2, "active", msg, "")
+					blocked = msg
+				}
+			} else if blocked != "" {
+				j.set(2, "active", "", "")
+				blocked = ""
 			}
 			if st.State == "echec" || (st.State == "deploiement" && deployFailed(ctx)) {
 				j.set(2, "failed", "le build a échoué sur think : journalctl -u apps-deploy. La version d'avant tourne toujours.", "")
 				return errors.New("echec")
 			}
 		}
-		if time.Now().After(deadline) {
+		if blocked != "" && time.Now().After(manual) {
+			j.set(2, "failed", blocked+"\n(toujours pas fait après 2 heures)", "")
+			return errors.New("rebuild")
+		}
+		if blocked == "" && time.Now().After(deadline) {
 			j.set(2, "failed", "pas appliqué après 10 minutes : systemctl status apps-deploy", "")
 			return errors.New("délai")
 		}
@@ -522,6 +535,9 @@ func badgeOf(j JobView) *JobBadge {
 			if s.State == "active" {
 				n = i + 1
 				b.Detail = s.Label
+				if s.Detail != "" {
+					b.Detail = s.Detail // en attente : ce qu'il reste à faire
+				}
 			}
 		}
 		b.Kind, b.Label = "running", fmt.Sprintf("en cours · %d/%d", n, len(j.Steps))

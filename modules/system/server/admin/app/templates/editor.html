@@ -11,7 +11,7 @@
       <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>
     </div>
   </div>
-  {{if .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong> Le formulaire reprendra quand elle sera terminée ; tu peux quitter la page, elle continue sur think.</p></div>{{end}}
+  {{with .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong> {{range .Steps}}{{if and (eq .State "active") .Detail}}En attente : {{.Detail}} Elle reprendra seule ensuite. {{end}}{{end}}Le formulaire reprendra quand elle sera terminée ; tu peux quitter la page, elle continue sur think.</p></div>{{end}}
   {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
 
   <nav class="envs" aria-label="Environnements">
