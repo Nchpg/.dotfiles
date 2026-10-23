@@ -6,7 +6,6 @@
 </header>
 <main class="page">
   <div class="line hero">
-    <span class="avatar avatar-lg" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" data-fallback></span>
     <div class="stack tight">
       <div class="line"><h1>{{.Name}}</h1>{{template "site-status" (status .Name .Up .Probed)}}</div>
       <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>

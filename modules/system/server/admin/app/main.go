@@ -30,7 +30,6 @@ type Server struct {
 	reg  *Registry
 	eval *Evaluator
 	jobs *Jobs
-	fav  *Favicons
 	tmpl *template.Template
 }
 
@@ -45,7 +44,7 @@ func main() {
 	}
 	s := &Server{
 		cfg: cfg, gh: newGitHub(cfg), reg: newRegistry(cfg), eval: &Evaluator{cfg: cfg},
-		jobs: &Jobs{m: map[string]*Job{}}, fav: newFavicons(), tmpl: tmpl,
+		jobs: &Jobs{m: map[string]*Job{}}, tmpl: tmpl,
 	}
 
 	mux := http.NewServeMux()
@@ -66,7 +65,6 @@ func main() {
 	mux.HandleFunc("GET /sites/{app}/env/{env}/recopy", s.recopyStatus)
 	mux.HandleFunc("GET /jobs/{id}", s.job)
 	mux.HandleFunc("GET /fragments/{name}", s.fragment)
-	mux.HandleFunc("GET /favicon/{app}", s.favicon)
 	mux.HandleFunc("GET /static/{file}", s.static)
 	mux.HandleFunc("GET /fonts/{file}", s.font)
 	for _, p := range []string{"vpn", "ssh", "metrics"} {

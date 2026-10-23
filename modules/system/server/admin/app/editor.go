@@ -188,6 +188,10 @@ func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 	if err != nil {
 		return ""
 	}
+	// Une image qui hérite du label de son image de base (nginx…) ne désigne pas le dépôt du site.
+	if owner, _, _ := strings.Cut(info.Source, "/"); !strings.EqualFold(owner, s.cfg.RegistryUser) {
+		return ""
+	}
 	return info.Source
 }
 

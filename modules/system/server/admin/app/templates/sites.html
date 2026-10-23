@@ -48,11 +48,11 @@
 {{define "site-cards"}}
 <section aria-label="Sites" id="site-cards" class="card table-card" hx-get="/fragments/cards" hx-trigger="every {{.Every}}s" hx-swap="outerHTML">
   <table class="sites">
-    <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th><th scope="col">Version</th><th scope="col">Mémoire</th><th scope="col"><span class="sr">Modifier</span></th></tr></thead>
+    <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
     {{range .Adding}}
     <tbody class="adding"><tr>
-      <td><span class="site-cell"><span class="avatar avatar-sm" style="--tint: #EEF0FD; --ink: #3B47C4">+</span><span class="stack tight"><strong>{{.App}}</strong><small class="muted">nouveau site</small></span></span></td>
-      <td colspan="5">{{template "job-badge" .}} {{if .Detail}}<small class="muted">{{.Detail}}</small>{{end}}</td><td></td>
+      <td class="site-td"><span class="stack tight"><strong>{{.App}}</strong><small class="muted">nouveau site</small></span></td>
+      <td colspan="3">{{template "job-badge" .}} {{if .Detail}}<small class="muted">{{.Detail}}</small>{{end}}</td>
     </tr></tbody>
     {{end}}
     {{range .Groups}}
@@ -61,42 +61,51 @@
       <tr class="{{if .First}}first{{end}}">
         {{if .First}}
         <td rowspan="{{.Span}}" class="site-td">
-          <span class="site-cell">
-            <span class="avatar avatar-sm" style="--tint: {{.Tint}}; --ink: {{.Ink}}">{{.Initial}}<img src="/favicon/{{.Name}}" alt="" loading="lazy" data-fallback></span>
-            <span class="stack tight"><a class="plain strong" href="/sites/{{.Name}}">{{.Name}}</a>{{with .Job}}{{template "job-badge" .}}{{end}}</span>
+          <span class="stack tight">
+            <a class="go strong" href="/sites/{{.Name}}">{{.Name}}</a>
+            {{with .Repo}}<a class="repo-link small" href="https://github.com/{{.}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.}}</a>{{end}}
+            {{with .Job}}{{template "job-badge" .}}{{end}}
           </span>
         </td>
         {{end}}
-        <td><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><span>{{.Label}}</span><small class="mono muted">{{.Branch}}</small></span></span></td>
+        <td><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.EditURL}}">{{.Label}}</a><small class="mono muted">{{.Branch}}{{if .Frozen}} · figé {{.Frozen}}{{end}}</small></span></span></td>
         <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
-        <td>{{if .VPN}}<span class="chip amber">VPN</span>{{else}}<span class="chip blue">Public</span>{{end}}{{if .SSO}} <span class="chip green">Authelia</span>{{end}}</td>
-        <td class="mono small">{{if .Frozen}}<span class="chip amber" title="Ne suit plus la branche">figé · {{.Frozen}}</span>{{else}}<span class="muted">{{.Rev}}</span>{{end}}</td>
-        <td class="small muted nowrap">{{.Memory}}</td>
-        <td class="end"><a class="btn btn-soft btn-sm" href="{{.EditURL}}">Modifier</a></td>
+        <td>
+          {{if .VPN}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>
+          {{else}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
+          {{if .SSO}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
+        </td>
       </tr>
       {{end}}
     </tbody>
-    {{else}}<tbody><tr><td colspan="7" class="muted">Aucun site pour l'instant.</td></tr></tbody>{{end}}
+    {{else}}<tbody><tr><td colspan="4" class="muted">Aucun site pour l'instant.</td></tr></tbody>{{end}}
   </table>
 </section>
 {{end}}
 
 {{define "activity"}}
-<aside class="card activity" id="activity" aria-label="Changements récents" hx-get="/fragments/activity" hx-trigger="every 60s" hx-swap="outerHTML">
-  <div class="line between"><h2>Changements</h2><a class="small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique</a></div>
-  <ol>
+<section class="activity" id="activity" aria-labelledby="changes" hx-get="/fragments/activity" hx-trigger="every 60s" hx-swap="outerHTML">
+  <div class="line between"><h2 id="changes">Changements</h2><a class="small line" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server">Historique sur GitHub<svg viewBox="0 0 24 24" aria-hidden="true" class="ext"><path d="M7 17L17 7M8 7h9v9"/></svg></a></div>
+  <div class="days">
     {{range .}}
-    <li>
-      {{if .Config}}<span class="tile tile-sm" style="--tint: #EAEDFD; --ink: #3B47C4"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"/></svg></span>
-      {{else}}<span class="tile tile-sm" style="--tint: #E9F8EF; --ink: #15803D"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"/></svg></span>{{end}}
-      <div class="stack tight">
-        <a href="{{.URL}}" class="plain">{{.Subject}}</a>
-        <span class="mono small muted">{{.Rev}} · {{.When}}</span>
-      </div>
-    </li>
-    {{else}}<li class="muted small">Historique indisponible.</li>{{end}}
-  </ol>
-</aside>
+    <div class="day">
+      <div class="day-label">{{.Label}}</div>
+      <ol>
+        {{range .Items}}
+        <li>
+          <span class="kind" style="color: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
+          <span class="stack tight grow">
+            <span>{{if .Name}}<strong>{{.Name}}</strong> {{end}}<span class="what">{{.What}}</span></span>
+            <small class="muted">{{.Kind}}</small>
+          </span>
+          <span class="when mono small"><span class="muted">{{.Time}}</span><a href="{{.URL}}">{{.Rev}}</a></span>
+        </li>
+        {{end}}
+      </ol>
+    </div>
+    {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
+  </div>
+</section>
 {{end}}
 
 {{define "site-status"}}

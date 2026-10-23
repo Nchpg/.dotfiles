@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -30,9 +31,15 @@ type StateCard struct {
 	CheckoutInk                        string
 }
 
+// ActivityItem : un commit de sites, lu comme une phrase (site, ce qui change, type).
 type ActivityItem struct {
-	Subject, Rev, When, URL string
-	Config                  bool
+	Name, What, Kind, Icon, Ink string
+	Rev, Time, URL              string
+}
+
+type ActivityDay struct {
+	Label string
+	Items []ActivityItem
 }
 
 // SiteRow : une ligne du tableau, un déploiement (la racine d'abord, puis les environnements).
@@ -72,6 +79,7 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 		deploys := e.Deploys(name)
 		for i, d := range deploys {
 			r := s.row(name, e, d, snap, up)
+			r.Repo = s.repoOf(ctx, e)
 			r.First, r.Span = i == 0, len(deploys)
 			if i == 0 {
 				r.Job = job
@@ -204,11 +212,14 @@ func shortTag(t string) string {
 }
 
 const (
-	iconCheck = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8 12l3 3 5-6"
-	iconClock = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"
-	iconWarn  = "M12 3l10 18H2zM12 10v4M12 17h.01"
-	iconSync  = "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"
-	iconQuest = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"
+	iconCheck   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8 12l3 3 5-6"
+	iconClock   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"
+	iconWarn    = "M12 3l10 18H2zM12 10v4M12 17h.01"
+	iconSync    = "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"
+	iconImage   = "M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"
+	iconSliders = "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"
+	iconBranch  = "M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"
+	iconQuest   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"
 )
 
 func (s *Server) stateCard(ctx context.Context, head string) StateCard {
@@ -298,8 +309,8 @@ func shortRev(r string) string {
 	return r
 }
 
-// activity : derniers commits qui touchent apps.json (réglages) ou le lock (images).
-func (s *Server) activity(ctx context.Context) []ActivityItem {
+// activity : derniers commits qui touchent apps.json (réglages) ou le lock (images), par jour.
+func (s *Server) activity(ctx context.Context) []ActivityDay {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	seen := map[string]int{}
@@ -312,22 +323,81 @@ func (s *Server) activity(ctx context.Context) []ActivityItem {
 		all = append(all, commits...)
 	}
 	sort.Slice(all, func(i, j int) bool { return all[i].Date.After(all[j].Date) })
-	var out []ActivityItem
+	var items []Commit
 	for _, c := range all {
 		if i, ok := seen[c.SHA]; ok {
-			out[i].Config = out[i].Config || c.Path == appsPath
+			if c.Path == appsPath {
+				items[i].Path = appsPath
+			}
 			continue
 		}
-		out = append(out, ActivityItem{
-			Subject: c.Subject, Rev: c.SHA[:7], When: c.Date.Local().Format("02/01 15:04"),
-			URL: "https://github.com/" + s.cfg.Repo + "/commit/" + c.SHA, Config: c.Path == appsPath,
-		})
-		seen[c.SHA] = len(out) - 1
-		if len(out) == 10 {
+		seen[c.SHA] = len(items)
+		items = append(items, c)
+		if len(items) == 10 {
 			break
 		}
 	}
-	return out
+	var days []ActivityDay
+	for _, c := range items {
+		date := c.Date.Local()
+		label := frenchDay(date)
+		if len(days) == 0 || days[len(days)-1].Label != label {
+			days = append(days, ActivityDay{Label: label})
+		}
+		it := describeCommit(c.Subject, c.Path == appsPath)
+		it.Rev, it.Time = c.SHA[:7], date.Format("15:04")
+		it.URL = "https://github.com/" + s.cfg.Repo + "/commit/" + c.SHA
+		d := &days[len(days)-1]
+		d.Items = append(d.Items, it)
+	}
+	return days
+}
+
+var reSubject = regexp.MustCompile(`^[a-z]+(?:\(([^)]*)\))?!?: (.+)$`)
+
+// describeCommit : site, description et type d'un commit de sites (`feat(myetf): make public`,
+// `chore(apps): bump myetf (481f826)`) ; un message libre reste tel quel.
+func describeCommit(subject string, config bool) ActivityItem {
+	it := ActivityItem{What: subject, Kind: "nouvelle image", Icon: iconImage, Ink: "#15803D"}
+	if config {
+		it.Kind, it.Icon, it.Ink = "réglages", iconSliders, "#3B47C4"
+	}
+	m := reSubject.FindStringSubmatch(subject)
+	if m == nil {
+		return it
+	}
+	scope, rest := m[1], m[2]
+	if bump, ok := strings.CutPrefix(rest, "bump "); ok && scope == "apps" {
+		names, _, _ := strings.Cut(bump, " (")
+		it.Name, it.What = names, "mis à jour"
+		return it
+	}
+	if scope != "" && scope != "apps" {
+		it.Name, it.What = scope, rest
+	}
+	if config && strings.Contains(rest, "environment") {
+		it.Kind, it.Icon, it.Ink = "environnement", iconBranch, "#9A4A07"
+	}
+	return it
+}
+
+var (
+	frDays   = []string{"dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"}
+	frMonths = []string{"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"}
+)
+
+// frenchDay : « aujourd'hui », « hier », ou « jeudi 22 octobre ».
+func frenchDay(t time.Time) string {
+	now := time.Now()
+	y1, m1, d1 := t.Date()
+	y2, m2, d2 := now.Date()
+	switch {
+	case y1 == y2 && m1 == m2 && d1 == d2:
+		return "aujourd'hui"
+	case now.AddDate(0, 0, -1).Format("2006-01-02") == t.Format("2006-01-02"):
+		return "hier"
+	}
+	return fmt.Sprintf("%s %d %s", frDays[t.Weekday()], t.Day(), frMonths[t.Month()-1])
 }
 
 var funcs = template.FuncMap{
@@ -350,4 +420,18 @@ var funcs = template.FuncMap{
 	"githubMark": func() string {
 		return "M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.5-2.6-.3-5.2-1.3-5.2-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3 .7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.1v3.2c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.7 18.3.5 12 .5z"
 	},
+}
+
+// repoOf : dépôt GitHub d'un site (label de son image), gardé 10 minutes : le tableau se
+// rafraîchit souvent, le dépôt ne change pas.
+func (s *Server) repoOf(ctx context.Context, e Entry) string {
+	if s.gh == nil || s.reg == nil {
+		return ""
+	}
+	ref := s.cfg.ref(e.Containers[e.EntryPoint()].Image)
+	v, err := s.gh.cached("repo:"+ref, 10*time.Minute, func() (any, error) { return s.sourceRepo(ctx, e), nil })
+	if err != nil {
+		return ""
+	}
+	return v.(string)
 }

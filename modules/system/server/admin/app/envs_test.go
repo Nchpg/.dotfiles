@@ -215,3 +215,22 @@ func TestTargetsFollowInheritance(t *testing.T) {
 		t.Errorf("cibles : %v", apps)
 	}
 }
+
+func TestDescribeCommit(t *testing.T) {
+	cases := []struct {
+		subject string
+		config  bool
+		want    [3]string
+	}{
+		{"feat(myetf): make public", true, [3]string{"myetf", "make public", "réglages"}},
+		{"chore(apps): bump rlkart-backend, rlkart-frontend (c2ef74f)", false, [3]string{"rlkart-backend, rlkart-frontend", "mis à jour", "nouvelle image"}},
+		{"feat(myetf): add preview environment", true, [3]string{"myetf", "add preview environment", "environnement"}},
+		{"chore: tidy apps.json by hand", true, [3]string{"", "chore: tidy apps.json by hand", "réglages"}},
+	}
+	for _, c := range cases {
+		it := describeCommit(c.subject, c.config)
+		if got := [3]string{it.Name, it.What, it.Kind}; got != c.want {
+			t.Errorf("%q : %v, attendu %v", c.subject, got, c.want)
+		}
+	}
+}

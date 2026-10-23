@@ -1,10 +1,5 @@
 // Comportements purement visuels ; tout ce qui compte (JSON, validation, diff) se fait côté serveur.
 
-// Favicon absente : on garde l'initiale.
-document.addEventListener("error", (ev) => {
-  if (ev.target.matches && ev.target.matches("img[data-fallback]")) ev.target.remove();
-}, true);
-
 // Filtre de la liste des sites, réappliqué quand les cartes se rafraîchissent.
 let filter = "all";
 function applyFilter() {
