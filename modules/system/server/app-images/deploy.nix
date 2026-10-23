@@ -44,8 +44,11 @@ let
 
       umask 077
       conf=$(mktemp)
+      auth=$(mktemp)
       # URL via un fichier de config curl, pas argv (lisible par tous).
       printf 'url = "%s"\n' "$(cat "$CREDENTIALS_DIRECTORY/webhook")" > "$conf"
+      # API GitHub authentifiée : sans jeton, la limite (60/h) est partagée par toute l'IP de think.
+      printf 'header = "Authorization: Bearer %s"\n' "$(cat "$CREDENTIALS_DIRECTORY/github")" > "$auth"
 
       head=""
       deployed=""
@@ -105,7 +108,7 @@ let
         mv -f "$state/status.json.new" "$state/status.json"
       }
 
-      trap 'publish || true; rm -f "$conf" "$conf.compare"' EXIT
+      trap 'publish || true; rm -f "$conf" "$conf.compare" "$auth"' EXIT
 
       # Avance le clone local jusqu'au commit déployé, sans toucher aux changements en cours :
       # `merge --ff-only` refuse s'ils portent sur ces fichiers ou si le clone a ses propres
@@ -154,7 +157,7 @@ let
           ;;
       esac
 
-      code=$(curl -sS --max-time 20 -o "$conf.compare" -w '%{http_code}' \
+      code=$(curl -sS --max-time 20 --config "$auth" -o "$conf.compare" -w '%{http_code}' \
         "https://api.github.com/repos/$repo/compare/$deployed...$head" || true)
       case "$code" in
         200) compare=$(cat "$conf.compare") ;;
@@ -238,6 +241,8 @@ in
       }
     ];
 
+    sops.secrets.${cfg.watch.tokenKey} = { };
+
     # Root : il active une nouvelle génération. Un échec de build signale l'unité (notify).
     systemd.services.apps-deploy = {
       description = "Déploie les mises à jour de sites poussées sur ${deploy.branch}";
@@ -251,7 +256,11 @@ in
         StateDirectory = "apps-deploy";
         # status.json est lu par le dashboard, sous un autre utilisateur.
         StateDirectoryMode = "0755";
-        LoadCredential = "webhook:${config.sops.secrets.${notify.webhookKey}.path}";
+        LoadCredential = [
+          "webhook:${config.sops.secrets.${notify.webhookKey}.path}"
+          # Le jeton d'apps-watch : lire l'API (compare) avec le quota d'un jeton.
+          "github:${config.sops.secrets.${cfg.watch.tokenKey}.path}"
+        ];
       };
     };
 
