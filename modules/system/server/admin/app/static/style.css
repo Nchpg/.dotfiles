@@ -426,3 +426,11 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
   .step.active .dot::after, .job-running .pulse, .sq.busy, .spin, .dots::after { animation: none; }
   .nav-loading::before { animation: none; transform: scaleX(.6); }
 }
+
+/* Petit « i » du bandeau d'état : explication en bulle au clic. */
+.info { position: relative; display: inline-flex; }
+.info summary { display: inline-flex; color: var(--faint); cursor: pointer; list-style: none; }
+.info summary::-webkit-details-marker { display: none; }
+.info summary:hover, .info[open] summary { color: var(--accent); }
+.info summary svg { width: 13px; height: 13px; }
+.info-pop { position: absolute; z-index: 30; top: calc(100% + 6px); left: -8px; width: min(300px, 80vw); margin: 0; padding: 10px 12px; background: var(--card); border: 1px solid #C9CED6; color: var(--text); font-size: 13px; line-height: 1.45; }

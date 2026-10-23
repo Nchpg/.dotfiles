@@ -5,7 +5,7 @@
 </header>
 <main class="page">
   <div class="line between">
-    <div class="stack tight"><h1>Sites</h1><span class="muted">{{.Sites}} sites, {{.Total}} environnements</span></div>
+    <h1>Sites</h1>
     <div class="tabs-line" role="group" aria-label="Filtrer">
       <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.Sites}}</span></button>
       <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.Public}}</span></button>
@@ -30,12 +30,12 @@
 {{define "state-card"}}
 <div class="strip-part" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
   <div class="strip-cell">
-    <span class="strip-label">think</span>
+    <span class="strip-label line">think{{template "info" (args "ID" "info-think" "Text" "La version qui tourne sur think, comparée au dernier commit de main. Chaque minute, apps-deploy applique seul les changements de sites (apps.json et lock des images) ; tout autre changement attend un rebuild à la main.")}}</span>
     <span class="strip-value line"><span class="sq{{if .Busy}} busy{{end}}" style="background: {{.Ink}}"></span>{{.Chip}}</span>
     <span class="mono small muted">{{.Think}}{{if ne .Think .Main}} → {{.Main}}{{end}}</span>
   </div>
   <div class="strip-cell">
-    <span class="strip-label">~/.dotfiles</span>
+    <span class="strip-label line">~/.dotfiles{{template "info" (args "ID" "info-checkout" "Text" "Le clone du dépôt sur think, d'où part un rebuild : commits pas encore poussés, fichiers modifiés, retard sur main. Après un déploiement de sites, apps-deploy l'avance seul.")}}</span>
     {{if .CheckoutBusy}}<span class="strip-value line" style="color: {{.CheckoutInk}}"><span class="spin" aria-hidden="true"></span><span class="dots">{{.Checkout}}</span></span>{{else if .Checkout}}<span class="strip-value" style="color: {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
     <span class="mono small muted">dépôt de think</span>
   </div>
@@ -48,9 +48,12 @@
 </div>
 {{end}}
 
+{{/* Petit « i » : une explication au clic. hx-preserve la garde ouverte quand la case se rafraîchit. */}}
+{{define "info"}}<details class="info" id="{{.ID}}" hx-preserve="true"><summary aria-label="Explication"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v5M12 8h.01"/></svg></summary><p class="info-pop">{{.Text}}</p></details>{{end}}
+
 {{define "online"}}
 <div class="strip-cell" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
-  <span class="strip-label">En ligne</span>
+  <span class="strip-label line">En ligne{{template "info" (args "ID" "info-online" "Text" "Adresses qui répondent aux sondes de Prometheus, passées chaque minute sur chaque environnement de chaque site.")}}</span>
   <span class="strip-value">{{.Online}} sur {{.Total}}</span>
   <span class="mono small muted">sondes Prometheus</span>
 </div>

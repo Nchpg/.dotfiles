@@ -131,3 +131,10 @@ document.addEventListener("click", (ev) => {
 });
 // Retour arrière (page restaurée du cache) : pas de barre restée affichée.
 addEventListener("pageshow", () => document.documentElement.classList.remove("nav-loading"));
+
+// Bulles d'explication : une seule ouverte, fermée par un clic ailleurs.
+document.addEventListener("click", (ev) => {
+  document.querySelectorAll("details.info[open]").forEach((d) => {
+    if (!d.contains(ev.target)) d.open = false;
+  });
+});
