@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"net/http"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +63,8 @@ type SiteRow struct {
 	Span                                      int
 	Initial, Tint, Ink                        string
 	Repo                                      string
-	Job                                       *JobBadge
+	Job                                       *JobBadge // sur la ligne du déploiement touché
+	SiteJob                                   *JobBadge // sous le nom du site, si aucune ligne n'est touchée
 }
 
 // SiteGroup : les lignes d'un site, filtrées ensemble.
@@ -89,12 +91,13 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			running = true
 		}
 		deploys := e.Deploys(name)
+		placed := false
 		for i, d := range deploys {
 			r := s.row(name, e, d, snap, up)
 			r.Repo = s.repoOf(ctx, e)
 			r.First, r.Span = i == 0, len(deploys)
-			if i == 0 {
-				r.Job = job
+			if job != nil && slices.Contains(job.Apps, d.App) {
+				r.Job, placed = job, true
 			}
 			g.Rows = append(g.Rows, r)
 			g.VPN = g.VPN || r.VPN
@@ -103,6 +106,9 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			if r.Up {
 				online++
 			}
+		}
+		if job != nil && !placed && len(g.Rows) > 0 {
+			g.Rows[0].SiteJob = job
 		}
 		if g.VPN {
 			vpn++

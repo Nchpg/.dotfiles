@@ -1237,6 +1237,10 @@ func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string,
 		old = &o
 	}
 	j := s.startJob(Request{App: name, Entry: e, Old: old, Base: base, Message: msg})
+	if !isNew {
+		// La page se recharge : bandeau « en cours », formulaire grisé, suivi à droite.
+		w.Header().Set("HX-Refresh", "true")
+	}
 	s.render(w, "job", j.Snapshot())
 }
 

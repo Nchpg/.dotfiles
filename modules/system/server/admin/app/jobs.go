@@ -40,7 +40,8 @@ type Job struct {
 	Created  time.Time
 	Finished time.Time
 	Domain   string
-	New      bool // site ajouté : absent d'apps.json tant que le commit n'est pas fait
+	New      bool     // site ajouté : absent d'apps.json tant que le commit n'est pas fait
+	Apps     []string // déploiements touchés (myetf, myetf-preview…)
 }
 
 type Jobs struct {
@@ -92,6 +93,7 @@ func (js *Jobs) add(j *Job) {
 // JobView : copie d'une demande, lisible sans verrou (templates, badges).
 type JobView struct {
 	ID, App, Message, Domain  string
+	Apps                      []string
 	Delete, New, Done, Failed bool
 	Steps                     []Step
 	Created, Finished         time.Time
@@ -101,7 +103,7 @@ type JobView struct {
 func (j *Job) Snapshot() JobView {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return JobView{ID: j.ID, App: j.App, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain, New: j.New, Created: j.Created, Finished: j.Finished}
+	return JobView{ID: j.ID, App: j.App, Apps: j.Apps, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain, New: j.New, Created: j.Created, Finished: j.Finished}
 }
 
 func (j *Job) set(i int, state, detail, link string) {
@@ -274,8 +276,10 @@ func (s *Server) startJob(req Request) *Job {
 	targets := req.targets(s.cfg.Domain)
 	domain := ""
 	var doms []string
+	var apps []string
 	for _, t := range targets {
 		doms = append(doms, t.Domain)
+		apps = append(apps, t.App)
 	}
 	if req.Entry != nil {
 		if d, err := req.Entry.Deploy(req.App, ""); err == nil {
@@ -284,7 +288,7 @@ func (s *Server) startJob(req Request) *Job {
 	} else if len(doms) > 0 {
 		domain = doms[0]
 	}
-	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new"}
+	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new", Apps: apps}
 	last := Step{Label: "Le site répond", Sub: strings.Join(doms, ", "), State: "todo"}
 	switch {
 	case j.Delete:
@@ -519,7 +523,8 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 // JobBadge : la dernière demande d'un site, résumée pour la liste et la page du site.
 type JobBadge struct {
 	ID, App string
-	Kind    string // running, done, failed
+	Apps    []string // déploiements touchés : la pastille va sur leurs lignes
+	Kind    string   // running, done, failed
 	Label   string
 	Detail  string
 	New     bool
@@ -552,7 +557,7 @@ func (js *Jobs) all() []JobView {
 
 // badgeOf : en cours, ou terminée depuis peu (réussite 5 min, échec 30 min) ; nil sinon.
 func badgeOf(j JobView) *JobBadge {
-	b := &JobBadge{ID: j.ID, App: j.App, New: j.New, Delete: j.Delete}
+	b := &JobBadge{ID: j.ID, App: j.App, Apps: j.Apps, New: j.New, Delete: j.Delete}
 	switch {
 	case !j.Done:
 		n := 1

@@ -502,3 +502,4 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .nav-loading body { cursor: progress; }
 @keyframes nav-load { from { transform: scaleX(0); } to { transform: scaleX(.9); } }
 @media (prefers-reduced-motion: reduce) { .nav-loading::before { animation: none; transform: scaleX(.6); } }
+.row-job { margin-top: 6px; }
