@@ -29,8 +29,8 @@ in
       };
 
       waypipe = lib.mkEnableOption ''
-        waypipe et wl-clipboard : sous `wssh`, `wl-paste` (et donc Ctrl+V d'image
-        dans Claude Code) lit le presse-papier du poste client
+        waypipe et wl-clipboard : via waypipe (userSettings.ssh.waypipe.hosts côté client),
+        `wl-paste` (et donc Ctrl+V d'image dans Claude Code) lit le presse-papier du poste client
       '';
 
       openFirewall = lib.mkOption {
