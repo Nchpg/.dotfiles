@@ -24,6 +24,7 @@ type Registry struct {
 	tokens  map[string]cacheItem
 	inspect map[string]ImageInfo // par digest : immuable
 	byRef   map[string]ImageInfo // tags `sha-…` : immuables aussi
+	tags    map[string]cacheItem // listes de tags, durée limitée (rafraîchies par `warm`)
 }
 
 type ImageInfo struct {
@@ -45,7 +46,7 @@ var manifestAccept = []string{
 }
 
 func newRegistry(cfg *Config) *Registry {
-	return &Registry{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, tokens: map[string]cacheItem{}, inspect: map[string]ImageInfo{}, byRef: map[string]ImageInfo{}}
+	return &Registry{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, tokens: map[string]cacheItem{}, inspect: map[string]ImageInfo{}, byRef: map[string]ImageInfo{}, tags: map[string]cacheItem{}}
 }
 
 // split : `ghcr.io/nchpg/rlkart-frontend:main` -> ("nchpg/rlkart-frontend", "main").
@@ -112,7 +113,21 @@ func (r *Registry) get(ctx context.Context, method, repo, path string, accept []
 }
 
 // Tags d'une image, donnée sans tag (`ghcr.io/nchpg/rlkart-frontend`).
+// Tags : liste des tags d'une image, gardée tagsTTL.
 func (r *Registry) Tags(ctx context.Context, name string) ([]string, error) {
+	r.mu.Lock()
+	it, ok := r.tags[name]
+	r.mu.Unlock()
+	if ok && time.Since(it.at) < tagsTTL {
+		return it.val.([]string), nil
+	}
+	return r.FetchTags(ctx, name)
+}
+
+const tagsTTL = 2 * time.Minute
+
+// FetchTags : relit la liste des tags sur ghcr et la garde.
+func (r *Registry) FetchTags(ctx context.Context, name string) ([]string, error) {
 	_, repo, _, err := splitRef(name + ":tag")
 	if err != nil {
 		return nil, err
@@ -128,6 +143,9 @@ func (r *Registry) Tags(ctx context.Context, name string) ([]string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
 	}
+	r.mu.Lock()
+	r.tags[name] = cacheItem{time.Now(), out.Tags}
+	r.mu.Unlock()
 	return out.Tags, nil
 }
 

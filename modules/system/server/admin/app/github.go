@@ -23,7 +23,12 @@ type GitHub struct {
 	mu    sync.Mutex
 	raw   map[string][]byte    // fichier par commit (immuable)
 	cache map[string]cacheItem // réponses d'API, durée limitée
+	head  cacheItem            // dernière tête de main lue (Head)
 }
+
+// headTTL : âge maximal de la tête de main pour afficher une page. Les demandes la relisent
+// toujours (Head) avant d'agir, et la boucle `warm` la rafraîchit en continu.
+const headTTL = 30 * time.Second
 
 type cacheItem struct {
 	at  time.Time
@@ -63,7 +68,21 @@ func (g *GitHub) Head(ctx context.Context) (string, error) {
 	if len(sha) != 40 {
 		return "", errors.New("branche introuvable sur GitHub")
 	}
+	g.mu.Lock()
+	g.head = cacheItem{time.Now(), sha}
+	g.mu.Unlock()
 	return sha, nil
+}
+
+// HeadCached : la tête de main lue il y a moins de headTTL, sinon relue (affichage des pages).
+func (g *GitHub) HeadCached(ctx context.Context) (string, error) {
+	g.mu.Lock()
+	it := g.head
+	g.mu.Unlock()
+	if sha, ok := it.val.(string); ok && time.Since(it.at) < headTTL {
+		return sha, nil
+	}
+	return g.Head(ctx)
 }
 
 // File : contenu d'un fichier à un commit donné (raw, sans quota, jamais périmé).

@@ -71,6 +71,10 @@ func main() {
 		mux.HandleFunc("GET /"+p, s.soon(p))
 	}
 
+	if s.reg != nil {
+		go s.warm(context.Background())
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           s.guard(mux),
@@ -171,7 +175,7 @@ type Snapshot struct {
 }
 
 func (s *Server) snapshot(ctx context.Context) (*Snapshot, error) {
-	head, err := s.gh.Head(ctx)
+	head, err := s.gh.HeadCached(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -192,3 +196,32 @@ func (s *Server) snapshot(ctx context.Context) (*Snapshot, error) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// warm : garde chauds, en fond, ce que les pages lisent sur le réseau (tête de main, tags des
+// images, packages, changements) : un clic n'attend plus GitHub ni ghcr.
+func (s *Server) warm(ctx context.Context) {
+	for {
+		if _, err := s.gh.Head(ctx); err == nil {
+			if snap, err := s.snapshot(ctx); err == nil {
+				seen := map[string]bool{}
+				for _, name := range snap.Apps.Names() {
+					for _, d := range snap.Apps.Entries[name].Deploys(name) {
+						for _, c := range d.Ctrs.Containers {
+							if ref := s.cfg.ref(untag(c.Image)); !seen[ref] {
+								seen[ref] = true
+								_, _ = s.reg.FetchTags(ctx, ref)
+							}
+						}
+					}
+				}
+			}
+		}
+		_, _ = s.gh.Packages(ctx)
+		s.activity(ctx, activityStep)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(20 * time.Second):
+		}
+	}
+}

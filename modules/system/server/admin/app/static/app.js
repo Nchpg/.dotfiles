@@ -123,3 +123,13 @@ document.addEventListener("keydown", (ev) => {
 document.addEventListener("toggle", (ev) => {
   if (ev.target.matches && ev.target.matches(".data-adder") && ev.target.open) ev.target.querySelector("input")?.focus();
 }, true);
+
+// Navigation : une barre de chargement en haut dès le clic, le temps que la page suivante arrive.
+document.addEventListener("click", (ev) => {
+  const a = ev.target.closest && ev.target.closest("a[href]");
+  if (!a || ev.defaultPrevented || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  if (a.target || a.hasAttribute("download") || a.origin !== location.origin || a.getAttribute("href").startsWith("#")) return;
+  document.documentElement.classList.add("nav-loading");
+});
+// Retour arrière (page restaurée du cache) : pas de barre restée affichée.
+addEventListener("pageshow", () => document.documentElement.classList.remove("nav-loading"));

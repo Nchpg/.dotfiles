@@ -496,3 +496,9 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .link-btn svg { width: 14px; height: 14px; }
 .link-btn:hover { color: var(--accent); }
 .data-adder[open] .link-btn { display: none; }
+
+/* Barre de chargement entre deux pages (classe posée au clic par app.js). */
+.nav-loading::before { content: ""; position: fixed; z-index: 100; top: 0; left: 0; height: 2px; width: 100%; background: var(--accent); transform-origin: left; animation: nav-load 2.5s cubic-bezier(.1, .7, .3, 1) forwards; }
+.nav-loading body { cursor: progress; }
+@keyframes nav-load { from { transform: scaleX(0); } to { transform: scaleX(.9); } }
+@media (prefers-reduced-motion: reduce) { .nav-loading::before { animation: none; transform: scaleX(.6); } }
