@@ -30,7 +30,7 @@
 {{define "state-card"}}
 <div class="strip-part" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
   <div class="strip-cell">
-    <span class="strip-label line">think{{template "info" (args "ID" "info-think" "Text" "La version qui tourne sur think, comparée au dernier commit de main. Chaque minute, apps-deploy applique seul les changements de sites (apps.json et lock des images) ; tout autre changement attend un rebuild à la main.")}}</span>
+    <span class="strip-label line">think{{template "info" (args "ID" "info-think" "Text" "La version qui tourne sur think (celle du dernier rebuild, commits locaux compris), comparée au dernier commit poussé sur main (GitHub). Chaque minute, apps-deploy applique seul les changements de sites (apps.json et lock des images) ; tout autre changement attend un rebuild à la main.")}}</span>
     <span class="strip-value line"><span class="sq{{if .Busy}} busy{{end}}" style="background: {{.Ink}}"></span>{{.Chip}}</span>
     <span class="mono small muted">{{.Think}}{{if ne .Think .Main}} → {{.Main}}{{end}}</span>
   </div>
