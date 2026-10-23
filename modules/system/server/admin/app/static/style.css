@@ -404,3 +404,11 @@ a.go:hover { color: var(--text); text-decoration: underline; }
   .topbar { position: sticky; top: 0; z-index: 20; }
   .sticky { top: 88px; }
 }
+
+/* Bandeau d'état : ce qui est en cours bouge (carré qui pulse, carré qui tourne, points). */
+.sq.busy { animation: pulse 1.2s ease-in-out infinite; }
+.spin { width: 9px; height: 9px; border: 1.5px solid currentColor; border-right-color: transparent; animation: spin .9s linear infinite; flex-shrink: 0; }
+.dots::after { content: "..."; display: inline-block; width: 1em; text-align: left; overflow: hidden; vertical-align: bottom; animation: dots 1.2s steps(4, end) infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes dots { from { width: 0; } to { width: 1em; } }
+@media (prefers-reduced-motion: reduce) { .sq.busy, .spin, .dots::after { animation: none; } }

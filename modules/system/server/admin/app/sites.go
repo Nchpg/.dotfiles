@@ -29,6 +29,7 @@ type StateCard struct {
 	Pending                            []string
 	Checkout                           string
 	CheckoutInk                        string
+	Busy, CheckoutBusy                 bool // en cours : animés
 }
 
 // ActivityItem : un commit de sites, lu comme une phrase (site, ce qui change, type).
@@ -238,6 +239,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 		set("think est à jour", "à jour", "", iconCheck, green)
 	case st.State == "deploiement":
 		set("Application en cours", "en cours", "", iconSync, blue)
+		c.Busy = true
 	case st.State == "attente":
 		set("Rebuild à faire", "en attente", "Pas que des sites sur main : rebuild à la main.", iconClock, amber)
 	case st.State == "local":
@@ -250,6 +252,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", iconWarn, red)
 	default:
 		set("main a avancé", "à appliquer", "Appliqué dans la minute.", iconSync, blue)
+		c.Busy = true
 	}
 	// Ce qui attend, seulement quand quelque chose attend : le dernier commit, et combien d'autres.
 	if think != head && st != nil && st.Fresh() && len(st.Pending) > 0 && (st.State == "attente" || st.State == "diverge" || st.State == "echec") {
@@ -262,7 +265,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 	// Ligne calculée par apps-deploy contre un autre main que l'actuel (push dans la dernière minute) :
 	// elle serait fausse, on attend son prochain passage.
 	if st != nil && st.Checkout != nil && st.Head != head {
-		c.Checkout, c.CheckoutInk = "vérification…", "#5D6573"
+		c.Checkout, c.CheckoutInk, c.CheckoutBusy = "vérification", "#5D6573", true
 	} else if st != nil && st.Checkout != nil {
 		co := st.Checkout
 		var parts []string

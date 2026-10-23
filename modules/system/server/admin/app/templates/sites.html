@@ -35,12 +35,12 @@
 <div class="strip-part" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
   <div class="strip-cell">
     <span class="strip-label">think</span>
-    <span class="strip-value line"><span class="sq" style="background: {{.Ink}}"></span>{{.Chip}}</span>
+    <span class="strip-value line"><span class="sq{{if .Busy}} busy{{end}}" style="background: {{.Ink}}"></span>{{.Chip}}</span>
     <span class="mono small muted">{{.Think}} · main {{.Main}}</span>
   </div>
   <div class="strip-cell">
     <span class="strip-label">~/.dotfiles</span>
-    {{if .Checkout}}<span class="strip-value" style="color: {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
+    {{if .CheckoutBusy}}<span class="strip-value line" style="color: {{.CheckoutInk}}"><span class="spin" aria-hidden="true"></span><span class="dots">{{.Checkout}}</span></span>{{else if .Checkout}}<span class="strip-value" style="color: {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
     <span class="mono small muted">dépôt de think</span>
   </div>
   {{if or .Text .Pending}}
