@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Fichiers réels du dépôt : les tests portent sur les vrais sites.
@@ -290,5 +291,45 @@ func TestCommitMessage(t *testing.T) {
 		if reCommitMessage.MatchString(m) != want {
 			t.Errorf("%q : %v attendu", m, want)
 		}
+	}
+}
+
+// Bandeau d'état : chaque combinaison (version de think, tête de main, ce qu'a vu apps-deploy).
+func TestStateCardOf(t *testing.T) {
+	now := time.Now().Unix()
+	st := func(head, deployed, state string) *DeployStatus {
+		return &DeployStatus{Checked: now, Head: head, Deployed: deployed, State: state}
+	}
+	stale := &DeployStatus{Checked: now - 600, Head: "B", Deployed: "A", State: "non_pousse"}
+	cases := []struct {
+		name, think, head string
+		st                *DeployStatus
+		chip              string
+	}{
+		{"à jour", "A", "A", st("A", "A", "a_jour"), "à jour"},
+		{"à jour, état périmé", "A", "A", stale, "à jour"},
+		{"apps-deploy arrêté", "A", "B", stale, "inconnu"},
+		{"rebuild pas encore vu", "C", "B", st("B", "A", "a_jour"), "vérification"},
+		{"push pas encore vu", "A", "C", st("B", "A", "a_jour"), "nouveau commit"},
+		{"think en avance (push suffit)", "C", "B", st("B", "C", "en_avance"), "à pousser"},
+		{"think et main ont chacun des commits", "C", "B", st("B", "C", "non_pousse"), "à pousser"},
+		{"version locale non commitée", "C-dirty", "B", st("B", "C-dirty", "local"), "modifié"},
+		{"rebuild à faire", "A", "B", st("B", "A", "attente"), "en attente"},
+		{"déploiement en cours", "A", "B", st("B", "A", "deploiement"), "en cours"},
+		{"déploiement en échec", "A", "B", st("B", "A", "echec"), "échec"},
+		{"diverge", "A", "B", st("B", "A", "diverge"), "à vérifier"},
+		{"GitHub injoignable", "A", "B", st("B", "A", "github"), "GitHub ?"},
+		{"état inconnu d'apps-deploy", "A", "B", st("B", "A", "inconnu"), "vérification"},
+	}
+	for _, c := range cases {
+		if got := stateCardOf(c.think, c.head, "main", c.st, nil).Chip; got != c.chip {
+			t.Errorf("%s : %q, attendu %q", c.name, got, c.chip)
+		}
+	}
+	if got := stateCardOf("C", "B", "main", st("B", "C", "en_avance"), nil).Text; !strings.Contains(got, "git push suffit") {
+		t.Errorf("en avance : %q", got)
+	}
+	if got := stateCardOf("A", "B", "main", nil, os.ErrNotExist).Chip; got != "inconnu" {
+		t.Errorf("sans status.json : %q", got)
 	}
 }

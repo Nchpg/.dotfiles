@@ -505,22 +505,25 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 	blocked := ""
 	reasons := map[string]string{
 		"local":      "think tourne une version locale non commitée : il n'applique rien seul. `rebuild` à la main.",
-		"non_pousse": "think tourne des commits pas encore poussés : `git push`, puis `rebuild`.",
+		"non_pousse": "think tourne des commits pas encore poussés et main a avancé : `git pull --rebase`, `git push`, puis `rebuild`.",
+		"en_avance":  "think tourne des commits pas encore poussés : `git push`.",
 		"diverge":    "main n'est plus dans la lignée de la version de think : `rebuild` à la main.",
 		"attente":    "main contient aussi d'autres changements que des sites : `rebuild` à la main pour tout appliquer.",
 		"github":     "think n'arrive pas à joindre GitHub (quota d'API ou réseau) : nouvel essai chaque minute.",
 	}
 	for {
-		if rev := deployedRevision(ctx); rev != "" && !strings.HasSuffix(rev, "-dirty") {
+		rev := deployedRevision(ctx)
+		if rev != "" && !strings.HasSuffix(rev, "-dirty") {
 			if b, err := s.gh.File(ctx, rev, appsPath); err == nil {
 				if f, err := parseApps(b); err == nil && f.Fingerprint(app) == want {
 					return nil
 				}
 			}
 		}
-		// Une décision ne compte que si apps-deploy a vu la tête actuelle de main (qui contient le commit).
+		// Une décision ne compte que si apps-deploy a vu la tête actuelle de main (qui contient le commit)
+		// et la version actuelle de think (un rebuild la rend périmée).
 		head, _ := s.gh.Head(ctx)
-		if st, err := readDeployStatus(s.cfg.DeployStatus); err == nil && st.Fresh() && head != "" && st.Head == head {
+		if st, err := readDeployStatus(s.cfg.DeployStatus); err == nil && st.Fresh() && head != "" && st.Head == head && st.Deployed == rev {
 			if msg, ok := reasons[st.State]; ok {
 				if msg != blocked {
 					j.set(2, "active", msg, "")

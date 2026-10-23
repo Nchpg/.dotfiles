@@ -299,18 +299,30 @@ const (
 )
 
 func (s *Server) stateCard(ctx context.Context, head string) StateCard {
+	st, err := readDeployStatus(s.cfg.DeployStatus)
+	return stateCardOf(deployedRevision(ctx), head, s.cfg.Branch, st, err)
+}
+
+// stateCardOf : le bandeau, d'après la version de think, la tête de main et l'état d'apps-deploy.
+func stateCardOf(think, head, branch string, st *DeployStatus, err error) StateCard {
 	green, amber, red, blue, gray := [2]string{"#E9F8EF", "#15803D"}, [2]string{"#FEF3E2", "#9A4A07"}, [2]string{"#FDECEC", "#B42318"}, [2]string{"#EAEDFD", "#3B47C4"}, [2]string{"#F1F2F5", "#4A515D"}
-	think := deployedRevision(ctx)
 	c := StateCard{Think: shortRev(think), Main: shortRev(head)}
 	set := func(title, chip, text, icon string, col [2]string) {
 		c.Title, c.Chip, c.Text, c.Icon, c.Tint, c.Ink = title, chip, text, icon, col[0], col[1]
 	}
-	st, err := readDeployStatus(s.cfg.DeployStatus)
+	// L'état d'apps-deploy ne vaut que pour la version de think et le commit de main qu'il a vus :
+	// juste après un rebuild ou un push, il est périmé jusqu'à son passage suivant (dans la minute).
 	switch {
-	case err != nil || !st.Fresh():
-		set("État inconnu", "inconnu", "apps-deploy ne passe plus : systemctl status apps-deploy.timer", iconQuest, gray)
 	case think == head:
 		set("think est à jour", "à jour", "", iconCheck, green)
+	case err != nil || !st.Fresh():
+		set("État inconnu", "inconnu", "apps-deploy ne passe plus : systemctl status apps-deploy.timer", iconQuest, gray)
+	case st.Deployed != think:
+		set("Vérification", "vérification", "think vient de changer de version : apps-deploy vérifie dans la minute.", iconSync, gray)
+		c.Busy = true
+	case st.Head != head:
+		set("main a avancé", "nouveau commit", "apps-deploy le regarde dans la minute.", iconSync, blue)
+		c.Busy = true
 	case st.State == "deploiement":
 		set("Application en cours", "en cours", "", iconSync, blue)
 		c.Busy = true
@@ -318,8 +330,10 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 		set("Rebuild à faire", "en attente", "Pas que des sites sur main : rebuild à la main.", iconClock, amber)
 	case st.State == "local":
 		set("Version locale non commitée", "modifié", "Les sites attendent un rebuild propre.", iconWarn, red)
+	case st.State == "en_avance":
+		set("Commits pas poussés", "à pousser", "think tourne déjà ces commits : git push suffit.", iconWarn, amber)
 	case st.State == "non_pousse":
-		set("Commits pas poussés", "à pousser", "git push, puis rebuild.", iconWarn, red)
+		set("Commits pas poussés", "à pousser", "main a aussi avancé : git pull --rebase, git push, puis rebuild.", iconWarn, red)
 	case st.State == "diverge":
 		set("main a divergé", "à vérifier", "Rebuild à la main.", iconWarn, red)
 	case st.State == "github":
@@ -327,7 +341,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 	case st.State == "echec":
 		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", iconWarn, red)
 	default:
-		set("main a avancé", "à appliquer", "Appliqué dans la minute.", iconSync, blue)
+		set("Vérification", "vérification", "apps-deploy vérifie dans la minute.", iconSync, gray)
 		c.Busy = true
 	}
 	// Ce qui attend, seulement quand quelque chose attend : le dernier commit, et combien d'autres.
@@ -345,7 +359,7 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 	} else if st != nil && st.Checkout != nil {
 		co := st.Checkout
 		var parts []string
-		if co.Branch != "" && co.Branch != s.cfg.Branch {
+		if co.Branch != "" && co.Branch != branch {
 			parts = append(parts, "sur la branche "+co.Branch)
 		}
 		if co.Modified > 0 {

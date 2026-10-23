@@ -199,16 +199,21 @@ let
       case "$code" in
         200) compare=$(cat "$conf.compare") ;;
         404)
-          decide non_pousse
-          # main déjà contenu dans la version de think (rebuild fait avant le push) : rien n'attend,
-          # pas de message. Vu dans le clone local, après l'avoir mis à jour.
-          if [ -z "$quiet" ] && [ -n "$checkout" ] && [ -d "$checkout/.git" ]; then
+          # Version de think inconnue de GitHub : des commits pas poussés. Deux cas, vus dans le clone
+          # local (mis à jour d'abord) :
+          # - main déjà contenu dans think (rebuild fait avant le push) : `git push` suffit, rien
+          #   n'attend d'être déployé, pas de message ;
+          # - main a aussi des commits que think n'a pas : récupérer, pousser, puis rebuild.
+          if [ -n "$checkout" ] && [ -d "$checkout/.git" ]; then
             as_owner fetch --quiet "https://github.com/$repo.git" "+refs/heads/$branch:refs/remotes/origin/$branch" 2> /dev/null || true
-            if as_owner merge-base --is-ancestor "$head" "$deployed" 2> /dev/null; then
-              quiet=1
-            fi
           fi
-          [ -n "$quiet" ] || say "⏸️ la version de think (\`''${deployed:0:7}\`) est inconnue de GitHub (commits pas encore poussés ?) : \`$short\` n'est pas déployé. \`rebuild\` à la main."
+          if [ -n "$checkout" ] && [ -d "$checkout/.git" ] \
+            && as_owner merge-base --is-ancestor "$head" "$deployed" 2> /dev/null; then
+            decide en_avance
+            exit 0
+          fi
+          decide non_pousse
+          [ -n "$quiet" ] || say "⏸️ think (\`''${deployed:0:7}\`) a des commits pas poussés, et $branch (\`$short\`) des commits que think n'a pas : rien n'est déployé. \`git pull --rebase\`, \`git push\`, puis \`rebuild\`."
           exit 0
           ;;
         *)
@@ -222,6 +227,13 @@ let
 
       pending=$(jq -c '[.commits[] | {sha, subject: (.commit.message | split("\n")[0])}]' <<< "$compare")
 
+      # `behind` : think, déjà sur GitHub (une autre branche), contient main : rien n'attend.
+      case "$(jq -r .status <<< "$compare")" in
+        behind)
+          decide en_avance
+          exit 0
+          ;;
+      esac
       if [ "$(jq -r .status <<< "$compare")" != ahead ]; then
         decide diverge "$pending"
         [ -n "$quiet" ] || say "⏸️ $branch (\`$short\`) n'est pas dans la lignée de la version de think (\`''${deployed:0:7}\`) : rien n'est déployé. \`rebuild\` à la main."
