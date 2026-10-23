@@ -348,7 +348,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .env-cell { align-items: flex-start; }
 .env-cell > svg { margin-top: 3px; }
 /* Accès : contraste plutôt que couleur ; Authelia en dessous, pour garder la colonne étroite. */
-.acc { display: flex; width: fit-content; min-width: 76px; align-items: center; justify-content: center; gap: 6px; padding: 3px 8px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.acc { display: flex; width: 96px; align-items: center; justify-content: center; gap: 6px; padding: 3px 8px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
 .acc svg { width: 12px; height: 12px; stroke-width: 2; }
 .acc-vpn { background: #10141B; color: #FFFFFF; }
 .acc-public { background: #EEF0F3; color: var(--text); }
