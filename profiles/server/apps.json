@@ -38,12 +38,7 @@
       "preview": {
         "branch": "preview",
         "data": "copy",
-        "devices": [
-          "gram",
-          "windows_gram",
-          "xiaomi_17t"
-        ],
-        "expose": "vpn",
+        "expose": "public",
         "subdomain": "etf-prev"
       }
     },
