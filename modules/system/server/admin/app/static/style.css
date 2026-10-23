@@ -412,3 +412,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes dots { from { width: 0; } to { width: 1em; } }
 @media (prefers-reduced-motion: reduce) { .sq.busy, .spin, .dots::after { animation: none; } }
+
+/* Sans séparateurs : des éléments espacés. */
+.hero-sub { gap: 14px; }
+.inherited { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; }

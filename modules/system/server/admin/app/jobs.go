@@ -392,7 +392,7 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request) error {
 				answered = append(answered, t.Domain+" retiré")
 			case !t.Remove && ok:
 				s.jobs.markVerified(t.Domain)
-				answered = append(answered, fmt.Sprintf("%s · HTTP %d", t.Domain, code))
+				answered = append(answered, fmt.Sprintf("%s (HTTP %d)", t.Domain, code))
 			default:
 				t.Code = code
 				still = append(still, t)
@@ -565,7 +565,7 @@ func badgeOf(j JobView) *JobBadge {
 				}
 			}
 		}
-		b.Kind, b.Label = "running", fmt.Sprintf("en cours · %d/%d", n, len(j.Steps))
+		b.Kind, b.Label = "running", fmt.Sprintf("en cours %d/%d", n, len(j.Steps))
 	case j.Failed && time.Since(j.Finished) < 30*time.Minute:
 		b.Kind, b.Label = "failed", "échec"
 		for _, s := range j.Steps {

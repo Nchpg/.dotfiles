@@ -8,10 +8,10 @@
   <div class="line hero">
     <div class="stack tight">
       <div class="line"><h1>{{.Name}}</h1>{{template "site-status" (status .Name .Up .Probed)}}</div>
-      <span class="mono muted">{{.Domain}}{{if .Repo}} · <a href="https://github.com/{{.Repo}}">{{.Repo}}</a>{{end}}</span>
+      <span class="line wrap hero-sub"><span class="mono muted">{{.Domain}}</span>{{if .Repo}}<a class="repo-link" href="https://github.com/{{.Repo}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.Repo}}</a>{{end}}</span>
     </div>
   </div>
-  {{with .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong> {{range .Steps}}{{if and (eq .State "active") .Detail}}En attente : {{.Detail}} Elle reprendra seule ensuite. {{end}}{{end}}Le formulaire reprendra quand elle sera terminée ; tu peux quitter la page, elle continue sur think.</p></div>{{end}}
+  {{with .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong>{{range .Steps}}{{if and (eq .State "active") .Detail}} En attente : {{.Detail}}{{end}}{{end}}</p></div>{{end}}
   {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
 
   <nav class="envs" aria-label="Environnements">
@@ -19,7 +19,7 @@
       {{range .Tabs}}
       <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>
         <svg viewBox="0 0 24 24" aria-hidden="true" class="{{if .Root}}accent{{else}}warn-ink{{end}}"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg>
-        <span class="stack tight"><span class="line tight-line"><span>{{.Label}}</span>{{if .Root}}<small class="muted">racine</small>{{end}}{{if .New}}<span class="chip amber">nouveau</span>{{end}}</span><small class="mono muted">{{.Branch}} · {{.Domain}}</small></span>
+        <span class="stack tight"><span class="line tight-line"><span>{{.Label}}</span>{{if .Root}}<small class="muted">racine</small>{{end}}{{if .New}}<span class="chip amber">nouveau</span>{{end}}</span><small class="mono muted">{{.Branch}}</small></span>
       </a>
       {{end}}
     </div>
@@ -32,7 +32,7 @@
         <div class="field"><span>Branche</span>{{template "dd" (args "D" .AddBranch)}}</div>
         <div class="field"><span>Hérite de</span>{{template "dd" (args "D" .AddFrom)}}</div>
         <button class="btn btn-primary">Créer</button>
-        {{if .AddError}}<p class="small bad grow-all">{{.AddError}}</p>{{else}}<p class="small muted grow-all">En VPN et données séparées au départ ; le reste hérite du parent. Rien n'est écrit avant « Appliquer ».</p>{{end}}
+        {{with .AddError}}<p class="small bad grow-all">{{.}}</p>{{end}}
       </form>
     </details>
     {{end}}
@@ -84,15 +84,14 @@
     </div>
     <div class="sec-body">
       {{if .New}}
-      <label class="field"><span>Nom du site <small class="muted">(identifiant interne, 12 caractères au plus, définitif)</small></span>
-        <input name="name" value="{{.Name}}" class="mono" required></label>
+      <label class="field"><span>Nom du site <small class="muted">(définitif)</small></span>
+        <input name="name" value="{{.Name}}" class="mono" maxlength="12" required></label>
       {{else}}
       <div class="fields">
         <label class="field"><span>Nom affiché</span><input name="label" value="{{.Label}}" maxlength="32"></label>
         <div class="field"><span>Branche du dépôt</span>{{template "dd" (args "D" .Branch "URL" .FormURL)}}</div>
         {{if .Child}}<div class="field"><span>Hérite de</span>{{template "dd" (args "D" .From "URL" .FormURL)}}</div>{{end}}
       </div>
-      {{if .Child}}<small class="muted">Servi comme <span class="mono">{{.Name}}-{{.Env}}</span> : ce nom interne ne change pas si tu renommes l'environnement.</small>{{end}}
       {{end}}
       <label class="field"><span>Sous-domaine</span>
         <span class="affix"><input name="sub" value="{{.Sub}}" class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
@@ -118,12 +117,11 @@
         <legend>Appareils autorisés</legend>
         <div class="pills">{{range .Peers}}<label class="pill"><input type="checkbox" name="dev" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>
       </fieldset>
-      {{if .Child}}<small class="muted" data-public-only {{if .VPN}}hidden{{end}}>Public mais pas la racine : les moteurs de recherche ne l'indexent pas (<span class="mono">X-Robots-Tag: noindex</span>).</small>{{end}}
       <label class="row-toggle">
-        <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">En plus, public ou VPN : compte et 2FA exigés.</small></span>
+        <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">Compte et 2FA exigés.</small></span>
         <input type="checkbox" name="sso" {{if .SSO}}checked{{end}}></label>
       {{else}}
-      <p class="inherited">{{.AccessFrom}} · <span class="mono">{{.AccessSummary}}</span></p>
+      <p class="inherited"><span>{{.AccessFrom}}</span>{{range .AccessSummary}}<span class="chip">{{.}}</span>{{end}}</p>
       {{end}}
     </div>
   </section>
@@ -152,23 +150,23 @@
         {{if .Deps}}<div class="line wrap small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
         <div class="stack tight">
           <span class="small strong">Données</span>
-          {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{else}}<small class="muted">Aucune : tout est perdu au redémarrage.</small>{{end}}
-          {{if not .Locked}}<span class="line"><input name="newdata_{{.Name}}" placeholder="/data /uploads" class="mono input-sm" aria-label="Nouveaux dossiers de données, séparés par des espaces"><small class="muted">séparés par des espaces</small></span>{{end}}
+          {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{else}}<small class="muted">Aucune</small>{{end}}
+          {{if not .Locked}}<input name="newdata_{{.Name}}" placeholder="+ /data /uploads" class="mono input-sm" aria-label="Nouveaux dossiers de données, séparés par des espaces">{{end}}
         </div>
         <div class="stack tight">
           <span class="small strong">Secrets</span>
           {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
-          {{else}}<small class="muted">Aucun secret sous {{$f.Name}}/. Pour en ajouter un : <code>secrets edit {{$f.Name}}/env</code>, <code>secrets sync</code>, rebuild ; il apparaît ici. La valeur ne passe jamais par cette page.</small>{{end}}
+          {{else}}<small class="muted">Aucun. <code>secrets edit {{$f.Name}}/env</code></small>{{end}}
         </div>
       </div>
       {{end}}
       {{range .NewImages}}
       <div class="new-image">
-        <span class="small">Nouvelle image publiée par le dépôt : <span class="mono">{{.Label}}</span></span>
-        <button type="button" class="btn btn-primary btn-sm" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"addctr": "{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML">Ajouter le conteneur {{.Note}}</button>
+        <span class="small">Nouvelle image <span class="mono">{{.Label}}</span></span>
+        <button type="button" class="btn btn-primary btn-sm" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"addctr": "{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML">Ajouter</button>
       </div>
       {{end}}
-      {{if not .OwnContainers}}<p class="inherited">{{.CtrsFrom}}. Passe en « propre » pour changer images, mémoire, données ou secrets ici seulement.</p>{{end}}
+      {{if not .OwnContainers}}<p class="inherited"><span>{{.CtrsFrom}}</span></p>{{end}}
     </div>
   </section>
 
@@ -194,21 +192,21 @@
     <div class="sec-body">
       {{if .OwnOptions}}
       <input type="hidden" name="options_shown" value="1">
-      <label class="row-toggle"><span class="stack tight"><strong>Accès à internet</strong><small class="muted">Pour appeler une API externe. Le réseau local reste fermé.</small></span><input type="checkbox" name="internet" {{if .Internet}}checked{{end}}></label>
+      <label class="row-toggle"><span class="stack tight"><strong>Accès à internet</strong><small class="muted">Le réseau local reste fermé.</small></span><input type="checkbox" name="internet" {{if .Internet}}checked{{end}}></label>
       <div class="row-toggle-group">
-        <label class="row-toggle"><span class="stack tight"><strong>Limite de débit</strong><small class="muted">Par adresse IP, sur les chemins listés (vide : tout le site).</small></span><input type="checkbox" name="rl" {{if .RL}}checked{{end}}></label>
+        <label class="row-toggle"><span class="stack tight"><strong>Limite de débit</strong><small class="muted">Par IP. Sans chemin : tout le site.</small></span><input type="checkbox" name="rl" {{if .RL}}checked{{end}}></label>
         <input name="rlpaths" value="{{.RLPaths}}" class="mono input-sm wide" placeholder="/api /generate" aria-label="Chemins limités, séparés par des espaces">
       </div>
-      <label class="row-toggle"><span class="stack tight"><strong>Page de santé</strong><small class="muted">Chemin sondé pour savoir si le site répond.</small></span><input name="probe" value="{{if .Probe}}{{.Probe}}{{else}}/{{end}}" class="mono input-sm"></label>
+      <label class="row-toggle"><strong>Page de santé</strong><input name="probe" value="{{if .Probe}}{{.Probe}}{{else}}/{{end}}" class="mono input-sm"></label>
       {{else}}
-      <p class="inherited">{{.OptionsFrom}} · <span class="mono">{{.OptionsSummary}}</span></p>
+      <p class="inherited"><span>{{.OptionsFrom}}</span>{{range .OptionsSummary}}<span class="chip">{{.}}</span>{{end}}</p>
       {{end}}
     </div>
   </section>
 
   {{if and .Exists (not .Child)}}
   <section class="sec sec-danger">
-    <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Retire {{.Name}}{{if gt (len .Tabs) 1}} et ses environnements{{end}} d'apps.json : conteneurs et adresses disparaissent dans la minute. Les données restent sur think.</small></span>
+    <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Les données restent sur think.</small></span>
     <details><summary class="btn btn-danger-ghost">Supprimer…</summary>
       <div class="stack gap confirm">
         <label class="field"><span>Tape <b class="mono">{{.Name}}</b> pour confirmer</span><input name="confirm" class="mono" form="delete-form" required></label>
@@ -219,10 +217,9 @@
   {{end}}
   {{if .RemoveEnvURL}}
   <section class="sec sec-danger">
-    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} hériteront de son parent. {{end}}Ses données restent sur think.</small></span>
+    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} hériteront de son parent. {{end}}Les données restent sur think.</small></span>
     <details><summary class="btn btn-danger-ghost">Retirer…</summary>
       <div class="stack gap confirm">
-        <small>Retirer {{.EnvLabel}} de {{.Name}} ? Le commit part tout de suite.</small>
         <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML">Retirer {{.EnvLabel}}</button>
       </div>
     </details>
@@ -236,7 +233,6 @@
     <div class="line between"><h2>Version de {{.EnvLabel}}</h2>{{if .Frozen}}<span class="chip amber">figé</span>{{else}}<span class="chip green">suit {{.Branch.Value}}</span>{{end}}</div>
     {{template "dd" (args "D" .Version "URL" .FormURL "Form" "site-form")}}
     {{if .VersionNote}}<small class="muted">{{.VersionNote}}</small>{{end}}
-    <small class="muted">Un commit précis fige {{.EnvLabel}} : les nouvelles images de la branche attendent qu'il la suive de nouveau.</small>
   </section>
   {{end}}
   {{if .Running}}{{template "job" .Running}}{{else}}{{template "preview" .Preview}}{{end}}

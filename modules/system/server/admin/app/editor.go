@@ -136,8 +136,8 @@ type FormVM struct {
 	OwnOptions               bool
 	AccessFrom, CtrsFrom     string // « Comme preview », « Comme preview (réglé dans production) »
 	OptionsFrom              string
-	AccessSummary            string
-	OptionsSummary           string
+	AccessSummary            []string
+	OptionsSummary           []string
 	DataModes                []DDOpt
 	Recopy                   *RecopyVM
 	RecopyURL, RemoveEnvURL  string
@@ -237,7 +237,7 @@ func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, stri
 		if c, ok := s.gh.CommitOf(ctx, repo, strings.TrimPrefix(t, "sha-")); ok {
 			item.date, item.sub = c.Date, c.Subject
 			if !c.Date.IsZero() {
-				item.sub = c.Date.Local().Format("02/01") + " · " + c.Subject
+				item.sub = c.Subject + " (" + c.Date.Local().Format("02/01") + ")"
 			}
 		}
 		vs = append(vs, item)
@@ -255,7 +255,7 @@ func (s *Server) versionDD(ctx context.Context, d Deploy, repo string) (DD, stri
 		opts = append(opts, ddOpt(current, shortTag(current), "tag actuel", icCommit, colAmber, true))
 	}
 	if len(vs) == 0 && note == "" {
-		note = "Aucun tag sha-… commun à toutes les images : seules les images construites par le template en ont."
+		note = "Aucun tag sha-… : image pas construite par le template."
 	}
 	dd := newDD("version", "Images à faire tourner", opts, "", icFollow)
 	dd.Structural = true
@@ -382,27 +382,23 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.AccessFrom = origin(Env.OwnAccess)
 		f.CtrsFrom = origin(Env.OwnContainers)
 		f.OptionsFrom = origin(Env.OwnOptions)
-		f.AccessSummary = "public"
+		f.AccessSummary = []string{"public"}
 		if d.VPN() {
-			f.AccessSummary = "VPN · " + strings.Join(d.Access.Devices, ", ")
+			f.AccessSummary = []string{"VPN : " + strings.Join(d.Access.Devices, ", ")}
 		}
 		if d.Access.SSO {
-			f.AccessSummary += " · Authelia"
-		} else {
-			f.AccessSummary += " · sans Authelia"
+			f.AccessSummary = append(f.AccessSummary, "Authelia")
 		}
-		f.OptionsSummary = "internet fermé"
+		f.OptionsSummary = []string{"internet fermé"}
 		if d.Options.Internet {
-			f.OptionsSummary = "internet ouvert"
+			f.OptionsSummary = []string{"internet ouvert"}
 		}
 		if d.Options.RateLimit != nil {
-			f.OptionsSummary += " · débit limité"
+			f.OptionsSummary = append(f.OptionsSummary, "débit limité")
 		}
-		probe := d.Options.Probe
-		if probe == "" {
-			probe = "/"
+		if p := d.Options.Probe; p != "" && p != "/" {
+			f.OptionsSummary = append(f.OptionsSummary, "santé "+p)
 		}
-		f.OptionsSummary += " · santé " + probe
 		var froms []DDOpt
 		for _, id := range append([]string{""}, e.EnvIDs()...) {
 			if id == env || (id != "" && e.inherits(id, env)) {
@@ -412,9 +408,9 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 			if err != nil {
 				continue
 			}
-			col, sub := colAmber, pd.Branch+" · "+pd.Domain(s.cfg.Domain)
+			col, sub := colAmber, pd.Domain(s.cfg.Domain)
 			if id == "" {
-				col, sub = colIndigo, "racine · "+sub
+				col = colIndigo
 			}
 			froms = append(froms, ddOpt(id, pd.Label, sub, icEnv, col, id == v.From))
 		}
@@ -422,9 +418,9 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.From.Structural = true
 		parent := e.labelOf(v.From)
 		f.DataModes = []DDOpt{
-			{Value: "separate", Label: "Séparées", Sub: "Dossiers à lui, vides au départ.", Selected: v.DataMode() == "separate"},
-			{Value: "copy", Label: "Copie de " + parent, Sub: "Copiées une fois au premier démarrage, puis indépendantes.", Selected: v.DataMode() == "copy"},
-			{Value: "shared", Label: "Partagées avec " + parent, Sub: "Les mêmes dossiers : ce que l'un écrit, l'autre le voit.", Selected: v.DataMode() == "shared"},
+			{Value: "separate", Label: "Séparées", Sub: "Vides au départ.", Selected: v.DataMode() == "separate"},
+			{Value: "copy", Label: "Copie de " + parent, Sub: "Copiées au premier démarrage.", Selected: v.DataMode() == "copy"},
+			{Value: "shared", Label: "Partagées avec " + parent, Sub: "Les mêmes dossiers.", Selected: v.DataMode() == "shared"},
 		}
 		if onMain && mv.DataMode() == "copy" && v.DataMode() == "copy" {
 			f.Recopy = s.recopyState(d.App, parent)
@@ -506,9 +502,8 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		}
 		if snap != nil {
 			if le, ok := snap.Lock[s.cfg.ref(c.Image)]; ok {
-				vm.Info = "sha256:" + strings.TrimPrefix(le.Digest, "sha256:")[:12] + "…"
 				if le.Port != nil {
-					vm.Info += fmt.Sprintf(" · port %d", *le.Port)
+					vm.Info = fmt.Sprintf("port %d", *le.Port)
 				}
 			}
 		}
@@ -537,7 +532,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 				if id == "" {
 					col = colIndigo
 				}
-				froms = append(froms, ddOpt(id, pd.Label, pd.Branch+" · "+pd.Domain(s.cfg.Domain), icEnv, col, id == env))
+				froms = append(froms, ddOpt(id, pd.Label, pd.Domain(s.cfg.Domain), icEnv, col, id == env))
 			}
 		}
 		f.AddFrom = newDD("from", "Hérite de", froms, "", icEnv)

@@ -7,6 +7,7 @@
   <div class="code-body">
     {{range .Lines}}<div class="code-line {{.Kind}}"><span class="mark">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}
   </div>
+  {{if or .To .Errors .Dirty}}
   <div class="code-foot stack gap">
     {{if .To}}<div class="addr small"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>{{if .From}}<span class="mono dim strike">{{.From}}</span><span>→</span>{{end}}<span class="mono">{{.To}}</span></div>{{end}}
     {{if .Errors}}<ul class="errors">{{range .Errors}}<li>{{.}}</li>{{end}}</ul>{{end}}
@@ -16,11 +17,9 @@
         <a class="btn btn-dark" href="">Annuler</a>
         <button type="button" class="btn btn-primary" hx-post="{{.ApplyURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" {{if .Errors}}disabled{{end}}>{{if .New}}Mettre en ligne{{else}}Appliquer{{end}}</button>
       </div>
-      <small>Vérifié sur think, puis commité sur main par apps.yml : think l'applique seul dans la minute.</small>
-    {{else if not .Errors}}
-      <small>Modifie un réglage : le fichier suit, ligne par ligne.</small>
     {{end}}
   </div>
+  {{end}}
 </section>
 {{end}}
 
@@ -48,9 +47,9 @@
     {{if .Done}}
       {{if .Failed}}<a class="btn btn-dark" href="">Revenir au formulaire</a>
       {{else if .Delete}}<a class="btn btn-primary" href="/sites">Retour aux sites</a>
-      <small data-reload-after="4000" data-reload-to="/sites">Retour à la liste dans quelques secondes…</small>
+      <small data-reload-after="4000" data-reload-to="/sites">Retour à la liste…</small>
       {{else}}<div class="grid2"><a class="btn btn-dark" href="/sites">Retour aux sites</a><a class="btn btn-primary" href="https://{{.Domain}}">Ouvrir le site</a></div>
-      <small data-reload-after="4000" data-reload-to="/sites/{{.App}}">Annoncé aussi sur Discord. La page se met à jour dans quelques secondes…</small>{{end}}
+      <small data-reload-after="4000" data-reload-to="/sites/{{.App}}">Mise à jour de la page…</small>{{end}}
     {{end}}
   </div>
 </section>
