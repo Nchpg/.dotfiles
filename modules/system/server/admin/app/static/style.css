@@ -14,7 +14,9 @@
 /* Base */
 * { box-sizing: border-box; }
 /* Pas de rebond au-delà de la page : il découvrait un fond blanc. */
-html { background: var(--bg); overscroll-behavior: none; }
+/* Place de la barre de défilement toujours réservée : sans elle, passer d'une page qui défile à une
+   qui ne défile pas (Métriques) décalait tout le contenu. */
+html { background: var(--bg); overscroll-behavior: none; scrollbar-gutter: stable; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14.5px/1.5 var(--sans); overscroll-behavior: none; }
 a { color: var(--accent-ink); text-decoration: none; }
 a:hover { color: #28319A; }
