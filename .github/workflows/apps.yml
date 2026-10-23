@@ -2,7 +2,9 @@ name: apps
 
 # Seul chemin d'écriture des sites sur main, déclenché par think avec son jeton « Actions » :
 # - pin  : apps-watch a vu une nouvelle image, son digest entre dans le lock ;
-# - edit : le dashboard modifie, ajoute ou supprime un site dans apps.json (et le lock).
+# - edit : le dashboard modifie, ajoute ou supprime un site dans apps.json (et le lock) ;
+# - peer : le dashboard inscrit ou retire un appareil VPN dans vpn-peers.json (autorisé seulement une
+#   fois sa clé pré-partagée dans les secrets, puis un rebuild à la main).
 # think applique seul ces commits (apps-deploy : ils ne touchent qu'apps.json et le lock).
 # Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
 # d'appeler, et apps.sh vérifie chaque entrée.
@@ -11,23 +13,24 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: pin ou edit
+        description: pin, edit ou peer
         required: true
         type: choice
         options:
           - pin
           - edit
+          - peer
       images:
         description: 'JSON [{"ref": "ghcr.io/…:tag", "digest": "sha256:…", "revision": "<sha>", "port": 8080}]'
         required: false
         default: "[]"
         type: string
       app:
-        description: "edit : nom du site"
+        description: "edit : nom du site ; peer : nom de l'appareil"
         required: false
         type: string
       entry:
-        description: "edit : entrée JSON du site, ou null pour le supprimer"
+        description: "edit : entrée JSON du site ; peer : {publicKey, address, trusted} ; null pour retirer"
         required: false
         type: string
       base:
@@ -89,7 +92,8 @@ jobs:
               echo "rien à changer"
               exit 0
             fi
-            git commit --quiet -m "$subject" -- profiles/server/apps.json profiles/server/apps.lock.json
+            git add -- profiles/server/vpn-peers.json 2> /dev/null || true
+            git commit --quiet -m "$subject" -- profiles/server/apps.json profiles/server/apps.lock.json profiles/server/vpn-peers.json
             if git push --quiet origin HEAD:main; then
               echo "### $subject" >> "$GITHUB_STEP_SUMMARY"
               exit 0
