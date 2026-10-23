@@ -118,7 +118,7 @@
     </ol>
   </div>
   {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
-  {{if .More}}<button type="button" class="more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML">Voir plus</button>{{end}}
+  {{if .More}}<button type="button" class="more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML" hx-disabled-elt="this"><span class="spin" aria-hidden="true"></span><span class="more-label">Voir plus</span><span class="more-busy">Chargement</span></button>{{end}}
 </section>
 {{end}}
 
