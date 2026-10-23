@@ -49,7 +49,7 @@ func newRegistry(cfg *Config) *Registry {
 	return &Registry{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, tokens: map[string]cacheItem{}, inspect: map[string]ImageInfo{}, byRef: map[string]ImageInfo{}, tags: map[string]cacheItem{}}
 }
 
-// split : `ghcr.io/nchpg/rlkart-frontend:main` -> ("nchpg/rlkart-frontend", "main").
+// splitRef : `ghcr.io/nchpg/rlkart-frontend:main` -> ("nchpg/rlkart-frontend", "main").
 func splitRef(ref string) (host, repo, tag string, err error) {
 	host, rest, ok := strings.Cut(ref, "/")
 	if !ok || host != "ghcr.io" {
@@ -112,8 +112,7 @@ func (r *Registry) get(ctx context.Context, method, repo, path string, accept []
 	return resp, nil
 }
 
-// Tags d'une image, donnée sans tag (`ghcr.io/nchpg/rlkart-frontend`).
-// Tags : liste des tags d'une image, gardée tagsTTL.
+// Tags : liste des tags d'une image donnée sans tag (`ghcr.io/nchpg/rlkart-frontend`), gardée tagsTTL.
 func (r *Registry) Tags(ctx context.Context, name string) ([]string, error) {
 	r.mu.Lock()
 	it, ok := r.tags[name]
@@ -126,27 +125,53 @@ func (r *Registry) Tags(ctx context.Context, name string) ([]string, error) {
 
 const tagsTTL = 2 * time.Minute
 
-// FetchTags : relit la liste des tags sur ghcr et la garde.
+// FetchTags : relit la liste des tags sur ghcr (toutes les pages) et la garde.
 func (r *Registry) FetchTags(ctx context.Context, name string) ([]string, error) {
 	_, repo, _, err := splitRef(name + ":tag")
 	if err != nil {
 		return nil, err
 	}
-	resp, err := r.get(ctx, "GET", repo, "/tags/list?n=1000", nil)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var out struct {
-		Tags []string `json:"tags"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+	var tags []string
+	path := "/tags/list?n=1000"
+	for page := 0; path != "" && page < 20; page++ {
+		var out struct {
+			Tags []string `json:"tags"`
+		}
+		next, err := r.getPage(ctx, repo, path, &out)
+		if err != nil {
+			return nil, err
+		}
+		tags = append(tags, out.Tags...)
+		path = next
 	}
 	r.mu.Lock()
-	r.tags[name] = cacheItem{time.Now(), out.Tags}
+	r.tags[name] = cacheItem{time.Now(), tags}
 	r.mu.Unlock()
-	return out.Tags, nil
+	return tags, nil
+}
+
+// getPage : une page JSON du registre et le chemin de la suivante (en-tête Link), vide s'il n'y en a pas.
+func (r *Registry) getPage(ctx context.Context, repo, path string, out any) (string, error) {
+	resp, err := r.get(ctx, "GET", repo, path, nil)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(out); err != nil {
+		return "", err
+	}
+	return nextLink(resp.Header.Get("Link"), repo), nil
+}
+
+// nextLink : le chemin de la page suivante d'un en-tête `Link: </v2/nchpg/app/tags/list?last=x&n=1000>; rel="next"`.
+func nextLink(link, repo string) string {
+	rest, ok := strings.CutPrefix(link, "<")
+	target, _, _ := strings.Cut(rest, ">")
+	next, found := strings.CutPrefix(target, "/v2/"+repo)
+	if !ok || !found || !strings.Contains(link, `rel="next"`) {
+		return ""
+	}
+	return next
 }
 
 // Digest d'un tag : ce que podman tire, index multi-architecture compris.

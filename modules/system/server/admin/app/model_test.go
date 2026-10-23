@@ -238,3 +238,48 @@ func TestSeveralDataFolders(t *testing.T) {
 		t.Fatalf("attendu /data et /uploads : %+v %v", got.Containers["web"].Data, errs)
 	}
 }
+
+func TestNextLink(t *testing.T) {
+	for link, want := range map[string]string{
+		`</v2/nchpg/app/tags/list?last=sha-9&n=1000>; rel="next"`: "/tags/list?last=sha-9&n=1000",
+		`</v2/autre/app/tags/list?last=x>; rel="next"`:            "",
+		`</v2/nchpg/app/tags/list?last=x>; rel="prev"`:            "",
+		"": "",
+	} {
+		if got := nextLink(link, "nchpg/app"); got != want {
+			t.Errorf("nextLink(%q) = %q, veut %q", link, got, want)
+		}
+	}
+}
+
+func TestSmallHelpers(t *testing.T) {
+	if initialOf("") != "" || initialOf("myetf") != "M" {
+		t.Error("initialOf")
+	}
+	for in, want := range map[string]string{"": "?", "abc": "abc", "0123456789": "0123456", "0123456789-dirty": "0123456-dirty"} {
+		if got := shortRev(in); got != want {
+			t.Errorf("shortRev(%q) = %q, veut %q", in, got, want)
+		}
+	}
+	// Sans point d'entrée déclaré, le choix ne dépend pas de l'ordre de la table.
+	for range 20 {
+		if got := entryPointOf("", map[string]Container{"web": {}, "api": {}, "db": {}}); got != "api" {
+			t.Fatalf("entryPointOf = %q", got)
+		}
+	}
+}
+
+// Une demande interrompue sans étape en échec (délai, arrêt) est close, pas « en cours » à jamais.
+func TestJobAbort(t *testing.T) {
+	j := &Job{Steps: []Step{{State: "done"}, {State: "active"}, {State: "todo"}}}
+	j.abort("interrompu")
+	v := j.Snapshot()
+	if !v.Done || !v.Failed || v.Steps[1].State != "failed" || v.Steps[1].Detail != "interrompu" || v.Steps[2].State != "todo" {
+		t.Errorf("abort : %+v", v)
+	}
+	done := &Job{Steps: []Step{{State: "done"}}, Done: true}
+	done.abort("x")
+	if done.Failed {
+		t.Error("abort sur une demande terminée")
+	}
+}

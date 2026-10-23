@@ -91,10 +91,11 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			running = true
 		}
 		deploys := e.Deploys(name)
+		repo := s.sourceRepo(ctx, e)
 		placed := false
 		for i, d := range deploys {
 			r := s.row(name, e, d, snap, up)
-			r.Repo = s.repoOf(ctx, e)
+			r.Repo = repo
 			r.First, r.Span = i == 0, len(deploys)
 			if job != nil && slices.Contains(job.Apps, d.App) {
 				r.Job, placed = job, true
@@ -191,7 +192,7 @@ func (s *Server) row(name string, e Entry, d Deploy, snap *Snapshot, up map[stri
 	tint, ink := colorsOf(name)
 	r := SiteRow{
 		Name: name, Label: d.Label, Branch: d.Branch, Domain: domain, URL: "https://" + domain,
-		Initial: strings.ToUpper(name[:1]), Tint: tint, Ink: ink, VPN: d.VPN(), SSO: d.Access.SSO,
+		Initial: initialOf(name), Tint: tint, Ink: ink, VPN: d.VPN(), SSO: d.Access.SSO,
 		EditURL: "/sites/" + name,
 	}
 	if d.Child {
@@ -319,17 +320,25 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
+// shortRev : 7 caractères d'un commit, `-dirty` gardé ; `?` si inconnu.
 func shortRev(r string) string {
-	if len(r) >= 7 && !strings.HasSuffix(r, "-dirty") {
-		return r[:7]
-	}
-	if strings.HasSuffix(r, "-dirty") && len(r) >= 7 {
+	switch {
+	case r == "":
+		return "?"
+	case len(r) < 7:
+		return r
+	case strings.HasSuffix(r, "-dirty"):
 		return r[:7] + "-dirty"
 	}
-	if r == "" {
-		return "?"
+	return r[:7]
+}
+
+// initialOf : la lettre du badge d'un site (vide si le nom l'est : formulaire en cours de saisie).
+func initialOf(name string) string {
+	if name == "" {
+		return ""
 	}
-	return r
+	return strings.ToUpper(name[:1])
 }
 
 // activity : les `n` derniers commits qui touchent apps.json (réglages) ou le lock (images), par jour.
@@ -444,18 +453,4 @@ var funcs = template.FuncMap{
 	"githubMark": func() string {
 		return "M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.5-2.6-.3-5.2-1.3-5.2-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3 .7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.1v3.2c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.7 18.3.5 12 .5z"
 	},
-}
-
-// repoOf : dépôt GitHub d'un site (label de son image), gardé 10 minutes : le tableau se
-// rafraîchit souvent, le dépôt ne change pas.
-func (s *Server) repoOf(ctx context.Context, e Entry) string {
-	if s.gh == nil || s.reg == nil {
-		return ""
-	}
-	ref := s.cfg.ref(e.Containers[e.EntryPoint()].Image)
-	v, err := s.gh.cached("repo:"+ref, 10*time.Minute, func() (any, error) { return s.sourceRepo(ctx, e), nil })
-	if err != nil {
-		return ""
-	}
-	return v.(string)
 }

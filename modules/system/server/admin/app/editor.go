@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -181,26 +182,44 @@ func (s *Server) repoImages(ctx context.Context, repo string) []string {
 	return out
 }
 
-// sourceRepo : dépôt GitHub d'un site, lu dans le label de son image.
+// sourceRepo : dépôt GitHub d'un site (package ghcr de son image, sinon label de l'image), gardé
+// 10 minutes : les pages le demandent à chaque rafraîchissement, il ne change pas. Sans dépôt
+// trouvé pendant une panne de l'API des packages, la réponse n'est pas gardée.
 func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
+	if s.gh == nil || s.reg == nil {
+		return ""
+	}
 	c := e.Containers[e.EntryPoint()]
+	repo := ""
+	v, err := s.gh.cached("repo:"+s.cfg.ref(c.Image), 10*time.Minute, func() (any, error) {
+		var err error
+		repo, err = s.lookupRepo(ctx, c.Image)
+		return repo, err
+	})
+	if err != nil {
+		return repo // panne : valeur du moment, non gardée
+	}
+	return v.(string)
+}
+
+// lookupRepo : l'erreur (liste des packages illisible, dépôt introuvable) dit de ne pas garder le résultat.
+func (s *Server) lookupRepo(ctx context.Context, image string) (string, error) {
 	// Le package ghcr connaît son dépôt ; le label de l'image vient en second.
-	if pkgs, err := s.gh.Packages(ctx); err == nil {
-		for _, p := range pkgs {
-			if p.Repository != nil && strings.EqualFold(p.Name, untag(c.Image)) {
-				return p.Repository.FullName
-			}
+	pkgs, perr := s.gh.Packages(ctx)
+	for _, p := range pkgs {
+		if p.Repository != nil && strings.EqualFold(p.Name, untag(image)) {
+			return p.Repository.FullName, nil
 		}
 	}
-	info, err := s.reg.Inspect(ctx, s.cfg.ref(c.Image))
+	info, err := s.reg.Inspect(ctx, s.cfg.ref(image))
 	if err != nil {
-		return ""
+		return "", perr // image illisible (absente de ghcr…) : sans dépôt, comme une image de base
 	}
 	// Une image qui hérite du label de son image de base (nginx…) ne désigne pas le dépôt du site.
 	if owner, _, _ := strings.Cut(info.Source, "/"); !strings.EqualFold(owner, s.cfg.RegistryUser) {
-		return ""
+		return "", perr
 	}
-	return info.Source
+	return info.Source, nil
 }
 
 // versionDD : suivre la branche, ou chaque commit dont toutes les images du déploiement ont le tag `sha-…`.
@@ -317,15 +336,6 @@ func (s *Server) secretsFor(name string) []string {
 
 var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "256 Mo"}, {"512m", "512 Mo"}, {"1g", "1 Go"}, {"2g", "2 Go"}}
 
-func contains(l []string, v string) bool {
-	for _, x := range l {
-		if x == v {
-			return true
-		}
-	}
-	return false
-}
-
 // formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
 func (s *Server) formVM(ctx context.Context, name string, e Entry, isNew bool, repo string, images []string, snap *Snapshot) FormVM {
 	return s.formVMFor(ctx, name, e, "", isNew, repo, images, snap)
@@ -345,7 +355,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 	f := FormVM{
 		New: isNew, Exists: !isNew, Name: name, Repo: repo, Env: env, Child: d.Child, EnvLabel: d.Label,
 		VPN: d.VPN(), SSO: d.Access.SSO, Internet: d.Options.Internet, Probe: d.Options.Probe,
-		Multi: len(d.Ctrs.Containers) > 1, Initial: strings.ToUpper(name[:1]),
+		Multi: len(d.Ctrs.Containers) > 1, Initial: initialOf(name),
 		OwnAccess: true, OwnContainers: true, OwnOptions: true,
 	}
 	f.Tint, f.Ink = colorsOf(name)
@@ -475,7 +485,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		used[img] = true
 		vm := CtrVM{Name: n, Entry: n == d.EntryPoint(), DataHost: "/var/lib/apps/" + d.App + "/" + n, Locked: !f.OwnContainers}
 		choices := append([]string{}, images...)
-		if !contains(choices, img) {
+		if !slices.Contains(choices, img) {
 			choices = append(choices, img)
 		}
 		var io []DDOpt
@@ -496,7 +506,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		vm.Memory.Locked = vm.Locked
 		for _, o := range names {
 			if o != n {
-				vm.Deps = append(vm.Deps, Opt{Value: o, Label: o, Selected: contains(c.DependsOn, o)})
+				vm.Deps = append(vm.Deps, Opt{Value: o, Label: o, Selected: slices.Contains(c.DependsOn, o)})
 			}
 		}
 		for _, dt := range c.Data {
@@ -509,7 +519,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		opts := map[string]bool{}
 		for _, k := range secrets {
 			opts[k] = true
-			vm.Secrets = append(vm.Secrets, Opt{Value: k, Label: k, Selected: contains(c.Secrets, k)})
+			vm.Secrets = append(vm.Secrets, Opt{Value: k, Label: k, Selected: slices.Contains(c.Secrets, k)})
 		}
 		for _, k := range c.Secrets {
 			if !opts[k] {
@@ -619,10 +629,10 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		}
 	}
 	added := ""
-	if img := r.FormValue("addctr"); img != "" && contains(allowed, img) {
+	if img := r.FormValue("addctr"); img != "" && slices.Contains(allowed, img) {
 		stem := containerName(repo, img, false)
 		added = stem
-		for i := 2; contains(names, added); i++ {
+		for i := 2; slices.Contains(names, added); i++ {
 			added = fmt.Sprintf("%s%d", stem, i)
 		}
 		names = append(names, added)
@@ -640,7 +650,7 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		if img == "" {
 			img = untag(c.Image)
 		}
-		if !contains(allowed, img) {
+		if !slices.Contains(allowed, img) {
 			errs = append(errs, fmt.Sprintf("%s : image %s hors du dépôt du site.", n, img))
 		}
 		c.Image = img
@@ -649,7 +659,7 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		}
 		c.Memory = r.FormValue("mem_" + n)
 		for _, dp := range r.Form["dep_"+n] {
-			if contains(names, dp) && dp != n {
+			if slices.Contains(names, dp) && dp != n {
 				c.DependsOn = append(c.DependsOn, dp)
 			}
 		}
@@ -669,7 +679,7 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 	entry := ""
 	if len(names) > 1 {
 		entry = r.FormValue("entry")
-		if !contains(names, entry) {
+		if !slices.Contains(names, entry) {
 			entry = names[0]
 		}
 	}
@@ -1127,7 +1137,7 @@ func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapsho
 	repo = s.sourceRepo(ctx, e)
 	allowed = s.repoImages(ctx, repo)
 	for _, c := range e.Containers {
-		if img := untag(c.Image); !contains(allowed, img) {
+		if img := untag(c.Image); !slices.Contains(allowed, img) {
 			allowed = append(allowed, img)
 		}
 	}
@@ -1209,7 +1219,13 @@ func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
 	s.startApply(w, r, name, e, snap, p, isNew)
 }
 
+var reCommitMessage = regexp.MustCompile(`^[[:print:]]{1,100}$`)
+
+// startApply : lance la demande si l'aperçu est propre et que la page est à jour. Le verrou rend atomique
+// « aucune demande en cours » puis « lancer » : deux envois simultanés ne partent pas ensemble.
 func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string, e *Entry, snap *Snapshot, p PreviewVM, isNew bool) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
 	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
 		p.Errors = append(p.Errors, "Une modification de "+name+" est déjà en cours : attends qu'elle se termine.")
 	}
@@ -1227,7 +1243,7 @@ func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string,
 		return
 	}
 	msg := p.Message
-	if !regexp.MustCompile(`^[[:print:]]{1,100}$`).MatchString(msg) {
+	if !reCommitMessage.MatchString(msg) {
 		p.Errors = append(p.Errors, "Message de commit : une ligne de 100 caractères au plus.")
 		s.render(w, "preview", p)
 		return
@@ -1297,6 +1313,8 @@ func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
 	ctx := r.Context()
 	name := r.PathValue("app")
 	if err := r.ParseForm(); err != nil {

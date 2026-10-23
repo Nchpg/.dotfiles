@@ -73,32 +73,13 @@ type Deploy struct {
 
 func (d Deploy) VPN() bool { return d.Access.Expose == "vpn" }
 
-func (d Deploy) EntryPoint() string {
-	if d.Ctrs.Entrypoint != "" {
-		return d.Ctrs.Entrypoint
-	}
-	for n := range d.Ctrs.Containers {
-		return n
-	}
-	return ""
-}
+func (d Deploy) EntryPoint() string { return entryPointOf(d.Ctrs.Entrypoint, d.Ctrs.Containers) }
 
 func (d Deploy) Frozen() bool { return strings.HasPrefix(d.Tag, "sha-") }
 
 // Domain : même règle que modules/system/server/apps/default.nix.
 func (d Deploy) Domain(base string) string {
-	parent := base
-	if d.VPN() {
-		parent = "vpn." + base
-	}
-	sub := d.Subdomain
-	if sub == "" {
-		sub = d.App
-	}
-	if sub == "@" {
-		return parent
-	}
-	return sub + "." + parent
+	return servedDomain(d.App, d.Subdomain, d.VPN(), base)
 }
 
 var reNotTag = regexp.MustCompile(`[^A-Za-z0-9._-]`)
@@ -278,6 +259,16 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 		}
 		if v.Subdomain != "" && !reSubdomain.MatchString(v.Subdomain) {
 			add("%ssous-domaine invalide.", w)
+		}
+		// Une section n'est à lui que par sa clé repère : ses autres clés seules feraient échouer l'évaluation.
+		if !v.OwnAccess() && (len(v.Devices) > 0 || v.SSO) {
+			add("%s« appareils » et « login » vont avec l'accès propre.", w)
+		}
+		if !v.OwnContainers() && v.Entrypoint != "" {
+			add("%sle point d'entrée va avec des conteneurs propres.", w)
+		}
+		if !v.OwnOptions() && (v.Probe != "" || v.RateLimit != nil) {
+			add("%spage de santé et limite de débit vont avec les options propres.", w)
 		}
 		if v.OwnAccess() {
 			if v.Expose != "public" && v.Expose != "vpn" {

@@ -70,8 +70,11 @@ func (ev *Evaluator) Check(ctx context.Context, head string, apps, lock []byte) 
 	}
 	attr := "git+file://" + dir + "#nixosConfigurations." + ev.cfg.Target + ".config.system.build.toplevel.drvPath"
 	out, err := ev.run(ctx, "nix", "eval", "--raw", attr)
-	if ctx.Err() != nil {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return errors.New("évaluation trop longue (plus de 6 minutes)")
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	if err != nil {
 		return errors.New(evalError(out))

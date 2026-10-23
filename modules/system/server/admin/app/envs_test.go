@@ -165,6 +165,21 @@ func TestEnvValidateRejects(t *testing.T) {
 			e.Environments["staging"] = v
 		},
 		"nom d'un autre site": func(e *Entry) { e.Environments["x"] = Env{Branch: "main"} },
+		"appareils sans accès propre": func(e *Entry) {
+			v := e.Environments["staging"]
+			v.Devices = []string{"gram"}
+			e.Environments["staging"] = v
+		},
+		"point d'entrée sans conteneurs propres": func(e *Entry) {
+			v := e.Environments["staging"]
+			v.Entrypoint = "web"
+			e.Environments["staging"] = v
+		},
+		"santé sans options propres": func(e *Entry) {
+			v := e.Environments["staging"]
+			v.Probe = "/health"
+			e.Environments["staging"] = v
+		},
 	}
 	for name, mutate := range cases {
 		e := cloneEntry(base)

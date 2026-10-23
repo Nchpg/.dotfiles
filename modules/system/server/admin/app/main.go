@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,8 @@ type Server struct {
 	eval *Evaluator
 	jobs *Jobs
 	tmpl *template.Template
+
+	applyMu sync.Mutex // sérialise « aucune demande en cours » puis « lancer »
 }
 
 func main() {
@@ -198,13 +201,14 @@ func (s *Server) snapshot(ctx context.Context) (*Snapshot, error) {
 func itoa(n int) string { return strconv.Itoa(n) }
 
 // warm : garde chauds, en fond, ce que les pages lisent sur le réseau (tête de main, tags des
-// images, packages, changements) : un clic n'attend plus GitHub ni ghcr.
+// images, packages, dépôts des sites, changements) : un clic n'attend plus GitHub ni ghcr.
 func (s *Server) warm(ctx context.Context) {
 	for {
 		if _, err := s.gh.Head(ctx); err == nil {
 			if snap, err := s.snapshot(ctx); err == nil {
 				seen := map[string]bool{}
 				for _, name := range snap.Apps.Names() {
+					_ = s.sourceRepo(ctx, snap.Apps.Entries[name])
 					for _, d := range snap.Apps.Entries[name].Deploys(name) {
 						for _, c := range d.Ctrs.Containers {
 							if ref := s.cfg.ref(untag(c.Image)); !seen[ref] {

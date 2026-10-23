@@ -44,31 +44,23 @@ type Entry struct {
 
 func (e Entry) VPN() bool { return e.Expose == "vpn" }
 
-// ContainerNames dans l'ordre d'affichage : le point d'entrée d'abord.
-func (e Entry) ContainerNames() []string {
-	names := make([]string, 0, len(e.Containers))
-	for n := range e.Containers {
-		names = append(names, n)
+// entryPointOf : le point d'entrée déclaré, sinon le premier nom (déterministe, même si une
+// config invalide a plusieurs conteneurs sans en désigner un).
+func entryPointOf(declared string, containers map[string]Container) string {
+	if declared != "" {
+		return declared
 	}
-	sort.Slice(names, func(i, j int) bool {
-		if (names[i] == e.Entrypoint) != (names[j] == e.Entrypoint) {
-			return names[i] == e.Entrypoint
+	first := ""
+	for n := range containers {
+		if first == "" || n < first {
+			first = n
 		}
-		return names[i] < names[j]
-	})
-	return names
+	}
+	return first
 }
 
 // EntryPoint : le conteneur servi par nginx, déclaré ou seul.
-func (e Entry) EntryPoint() string {
-	if e.Entrypoint != "" {
-		return e.Entrypoint
-	}
-	for n := range e.Containers {
-		return n
-	}
-	return ""
-}
+func (e Entry) EntryPoint() string { return entryPointOf(e.Entrypoint, e.Containers) }
 
 // Version commune des images : le tag suivi (`main`, `sha-…`), vide s'ils diffèrent.
 func (e Entry) Version() string {
@@ -262,20 +254,23 @@ func diffLines(a, b []string) (out []DiffLine, adds, dels int) {
 	return out, adds, dels
 }
 
-// Domaine servi : même règle que modules/system/server/apps/default.nix.
-func domainOf(name string, e Entry, base string) string {
+// servedDomain : même règle que modules/system/server/apps/default.nix. `sub` vide : le nom de l'app.
+func servedDomain(app, sub string, vpn bool, base string) string {
 	parent := base
-	if e.VPN() {
+	if vpn {
 		parent = "vpn." + base
 	}
-	sub := e.Subdomain
 	if sub == "" {
-		sub = name
+		sub = app
 	}
 	if sub == "@" {
 		return parent
 	}
 	return sub + "." + parent
+}
+
+func domainOf(name string, e Entry, base string) string {
+	return servedDomain(name, e.Subdomain, e.VPN(), base)
 }
 
 // Port de bouclage dérivé du nom, comme `hashedPort` du module apps.

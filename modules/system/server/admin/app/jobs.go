@@ -68,6 +68,8 @@ func (js *Jobs) recentlyVerified(d time.Duration) []string {
 	for dom, t := range js.verified {
 		if time.Since(t) < d {
 			out = append(out, dom)
+		} else {
+			delete(js.verified, dom)
 		}
 	}
 	return out
@@ -117,6 +119,24 @@ func (j *Job) set(i int, state, detail, link string) {
 		j.Failed, j.Done = true, true
 		j.Finished = time.Now()
 	}
+}
+
+// abort : une demande interrompue (délai du contexte, arrêt) sans étape en échec est close ici,
+// sinon elle resterait « en cours » pour toujours.
+func (j *Job) abort(detail string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.Done {
+		return
+	}
+	for i := range j.Steps {
+		if j.Steps[i].State == "active" {
+			j.Steps[i].State, j.Steps[i].Detail = "failed", detail
+			break
+		}
+	}
+	j.Failed, j.Done = true, true
+	j.Finished = time.Now()
 }
 
 func (j *Job) finish() {
@@ -306,10 +326,18 @@ func (s *Server) startJob(req Request) *Job {
 	}
 	s.jobs.add(j)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		// Plus long que la plus longue attente (2 h d'un `rebuild` à la main, puis les étapes d'après).
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 		defer cancel()
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("%s : panique : %v", req.App, p)
+				j.abort("erreur interne, voir les journaux")
+			}
+		}()
 		if err := s.runJob(ctx, j, req); err != nil {
 			log.Printf("%s : %v", req.App, err)
+			j.abort("interrompu : " + err.Error())
 		}
 	}()
 	return j
