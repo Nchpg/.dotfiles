@@ -60,6 +60,9 @@ rien en production tant que le lock n'a pas bougé.
      push:
        branches: [main]   # ou [main, preview] : une image par branche (cf. Environnements)
      workflow_dispatch:
+   concurrency:            # un nouveau push annule le build en cours de la même branche
+     group: images-${{ github.ref }}
+     cancel-in-progress: true
    jobs:
      image:
        uses: Nchpg/.dotfiles/.github/workflows/app-image.yml@main
