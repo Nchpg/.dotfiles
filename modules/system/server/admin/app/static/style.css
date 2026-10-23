@@ -383,7 +383,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .site-td a.go { font-weight: 600; }
 
 /* Bandeau d'état : think, ~/.dotfiles, en ligne ; une ligne en dessous quand il faut agir. */
-.strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); background: var(--card); border: 1px solid var(--line); }
+.strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--card); border: 1px solid var(--line); }
 .strip-part { display: contents; }
 .strip-cell { display: flex; flex-direction: column; gap: 2px; padding: 14px 18px; min-width: 0; }
 .strip-cell + .strip-cell, .strip-part + .strip-cell { border-left: 1px solid #EEF0F3; }
@@ -416,3 +416,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 /* Sans séparateurs : des éléments espacés. */
 .hero-sub { gap: 14px; }
 .inherited { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; }
+@media (max-width: 720px) {
+  .strip { grid-template-columns: minmax(0, 1fr); }
+  .strip-cell + .strip-cell, .strip-part + .strip-cell { border-left: 0; border-top: 1px solid #EEF0F3; }
+}
