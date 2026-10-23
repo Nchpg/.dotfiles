@@ -166,9 +166,9 @@ func (s *Server) font(w http.ResponseWriter, r *http.Request) {
 // metricsReady : la page Métriques montre Grafana (le menu n'affiche plus « bientôt »).
 var metricsReady bool
 
-// metrics : le tableau de bord Grafana en kiosque, sur toute la page.
+// metrics : le tableau de bord Grafana en kiosque, sur toute la page, en thème clair comme le reste.
 func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {
-	s.render(w, "metrics", map[string]any{"Nav": "metrics", "URL": s.cfg.MetricsURL, "Embed": s.cfg.MetricsURL + "&kiosk"})
+	s.render(w, "metrics", map[string]any{"Nav": "metrics", "URL": s.cfg.MetricsURL, "Embed": s.cfg.MetricsURL + "&kiosk&theme=light"})
 }
 
 func (s *Server) soon(page string) http.HandlerFunc {
