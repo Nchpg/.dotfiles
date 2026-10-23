@@ -138,3 +138,7 @@ document.addEventListener("click", (ev) => {
     if (!d.contains(ev.target)) d.open = false;
   });
 });
+// Navigation par le menu (hx-boost, sans rechargement) : la barre s'arrête quand la page est en place.
+for (const ev of ["htmx:afterSettle", "htmx:responseError", "htmx:sendError"]) {
+  document.addEventListener(ev, () => document.documentElement.classList.remove("nav-loading"));
+}

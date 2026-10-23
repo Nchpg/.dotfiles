@@ -10,7 +10,8 @@
 </head>
 <body>
 <div class="shell">
-<aside class="side">
+{{/* Navigation sans rechargement (hx-boost) : seul le contenu change, pas de page blanche entre deux. */}}
+<aside class="side" hx-boost="true">
   <a class="brand" href="/sites">
     <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"/></svg></span>
     <span class="brand-text"><strong>think</strong><small>admin.vpn</small></span>
