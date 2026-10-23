@@ -1,19 +1,4 @@
 {
-  "etfpreview": {
-    "containers": {
-      "web": {
-        "data": [
-          {
-            "path": "/app/data"
-          }
-        ],
-        "image": "myetf:main",
-        "memory": "256m"
-      }
-    },
-    "internetAccess": true,
-    "subdomain": "myetf-preview"
-  },
   "iseg2017": {
     "containers": {
       "web": {
