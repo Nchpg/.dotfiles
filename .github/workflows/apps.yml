@@ -8,8 +8,10 @@ name: apps
 # - access : le dashboard change les accès d'un appareil (services de think dans vpn-peers.json, sites
 #   en VPN dans apps.json), en un commit, appliqué seul par think (apps-deploy) ;
 # - account : le dashboard change les accès d'un compte Authelia (services de think dans
-#   authelia-accounts.json, sites avec Authelia dans apps.json), en un commit, appliqué seul aussi.
-# think applique seul ces commits (apps-deploy), sauf l'ajout ou le retrait d'un appareil VPN.
+#   authelia-accounts.json, sites avec Authelia dans apps.json), en un commit, appliqué seul aussi ;
+# - sshkey : le dashboard ajoute ou retire une clé SSH (ssh-keys.json) ; jamais appliqué seul.
+# think applique seul ces commits (apps-deploy), sauf l'ajout ou le retrait d'un appareil VPN et
+# les clés SSH : `rebuild` les montre et demande confirmation.
 # Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
 # d'appeler, et apps.sh vérifie chaque entrée.
 # Runner GitHub et non self-hosted : il doit passer même machine éteinte.
@@ -17,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: pin, edit, peer, access ou account
+        description: pin, edit, peer, access, account ou sshkey
         required: true
         type: choice
         options:
@@ -26,17 +28,18 @@ on:
           - peer
           - access
           - account
+          - sshkey
       images:
         description: 'JSON [{"ref": "ghcr.io/…:tag", "digest": "sha256:…", "revision": "<sha>", "port": 8080}]'
         required: false
         default: "[]"
         type: string
       app:
-        description: "edit : nom du site ; peer, access : nom de l'appareil ; account : nom du compte"
+        description: "edit : nom du site ; peer, access : nom de l'appareil ; account, sshkey : nom du compte"
         required: false
         type: string
       entry:
-        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access, account : {services, sites} ; null pour retirer"
+        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access, account : {services, sites} ; sshkey : {add} ou {remove} ; null pour retirer"
         required: false
         type: string
       base:
@@ -98,8 +101,8 @@ jobs:
               echo "rien à changer"
               exit 0
             fi
-            git add -- profiles/server/vpn-peers.json profiles/server/authelia-accounts.json 2> /dev/null || true
-            git commit --quiet -m "$subject" -- profiles/server/apps.json profiles/server/apps.lock.json profiles/server/vpn-peers.json profiles/server/authelia-accounts.json
+            git add -- profiles/server/vpn-peers.json profiles/server/authelia-accounts.json profiles/server/ssh-keys.json 2> /dev/null || true
+            git commit --quiet -m "$subject" -- profiles/server/apps.json profiles/server/apps.lock.json profiles/server/vpn-peers.json profiles/server/authelia-accounts.json profiles/server/ssh-keys.json
             if git push --quiet origin HEAD:main; then
               echo "### $subject" >> "$GITHUB_STEP_SUMMARY"
               exit 0

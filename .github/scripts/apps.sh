@@ -11,6 +11,8 @@
 #   account : APP (compte Authelia), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses
 #          services (authelia-accounts.json) et sa place dans la liste `accounts` des sites avec
 #          Authelia (apps.json).
+#   sshkey : APP (compte de think), ENTRY ({"add": "<clé publique>"} ou {"remove": "<clé publique>"}) :
+#          ssh-keys.json. Jamais appliqué seul : `rebuild` montre la clé et demande confirmation.
 # Écrit apps.json et/ou le lock, et sur stdout `subject=<message de commit>` (vide si rien ne change).
 # Les entrées viennent d'un appel externe : tout est vérifié avant d'écrire, et le lock reste cohérent
 # avec apps.json (chaque image suivie y a son digest, aucune entrée orpheline).
@@ -20,6 +22,7 @@ apps=profiles/server/apps.json
 lock=profiles/server/apps.lock.json
 peers=profiles/server/vpn-peers.json
 accounts=profiles/server/authelia-accounts.json
+sshkeys=profiles/server/ssh-keys.json
 
 die() {
     echo "::error::$*" >&2
@@ -347,11 +350,38 @@ account() {
     echo "subject=feat(authelia): access for $APP"
 }
 
+# Clé SSH d'un compte : ajout (refusé si la clé est déjà quelque part) ou retrait (refusé s'il ne
+# restait plus aucune clé). Même forme que le module ssh (keysFile).
+sshkey() {
+    local key subject
+    [[ "${APP:-}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || die "APP : nom de compte invalide"
+    jq -e 'type == "object" and length == 1 and ((.add // .remove) | type == "string")' <<<"${ENTRY:-}" >/dev/null 2>&1 \
+        || die "ENTRY : {\"add\": \"<clé>\"} ou {\"remove\": \"<clé>\"} attendu"
+    key=$(jq -r '.add // .remove' <<<"$ENTRY")
+    [[ ${#key} -le 1000 && "$key" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com)\ [A-Za-z0-9+/]+={0,3}(\ [^\"\\[:cntrl:]]{1,100})$ ]] \
+        || die "clé publique mal formée (type, clé, puis un commentaire)"
+    [ -f "$sshkeys" ] || echo '{}' >"$sshkeys"
+    if jq -e 'has("add")' <<<"$ENTRY" >/dev/null; then
+        jq -e --arg k "$(cut -d' ' -f2 <<<"$key")" '[.[][] | select(split(" ")[1] == $k)] | length == 0' "$sshkeys" >/dev/null \
+            || die "cette clé est déjà autorisée"
+        jq -S --indent 2 --arg u "$APP" --arg k "$key" '.[$u] = ((.[$u] // []) + [$k])' "$sshkeys" | replace "$sshkeys"
+        subject="feat(ssh): add key ${key##* }"
+    else
+        jq -e --arg u "$APP" --arg k "$key" '(.[$u] // []) | index($k) != null' "$sshkeys" >/dev/null \
+            || die "clé absente de $sshkeys pour $APP"
+        jq -S --indent 2 --arg u "$APP" --arg k "$key" '.[$u] -= [$k] | with_entries(select(.value != []))' "$sshkeys" | replace "$sshkeys"
+        jq -e '[.[][]] | length > 0' "$sshkeys" >/dev/null || die "ce serait la dernière clé : plus personne n'ouvrirait de session"
+        subject="feat(ssh): remove key ${key##* }"
+    fi
+    echo "subject=$subject"
+}
+
 case "${1:-}" in
     pin) pin ;;
     edit) edit ;;
     peer) peer ;;
     access) access ;;
     account) account ;;
-    *) die "usage : apps.sh pin|edit|peer|access|account" ;;
+    sshkey) sshkey ;;
+    *) die "usage : apps.sh pin|edit|peer|access|account|sshkey" ;;
 esac

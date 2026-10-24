@@ -81,6 +81,8 @@ type SSHInfo struct {
 	Port  int       `json:"port"`
 	Host  string    `json:"host"`  // think, joint par le tunnel
 	Files []string  `json:"files"` // fichiers du dépôt qui déclarent les comptes
+	// Clés de ssh-keys.json dans la génération active : celles que le dashboard peut retirer.
+	FileKeys map[string][]string `json:"fileKeys"`
 }
 
 // SSHUser : clés autorisées d'un compte.
@@ -589,6 +591,8 @@ func sortedCopy(v []string) []string {
 type SSHKeyRow struct {
 	User, Type, Comment, Fingerprint string
 	Key                              string // la ligne entière, publique
+	// Dans ssh-keys.json sur main (retirable d'ici) ; ajoutée ou retirée sur main, rebuild à faire.
+	InFile, Adding, Removing bool
 }
 
 func sshKeyRow(user, key string) SSHKeyRow {
@@ -610,13 +614,62 @@ func sshKeyRow(user, key string) SSHKeyRow {
 }
 
 func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
+	onMain, known := s.mainSSHKeys(r.Context())
 	var rows []SSHKeyRow
 	for _, u := range s.cfg.SSH.Users {
 		for _, k := range u.Keys {
-			rows = append(rows, sshKeyRow(u.Name, k))
+			row := sshKeyRow(u.Name, k)
+			row.InFile = slices.Contains(onMain[u.Name], k)
+			row.Removing = known && slices.Contains(s.cfg.SSH.FileKeys[u.Name], k) && !row.InFile
+			rows = append(rows, row)
 		}
 	}
-	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows})
+	for user, keys := range onMain {
+		for _, k := range keys {
+			if !slices.ContainsFunc(rows, func(x SSHKeyRow) bool { return x.User == user && x.Key == k }) {
+				row := sshKeyRow(user, k)
+				row.InFile, row.Adding = true, true
+				rows = append(rows, row)
+			}
+		}
+	}
+	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur")})
+}
+
+const sshKeysPath = "profiles/server/ssh-keys.json"
+
+// mainSSHKeys : ssh-keys.json sur main ; `known` faux s'il est illisible (rien n'est alors annoncé).
+func (s *Server) mainSSHKeys(ctx context.Context) (map[string][]string, bool) {
+	head, err := s.gh.HeadCached(ctx)
+	if err != nil {
+		return nil, false
+	}
+	b, err := s.gh.File(ctx, head, sshKeysPath)
+	if err != nil {
+		return nil, false
+	}
+	var keys map[string][]string
+	if json.Unmarshal(b, &keys) != nil {
+		return nil, false
+	}
+	return keys, true
+}
+
+// sshRemove : retire une clé de ssh-keys.json (commit) ; elle reste active jusqu'au rebuild.
+func (s *Server) sshRemove(w http.ResponseWriter, r *http.Request) {
+	user, key := r.FormValue("user"), r.FormValue("key")
+	back := func(msg string) { http.Redirect(w, r, "/ssh?erreur="+url.QueryEscape(msg), http.StatusSeeOther) }
+	onMain, _ := s.mainSSHKeys(r.Context())
+	if !slices.Contains(onMain[user], key) {
+		back("Cette clé n'est pas dans " + sshKeysPath + " sur main : elle se retire dans le code Nix.")
+		return
+	}
+	entry, _ := json.Marshal(map[string]string{"remove": key})
+	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "sshkey", "app": user, "entry": string(entry), "source": "dashboard"}); err != nil {
+		back("Retrait impossible (apps.yml) : " + err.Error())
+		return
+	}
+	back(sshKeyRow(user, key).Comment + " : retrait demandé (commit dans la minute). Elle reste autorisée jusqu'au prochain rebuild (git pull, puis rebuild, qui le montre et demande confirmation).")
 }
 
 // parseSQLiteTime : les dates de la base d'Authelia (texte, avec ou sans fuseau ni fraction).

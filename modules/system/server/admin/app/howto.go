@@ -51,50 +51,88 @@ func (s *Server) accountNew(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "account-new", data)
 }
 
-func (s *Server) sshNew(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
+// sshForm : le formulaire d'ajout de clé (GET ou POST), vérifié ; `line` : la ligne à autoriser,
+// prête quand une clé valide a été collée.
+func (s *Server) sshForm(r *http.Request) (data map[string]any, line string) {
 	var users []string
 	for _, u := range s.cfg.SSH.Users {
 		users = append(users, u.Name)
 	}
-	user, device, key := strings.TrimSpace(q.Get("user")), strings.TrimSpace(q.Get("device")), strings.Join(strings.Fields(q.Get("key")), " ")
+	user, device, key := strings.TrimSpace(r.FormValue("user")), strings.TrimSpace(r.FormValue("device")), strings.Join(strings.Fields(r.FormValue("key")), " ")
 	if user == "" && len(users) > 0 {
 		user = users[0]
 	}
-	data := map[string]any{"Nav": "ssh", "User": user, "Users": users, "Device": device, "Key": key, "Info": s.cfg.SSH}
-	if q.Has("device") {
-		var errs []string
-		if !slices.Contains(users, user) {
-			errs = append(errs, "Compte inconnu : "+user+".")
+	data = map[string]any{"Nav": "ssh", "User": user, "Users": users, "Device": device, "Key": key, "Info": s.cfg.SSH}
+	if !r.Form.Has("device") {
+		return data, ""
+	}
+	var errs []string
+	if !slices.Contains(users, user) {
+		errs = append(errs, "Compte inconnu : "+user+".")
+	}
+	if !reLabel.MatchString(device) {
+		errs = append(errs, "Appareil : lettres, chiffres, . _ -, 32 caractères au plus.")
+	}
+	comment := user + "@" + device
+	data["Comment"] = comment
+	if key != "" {
+		f := strings.Fields(key)
+		switch {
+		case !rePubKey.MatchString(key):
+			errs = append(errs, "Clé publique illisible : colle la ligne entière du fichier .pub.")
+		case len(f) == 2:
+			line = key + " " + comment
+		default:
+			line = key
 		}
-		if !reLabel.MatchString(device) {
-			errs = append(errs, "Appareil : lettres, chiffres, . _ -, 32 caractères au plus.")
+		onMain, _ := s.mainSSHKeys(r.Context())
+		all := map[string][]string{}
+		for _, u := range s.cfg.SSH.Users {
+			all[u.Name] = append(all[u.Name], u.Keys...)
 		}
-		comment := user + "@" + device
-		line := "ssh-ed25519 AAAA… " + comment
-		if key != "" {
-			f := strings.Fields(key)
-			switch {
-			case !rePubKey.MatchString(key):
-				errs = append(errs, "Clé publique illisible : colle la ligne entière du fichier .pub.")
-			case len(f) == 2:
-				line = key + " " + comment
-			default:
-				line = key
-			}
-			for _, u := range s.cfg.SSH.Users {
-				for _, k := range u.Keys {
-					if len(f) >= 2 && len(strings.Fields(k)) >= 2 && strings.Fields(k)[1] == f[1] {
-						errs = append(errs, "Cette clé est déjà autorisée pour "+u.Name+".")
-					}
+		for u, ks := range onMain {
+			all[u] = append(all[u], ks...)
+		}
+		for u, ks := range all {
+			for _, k := range ks {
+				if kf := strings.Fields(k); len(f) >= 2 && len(kf) >= 2 && kf[1] == f[1] {
+					errs = append(errs, "Cette clé est déjà autorisée pour "+u+".")
 				}
 			}
 		}
-		if len(errs) > 0 {
-			data["Error"] = strings.Join(errs, " ")
-		} else {
-			data["Comment"], data["Line"], data["Ready"] = comment, line, true
-		}
 	}
+	if len(errs) > 0 {
+		data["Error"] = strings.Join(slices.Compact(errs), " ")
+		return data, ""
+	}
+	data["Ready"] = true
+	if line != "" {
+		data["Line"], data["Fingerprint"] = line, sshKeyRow(user, line).Fingerprint
+	}
+	return data, line
+}
+
+// sshNew : sans clé, les commandes pour la créer ; avec une clé, son résumé et le bouton d'ajout.
+func (s *Server) sshNew(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	data, _ := s.sshForm(r)
+	s.render(w, "ssh-new", data)
+}
+
+// sshAdd : la clé entre dans ssh-keys.json (commit) ; active au prochain rebuild, qui la montre.
+func (s *Server) sshAdd(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	data, line := s.sshForm(r)
+	if line == "" {
+		s.render(w, "ssh-new", data)
+		return
+	}
+	entry, _ := json.Marshal(map[string]string{"add": line})
+	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "sshkey", "app": data["User"].(string), "entry": string(entry), "source": "dashboard"}); err != nil {
+		data["Error"] = "Ajout impossible (apps.yml) : " + err.Error()
+		s.render(w, "ssh-new", data)
+		return
+	}
+	data["Added"] = true
 	s.render(w, "ssh-new", data)
 }

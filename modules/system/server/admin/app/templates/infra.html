@@ -161,9 +161,10 @@
 </header>
 <main class="page">
   <h1>SSH</h1>
+  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="keys-title">
-      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think, déclarées dans la config (systemSettings.users). Elles se changent dans le code Nix, puis un rebuild. Empreinte : le résumé court de la clé (SHA256), celui que ssh-keygen -l affiche et que le journal de think note à chaque connexion (« Accepted publickey … SHA256:… ») : il dit quelle clé s'est connectée.")}}</h2></div>
+      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think : celles de ssh-keys.json, ajoutées ou retirées d'ici par un commit sur main, et celles du code Nix (systemSettings.users). Rien ne s'active seul : git pull, puis rebuild, qui montre chaque clé et demande confirmation. Empreinte : le résumé court de la clé (SHA256), celui que ssh-keygen -l affiche et que le journal de think note à chaque connexion (« Accepted publickey … SHA256:… ») : il dit quelle clé s'est connectée.")}}</h2></div>
       <section class="card table-card" aria-label="Liste des clés">
         <table class="list">
           <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Empreinte</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -171,9 +172,13 @@
             {{range .Rows}}
             <tr>
               <td>{{.User}}</td>
-              <td><span class="stack tight"><span>{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}</span><small class="mono muted">{{.Type}}</small></span></td>
+              <td><span class="stack tight"><span class="line">{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}{{if .Adding}}<span class="chip amber">ajout : rebuild à faire</span>{{else if .Removing}}<span class="chip amber">retrait : rebuild à faire</span>{{end}}</span><small class="mono muted">{{.Type}}{{if not .InFile}}{{if not .Removing}}, code Nix{{end}}{{end}}</small></span></td>
               <td class="mono small muted ellipsis-cell" title="{{.Fingerprint}}">{{.Fingerprint}}</td>
-              <td class="end"><button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier la clé</button></td>
+              <td class="end"><span class="line end-line">
+                <button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier</button>
+                {{if and .InFile (not .Adding)}}<form method="post" action="/ssh/remove" class="row-remove"><input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="key" value="{{.Key}}">
+                  <details><summary class="btn btn-sm btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary><div class="confirm"><button class="btn btn-sm btn-danger">Retirer</button></div></details></form>{{end}}
+              </span></td>
             </tr>
             {{else}}<tr><td colspan="4" class="muted">Aucune clé.</td></tr>{{end}}
           </tbody>
@@ -279,31 +284,45 @@
   <h1>Nouvelle clé</h1>
   {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
   <div class="overview">
-    <form method="get" action="/ssh/new" class="card stack gap narrow">
-      {{if gt (len .Users) 1}}<label class="field"><span>Compte sur think</span><input name="user" value="{{.User}}" class="mono" list="users" required><datalist id="users">{{range .Users}}<option value="{{.}}">{{end}}</datalist></label>
-      {{else}}<input type="hidden" name="user" value="{{.User}}">{{end}}
-      <label class="field"><span>Appareil <small class="muted">(nom dans le commentaire de la clé)</small></span><input name="device" value="{{.Device}}" class="mono" required pattern="[A-Za-z0-9._\-]{1,32}" placeholder="pixel-9" {{if not .Ready}}autofocus{{end}}></label>
-      <label class="field"><span>Clé publique <small class="muted">(facultatif : sinon, la commande pour la créer)</small></span><textarea name="key" rows="3" class="mono small" placeholder="ssh-ed25519 AAAA…">{{.Key}}</textarea></label>
-      <button class="btn btn-primary">Donner les commandes</button>
-    </form>
-    {{if .Ready}}
+    {{if .Added}}
+    <div class="alert alert-amber"><p><strong>{{.Comment}}</strong> entre dans ssh-keys.json (commit sur main dans la minute). Elle n'ouvre rien tant que tu n'as pas fait le rebuild ci-dessous.</p></div>
     <section class="card" aria-label="Étapes">
       <ol class="howto">
-        {{if not .Key}}
-        <li><div class="howto-title">Créer la clé<span class="howto-where">sur l'appareil</span></div>
-          {{template "cmd" (args "Sh" true "Text" (printf "ssh-keygen -t ed25519 -C \"%s\"" .Comment))}}
-          {{template "cmd" (args "Sh" true "Text" "cat ~/.ssh/id_ed25519.pub")}}
-          <p>La ligne affichée est la clé publique : colle-la dans le formulaire pour avoir la ligne exacte.</p></li>
-        {{end}}
-        <li><div class="howto-title">L'autoriser<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
-          <p>Dans {{range $i, $f := .Info.Files}}{{if $i}} ou {{end}}<code>{{$f}}</code>{{end}}, aux <code>sshKeys</code> du compte <code>{{.User}}</code> :</p>
-          {{template "cmd" (args "Text" (printf "\"%s\"" .Line))}}</li>
+        <li><div class="howto-title">Récupérer le commit<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+          {{template "cmd" (args "Sh" true "Text" "git pull")}}</li>
         <li><div class="howto-title">Appliquer</div>
-          {{template "cmd" (args "Sh" true "Text" "rebuild")}}</li>
+          {{template "cmd" (args "Sh" true "Text" "rebuild")}}
+          <p>Il montre la clé (<span class="mono">{{.Comment}}</span>, <span class="mono">{{.Fingerprint}}</span>) et demande confirmation.</p></li>
         <li><div class="howto-title">Se connecter<span class="howto-where">depuis l'appareil, par le VPN</span></div>
           {{template "cmd" (args "Sh" true "Text" (printf "ssh -p %d %s@%s" .Info.Port .User .Info.Host))}}</li>
       </ol>
     </section>
+    {{else}}
+    <form method="get" action="/ssh/new" class="card stack gap narrow">
+      {{if gt (len .Users) 1}}<label class="field"><span>Compte sur think</span><input name="user" value="{{.User}}" class="mono" list="users" required><datalist id="users">{{range .Users}}<option value="{{.}}">{{end}}</datalist></label>
+      {{else}}<input type="hidden" name="user" value="{{.User}}">{{end}}
+      <label class="field"><span>Appareil <small class="muted">(nom dans le commentaire de la clé)</small></span><input name="device" value="{{.Device}}" class="mono" required pattern="[A-Za-z0-9._\-]{1,32}" placeholder="pixel-9" {{if not .Ready}}autofocus{{end}}></label>
+      <label class="field"><span>Clé publique <small class="muted">(vide : la commande pour la créer)</small></span><textarea name="key" rows="3" class="mono small" placeholder="ssh-ed25519 AAAA…">{{.Key}}</textarea></label>
+      <button class="btn">Vérifier</button>
+    </form>
+    {{if .Ready}}{{if .Line}}
+    <form method="post" action="/ssh/new" class="card stack gap">
+      <input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="device" value="{{.Device}}"><input type="hidden" name="key" value="{{.Key}}">
+      <div class="stack tight"><strong>{{.Comment}}</strong><small class="mono muted">{{.Fingerprint}}</small></div>
+      <pre class="conf mono small">{{.Line}}</pre>
+      <div class="line"><button class="btn btn-primary">Ajouter la clé</button><small class="muted">Commit sur main ; active seulement après ton rebuild.</small></div>
+    </form>
+    {{else}}
+    <section class="card" aria-label="Étapes">
+      <ol class="howto">
+        <li><div class="howto-title">Créer la clé<span class="howto-where">sur l'appareil</span></div>
+          {{template "cmd" (args "Sh" true "Text" (printf "ssh-keygen -t ed25519 -C \"%s\"" .Comment))}}</li>
+        <li><div class="howto-title">Afficher la clé publique</div>
+          {{template "cmd" (args "Sh" true "Text" "cat ~/.ssh/id_ed25519.pub")}}
+          <p>Colle la ligne affichée dans le formulaire ci-dessus, puis « Vérifier ».</p></li>
+      </ol>
+    </section>
+    {{end}}{{end}}
     {{end}}
   </div>
 </main>

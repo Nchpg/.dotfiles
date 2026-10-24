@@ -110,10 +110,15 @@ let
   # Page SSH : clés autorisées de chaque compte (publiques), et pour en ajouter une : le port, une
   # adresse de think dans le tunnel, et les fichiers du dépôt qui déclarent les comptes.
   sshInfo = {
-    users = map (u: {
-      inherit (u) name;
-      keys = u.sshKeys;
-    }) (lib.filter (u: u.sshKeys != [ ]) config.systemSettings.users);
+    users = lib.mapAttrsToList (name: keys: { inherit name keys; }) (
+      lib.filterAttrs (_: keys: keys != [ ]) config.systemSettings.ssh.authorizedKeys
+    );
+    # Celles de keysFile se retirent d'ici (les autres sont dans le code Nix).
+    fileKeys =
+      if config.systemSettings.ssh.keysFile == null then
+        { }
+      else
+        lib.importJSON config.systemSettings.ssh.keysFile;
     inherit (config.systemSettings.ssh) port;
     host = if wireguard.enable then wireguard.serverAddress else target.host;
     files = map (

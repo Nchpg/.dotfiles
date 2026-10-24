@@ -530,3 +530,6 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .cmd.sh pre::before { content: "$ "; color: var(--side-faint); }
 .cmd-copy { position: absolute; top: 6px; right: 6px; height: 26px; padding: 0 10px; border: 0; background: var(--side-2); color: var(--side-text); font-size: 12px; font-weight: 500; cursor: pointer; }
 .cmd-copy:hover { color: #fff; }
+.end-line { justify-content: flex-end; gap: 8px; } .row-remove { position: relative; } .row-remove details[open] .confirm { position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 5; background: var(--card); border: 1px solid var(--line); padding: 8px; }
+.row-remove summary .if-open, .row-remove details[open] summary .if-closed { display: none; } .row-remove summary::-webkit-details-marker { display: none; }
+.end-line { display: inline-flex; flex-wrap: nowrap; } .row-remove, .row-remove details { display: inline-block; }

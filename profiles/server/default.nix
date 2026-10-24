@@ -27,11 +27,6 @@ in
           name = "nchpg";
           isAdmin = true;
           shell = "fish";
-          sshKeys = [
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upf nchpg@gram"
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFLQKGgSPS//aBeJ0ZnXvDV9sr7XYC7Qu/NUIHy9B+9 nchpg@xiaomi-17t-termux"
-            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC1ZsoIRAXJRR0crPgfWJRPCNBQ+pdWqkMX6qmCq+4y1 nchpg@windows"
-          ];
         }
       ];
 
@@ -39,6 +34,8 @@ in
         enable = true;
         # Hors du 22 : vide le journal du bruteforce automatisé, pas une sécurité.
         port = 3249;
+        # Clés autorisées : ajoutées ou retirées par le dashboard (page SSH), activées par `rebuild`.
+        keysFile = ./ssh-keys.json;
         waypipe = true;
       };
 
