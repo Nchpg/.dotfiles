@@ -88,14 +88,23 @@ let
         name
         address
         publicKey
-        trusted
+        services
         ;
       added = lib.elem p.name addedPeers;
     }) wireguard.peers;
-    # Services limités à certains appareils (colonne Accès) ; les sites VPN viennent d'apps.json.
-    adminDevices = cfg.devices;
-    # Réservés aux appareils `trusted` (trustedSources) : Vaultwarden aujourd'hui.
-    trustedServices = lib.optional config.systemSettings.vaultwarden.enable "vaultwarden";
+    # Services de think réservés au VPN, ouverts appareil par appareil (cf. `services` des appareils).
+    services = [
+      {
+        name = "admin";
+        label = "Dashboard admin";
+        inherit host;
+      }
+    ]
+    ++ lib.optional config.systemSettings.vaultwarden.enable {
+      name = "vaultwarden";
+      label = "Vaultwarden";
+      host = config.systemSettings.vaultwarden.hostName;
+    };
   };
 
   # Page SSH : clés autorisées de chaque compte (publiques).

@@ -24,8 +24,9 @@ import (
 )
 
 // Pages VPN, SSH et Comptes : lecture de ce que la config déclare (fichiers JSON du build) et de
-// l'état vivant (Prometheus, résumé des comptes écrit par admin-accounts). Seule écriture : inscrire
-// ou retirer un appareil VPN par apps.yml (action `peer`), qui ne l'autorise jamais seule.
+// l'état vivant (Prometheus, résumé des comptes écrit par admin-accounts). Écritures par apps.yml :
+// inscrire ou retirer un appareil VPN (`peer`, jamais autorisé sans son secret et un rebuild) et
+// changer ses accès (`access` : services de think, sites en VPN).
 
 // VPNInfo : paramètres du tunnel et appareils de la génération active (cf. `vpnInfo`, ../default.nix).
 type VPNInfo struct {
@@ -35,17 +36,43 @@ type VPNInfo struct {
 	Subnet        string    `json:"subnet"`
 	ServerAddress string    `json:"serverAddress"`
 	Peers         []VPNPeer `json:"peers"`
-	// Services limités à certains appareils : le dashboard (sa liste), ceux des appareils `trusted`.
-	AdminDevices    []string `json:"adminDevices"`
-	TrustedServices []string `json:"trustedServices"`
+	// Services de think réservés au VPN, ouverts appareil par appareil (admin, vaultwarden).
+	Services []VPNService `json:"services"`
+}
+
+type VPNService struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
+	Host  string `json:"host"`
 }
 
 type VPNPeer struct {
-	Name      string `json:"name"`
-	Address   string `json:"address"`
-	PublicKey string `json:"publicKey"`
-	Trusted   bool   `json:"trusted"`
-	Added     bool   `json:"added"` // inscrit par le dashboard (vpn-peers.json)
+	Name      string   `json:"name"`
+	Address   string   `json:"address"`
+	PublicKey string   `json:"publicKey"`
+	Services  []string `json:"services"`
+	Added     bool     `json:"added"` // dans vpn-peers.json (géré depuis le dashboard)
+}
+
+// serviceLabel : le nom lisible d'un service de think (son identifiant s'il est inconnu).
+func (v VPNInfo) serviceLabel(name string) string {
+	for _, s := range v.Services {
+		if s.Name == name {
+			return s.Label
+		}
+	}
+	return name
+}
+
+// requestDevice : l'appareil VPN d'où vient la requête (X-Real-IP posé par nginx), vide sinon.
+func (s *Server) requestDevice(r *http.Request) string {
+	ip := r.Header.Get("X-Real-IP")
+	for _, p := range s.cfg.VPN.Peers {
+		if ip != "" && p.Address == ip {
+			return p.Name
+		}
+	}
+	return ""
 }
 
 // SSHUser : clés autorisées d'un compte (cf. `sshInfo`).
@@ -167,9 +194,9 @@ func (s *Server) pendingPeers(ctx context.Context) []VPNPeer {
 		return nil
 	}
 	var file map[string]struct {
-		PublicKey string `json:"publicKey"`
-		Address   string `json:"address"`
-		Trusted   bool   `json:"trusted"`
+		PublicKey string   `json:"publicKey"`
+		Address   string   `json:"address"`
+		Services  []string `json:"services"`
 	}
 	if json.Unmarshal(b, &file) != nil {
 		return nil
@@ -181,7 +208,7 @@ func (s *Server) pendingPeers(ctx context.Context) []VPNPeer {
 	var out []VPNPeer
 	for name, p := range file {
 		if !active[name] {
-			out = append(out, VPNPeer{Name: name, Address: p.Address, PublicKey: p.PublicKey, Trusted: p.Trusted, Added: true})
+			out = append(out, VPNPeer{Name: name, Address: p.Address, PublicKey: p.PublicKey, Services: p.Services, Added: true})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -209,11 +236,8 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	}
 	access := func(p VPNPeer) []string {
 		var out []string
-		if slices.Contains(s.cfg.VPN.AdminDevices, p.Name) {
-			out = append(out, "dashboard")
-		}
-		if p.Trusted {
-			out = append(out, s.cfg.VPN.TrustedServices...)
+		for _, sv := range p.Services {
+			out = append(out, sv)
 		}
 		return append(out, sitesOf[p.Name]...)
 	}
@@ -265,7 +289,19 @@ func (s *Server) nextAddress(pending []VPNPeer) (string, error) {
 
 func (s *Server) vpnNew(w http.ResponseWriter, r *http.Request) {
 	addr, err := s.nextAddress(s.pendingPeers(r.Context()))
-	s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Address": addr, "Error": errString(err), "Subnet": s.cfg.VPN.Subnet})
+	s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Address": addr, "Error": errString(err), "Subnet": s.cfg.VPN.Subnet,
+		"Services": s.cfg.VPN.Services, "Checked": map[string]bool{}})
+}
+
+// formServices : les services cochés (champ `service`), seulement ceux que think connaît.
+func (s *Server) formServices(r *http.Request) []string {
+	var out []string
+	for _, sv := range s.cfg.VPN.Services {
+		if slices.Contains(r.Form["service"], sv.Name) {
+			out = append(out, sv.Name)
+		}
+	}
+	return out
 }
 
 // checkAddress : une adresse IPv4 du réseau du tunnel, ni celle du serveur, ni celle d'un autre
@@ -302,9 +338,15 @@ func errString(err error) string {
 func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := strings.TrimSpace(r.FormValue("name"))
-	trusted := r.FormValue("trusted") == "on"
+	_ = r.ParseForm()
+	services := s.formServices(r)
+	checked := map[string]bool{}
+	for _, sv := range services {
+		checked[sv] = true
+	}
 	fail := func(msg string) {
-		s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Name": name, "Address": r.FormValue("address"), "Trusted": trusted, "Error": msg, "Subnet": s.cfg.VPN.Subnet})
+		s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Name": name, "Address": r.FormValue("address"), "Error": msg, "Subnet": s.cfg.VPN.Subnet,
+			"Services": s.cfg.VPN.Services, "Checked": checked})
 	}
 	if !reDeviceName.MatchString(name) {
 		fail("Nom : lettres minuscules, chiffres et _ (24 caractères au plus).")
@@ -339,7 +381,10 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	b64 := base64.StdEncoding.EncodeToString
 	pub := b64(priv.PublicKey().Bytes())
-	entry, _ := json.Marshal(map[string]any{"publicKey": pub, "address": addr, "trusted": trusted})
+	if services == nil {
+		services = []string{}
+	}
+	entry, _ := json.Marshal(map[string]any{"publicKey": pub, "address": addr, "services": services})
 	if err := s.gh.Dispatch(ctx, map[string]string{"action": "peer", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
 		fail("Inscription impossible (apps.yml) : " + err.Error())
 		return
@@ -379,7 +424,7 @@ func qrSVG(ctx context.Context, text string) template.HTML {
 	return template.HTML(out)
 }
 
-// vpnRemove : retire un appareil inscrit par le dashboard (vpn-peers.json), par apps.yml.
+// vpnRemove : retire un appareil de vpn-peers.json (et des listes des sites), par apps.yml.
 func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if !reDeviceName.MatchString(name) {
@@ -391,7 +436,11 @@ func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 		known = known || (p.Name == name && p.Added)
 	}
 	if !known {
-		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape(name+" n'a pas été inscrit par le dashboard : il se retire dans vpn.nix."), http.StatusSeeOther)
+		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape(name+" n'est pas dans vpn-peers.json : il se retire dans vpn.nix."), http.StatusSeeOther)
+		return
+	}
+	if name == s.requestDevice(r) {
+		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape("Tu es connecté depuis "+name+" : le retirer te couperait le VPN. Fais-le depuis un autre appareil."), http.StatusSeeOther)
 		return
 	}
 	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "peer", "app": name, "entry": "null", "source": "dashboard"}); err != nil {
@@ -399,6 +448,120 @@ func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape(name+" : retrait demandé. Il reste autorisé jusqu'au prochain rebuild (après git pull)."), http.StatusSeeOther)
+}
+
+// AccessSite : un site (ou environnement) en VPN dans la page Accès d'un appareil. Inherited : il
+// reprend l'accès de son parent, il se règle là-bas.
+type AccessSite struct {
+	Site, Env, App, Domain, From string
+	On, Inherited                bool
+}
+
+// accessSites : les sites en VPN de main, et si l'appareil y est.
+func (s *Server) accessSites(ctx context.Context, device string) ([]AccessSite, error) {
+	snap, err := s.snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []AccessSite
+	for _, site := range snap.Apps.Names() {
+		e := snap.Apps.Entries[site]
+		for _, d := range e.Deploys(site) {
+			if !d.VPN() {
+				continue
+			}
+			a := AccessSite{Site: site, Env: d.ID, App: d.App, Domain: d.Domain(s.cfg.Domain), On: slices.Contains(d.Access.Devices, device)}
+			if d.ID != "" && !e.Environments[d.ID].OwnAccess() {
+				a.Inherited, a.From = true, e.labelOf(e.Environments[d.ID].From)
+			}
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+// peerByName : un appareil actif ou en attente.
+func (s *Server) peerByName(ctx context.Context, name string) (VPNPeer, bool) {
+	for _, p := range append(append([]VPNPeer(nil), s.cfg.VPN.Peers...), s.pendingPeers(ctx)...) {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return VPNPeer{}, false
+}
+
+func (s *Server) vpnAccess(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	p, ok := s.peerByName(ctx, r.PathValue("name"))
+	if !ok || !p.Added {
+		http.NotFound(w, r)
+		return
+	}
+	sites, err := s.accessSites(ctx, p.Name)
+	checked := map[string]bool{}
+	for _, sv := range p.Services {
+		checked[sv] = true
+	}
+	s.render(w, "vpn-access", map[string]any{"Nav": "vpn", "Peer": p, "Services": s.cfg.VPN.Services, "Checked": checked,
+		"Sites": sites, "Error": errString(err), "Self": p.Name == s.requestDevice(r)})
+}
+
+// vpnAccessSave : services cochés et sites cochés (ceux qui ont leur propre accès), en un commit.
+func (s *Server) vpnAccessSave(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	p, ok := s.peerByName(ctx, r.PathValue("name"))
+	if !ok || !p.Added {
+		http.NotFound(w, r)
+		return
+	}
+	back := func(msg string) {
+		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape(msg), http.StatusSeeOther)
+	}
+	_ = r.ParseForm()
+	services := s.formServices(r)
+	if slices.Contains(p.Services, "admin") && !slices.Contains(services, "admin") && p.Name == s.requestDevice(r) {
+		back("Tu es connecté depuis " + p.Name + " : lui retirer le dashboard te fermerait la page. Fais-le depuis un autre appareil.")
+		return
+	}
+	sites, err := s.accessSites(ctx, p.Name)
+	if err != nil {
+		back("Sites illisibles : " + err.Error())
+		return
+	}
+	type siteAccess struct {
+		Site string `json:"site"`
+		Env  string `json:"env"`
+		On   bool   `json:"on"`
+	}
+	changes := []siteAccess{}
+	for _, a := range sites {
+		on := slices.Contains(r.Form["site"], a.App)
+		if !a.Inherited && on != a.On {
+			changes = append(changes, siteAccess{a.Site, a.Env, on})
+		}
+	}
+	if services == nil {
+		services = []string{}
+	}
+	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
+	if err := s.gh.Dispatch(ctx, map[string]string{"action": "access", "app": p.Name, "entry": string(entry), "source": "dashboard"}); err != nil {
+		back("Changement impossible (apps.yml) : " + err.Error())
+		return
+	}
+	msg := p.Name + " : accès enregistrés (commit dans la minute)."
+	if !slices.Equal(sortedCopy(services), sortedCopy(p.Services)) {
+		msg += " Services de think : au prochain rebuild (git pull, puis rebuild)."
+	}
+	if len(changes) > 0 {
+		msg += " Sites : appliqués seuls, sauf si un rebuild est en attente."
+	}
+	back(msg)
+}
+
+func sortedCopy(v []string) []string {
+	out := append([]string(nil), v...)
+	sort.Strings(out)
+	return out
 }
 
 // SSHKeyRow : une clé autorisée, son type, son commentaire et son empreinte (comme ssh-keygen -l).

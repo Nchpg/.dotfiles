@@ -29,7 +29,7 @@
       </div>
     </section>
     <section class="block" aria-labelledby="devices-title">
-      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services ouverts à certains appareils seulement (dashboard, Vaultwarden, sites en VPN qui le listent) ; les autres services en VPN sont ouverts à tous les appareils.")}}</h2></div>
+      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services de think joignables seulement par le VPN (dashboard, Vaultwarden) et les sites en VPN, choisis appareil par appareil (« Accès »). Grafana et Nextcloud sont publics derrière Authelia : ils ne se choisissent pas par appareil.")}}</h2></div>
       <section class="card table-card" aria-label="Liste des appareils">
         <table class="list">
           <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col">Accès réservés</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -45,7 +45,7 @@
               <td class="mono small muted">{{if .RemoteIP}}{{.RemoteIP}}{{else}}—{{end}}</td>
               <td class="mono small muted nowrap" title="Depuis la dernière mise en route du tunnel sur think, vu de l'appareil">{{if .Seen}}↑ {{.Received}} ↓ {{.Sent}}{{else}}—{{end}}</td>
               <td><span class="line wrap">{{range .Access}}<span class="chip">{{.}}</span>{{else}}<span class="muted">aucun</span>{{end}}</span></td>
-              <td class="end">{{if .Added}}<form method="post" action="/vpn/{{.Name}}/remove" class="inline-confirm"><details><summary class="btn btn-sm btn-danger-ghost">Retirer…</summary><button class="btn btn-sm btn-danger">Retirer {{.Name}}</button></details></form>{{end}}</td>
+              <td class="end">{{if .Added}}<a class="btn btn-sm" href="/vpn/{{.Name}}/access">Gérer</a>{{end}}</td>
             </tr>
             {{else}}<tr><td colspan="7" class="muted">Aucun appareil.</td></tr>{{end}}
           </tbody>
@@ -64,7 +64,8 @@
   <form method="post" action="/vpn/new" class="card stack gap narrow">
     <label class="field"><span>Nom de l'appareil</span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9_]{1,24}" placeholder="pixel_9" autofocus></label>
     <label class="field"><span>IP dans le tunnel <small class="muted">({{.Subnet}}, la première libre est proposée)</small></span><input name="address" value="{{.Address}}" class="mono" required inputmode="decimal"></label>
-    <label class="row-toggle"><span class="stack tight"><strong>Accès à Vaultwarden</strong><small class="muted">Le coffre de mots de passe, réservé aux appareils choisis. Les sites en VPN se donnent site par site.</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
+    {{template "service-checks" .}}
+    <small class="muted">Les sites en VPN se donnent ensuite, depuis « Accès… » dans la liste.</small>
     <button class="btn btn-primary">Créer l'appareil</button>
     <small class="muted">Les clés sont créées ici et ne sont gardées nulle part : la page suivante est la seule à les montrer.</small>
   </form>
@@ -100,6 +101,46 @@
       </div>
     </section>
   </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{/* Cases des services de think réservés au VPN (.Services, .Checked). */}}
+{{define "service-checks"}}
+<fieldset class="checks">
+  <legend>Services de think</legend>
+  {{range .Services}}<label class="row-toggle"><span class="stack tight"><strong>{{.Label}}</strong><small class="mono muted">{{.Host}}</small></span><input type="checkbox" name="service" value="{{.Name}}" {{if index $.Checked .Name}}checked{{end}}></label>{{end}}
+</fieldset>
+{{end}}
+
+{{define "vpn-access"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" .Peer.Name)}}</header>
+<main class="page">
+  <div class="stack tight"><h1>{{.Peer.Name}}</h1><span class="mono muted">{{.Peer.Address}}</span></div>
+  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  <form method="post" action="/vpn/{{.Peer.Name}}/access" class="stack gap-lg narrow">
+    <section class="card stack gap">
+      {{template "service-checks" .}}
+      {{if .Self}}<small class="warn-ink">Tu es connecté depuis cet appareil : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
+      <small class="muted">Appliqué au prochain rebuild (git pull, puis rebuild) : c'est toi qui ouvres ces services.</small>
+    </section>
+    <section class="card stack gap">
+      <fieldset class="checks">
+        <legend>Sites en VPN</legend>
+        {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
+        {{else}}<p class="small muted">Aucun site en VPN.</p>{{end}}
+      </fieldset>
+      <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
+    </section>
+    <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/vpn">Annuler</a></div>
+  </form>
+  {{if not .Self}}
+  <form method="post" action="/vpn/{{.Peer.Name}}/remove" class="card sec-danger narrow">
+    <span class="stack tight grow"><strong class="bad">Retirer {{.Peer.Name}}</strong><small class="muted">Il perd le VPN au prochain rebuild, et quitte les listes des sites.</small></span>
+    <details><summary class="btn btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary>
+      <div class="confirm"><button class="btn btn-danger">Retirer</button></div>
+    </details>
+  </form>
+  {{end}}
 </main>
 {{template "bottom" .}}{{end}}
 

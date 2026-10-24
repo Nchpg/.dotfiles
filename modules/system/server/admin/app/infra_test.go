@@ -49,9 +49,11 @@ func TestInfraTemplates(t *testing.T) {
 	s, _ := testServer(t)
 	last := "2026-10-23 21:09:00"
 	pages := map[string]map[string]any{
-		"vpn": {"Nav": "vpn", "Rows": []PeerRow{{VPNPeer: VPNPeer{Name: "gram", Address: "10.8.0.3", PublicKey: "/gV7axgKpUvtPD/oEnbgC4CFpvRULEMAmGVekD4B/zI=", Trusted: true}, Connected: true, Received: "1 Mo", Sent: "2 Mo"},
+		"vpn": {"Nav": "vpn", "Rows": []PeerRow{{VPNPeer: VPNPeer{Name: "gram", Address: "10.8.0.3", PublicKey: "/gV7axgKpUvtPD/oEnbgC4CFpvRULEMAmGVekD4B/zI=", Services: []string{"admin"}}, Connected: true, Received: "1 Mo", Sent: "2 Mo"},
 			{VPNPeer: VPNPeer{Name: "pixel", Address: "10.8.0.9", PublicKey: "AyLyEp/YhPJaLNMwIfyZibWt6XymReCgVUXLLQ6JqXs=", Added: true}, Pending: true}}, "Connected": 1, "Total": 1, "Endpoint": "vpn:51820", "Subnet": "10.8.0.0/24"},
-		"vpn-new":   {"Nav": "vpn", "Address": "10.8.0.9"},
+		"vpn-new": {"Nav": "vpn", "Address": "10.8.0.9", "Services": []VPNService{{Name: "admin", Label: "Dashboard admin", Host: "admin.vpn"}}, "Checked": map[string]bool{"admin": true}},
+		"vpn-access": {"Nav": "vpn", "Peer": VPNPeer{Name: "gram", Address: "10.8.0.3", Added: true}, "Services": []VPNService{{Name: "vaultwarden", Label: "Vaultwarden", Host: "vault.vpn"}}, "Checked": map[string]bool{},
+			"Sites": []AccessSite{{Site: "myetf", App: "myetf", Domain: "etf.vpn", On: true}, {Site: "myetf", Env: "staging", App: "myetf-staging", Inherited: true, From: "production"}}, "Self": true},
 		"vpn-added": {"Nav": "vpn", "Name": "pixel", "Address": "10.8.0.9", "Conf": "[Interface]\n", "QR": qrSVG(t.Context(), "x"), "Download": "data:text/plain;base64,eA==", "Secret": "wireguard:\n  pixel_preshared_key: K", "SecretKey": "wireguard/pixel_preshared_key"},
 		"ssh":       {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
 		"accounts":  {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h"}}},
