@@ -62,10 +62,11 @@ in
 
     allowedNetworks = lib.mkOption {
       type = lib.types.listOf lib.types.str;
+      # Les appareils qui ont le service « vaultwarden » (vpn-peers.json, page VPN), et think.
       default =
-        lib.optional wireguard.enable wireguard.subnet
+        lib.optionals wireguard.enable (wireguard.sourcesFor "vaultwarden")
         ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource;
-      defaultText = lib.literalExpression "[ vpn.wireguard.subnet vpn.wireguard.selfSource ]";
+      defaultText = lib.literalExpression "vpn.wireguard.sourcesFor \"vaultwarden\" ++ [ vpn.wireguard.selfSource ]";
       example = [ "10.8.0.0/24" ];
       description = ''
         Sources autorisées par nginx (notation `allow`), le reste reçoit 403.
@@ -166,6 +167,13 @@ in
 
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
+      # Ouvert appareil par appareil (page VPN) : il se déclare au registre du VPN.
+      (lib.mkIf wireguard.enable {
+        systemSettings.vpn.wireguard.services.vaultwarden = {
+          label = "Vaultwarden";
+          host = cfg.hostName;
+        };
+      })
       {
         assertions = [
           {

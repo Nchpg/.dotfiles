@@ -17,13 +17,11 @@ let
   # nom fixe ; elle doit exister dans les secrets, sinon l'évaluation s'arrête (cf. assertions).
   # Un appareil inscrit sans elle n'est donc jamais autorisé.
   pskKeyOf = name: "wireguard/${name}_preshared_key";
-  # Services de think joignables SEULEMENT par le VPN, ouverts appareil par appareil (cf. `services`) ;
-  # les sites ont leur liste dans apps.json. Grafana et Nextcloud n'y sont pas : publics (tunnel
-  # Cloudflare, Authelia), une liste par appareil côté VPN ne fermerait rien.
-  knownServices = [
-    "admin"
-    "vaultwarden"
-  ];
+  # Services de think ouverts appareil par appareil : chaque module déclare le sien (`services`).
+  knownServices = lib.attrNames cfg.services;
+  unknownServices = lib.concatMap (
+    p: map (s: "${p.name} : ${s}") (lib.subtractLists knownServices p.services)
+  ) cfg.peers;
   # Rangés par adresse : l'ordre des [WireGuardPeer] reste celui d'avant le fichier (et du tunnel).
   lastOctet = p: lib.toInt (lib.last (lib.splitString "." p.address));
   filePeers =
@@ -35,8 +33,6 @@ let
           inherit name;
           inherit (p) publicKey address;
           services = p.services or [ ];
-          # Vaultwarden lit `trustedSources` : ses appareils sont ceux qui ont ce service.
-          trusted = lib.elem "vaultwarden" (p.services or [ ]);
           presharedKeyKey = pskKeyOf name;
         }) (lib.importJSON cfg.peersFile)
       );
@@ -47,7 +43,6 @@ let
     builtins.match "[a-z0-9_]{1,24}" p.name == null
     || builtins.match "[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=" p.publicKey == null
     || builtins.match "${lib.escapeRegex subnetPrefix}\\.([0-9]{1,3})" p.address == null
-    || lib.subtractLists knownServices p.services != [ ]
   ) filePeers;
   missingPsk = lib.filter (
     p: !builtins.pathExists "${inputs.secrets}/${p.presharedKeyKey}.yaml"
@@ -154,7 +149,7 @@ in
       default = null;
       example = lib.literalExpression "./vpn-peers.json";
       description = ''
-        Appareils inscrits par le dashboard (`{"<nom>": {"publicKey", "address", "trusted"}}`), en plus de
+        Appareils inscrits par le dashboard (`{"<nom>": {"publicKey", "address", "services"}}`), en plus de
         `peers`. Chacun exige le secret `wireguard/<nom>_preshared_key`.
       '';
     };
@@ -199,21 +194,12 @@ in
               '';
             };
 
-            trusted = lib.mkOption {
-              type = lib.types.bool;
-              default = false;
-              description = ''
-                Appareil de confiance : inclus dans `trustedSources`.
-              '';
-            };
-
             services = lib.mkOption {
-              type = lib.types.listOf (lib.types.enum knownServices);
+              type = lib.types.listOf lib.types.str;
               default = [ ];
               description = ''
-                Services de think auxquels l'appareil a accès par le VPN : `admin` (le dashboard,
-                systemSettings.admin.devices le reprend) et
-                `vaultwarden` (il fait l'appareil `trusted`).
+                Services de think (déclarés dans `services` du module) auxquels l'appareil a accès
+                par le VPN.
               '';
             };
           };
@@ -229,12 +215,27 @@ in
       '';
     };
 
-    trustedSources = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      readOnly = true;
-      default = map (p: "${p.address}/32") (lib.filter (p: p.trusted) cfg.peers);
-      defaultText = lib.literalExpression "les adresses en /32 des peers `trusted`";
-      description = "Adresses CIDR des peers `trusted`, à reprendre dans un `allowedNetworks`.";
+    services = lib.mkOption {
+      default = { };
+      description = ''
+        Services de think joints par le tunnel et ouverts appareil par appareil : chaque module
+        déclare le sien, et lit ses appareils avec `sourcesFor <nom>` (les `services` de chaque
+        appareil, vpn-peers.json). Le dashboard en fait ses cases à cocher.
+      '';
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            label = lib.mkOption {
+              type = lib.types.str;
+              description = "Nom affiché.";
+            };
+            host = lib.mkOption {
+              type = lib.types.str;
+              description = "Adresse par laquelle le VPN le joint.";
+            };
+          };
+        }
+      );
     };
 
     sourcesFor = lib.mkOption {
@@ -271,6 +272,10 @@ in
     systemSettings.vpn.wireguard.peers = filePeers;
 
     assertions = [
+      {
+        assertion = unknownServices == [ ];
+        message = "systemSettings.vpn.wireguard : service inconnu (${lib.concatStringsSep ", " unknownServices}) ; connus : ${lib.concatStringsSep ", " knownServices}.";
+      }
       {
         assertion = badFilePeers == [ ];
         message = "systemSettings.vpn.wireguard.peersFile : entrée invalide pour ${

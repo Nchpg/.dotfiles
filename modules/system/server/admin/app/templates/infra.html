@@ -29,7 +29,7 @@
       </div>
     </section>
     <section class="block" aria-labelledby="devices-title">
-      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services de think joignables seulement par le VPN (dashboard, Vaultwarden) et les sites en VPN, choisis appareil par appareil (« Accès »). Grafana et Nextcloud sont publics derrière Authelia : ils ne se choisissent pas par appareil.")}}</h2></div>
+      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services de think qui se déclarent pour le VPN et les sites en VPN, choisis appareil par appareil (« Gérer »). Un service public (tunnel Cloudflare, comme Grafana) n'y figure pas : on l'atteint par internet, pas par le VPN.")}}</h2></div>
       <section class="card table-card" aria-label="Liste des appareils">
         <table class="list">
           <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col">Accès réservés</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>

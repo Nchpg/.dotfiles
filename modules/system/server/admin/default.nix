@@ -20,14 +20,9 @@ let
 
   host = "${cfg.subdomain}.vpn.${config.systemSettings.proxy.domain}";
 
-  peerAddress = lib.listToAttrs (map (p: lib.nameValuePair p.name "${p.address}/32") wireguard.peers);
+  # Les appareils qui ont le service « admin » (vpn-peers.json, page VPN), et think lui-même.
   allowed =
-    map (
-      d:
-      peerAddress.${d}
-        or (throw "systemSettings.admin.devices : « ${d} » n'est pas un peer de vpn.wireguard.peers.")
-    ) cfg.devices
-    ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource;
+    wireguard.sourcesFor "admin" ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource;
 
   package = pkgs-stable.buildGoModule {
     pname = "admin";
@@ -92,19 +87,11 @@ let
         ;
       added = lib.elem p.name addedPeers;
     }) wireguard.peers;
-    # Services de think réservés au VPN, ouverts appareil par appareil (cf. `services` des appareils).
-    services = [
-      {
-        name = "admin";
-        label = "Dashboard admin";
-        inherit host;
-      }
-    ]
-    ++ lib.optional config.systemSettings.vaultwarden.enable {
-      name = "vaultwarden";
-      label = "Vaultwarden";
-      host = config.systemSettings.vaultwarden.hostName;
-    };
+    # Services ouverts appareil par appareil : le registre que chaque module remplit.
+    services = lib.mapAttrsToList (name: s: {
+      inherit name;
+      inherit (s) label host;
+    }) wireguard.services;
   };
 
   # Page SSH : clés autorisées de chaque compte (publiques).
@@ -179,12 +166,6 @@ in
       description = "Port de bouclage du service, derrière nginx.";
     };
 
-    devices = lib.mkOption {
-      type = lib.types.nonEmptyListOf lib.types.str;
-      example = [ "gram" ];
-      description = "Appareils WireGuard admis (noms de vpn.wireguard.peers). think l'est toujours.";
-    };
-
     subject = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ "user:nathan" ];
@@ -193,7 +174,17 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Ouvert appareil par appareil (page VPN) : il se déclare au registre du VPN.
+    systemSettings.vpn.wireguard.services.admin = {
+      label = "Dashboard admin";
+      inherit host;
+    };
+
     assertions = [
+      {
+        assertion = wireguard.sourcesFor "admin" != [ ];
+        message = "systemSettings.admin : aucun appareil VPN n'a le service « admin » (vpn-peers.json) : plus personne n'ouvrirait le dashboard.";
+      }
       {
         assertion = authelia.enable && config.systemSettings.proxy.enable;
         message = "systemSettings.admin exige le portail Authelia et le proxy : il ne doit jamais être servi sans connexion.";

@@ -42,6 +42,14 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    # Ouvert appareil par appareil (page VPN) : il se déclare au registre du VPN.
+    systemSettings.vpn.wireguard.services = lib.mkIf wireguard.enable {
+      nextcloud = {
+        label = "Nextcloud";
+        host = if internalHost != null then internalHost else cfg.hostName;
+      };
+    };
+
     assertions = [
       {
         assertion = cfg.hostName != null;
@@ -80,12 +88,14 @@ in
           policy = "bypass";
           resources = cfg.publicSharing.autheliaResources;
         }
-        ++ lib.optionals wireguard.enable (
+        # Sans Authelia : les appareils VPN qui ont le service « nextcloud » ; les autres passent par
+        # le second facteur comme tout le monde.
+        ++ lib.optionals (wireguard.enable && wireguard.sourcesFor "nextcloud" != [ ]) (
           map
             (host: {
               domain = host;
               policy = "bypass";
-              networks = [ wireguard.subnet ];
+              networks = wireguard.sourcesFor "nextcloud";
             })
             (
               # Le LAN n'est PAS dans les plages : tout appareil du WiFi sauterait le second facteur.

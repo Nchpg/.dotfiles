@@ -1,10 +1,7 @@
-{ config, ... }:
+{ ... }:
 
 let
   domain = import ./domain.nix;
-  wireguard = config.systemSettings.vpn.wireguard;
-
-  mesAppareils = wireguard.trustedSources ++ [ wireguard.selfSource ];
 in
 {
   systemSettings = {
@@ -13,7 +10,7 @@ in
       enable = true;
       hostName = "vault.vpn.${domain}";
 
-      allowedNetworks = mesAppareils;
+      # Accès : les appareils qui ont le service « vaultwarden » (page VPN du dashboard).
 
       # Pour rouvrir les inscriptions, repasser à `true` le temps d'un rebuild.
       signups.enable = false;

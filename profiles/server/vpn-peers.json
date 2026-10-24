@@ -4,43 +4,54 @@
     "publicKey": "/gV7axgKpUvtPD/oEnbgC4CFpvRULEMAmGVekD4B/zI=",
     "services": [
       "admin",
+      "nextcloud",
       "vaultwarden"
     ]
   },
   "lenovo_tab_p12": {
     "address": "10.8.0.8",
     "publicKey": "AyLyEp/YhPJaLNMwIfyZibWt6XymReCgVUXLLQ6JqXs=",
-    "services": []
+    "services": [
+      "nextcloud"
+    ]
   },
   "oppo_a74": {
     "address": "10.8.0.5",
     "publicKey": "gSR1i2a2jxgn3yeszMLjFMe8n+fXOTrFPMuvy0gEhko=",
-    "services": []
+    "services": [
+      "nextcloud"
+    ]
   },
   "windows_gram": {
     "address": "10.8.0.4",
     "publicKey": "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=",
     "services": [
       "admin",
+      "nextcloud",
       "vaultwarden"
     ]
   },
   "xiaomi_14tpro": {
     "address": "10.8.0.7",
     "publicKey": "pJ7CyK5txL/l2lVqsJ7cD+VGa69WOPy7ixGH7DtIDH0=",
-    "services": []
+    "services": [
+      "nextcloud"
+    ]
   },
   "xiaomi_17t": {
     "address": "10.8.0.2",
     "publicKey": "2XpsKYhyyKszaFd91V8cQ7yynz04RZ37S040S2OU5DY=",
     "services": [
       "admin",
+      "nextcloud",
       "vaultwarden"
     ]
   },
   "xiaomi_9t": {
     "address": "10.8.0.6",
     "publicKey": "hcqtv8ay9e0DKE1qRxWc4+FW2JAiDkWYTbiMIjfPJCE=",
-    "services": []
+    "services": [
+      "nextcloud"
+    ]
   }
 }
