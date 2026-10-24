@@ -22,6 +22,7 @@ let
           "ramUtilisee"
           "stockageUtilise"
           "sondesEnEchec"
+          "demarreDepuis"
           "materiel"
         ]
       ];

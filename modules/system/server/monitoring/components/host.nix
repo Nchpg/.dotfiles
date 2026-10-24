@@ -237,6 +237,25 @@ in
           ];
         };
 
+        demarreDepuis = mkStat {
+          id = 45;
+          title = "Démarré depuis";
+          unit = "dtdurations";
+          description = "Temps écoulé depuis le dernier démarrage de think, et le noyau chargé à ce démarrage (un rebuild qui en installe un autre ne le charge qu'au prochain : le dashboard admin le signale). Orange pendant l'heure qui suit un démarrage : s'il n'était pas voulu (coupure de courant, plantage), c'est là qu'on le voit.";
+          # Le noyau vient de node_uname_info : `release` devient le nom de la valeur.
+          targets = [
+            {
+              expr = "(time() - node_boot_time_seconds) * on(instance) group_left(release) node_uname_info";
+              legend = "noyau {{release}}";
+            }
+          ];
+          graph = false;
+          steps = steps "orange" [
+            3600
+            "text"
+          ];
+        };
+
         # Unités mêlées d'où la surcharge, sinon Grafana annoncerait « 4 o ».
         materiel = mkStat {
           id = 5;
