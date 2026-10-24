@@ -9,6 +9,8 @@ here="$(dirname "$0")"
 . "$here/lib/ui.sh"
 # shellcheck source=scripts/lib/hooks.sh
 . "$here/lib/hooks.sh"
+# shellcheck source=scripts/lib/access.sh
+. "$here/lib/access.sh"
 
 PROFILE="${DOTS_PROFILE:-}"
 HOST="${DOTS_HOST:-}"
@@ -27,7 +29,8 @@ usage() {
     echo "  -u : lance \`update\` (modules à update.sh + inputs du flake, au"
     echo "       choix) avant le rebuild"
     echo "  -y : aucune confirmation (working tree sale, modules -u) ; ne"
-    echo "       touche JAMAIS au lock des secrets (avertit seulement)"
+    echo "       touche JAMAIS au lock des secrets (avertit seulement), et les"
+    echo "       changements d'accès (sites, VPN, Authelia, SSH) demandent toujours un oui"
 }
 
 need_value() {
@@ -151,6 +154,9 @@ if [[ -n "$branch" && "$origin" == https://* ]] \
         fi
     fi
 fi
+
+# Sites, appareils VPN, comptes Authelia, clés SSH : montrés et confirmés, même avec --yes.
+access_review
 
 echo "🚀 Starting NixOS system rebuild..."
 

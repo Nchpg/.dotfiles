@@ -88,7 +88,7 @@ in
           ++ lib.optional user.allowDocker "docker"
           ++ lib.optional user.allowLibvirt "libvirtd";
           shell = lib.mkIf (user.shell != null && user.shell != "fish") pkgs-stable.${user.shell};
-          openssh.authorizedKeys.keys = user.sshKeys;
+          openssh.authorizedKeys.keys = config.systemSettings.ssh.authorizedKeys.${user.name};
           createHome = true;
           description = user.name;
         };

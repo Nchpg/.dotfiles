@@ -17,6 +17,7 @@
   nvd,
   sops,
   age,
+  openssh,
   settings ? { },
   # `theme` attend DOTS_GALLERY et DOTS_BROWSER dans `settings`.
   commands ? [
@@ -49,6 +50,7 @@ let
     nvd
     sops
     age
+    openssh
   ];
 in
 stdenvNoCC.mkDerivation {

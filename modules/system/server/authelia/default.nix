@@ -286,6 +286,14 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    # Relu par `rebuild` avant d'activer (le dashboard l'écrit).
+    systemSettings.accessReview.files = lib.mkIf (cfg.accountsFile != null) {
+      authelia-accounts = {
+        source = cfg.accountsFile;
+        kind = "authelia";
+      };
+    };
+
     assertions = [
       {
         # Connexion toujours en double authentification : un mot de passe seul ne suffit nulle part.

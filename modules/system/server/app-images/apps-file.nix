@@ -368,6 +368,11 @@ in
 
   config = lib.mkIf (file != null) {
     systemSettings.apps = lib.listToAttrs (map (d: lib.nameValuePair d.app (toApp d)) deployments);
+    # Relu par `rebuild` avant d'activer (le dashboard l'écrit).
+    systemSettings.accessReview.files.apps = {
+      source = file;
+      kind = "apps";
+    };
 
     assertions = [
       {

@@ -270,6 +270,13 @@ in
 
   config = lib.mkIf cfg.enable {
     systemSettings.vpn.wireguard.peers = filePeers;
+    # Relu par `rebuild` avant d'activer (le dashboard l'écrit).
+    systemSettings.accessReview.files = lib.mkIf (cfg.peersFile != null) {
+      vpn-peers = {
+        source = cfg.peersFile;
+        kind = "vpn";
+      };
+    };
 
     assertions = [
       {
