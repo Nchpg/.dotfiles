@@ -134,7 +134,7 @@
     <section class="card stack gap">
       {{template "service-checks" .}}
       {{if .Self}}<small class="warn-ink">Tu es connecté depuis cet appareil : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
-      <small class="muted">Appliqué au prochain rebuild (git pull, puis rebuild) : c'est toi qui ouvres ces services.</small>
+      <small class="muted">Appliqué seul dans la minute, comme les sites.</small>
     </section>
     <section class="card stack gap">
       {{template "site-checks" .}}

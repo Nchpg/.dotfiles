@@ -7,10 +7,11 @@
 }:
 
 # Déploie seul les changements de sites, et rien d'autre. Toutes les minutes, think regarde la
-# branche suivie : si les nouveaux commits ne touchent qu'apps.json et le lock des images ET
-# partent de la version qui tourne, il les active. Sinon il ne touche à rien et prévient sur
-# Discord : le reste se déploie par un `rebuild` à la main. Une version locale (non commitée, ou
-# commits pas encore poussés) n'est donc jamais écrasée.
+# branche suivie : si les nouveaux commits ne touchent qu'apps.json et le lock des images (ou les
+# seuls services des appareils de vpn-peers.json) ET partent de la version qui tourne, il les
+# active. Sinon il ne touche à rien et prévient sur Discord : le reste se déploie par un `rebuild`
+# à la main. Une version locale (non commitée, ou commits pas encore poussés) n'est donc jamais
+# écrasée.
 #
 # Il tient aussi `status.json` à jour pour le dashboard : versions, décision, état du clone local.
 let
@@ -23,6 +24,10 @@ let
     "profiles/server/apps.json"
     "profiles/server/apps.lock.json"
   ];
+  # Appareils VPN : part seul aussi, mais seulement si les appareils restent les mêmes (nom, clé,
+  # adresse) et que seuls leurs services changent. Un ajout ou un retrait attend un rebuild à la main
+  # (le secret de l'appareil doit exister d'abord).
+  peersPath = "profiles/server/vpn-peers.json";
 
   script = pkgs-stable.writeShellApplication {
     name = "apps-deploy";
@@ -259,15 +264,25 @@ let
         exit 0
       fi
 
-      if ! jq -e --argjson ok ${lib.escapeShellArg (builtins.toJSON sitePaths)} \
-        '[.files[].filename] - $ok | length == 0' <<< "$compare" > /dev/null; then
+      # Services des appareils seulement : vpn-peers.json lu aux deux versions, identique hors `services`.
+      services_only() {
+        local before after
+        before=$(curl -fsS --max-time 20 "https://raw.githubusercontent.com/$repo/$deployed/${peersPath}") || return 1
+        after=$(curl -fsS --max-time 20 "https://raw.githubusercontent.com/$repo/$head/${peersPath}") || return 1
+        jq -e -n --argjson a "$before" --argjson b "$after" \
+          '($a | map_values(del(.services))) == ($b | map_values(del(.services)))' > /dev/null
+      }
+      others=$(jq -c --argjson ok ${lib.escapeShellArg (builtins.toJSON sitePaths)} '[.files[].filename] - $ok' <<< "$compare")
+      if [ "$others" != "[]" ] && ! { [ "$others" = ${
+        lib.escapeShellArg (builtins.toJSON [ peersPath ])
+      } ] && services_only; }; then
         decide attente "$pending"
         # Que du code (pas de site qui attend) : le bandeau du dashboard suffit.
         [ -n "$quiet" ] || [ "$touches_sites" = false ] || blocked "main contient aussi d'autres changements"
         exit 0
       fi
 
-      # Que des changements de sites : on active exactement ce commit (apps-announce suit).
+      # Que des changements de sites (et de services d'appareils) : on active exactement ce commit.
       decide deploiement "$pending"
       publish
       echo "changements de sites : ''${deployed:0:7} → $short"

@@ -6,7 +6,7 @@ name: apps
 # - peer : le dashboard inscrit ou retire un appareil VPN dans vpn-peers.json (autorisé seulement une
 #   fois sa clé pré-partagée dans les secrets, puis un rebuild à la main) ;
 # - access : le dashboard change les accès d'un appareil (services de think dans vpn-peers.json, sites
-#   en VPN dans apps.json), en un commit ; les services attendent un rebuild à la main.
+#   en VPN dans apps.json), en un commit, appliqué seul par think (apps-deploy).
 # think applique seul ces commits (apps-deploy : ils ne touchent qu'apps.json et le lock).
 # Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
 # d'appeler, et apps.sh vérifie chaque entrée.

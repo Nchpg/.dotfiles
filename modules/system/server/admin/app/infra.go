@@ -565,11 +565,8 @@ func (s *Server) vpnAccessSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	msg := p.Name + " : accès enregistrés (commit dans la minute)."
-	if !slices.Equal(sortedCopy(services), sortedCopy(p.Services)) {
-		msg += " Services de think : au prochain rebuild (git pull, puis rebuild)."
-	}
-	if len(changes) > 0 {
-		msg += " Sites : appliqués seuls, sauf si un rebuild est en attente."
+	if len(changes) > 0 || !slices.Equal(sortedCopy(services), sortedCopy(p.Services)) {
+		msg += " Appliqué seul ensuite, sauf si un rebuild est déjà en attente."
 	}
 	back(msg)
 }
