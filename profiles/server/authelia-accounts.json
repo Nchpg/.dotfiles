@@ -6,6 +6,11 @@
       "nextcloud"
     ]
   },
+  "nathan2": {
+    "services": [
+      "admin"
+    ]
+  },
   "olivier": {
     "services": [
       "nextcloud"
