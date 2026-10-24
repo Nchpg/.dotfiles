@@ -22,7 +22,11 @@ let
           "alertesEnCours"
           "sondesEnEchec"
           "demarreDepuis"
-          "materiel"
+          # Même largeur que « Stockage utilisé » en dessous ; les trois autres se partagent le reste.
+          {
+            name = "materiel";
+            w = 8;
+          }
         ]
         [
           "processeur"
@@ -128,7 +132,10 @@ let
     }
   ];
 
-  places = lib.concatMap (s: lib.concatLists s.bands) squelette;
+  # Une case de bande : le nom d'un panneau, ou `{ name; w; }` pour lui imposer sa largeur.
+  nameOf = n: n.name or n;
+
+  places = map nameOf (lib.concatMap (s: lib.concatLists s.bands) squelette);
 
   sections = lib.filter (s: s.bands != [ ]) (
     map (
@@ -136,7 +143,12 @@ let
       s
       // {
         bands = lib.filter (b: b != [ ]) (
-          map (b: map (n: panels.${n}) (lib.filter (n: panels ? ${n}) b)) s.bands
+          map (
+            b:
+            map (n: panels.${nameOf n} // lib.optionalAttrs (n ? w) { inherit (n) w; }) (
+              lib.filter (n: panels ? ${nameOf n}) b
+            )
+          ) s.bands
         );
       }
     ) squelette

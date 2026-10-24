@@ -435,13 +435,33 @@ let
       ];
     };
 
+  # Largeurs d'une bande : un panneau qui porte `w` la garde, les autres se partagent le reste des 24
+  # colonnes (les premiers prennent une colonne de plus si la division tombe mal).
   bandWidths =
-    n:
+    band:
     let
-      w = 24 / n;
-      reste = 24 - w * n;
+      fixed = lib.foldl' (s: p: s + (p.w or 0)) 0 band;
+      n = lib.length (lib.filter (p: !(p ? w)) band);
+      w = if n == 0 then 0 else (24 - fixed) / n;
+      reste = 24 - fixed - w * n;
     in
-    lib.genList (i: if i < reste then w + 1 else w) n;
+    (lib.foldl'
+      (
+        acc: p:
+        if p ? w then
+          acc // { out = acc.out ++ [ p.w ]; }
+        else
+          {
+            out = acc.out ++ [ (if acc.i < reste then w + 1 else w) ];
+            i = acc.i + 1;
+          }
+      )
+      {
+        out = [ ];
+        i = 0;
+      }
+      band
+    ).out;
 
   bandOffsets = widths: lib.init (lib.foldl' (acc: w: acc ++ [ (lib.last acc + w) ]) [ 0 ] widths);
 
@@ -450,12 +470,15 @@ let
   placeBand =
     y: band:
     let
-      widths = bandWidths (lib.length band);
+      widths = bandWidths band;
       xs = bandOffsets widths;
     in
     lib.imap0 (
       i: p:
-      removeAttrs p [ "h" ]
+      removeAttrs p [
+        "h"
+        "w"
+      ]
       // {
         gridPos = {
           inherit y;
