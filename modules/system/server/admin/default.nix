@@ -64,7 +64,8 @@ let
     in
     lib.mapAttrsToList (domain: site: {
       inherit domain;
-      inherit (site) public;
+      # Public : déclaré tel, ou routé par le tunnel Cloudflare par son propre module (Grafana).
+      public = site.public || config.systemSettings.cloudflared.ingress ? ${domain};
       name = lib.head (lib.attrNames site.probes ++ [ domain ]);
       probed = site.probes != { };
       authelia = behindAuthelia domain;

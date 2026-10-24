@@ -17,9 +17,11 @@ let
   # nom fixe ; elle doit exister dans les secrets, sinon l'évaluation s'arrête (cf. assertions).
   # Un appareil inscrit sans elle n'est donc jamais autorisé.
   pskKeyOf = name: "wireguard/${name}_preshared_key";
-  # Services réservés qu'un appareil peut recevoir (cf. `services`) ; les sites, eux, sont dans apps.json.
+  # Services de think joignables SEULEMENT par le VPN, ouverts appareil par appareil (cf. `services`) ;
+  # les sites ont leur liste dans apps.json. Grafana et Nextcloud n'y sont pas : publics (tunnel
+  # Cloudflare, Authelia), une liste par appareil côté VPN ne fermerait rien.
   knownServices = [
-    "dashboard"
+    "admin"
     "vaultwarden"
   ];
   # Rangés par adresse : l'ordre des [WireGuardPeer] reste celui d'avant le fichier (et du tunnel).
@@ -209,8 +211,9 @@ in
               type = lib.types.listOf (lib.types.enum knownServices);
               default = [ ];
               description = ''
-                Services réservés auxquels l'appareil a accès : `dashboard` (systemSettings.admin.devices
-                le reprend) et `vaultwarden` (il fait l'appareil `trusted`).
+                Services de think auxquels l'appareil a accès par le VPN : `admin` (le dashboard,
+                systemSettings.admin.devices le reprend) et
+                `vaultwarden` (il fait l'appareil `trusted`).
               '';
             };
           };
@@ -232,6 +235,15 @@ in
       default = map (p: "${p.address}/32") (lib.filter (p: p.trusted) cfg.peers);
       defaultText = lib.literalExpression "les adresses en /32 des peers `trusted`";
       description = "Adresses CIDR des peers `trusted`, à reprendre dans un `allowedNetworks`.";
+    };
+
+    sourcesFor = lib.mkOption {
+      type = lib.types.functionTo (lib.types.listOf lib.types.str);
+      readOnly = true;
+      default =
+        service: map (p: "${p.address}/32") (lib.filter (p: lib.elem service p.services) cfg.peers);
+      defaultText = lib.literalExpression "service: les adresses en /32 des appareils qui ont ce service";
+      description = "Adresses CIDR des appareils qui ont un service (`services`), pour un `nginxAllowOnly`.";
     };
 
     selfSource = lib.mkOption {

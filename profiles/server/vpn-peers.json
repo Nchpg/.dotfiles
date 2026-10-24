@@ -3,7 +3,7 @@
     "address": "10.8.0.3",
     "publicKey": "/gV7axgKpUvtPD/oEnbgC4CFpvRULEMAmGVekD4B/zI=",
     "services": [
-      "dashboard",
+      "admin",
       "vaultwarden"
     ]
   },
@@ -21,7 +21,7 @@
     "address": "10.8.0.4",
     "publicKey": "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=",
     "services": [
-      "dashboard",
+      "admin",
       "vaultwarden"
     ]
   },
@@ -34,7 +34,7 @@
     "address": "10.8.0.2",
     "publicKey": "2XpsKYhyyKszaFd91V8cQ7yynz04RZ37S040S2OU5DY=",
     "services": [
-      "dashboard",
+      "admin",
       "vaultwarden"
     ]
   },
