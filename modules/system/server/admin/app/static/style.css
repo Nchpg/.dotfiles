@@ -512,3 +512,5 @@ td.nowrap .line { flex-wrap: nowrap; }
 fieldset.checks { margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 fieldset.checks legend { padding: 0 0 4px; font-weight: 600; font-size: 14px; }
 .row-toggle.disabled { opacity: .55; cursor: default; }
+.access-cell { font-size: 13px; line-height: 1.5; } .access-cell .muted { display: inline-block; min-width: 56px; }
+form fieldset.checks + fieldset.checks, form .field + fieldset.checks { margin-top: 10px; }

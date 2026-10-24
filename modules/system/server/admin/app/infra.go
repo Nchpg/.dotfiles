@@ -178,7 +178,7 @@ type PeerRow struct {
 	Connected, Seen bool
 	LastSeen        string
 	RemoteIP        string   // IP publique d'où il se connecte (exporteur, withRemoteIp)
-	Access          []string // services limités auxquels il a droit
+	Services, Sites []string // services de think et sites en VPN auxquels il a droit
 	Received, Sent  string
 	Pending         bool // inscrit sur main, pas encore actif (secret + rebuild à faire)
 }
@@ -234,17 +234,10 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	access := func(p VPNPeer) []string {
-		var out []string
-		for _, sv := range p.Services {
-			out = append(out, sv)
-		}
-		return append(out, sitesOf[p.Name]...)
-	}
 	var rows []PeerRow
 	connected := 0
 	for _, p := range s.cfg.VPN.Peers {
-		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey], Access: access(p)}
+		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey], Services: p.Services, Sites: sitesOf[p.Name]}
 		if t := hs[p.PublicKey]; t > 0 {
 			d := time.Since(time.Unix(int64(t), 0))
 			// Un appareil actif refait sa poignée de main toutes les 2 minutes.
@@ -256,7 +249,7 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	for _, p := range s.pendingPeers(ctx) {
-		rows = append(rows, PeerRow{VPNPeer: p, Pending: true, Access: access(p)})
+		rows = append(rows, PeerRow{VPNPeer: p, Pending: true, Services: p.Services, Sites: sitesOf[p.Name]})
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
 	s.render(w, "vpn", map[string]any{"Nav": "vpn", "Rows": rows, "Connected": connected, "Total": len(s.cfg.VPN.Peers),
@@ -289,8 +282,28 @@ func (s *Server) nextAddress(pending []VPNPeer) (string, error) {
 
 func (s *Server) vpnNew(w http.ResponseWriter, r *http.Request) {
 	addr, err := s.nextAddress(s.pendingPeers(r.Context()))
+	sites, _ := s.accessSites(r.Context(), "")
 	s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Address": addr, "Error": errString(err), "Subnet": s.cfg.VPN.Subnet,
-		"Services": s.cfg.VPN.Services, "Checked": map[string]bool{}})
+		"Services": s.cfg.VPN.Services, "Checked": map[string]bool{}, "Sites": sites})
+}
+
+// siteAccess : un site (ou environnement) où l'appareil entre (`on`) ou d'où il sort.
+type siteAccess struct {
+	Site string `json:"site"`
+	Env  string `json:"env"`
+	On   bool   `json:"on"`
+}
+
+// formSites : les sites en VPN avec leur propre accès, cochés (`on`) ou non (champ `site`).
+func formSites(r *http.Request, sites []AccessSite) []AccessSite {
+	out := make([]AccessSite, 0, len(sites))
+	for _, a := range sites {
+		if !a.Inherited {
+			a.On = slices.Contains(r.Form["site"], a.App)
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // formServices : les services cochés (champ `service`), seulement ceux que think connaît.
@@ -344,9 +357,11 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 	for _, sv := range services {
 		checked[sv] = true
 	}
+	all, _ := s.accessSites(ctx, "")
+	sites := formSites(r, all)
 	fail := func(msg string) {
 		s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Name": name, "Address": r.FormValue("address"), "Error": msg, "Subnet": s.cfg.VPN.Subnet,
-			"Services": s.cfg.VPN.Services, "Checked": checked})
+			"Services": s.cfg.VPN.Services, "Checked": checked, "Sites": sites})
 	}
 	if !reDeviceName.MatchString(name) {
 		fail("Nom : lettres minuscules, chiffres et _ (24 caractères au plus).")
@@ -384,7 +399,13 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 	if services == nil {
 		services = []string{}
 	}
-	entry, _ := json.Marshal(map[string]any{"publicKey": pub, "address": addr, "services": services})
+	on := []siteAccess{}
+	for _, a := range sites {
+		if a.On && !a.Inherited {
+			on = append(on, siteAccess{a.Site, a.Env, true})
+		}
+	}
+	entry, _ := json.Marshal(map[string]any{"publicKey": pub, "address": addr, "services": services, "sites": on})
 	if err := s.gh.Dispatch(ctx, map[string]string{"action": "peer", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
 		fail("Inscription impossible (apps.yml) : " + err.Error())
 		return
@@ -527,11 +548,6 @@ func (s *Server) vpnAccessSave(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		back("Sites illisibles : " + err.Error())
 		return
-	}
-	type siteAccess struct {
-		Site string `json:"site"`
-		Env  string `json:"env"`
-		On   bool   `json:"on"`
 	}
 	changes := []siteAccess{}
 	for _, a := range sites {

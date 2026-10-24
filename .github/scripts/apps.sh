@@ -223,6 +223,26 @@ keep_dashboard() {
         || die "plus aucun appareil n'aurait accès au dashboard : refusé"
 }
 
+# Sites [{site, env, on}] : chaque cible doit exister, être en VPN avec son propre accès ; l'appareil
+# $APP entre dans (ou sort de) sa liste `devices`, qui ne peut pas finir vide.
+sites_ok='type == "array" and all(.[]; type == "object" and (.site | type == "string")
+    and ((.env // "") | type == "string") and (.on | type == "boolean"))'
+set_sites() {
+    local sites=$1 bad empty
+    bad=$(jq -r --argjson s "$sites" '. as $a | $s[]
+        | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
+        | select(($t | type) != "object" or $t.expose != "vpn")
+        | "\(.site)\(if (.env // "") != "" then "-" + .env else "" end)"' "$apps")
+    [ -z "$bad" ] || die "pas en VPN avec son propre accès : $(paste -sd, - <<<"$bad")"
+    jq -S --indent 2 --arg n "$APP" --argjson s "$sites" 'reduce $s[] as $x (.;
+        (if ($x.env // "") == "" then [$x.site] else [$x.site, "environments", $x.env] end) as $p
+        | setpath($p + ["devices"]; ((getpath($p + ["devices"]) // []) - [$n]) + (if $x.on then [$n] else [] end) | sort))' \
+        "$apps" | replace "$apps"
+    empty=$(jq -r 'to_entries[] | (select(.value.expose == "vpn" and (.value.devices // []) == []) | .key),
+        (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.expose == "vpn" and (.value.devices // []) == []) | "\($k)-\(.key)")' "$apps")
+    [ -z "$empty" ] || die "un site en VPN doit garder au moins un appareil : $(paste -sd, - <<<"$empty")"
+}
+
 # Appareil VPN : ajout ou retrait dans vpn-peers.json (unicité vérifiée aussi par le dashboard et
 # par l'évaluation Nix).
 peer() {
@@ -241,15 +261,17 @@ peer() {
         subject="feat(vpn): remove $APP"
     else
         jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
-        jq -e "type == \"object\" and (keys - [\"publicKey\", \"address\", \"services\"] | length == 0)
+        jq -e "type == \"object\" and (keys - [\"publicKey\", \"address\", \"services\", \"sites\"] | length == 0)
             and (.publicKey | type == \"string\" and test(\"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\$\"))
             and (.address | type == \"string\" and test(\"^[0-9]{1,3}(\\\\.[0-9]{1,3}){3}\$\"))
-            and (.services // [] | $services_ok)" <<<"$ENTRY" >/dev/null \
-            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), services (noms de services)} attendu"
+            and (.services // [] | $services_ok) and (.sites // [] | $sites_ok)" <<<"$ENTRY" >/dev/null \
+            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), services (noms), sites ([{site, env, on}])} attendu"
         jq -e --arg n "$APP" 'has($n) | not' "$peers" >/dev/null || die "$APP existe déjà dans $peers"
         jq -e --arg n "$APP" --argjson e "$ENTRY" '[to_entries[] | select(.value.address == $e.address or .value.publicKey == $e.publicKey)] | length == 0' "$peers" >/dev/null \
             || die "adresse ou clé publique déjà prise dans $peers"
-        jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" '.[$n] = $e' "$peers" | replace "$peers"
+        jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" '.[$n] = ($e | del(.sites))' "$peers" | replace "$peers"
+        # Ses sites dès l'inscription : même commit.
+        set_sites "$(jq -c '.sites // []' <<<"$ENTRY")"
         subject="feat(vpn): add $APP"
     fi
     echo "subject=$subject"
@@ -263,24 +285,11 @@ access() {
     jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
     jq -e "type == \"object\" and (keys - [\"services\", \"sites\"] | length == 0)
         and (.services | $services_ok)
-        and (.sites | type == \"array\" and all(.[]; type == \"object\" and (.site | type == \"string\")
-            and ((.env // \"\") | type == \"string\") and (.on | type == \"boolean\")))" <<<"$ENTRY" >/dev/null \
+        and (.sites | $sites_ok)" <<<"$ENTRY" >/dev/null \
         || die "ENTRY : {services: [noms], sites: [{site, env, on}]} attendu"
-    # Chaque cible : un site (ou environnement) existant, en VPN, avec son propre accès.
-    bad=$(jq -r --argjson e "$ENTRY" '. as $a | $e.sites[]
-        | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
-        | select(($t | type) != "object" or $t.expose != "vpn")
-        | "\(.site)\(if (.env // "") != "" then "-" + .env else "" end)"' "$apps")
-    [ -z "$bad" ] || die "pas en VPN avec son propre accès : $(paste -sd, - <<<"$bad")"
     jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" '.[$n].services = ($e.services | unique)' "$peers" | replace "$peers"
     keep_dashboard
-    jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" 'reduce $e.sites[] as $s (.;
-        (if ($s.env // "") == "" then [$s.site] else [$s.site, "environments", $s.env] end) as $p
-        | setpath($p + ["devices"]; ((getpath($p + ["devices"]) // []) - [$n]) + (if $s.on then [$n] else [] end) | sort))' \
-        "$apps" | replace "$apps"
-    empty=$(jq -r 'to_entries[] | (select(.value.expose == "vpn" and (.value.devices // []) == []) | .key),
-        (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.expose == "vpn" and (.value.devices // []) == []) | "\($k)-\(.key)")' "$apps")
-    [ -z "$empty" ] || die "un site en VPN doit garder au moins un appareil : $(paste -sd, - <<<"$empty")"
+    set_sites "$(jq -c .sites <<<"$ENTRY")"
     if git diff --quiet -- "$peers" "$apps"; then
         echo "subject="
         return 0
