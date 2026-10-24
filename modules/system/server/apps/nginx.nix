@@ -80,7 +80,7 @@ in
       _: app:
       {
         inherit (app) domain;
-        inherit (app.sso) policy;
+        policy = "two_factor";
       }
       // lib.optionalAttrs (app.sso.subject != null) { inherit (app.sso) subject; }
     ) ssoApps;

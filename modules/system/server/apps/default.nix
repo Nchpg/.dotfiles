@@ -85,15 +85,6 @@ in
             sso = {
               enable = lib.mkEnableOption "le portail Authelia devant l'application, en plus de `expose`";
 
-              policy = lib.mkOption {
-                type = lib.types.enum [
-                  "one_factor"
-                  "two_factor"
-                ];
-                default = "two_factor";
-                description = "Politique Authelia de l'application.";
-              };
-
               subject = lib.mkOption {
                 type = lib.types.nullOr (lib.types.listOf lib.types.str);
                 default = null;

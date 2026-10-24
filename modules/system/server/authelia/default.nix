@@ -281,6 +281,11 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
+        # Connexion toujours en double authentification : un mot de passe seul ne suffit nulle part.
+        assertion = lib.all (r: r.policy != "one_factor") cfg.rules;
+        message = "systemSettings.authelia.rules : `one_factor` refusé, la connexion se fait toujours en `two_factor`.";
+      }
+      {
         assertion = lib.all (n: builtins.match "[A-Za-z0-9._@-]{1,64}" n != null) (
           lib.attrNames cfg.accounts
         );
