@@ -21,8 +21,10 @@ import (
 // AutheliaInfo : registre des services derrière le portail et ce que la génération active ouvre à
 // chaque compte (cf. `autheliaInfo`, ../default.nix).
 type AutheliaInfo struct {
-	Services []VPNService        `json:"services"`
-	Accounts map[string][]string `json:"accounts"`
+	Services    []VPNService        `json:"services"`
+	Accounts    map[string][]string `json:"accounts"`
+	UsersSecret string              `json:"usersSecret"` // clé sops du fichier d'utilisateurs semé
+	PortalHost  string              `json:"portalHost"`
 }
 
 const autheliaAccountsPath = "profiles/server/authelia-accounts.json"

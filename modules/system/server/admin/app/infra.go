@@ -75,7 +75,15 @@ func (s *Server) requestDevice(r *http.Request) string {
 	return ""
 }
 
-// SSHUser : clés autorisées d'un compte (cf. `sshInfo`).
+// SSHInfo : clés autorisées de chaque compte, et de quoi en ajouter une (cf. `sshInfo`).
+type SSHInfo struct {
+	Users []SSHUser `json:"users"`
+	Port  int       `json:"port"`
+	Host  string    `json:"host"`  // think, joint par le tunnel
+	Files []string  `json:"files"` // fichiers du dépôt qui déclarent les comptes
+}
+
+// SSHUser : clés autorisées d'un compte.
 type SSHUser struct {
 	Name string   `json:"name"`
 	Keys []string `json:"keys"`
@@ -602,7 +610,7 @@ func sshKeyRow(user, key string) SSHKeyRow {
 
 func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 	var rows []SSHKeyRow
-	for _, u := range s.cfg.SSH {
+	for _, u := range s.cfg.SSH.Users {
 		for _, k := range u.Keys {
 			rows = append(rows, sshKeyRow(u.Name, k))
 		}

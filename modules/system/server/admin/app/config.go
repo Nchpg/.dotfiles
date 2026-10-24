@@ -28,7 +28,7 @@ type Config struct {
 	SecretKeys   []string
 	Services     []Service    // services de think hors apps.json (lecture seule)
 	VPN          VPNInfo      // tunnel et appareils (page VPN)
-	SSH          []SSHUser    // clés autorisées (page SSH)
+	SSH          SSHInfo      // clés autorisées (page SSH)
 	AccountsFile string       // résumé des comptes Authelia, écrit par admin-accounts (root)
 	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
 	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage

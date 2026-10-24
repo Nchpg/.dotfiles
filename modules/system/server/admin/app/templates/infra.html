@@ -155,7 +155,10 @@
 {{template "bottom" .}}{{end}}
 
 {{define "ssh"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "SSH")}}</header>
+<header class="topbar">
+  {{template "crumbs" (args "Title" "SSH")}}
+  <a class="btn btn-primary" href="/ssh/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une clé</a>
+</header>
 <main class="page">
   <h1>SSH</h1>
   <div class="overview">
@@ -181,7 +184,10 @@
 {{template "bottom" .}}{{end}}
 
 {{define "accounts"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "Authelia")}}</header>
+<header class="topbar">
+  {{template "crumbs" (args "Title" "Authelia")}}
+  <a class="btn btn-primary" href="/accounts/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un compte</a>
+</header>
 <main class="page">
   <h1>Authelia</h1>
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
@@ -231,5 +237,79 @@
     <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/accounts">Annuler</a></div>
   </form>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{/* Pages « Ajouter » : un formulaire (GET), puis les commandes à taper, rien n'est écrit d'ici. */}}
+{{define "account-new"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" "Nouveau compte")}}</header>
+<main class="page">
+  <h1>Nouveau compte</h1>
+  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  <div class="overview">
+    <form method="get" action="/accounts/new" class="card stack gap narrow">
+      <label class="field"><span>Identifiant <small class="muted">(pour se connecter)</small></span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9][a-z0-9._\-]{0,31}" placeholder="marie" {{if not .Snippet}}autofocus{{end}}></label>
+      <label class="field"><span>Nom affiché</span><input name="displayname" value="{{.DisplayName}}" required maxlength="64" placeholder="Marie"></label>
+      <label class="field"><span>Adresse e-mail <small class="muted">(pour choisir son mot de passe)</small></span><input name="email" type="email" value="{{.Email}}" required placeholder="marie@exemple.fr"></label>
+      <label class="field"><span>Groupe</span><input name="group" value="{{.Group}}" class="mono" list="groups" required><datalist id="groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist></label>
+      <button class="btn btn-primary">Donner les commandes</button>
+    </form>
+    {{with .Snippet}}
+    <section class="block" aria-labelledby="steps-title">
+      <div class="block-head"><h2 id="steps-title">Sur think, dans ~/.dotfiles</h2></div>
+      <div class="card stack gap">
+        <ol class="steps-list">
+          <li><code>secrets edit {{$.Secret}}</code>, puis, dans le bloc des comptes, ajouter à côté des autres (même retrait que les comptes existants) :
+            <pre class="conf mono small">{{.}}</pre>
+            <small class="muted">Sans mot de passe : think lui en donne un au hasard, que personne ne connaît.</small></li>
+          <li><code>rebuild</code></li>
+          <li>La personne ouvre <a href="https://{{$.Portal}}/" target="_blank" rel="noopener" class="mono">{{$.Portal}}</a>, « Mot de passe oublié ? » avec son adresse, choisit son mot de passe, puis sa double authentification.</li>
+          <li>Ici, quand le compte apparaît dans la liste (relue toutes les 5 minutes) : « Gérer » pour lui ouvrir des services et des sites. Avant, il n'a accès à rien.</li>
+        </ol>
+      </div>
+    </section>
+    {{end}}
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "ssh-new"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "SSH" "Link" "/ssh" "Sub" "Nouvelle clé")}}</header>
+<main class="page">
+  <h1>Nouvelle clé</h1>
+  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  <div class="overview">
+    <form method="get" action="/ssh/new" class="card stack gap narrow">
+      {{if gt (len .Users) 1}}<label class="field"><span>Compte sur think</span><input name="user" value="{{.User}}" class="mono" list="users" required><datalist id="users">{{range .Users}}<option value="{{.}}">{{end}}</datalist></label>
+      {{else}}<input type="hidden" name="user" value="{{.User}}">{{end}}
+      <label class="field"><span>Appareil <small class="muted">(nom dans le commentaire de la clé)</small></span><input name="device" value="{{.Device}}" class="mono" required pattern="[A-Za-z0-9._\-]{1,32}" placeholder="pixel-9" {{if not .Ready}}autofocus{{end}}></label>
+      <label class="field"><span>Clé publique <small class="muted">(facultatif : sinon, la commande pour la créer)</small></span><textarea name="key" rows="3" class="mono small" placeholder="ssh-ed25519 AAAA…">{{.Key}}</textarea></label>
+      <button class="btn btn-primary">Donner les commandes</button>
+    </form>
+    {{if .Ready}}
+    {{if not .Key}}
+    <section class="block" aria-labelledby="device-title">
+      <div class="block-head"><h2 id="device-title">1. Sur l'appareil</h2></div>
+      <div class="card stack gap">
+        <ol class="steps-list">
+          <li><code>ssh-keygen -t ed25519 -C "{{.Comment}}"</code></li>
+          <li><code>cat ~/.ssh/id_ed25519.pub</code> : la ligne affichée est la clé publique (la colle ci-dessus pour avoir la ligne exacte).</li>
+        </ol>
+      </div>
+    </section>
+    {{end}}
+    <section class="block" aria-labelledby="think-title">
+      <div class="block-head"><h2 id="think-title">{{if not .Key}}2. {{end}}Sur think, dans ~/.dotfiles</h2></div>
+      <div class="card stack gap">
+        <ol class="steps-list">
+          <li>Dans {{range $i, $f := .Info.Files}}{{if $i}} ou {{end}}<code>{{$f}}</code>{{end}}, ajouter aux <code>sshKeys</code> du compte <code>{{.User}}</code> :
+            <pre class="conf mono small">"{{.Line}}"</pre></li>
+          <li><code>rebuild</code></li>
+          <li>Depuis l'appareil, par le VPN : <code>ssh -p {{.Info.Port}} {{.User}}@{{.Info.Host}}</code></li>
+        </ol>
+      </div>
+    </section>
+    {{end}}
+  </div>
 </main>
 {{template "bottom" .}}{{end}}

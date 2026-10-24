@@ -15,7 +15,7 @@ let
   instanceDir = "/var/lib/authelia-main";
 
   liveUsers = "${instanceDir}/users.yml";
-  seedUsers = config.sops.secrets."authelia/users".path;
+  seedUsers = config.sops.secrets.${cfg.usersSecret}.path;
 
   # Le domaine lui-même ou un sous-domaine (hasSuffix seul accepterait `malexemple.fr`).
   isUnder = domain: host: host == domain || lib.hasSuffix ".${domain}" host;
@@ -73,6 +73,13 @@ in
       type = lib.types.port;
       default = 9091;
       description = "Port de bouclage d'Authelia (nginx uniquement).";
+    };
+
+    usersSecret = lib.mkOption {
+      type = lib.types.str;
+      readOnly = true;
+      default = "authelia/users";
+      description = "Clé sops du fichier d'utilisateurs semé (`secrets edit` pour ajouter un compte).";
     };
 
     portalHost = lib.mkOption {
@@ -318,7 +325,7 @@ in
           "authelia/jwt_secret"
           "authelia/storage_key"
           "authelia/session_secret"
-          "authelia/users"
+          cfg.usersSecret
         ]
         (_: {
           owner = "authelia-main";

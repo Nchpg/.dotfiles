@@ -514,3 +514,4 @@ fieldset.checks legend { padding: 0 0 4px; font-weight: 600; font-size: 14px; }
 .row-toggle.disabled { opacity: .55; cursor: default; }
 .access-cell { font-size: 13px; line-height: 1.5; } .access-cell .muted { display: inline-block; min-width: 56px; }
 form fieldset.checks + fieldset.checks, form .field + fieldset.checks { margin-top: 10px; }
+textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card); color: var(--text); min-width: 0; resize: vertical; font: inherit; }

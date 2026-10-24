@@ -1,5 +1,6 @@
 {
   config,
+  options,
   lib,
   pkgs-stable,
   myLib,
@@ -102,13 +103,27 @@ let
       inherit (s) label host;
     }) authelia.services;
     accounts = lib.mapAttrs (_: a: a.services) authelia.accounts;
+    # Page « Ajouter un compte » : le secret à éditer et le portail (mot de passe oublié).
+    inherit (authelia) usersSecret portalHost;
   };
 
-  # Page SSH : clés autorisées de chaque compte (publiques).
-  sshInfo = map (u: {
-    inherit (u) name;
-    keys = u.sshKeys;
-  }) (lib.filter (u: u.sshKeys != [ ]) config.systemSettings.users);
+  # Page SSH : clés autorisées de chaque compte (publiques), et pour en ajouter une : le port, une
+  # adresse de think dans le tunnel, et les fichiers du dépôt qui déclarent les comptes.
+  sshInfo = {
+    users = map (u: {
+      inherit (u) name;
+      keys = u.sshKeys;
+    }) (lib.filter (u: u.sshKeys != [ ]) config.systemSettings.users);
+    inherit (config.systemSettings.ssh) port;
+    host = if wireguard.enable then wireguard.serverAddress else target.host;
+    files = map (
+      d:
+      let
+        rel = lib.removePrefix "${toString inputs.self}/" (toString d.file);
+      in
+      if lib.hasSuffix ".nix" rel then rel else "${rel}/default.nix"
+    ) options.systemSettings.users.definitionsWithLocations;
+  };
 
   # Page Comptes : résumé des comptes Authelia, sans aucun secret (le fichier d'utilisateurs et la
   # base sont à root). Une table absente (autre version d'Authelia) donne une liste vide.
