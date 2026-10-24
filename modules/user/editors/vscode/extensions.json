@@ -2,8 +2,8 @@
   "anthropic.claude-code": {
     "publisher": "anthropic",
     "name": "claude-code",
-    "version": "2.1.300",
-    "hash": "sha256-3L+WKtc4TXpSa/RpJ1AaokNe2jquS6P4/jH6b5l97Wo=",
+    "version": "2.1.310",
+    "hash": "sha256-nTlTDEigZ7kpn/xe93nldzHTemy89YhejEs1FPkVauc=",
     "arch": "linux-x64"
   },
   "ahgood.shift-shift": {
@@ -15,8 +15,8 @@
   "ms-azuretools.vscode-containers": {
     "publisher": "ms-azuretools",
     "name": "vscode-containers",
-    "version": "2.5.2",
-    "hash": "sha256-ERpwIOxLZxelWPRFYwsaEcbnOxW3cC3vGOKIkg92ztw="
+    "version": "2.5.3",
+    "hash": "sha256-QP74EdzkPqGjH1c9h8eESMubpvMDyLmC9eW4HcA9CBc="
   },
   "ms-vscode.remote-explorer": {
     "publisher": "ms-vscode",
