@@ -212,10 +212,12 @@ edit() {
     echo "subject=$subject"
 }
 
-# Services réservés qu'un appareil peut recevoir (même liste que le module wireguard).
-services_ok='(type == "array") and all(.[]; IN("admin", "vaultwarden"))'
+# Services d'un appareil : des noms ; la config refuse ceux qu'aucun module ne déclare
+# (systemSettings.vpn.wireguard.services), le dashboard ne propose que ceux-là.
+services_ok='(type == "array") and all(.[]; type == "string" and test("^[a-z0-9_-]{1,32}$"))'
 
-# Il reste au moins un appareil avec le dashboard : sans lui, plus personne ne l'ouvre.
+# Il reste au moins un appareil avec « admin », le service du dashboard (déclaré par son module) :
+# sans lui, plus personne ne l'ouvre.
 keep_dashboard() {
     jq -e '[.[] | select(.services // [] | index("admin"))] | length > 0' "$peers" >/dev/null \
         || die "plus aucun appareil n'aurait accès au dashboard : refusé"
@@ -243,7 +245,7 @@ peer() {
             and (.publicKey | type == \"string\" and test(\"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\$\"))
             and (.address | type == \"string\" and test(\"^[0-9]{1,3}(\\\\.[0-9]{1,3}){3}\$\"))
             and (.services // [] | $services_ok)" <<<"$ENTRY" >/dev/null \
-            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), services (admin, vaultwarden)} attendu"
+            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), services (noms de services)} attendu"
         jq -e --arg n "$APP" 'has($n) | not' "$peers" >/dev/null || die "$APP existe déjà dans $peers"
         jq -e --arg n "$APP" --argjson e "$ENTRY" '[to_entries[] | select(.value.address == $e.address or .value.publicKey == $e.publicKey)] | length == 0' "$peers" >/dev/null \
             || die "adresse ou clé publique déjà prise dans $peers"
@@ -263,7 +265,7 @@ access() {
         and (.services | $services_ok)
         and (.sites | type == \"array\" and all(.[]; type == \"object\" and (.site | type == \"string\")
             and ((.env // \"\") | type == \"string\") and (.on | type == \"boolean\")))" <<<"$ENTRY" >/dev/null \
-        || die "ENTRY : {services: [admin, vaultwarden], sites: [{site, env, on}]} attendu"
+        || die "ENTRY : {services: [noms], sites: [{site, env, on}]} attendu"
     # Chaque cible : un site (ou environnement) existant, en VPN, avec son propre accès.
     bad=$(jq -r --argjson e "$ENTRY" '. as $a | $e.sites[]
         | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
