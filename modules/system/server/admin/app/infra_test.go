@@ -84,3 +84,21 @@ func TestCheckAddress(t *testing.T) {
 		}
 	}
 }
+
+// Joignable par le tunnel : le nom doit résoudre dans le réseau du VPN.
+func TestViaTunnel(t *testing.T) {
+	s := &Server{cfg: &Config{VPN: VPNInfo{Subnet: "10.8.0.0/24", ServerAddress: "10.8.0.1"}}}
+	if ok, known := s.viaTunnel("localhost"); !known || ok {
+		t.Errorf("localhost : ok=%v known=%v, attendu hors tunnel", ok, known)
+	}
+	s.cfg.VPN.Subnet = "127.0.0.0/8"
+	tunnelCache.Lock()
+	delete(tunnelCache.m, "localhost")
+	tunnelCache.Unlock()
+	if ok, _ := s.viaTunnel("localhost"); !ok {
+		t.Error("localhost dans 127.0.0.0/8 : attendu joignable")
+	}
+	if _, known := (&Server{cfg: &Config{}}).viaTunnel("localhost"); known {
+		t.Error("sans VPN configuré : rien ne doit être affirmé")
+	}
+}

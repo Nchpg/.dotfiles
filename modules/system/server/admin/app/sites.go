@@ -58,6 +58,7 @@ type ActivityDay struct {
 type SiteRow struct {
 	Name, Label, Branch, Domain, URL, EditURL string
 	VPN, SSO, Up, Probed                      bool
+	NoTunnel                                  bool // en VPN, mais le nom ne pointe pas sur think dans le tunnel
 	Memory, Rev, Frozen                       string
 	First                                     bool
 	Span                                      int
@@ -173,12 +174,17 @@ type ServiceRow struct {
 	Service
 	URL        string
 	Up, Probed bool
+	NoTunnel   bool // servi en VPN, mais le nom ne pointe pas sur think dans le tunnel
 }
 
 func (s *Server) serviceRows(up map[string]bool) []ServiceRow {
 	rows := make([]ServiceRow, 0, len(s.cfg.Services))
 	for _, sv := range s.cfg.Services {
 		r := ServiceRow{Service: sv, URL: "https://" + sv.Domain}
+		if !sv.Public {
+			ok, known := s.viaTunnel(sv.Domain)
+			r.NoTunnel = known && !ok
+		}
 		if sv.Probed {
 			r.Up, r.Probed = up[sv.Domain]
 		}
@@ -250,6 +256,10 @@ func (s *Server) row(name string, e Entry, d Deploy, snap *Snapshot, up map[stri
 		Name: name, Label: d.Label, Branch: d.Branch, Domain: domain, URL: "https://" + domain,
 		Initial: initialOf(name), Tint: tint, Ink: ink, VPN: d.VPN(), SSO: d.Access.SSO,
 		EditURL: "/sites/" + name,
+	}
+	if r.VPN {
+		ok, known := s.viaTunnel(domain)
+		r.NoTunnel = known && !ok
 	}
 	if d.Child {
 		r.EditURL += "?env=" + d.ID

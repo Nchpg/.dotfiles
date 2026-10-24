@@ -178,6 +178,7 @@ a.go:hover { color: var(--text); text-decoration: underline; }
 .acc-vpn { background: #10141B; color: #FFFFFF; }
 .acc-public { background: #EEF0F3; color: var(--text); }
 .acc-sso { margin-top: 6px; padding: 2px 7px; border: 1px solid #C9CED6; color: var(--text); }
+.acc-warn { margin-top: 6px; padding: 2px 7px; border: 1px solid var(--warn); color: var(--warn); background: var(--warn-soft); }
 
 /* Demande en cours (pastille) */
 .job .pulse { width: 7px; height: 7px; background: currentColor; }
