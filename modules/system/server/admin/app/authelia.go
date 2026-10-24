@@ -143,7 +143,7 @@ type AccountRow struct {
 
 func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	data := map[string]any{"Nav": "accounts", "Error": r.URL.Query().Get("erreur")}
+	data := map[string]any{"Nav": "accounts", "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))}
 	list, err := s.readAccounts()
 	if err != nil {
 		data["Error"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
@@ -242,9 +242,11 @@ func (s *Server) accountAccessSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
-	if err := s.gh.Dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"},
+		"Accès de "+name, "think l'applique seul dans la minute, sauf si un rebuild est déjà en attente.")
+	if err != nil {
 		back("Changement impossible (apps.yml) : " + err.Error())
 		return
 	}
-	back(name + " : accès enregistrés (commit dans la minute), appliqués seuls ensuite, sauf si un rebuild est déjà en attente.")
+	tracked(w, r, "/accounts", id)
 }

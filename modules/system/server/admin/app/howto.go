@@ -77,12 +77,14 @@ func (s *Server) accountNew(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(services) > 0 || len(changes) > 0 {
 		entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
-		if err := s.gh.Dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
+		id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"},
+			"Accès de "+name, "Ils s'activent avec le compte, au rebuild ci-dessous.")
+		if err != nil {
 			data["Error"] = "Accès non enregistrés (apps.yml) : " + err.Error()
 			s.render(w, "account-new", data)
 			return
 		}
-		data["Granted"] = true
+		data["Granted"], data["Track"] = true, trackOf(id)
 	}
 	data["GrantedServices"], data["GrantedSites"] = services, opened
 	data["Snippet"] = name + ":\n    displayname: " + yamlString(display) + "\n    email: " + yamlString(email)
@@ -166,11 +168,13 @@ func (s *Server) sshAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry, _ := json.Marshal(map[string]string{"add": line})
-	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "sshkey", "app": data["User"].(string), "entry": string(entry), "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(r.Context(), map[string]string{"action": "sshkey", "app": data["User"].(string), "entry": string(entry), "source": "dashboard"},
+		"Clé "+data["Comment"].(string), "Elle s'active au rebuild ci-dessous.")
+	if err != nil {
 		data["Error"] = "Ajout impossible (apps.yml) : " + err.Error()
 		s.render(w, "ssh-new", data)
 		return
 	}
-	data["Added"] = true
+	data["Added"], data["Track"] = true, trackOf(id)
 	s.render(w, "ssh-new", data)
 }

@@ -530,6 +530,17 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .cmd.sh pre::before { content: "$ "; color: var(--side-faint); }
 .cmd-copy { position: absolute; top: 6px; right: 6px; height: 26px; padding: 0 10px; border: 0; background: var(--side-2); color: var(--side-text); font-size: 12px; font-weight: 500; cursor: pointer; }
 .cmd-copy:hover { color: #fff; }
-.end-line { justify-content: flex-end; gap: 8px; } .row-remove { position: relative; } .row-remove details[open] .confirm { position: absolute; right: 0; top: 100%; margin-top: 6px; z-index: 5; background: var(--card); border: 1px solid var(--line); padding: 8px; }
-.row-remove summary .if-open, .row-remove details[open] summary .if-closed { display: none; } .row-remove summary::-webkit-details-marker { display: none; }
-.end-line { display: inline-flex; flex-wrap: nowrap; } .row-remove, .row-remove details { display: inline-block; }
+/* Voyant d'une demande à apps.yml. */
+.track { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--line); background: var(--card); font-size: 13.5px; }
+.track-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--faint); }
+.track-running .track-dot { background: #F59E0B; animation: track-pulse 1.2s ease-in-out infinite; }
+.track-done { border-color: #BBE5C8; background: var(--ok-soft); } .track-done .track-dot { background: #22C55E; }
+.track-failed { border-color: #F3C9C5; background: var(--bad-soft); } .track-failed .track-dot { background: var(--bad); }
+@keyframes track-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .track-running .track-dot { animation: none; } }
+/* Retirer une ligne de tableau : « Retirer… », puis « Annuler » et la confirmation côte à côte. */
+.end-line { display: inline-flex; flex-wrap: nowrap; justify-content: flex-end; gap: 8px; }
+.row-remove details { display: inline-flex; flex-direction: row-reverse; align-items: center; gap: 8px; }
+.row-remove summary { list-style: none; }
+.row-remove summary::-webkit-details-marker { display: none; }
+.row-remove details:not([open]) .if-open, .row-remove details[open] .if-closed { display: none; }

@@ -263,7 +263,7 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
 	s.render(w, "vpn", map[string]any{"Nav": "vpn", "Rows": rows, "Connected": connected, "Total": len(s.cfg.VPN.Peers),
-		"Endpoint": s.cfg.VPN.Endpoint, "Subnet": s.cfg.VPN.Subnet, "Error": r.URL.Query().Get("erreur")})
+		"Endpoint": s.cfg.VPN.Endpoint, "Subnet": s.cfg.VPN.Subnet, "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))})
 }
 
 // nextAddress : la première adresse libre du /24 du tunnel (serveur et appareils exclus, ceux en
@@ -416,7 +416,9 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	entry, _ := json.Marshal(map[string]any{"publicKey": pub, "address": addr, "services": services, "sites": on})
-	if err := s.gh.Dispatch(ctx, map[string]string{"action": "peer", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(ctx, map[string]string{"action": "peer", "app": name, "entry": string(entry), "source": "dashboard"},
+		"Appareil "+name, "Il ne s'ouvre qu'avec les étapes ci-dessous (secret, puis rebuild).")
+	if err != nil {
 		fail("Inscription impossible (apps.yml) : " + err.Error())
 		return
 	}
@@ -426,6 +428,7 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 		"Download":  "data:text/plain;base64," + b64([]byte(conf)),
 		"Secret":    fmt.Sprintf("wireguard:\n  %s_preshared_key: %s", name, b64(psk)),
 		"SecretKey": "wireguard/" + name + "_preshared_key",
+		"Track":     trackOf(id),
 	})
 }
 
@@ -474,11 +477,13 @@ func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape("Tu es connecté depuis "+name+" : le retirer te couperait le VPN. Fais-le depuis un autre appareil."), http.StatusSeeOther)
 		return
 	}
-	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "peer", "app": name, "entry": "null", "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(r.Context(), map[string]string{"action": "peer", "app": name, "entry": "null", "source": "dashboard"},
+		"Retrait de "+name, "Il reste autorisé jusqu'au prochain rebuild : git pull, puis rebuild.")
+	if err != nil {
 		http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape("Retrait impossible : "+err.Error()), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, "/vpn?erreur="+url.QueryEscape(name+" : retrait demandé. Il reste autorisé jusqu'au prochain rebuild (après git pull)."), http.StatusSeeOther)
+	tracked(w, r, "/vpn", id)
 }
 
 // AccessSite : un site (ou environnement) en VPN dans la page Accès d'un appareil. Inherited : il
@@ -570,21 +575,13 @@ func (s *Server) vpnAccessSave(w http.ResponseWriter, r *http.Request) {
 		services = []string{}
 	}
 	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
-	if err := s.gh.Dispatch(ctx, map[string]string{"action": "access", "app": p.Name, "entry": string(entry), "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(ctx, map[string]string{"action": "access", "app": p.Name, "entry": string(entry), "source": "dashboard"},
+		"Accès de "+p.Name, "think l'applique seul dans la minute, sauf si un rebuild est déjà en attente.")
+	if err != nil {
 		back("Changement impossible (apps.yml) : " + err.Error())
 		return
 	}
-	msg := p.Name + " : accès enregistrés (commit dans la minute)."
-	if len(changes) > 0 || !slices.Equal(sortedCopy(services), sortedCopy(p.Services)) {
-		msg += " Appliqué seul ensuite, sauf si un rebuild est déjà en attente."
-	}
-	back(msg)
-}
-
-func sortedCopy(v []string) []string {
-	out := append([]string(nil), v...)
-	sort.Strings(out)
-	return out
+	tracked(w, r, "/vpn", id)
 }
 
 // SSHKeyRow : une clé autorisée, son type, son commentaire et son empreinte (comme ssh-keygen -l).
@@ -633,7 +630,7 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur")})
+	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))})
 }
 
 const sshKeysPath = "profiles/server/ssh-keys.json"
@@ -665,11 +662,13 @@ func (s *Server) sshRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	entry, _ := json.Marshal(map[string]string{"remove": key})
-	if err := s.gh.Dispatch(r.Context(), map[string]string{"action": "sshkey", "app": user, "entry": string(entry), "source": "dashboard"}); err != nil {
+	id, err := s.dispatch(r.Context(), map[string]string{"action": "sshkey", "app": user, "entry": string(entry), "source": "dashboard"},
+		"Retrait de la clé "+sshKeyRow(user, key).Comment, "Elle reste autorisée jusqu'au prochain rebuild : git pull, puis rebuild (qui le montre et demande confirmation).")
+	if err != nil {
 		back("Retrait impossible (apps.yml) : " + err.Error())
 		return
 	}
-	back(sshKeyRow(user, key).Comment + " : retrait demandé (commit dans la minute). Elle reste autorisée jusqu'au prochain rebuild (git pull, puis rebuild, qui le montre et demande confirmation).")
+	tracked(w, r, "/ssh", id)
 }
 
 // parseSQLiteTime : les dates de la base d'Authelia (texte, avec ou sans fuseau ni fraction).

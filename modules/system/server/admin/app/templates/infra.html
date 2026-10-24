@@ -9,6 +9,7 @@
 </header>
 <main class="page">
   <h1>VPN</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="strip" aria-label="État du VPN">
@@ -80,6 +81,7 @@
 <header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" .Name)}}</header>
 <main class="page">
   <h1>{{.Name}}</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
   <div class="alert alert-amber"><p><strong>Page unique.</strong> Les clés ne sont gardées nulle part : enregistre la configuration sur l'appareil avant de quitter.</p></div>
   <div class="overview">
     <section class="block" aria-labelledby="conf-title">
@@ -161,6 +163,7 @@
 </header>
 <main class="page">
   <h1>SSH</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="keys-title">
@@ -177,7 +180,7 @@
               <td class="end"><span class="line end-line">
                 <button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier</button>
                 {{if and .InFile (not .Adding)}}<form method="post" action="/ssh/remove" class="row-remove"><input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="key" value="{{.Key}}">
-                  <details><summary class="btn btn-sm btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary><div class="confirm"><button class="btn btn-sm btn-danger">Retirer</button></div></details></form>{{end}}
+                  <details><summary class="btn btn-sm btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary><button class="btn btn-sm btn-danger">Retirer</button></details></form>{{end}}
               </span></td>
             </tr>
             {{else}}<tr><td colspan="4" class="muted">Aucune clé.</td></tr>{{end}}
@@ -196,6 +199,7 @@
 </header>
 <main class="page">
   <h1>Authelia</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="accounts-title">
@@ -250,12 +254,13 @@
 <header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" "Nouveau compte")}}</header>
 <main class="page">
   <h1>{{if .Snippet}}{{.Name}}{{else}}Nouveau compte{{end}}</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
   {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     {{if .Snippet}}
     <section class="card" aria-label="Étapes">
       <ol class="howto">
-        <li><div class="howto-title">Ses accès{{if .Granted}}<span class="howto-where">enregistrés : commit sur main dans la minute</span>{{end}}</div>
+        <li><div class="howto-title">Ses accès</div>
           <p>{{if .Granted}}{{with .GrantedServices}}Services : {{join . ", "}}. {{end}}{{with .GrantedSites}}Sites : {{join . ", "}}.{{end}}{{else}}Aucun : il n'ouvrira rien tant que tu ne coches rien dans « Gérer ».{{end}}</p></li>
         <li><div class="howto-title">Ajouter le compte aux secrets<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
           {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" .Secret))}}
@@ -293,7 +298,7 @@
   {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     {{if .Added}}
-    <div class="alert alert-amber"><p><strong>{{.Comment}}</strong> entre dans ssh-keys.json (commit sur main dans la minute). Elle n'ouvre rien tant que tu n'as pas fait le rebuild ci-dessous.</p></div>
+    {{with .Track}}{{template "track" .}}{{end}}
     <section class="card" aria-label="Étapes">
       <ol class="howto">
         <li><div class="howto-title">Récupérer le commit<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
@@ -338,3 +343,11 @@
 
 {{/* Bloc de commande (.Text ; .Sh : une commande, précédée de « $ ») avec un bouton Copier. */}}
 {{define "cmd"}}<div class="cmd{{if .Sh}} sh{{end}}"><pre>{{.Text}}</pre><button type="button" class="cmd-copy" data-copy>Copier</button></div>{{end}}
+
+{{/* Voyant d'une demande à apps.yml : orange tant que le run court (htmx le relit), vert une fois
+     commité sur main, rouge si refusé. */}}
+{{define "track"}}<div class="track track-{{.State}}" role="status"{{if eq .State "running"}} hx-get="/track/{{.ID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+  <span class="track-dot" aria-hidden="true"></span>
+  <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "done"}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{else}}{{.Detail}}{{end}}</span>
+  {{with .Link}}<a class="small" href="{{.}}" target="_blank" rel="noopener">{{if eq $.State "done"}}voir le commit{{else}}voir le run{{end}}</a>{{end}}
+</div>{{end}}

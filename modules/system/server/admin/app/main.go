@@ -80,6 +80,7 @@ func main() {
 	mux.HandleFunc("GET /ssh/new", s.sshNew)
 	mux.HandleFunc("POST /ssh/new", s.sshAdd)
 	mux.HandleFunc("POST /ssh/remove", s.sshRemove)
+	mux.HandleFunc("GET /track/{id}", s.trackFragment)
 	mux.HandleFunc("GET /accounts", s.accounts)
 	mux.HandleFunc("GET /accounts/new", s.accountNew)
 	mux.HandleFunc("POST /accounts/new", s.accountNew)
