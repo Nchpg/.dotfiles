@@ -132,6 +132,10 @@ let
       overrides ? [ ],
       graph ? true,
       justify ? "auto",
+      # Champs montrés : "" (les nombres), "/.*/" pour un texte (cible au format table).
+      fields ? "",
+      transformations ? [ ],
+      valueSize ? 30,
     }:
     {
       inherit id title;
@@ -156,13 +160,13 @@ let
         # Tailles fixes : en automatique, une valeur avec courbe sort petite et une sans courbe
         # énorme, et une rangée de tuiles devient illisible.
         text = {
-          valueSize = 30;
+          inherit valueSize;
           titleSize = 13;
         };
         textMode = if targets == null then "auto" else "value_and_name";
         reduceOptions = {
           calcs = [ "lastNotNull" ];
-          fields = "";
+          inherit fields;
           values = false;
         };
       };
@@ -176,13 +180,22 @@ let
             }
           ]
         else
-          lib.imap0 (i: t: {
-            refId = toString (i + 1);
-            datasource = promDs;
-            expr = t.expr;
-            legendFormat = t.legend;
-          }) targets;
+          lib.imap0 (
+            i: t:
+            {
+              refId = toString (i + 1);
+              datasource = promDs;
+              expr = t.expr;
+            }
+            // lib.optionalAttrs (t ? legend) { legendFormat = t.legend; }
+            # Un libellé (`release` de node_uname_info…) lu comme une valeur : une ligne de tableau.
+            // lib.optionalAttrs (t ? format) {
+              inherit (t) format;
+              instant = true;
+            }
+          ) targets;
     }
+    // lib.optionalAttrs (transformations != [ ]) { inherit transformations; }
     // mkDescription description;
 
   mkTs =

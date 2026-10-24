@@ -16,18 +16,18 @@ let
     {
       title = "Vue d'ensemble";
       bands = [
+        # Deux lignes : sept panneaux sur une seule coupaient les titres. L'état d'abord, la charge
+        # ensuite, avec ses courbes.
         [
           "alertesEnCours"
-          "processeur"
-          "ramUtilisee"
-          "stockageUtilise"
-        ]
-        # Seconde ligne, plus large : sept panneaux sur une seule coupaient les titres et
-        # réduisaient « Matériel » (trois valeurs) à des chiffres illisibles.
-        [
           "sondesEnEchec"
           "demarreDepuis"
           "materiel"
+        ]
+        [
+          "processeur"
+          "ramUtilisee"
+          "stockageUtilise"
         ]
       ];
     }

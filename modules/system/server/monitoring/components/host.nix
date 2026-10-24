@@ -242,14 +242,8 @@ in
           title = "Démarré depuis";
           # En jours entiers : `dtdurations` écrirait « 3 weeks », en anglais.
           unit = "suffix: j";
-          description = "Temps écoulé depuis le dernier démarrage de think, et le noyau chargé à ce démarrage (un rebuild qui en installe un autre ne le charge qu'au prochain : le dashboard admin le signale). Orange le premier jour : s'il n'était pas voulu (coupure de courant, plantage), c'est là qu'on le voit.";
-          # Le noyau vient de node_uname_info : `release` devient le nom de la valeur.
-          targets = [
-            {
-              expr = "floor((time() - node_boot_time_seconds) / 86400) * on(instance) group_left(release) node_uname_info";
-              legend = "noyau {{release}}";
-            }
-          ];
+          description = "Temps écoulé depuis le dernier démarrage de think. Orange le premier jour : s'il n'était pas voulu (coupure de courant, plantage), c'est là qu'on le voit.";
+          expr = "floor((time() - node_boot_time_seconds) / 86400)";
           graph = false;
           justify = "center";
           steps = steps "orange" [
@@ -263,7 +257,7 @@ in
           id = 5;
           title = "Matériel";
           unit = "bytes";
-          description = "Ce que la machine EST, et non ce qu'elle fait : trois constantes, qui donnent l'échelle de lecture des quatre mesures voisines.";
+          description = "Ce que la machine EST, et non ce qu'elle fait : ses constantes (cœurs, RAM, stockage), qui donnent l'échelle de lecture des mesures voisines, et le noyau chargé.";
           graph = false;
           targets = [
             {
@@ -277,6 +271,27 @@ in
             {
               expr = "node_filesystem_size_bytes{mountpoint=\"/\"}";
               legend = "stockage";
+            }
+            # Le noyau chargé : un texte, la colonne `release` du tableau (un rebuild qui en installe
+            # un autre ne le charge qu'au prochain démarrage, ce que le dashboard admin signale).
+            {
+              expr = "node_uname_info";
+              format = "table";
+            }
+          ];
+          # Des colonnes du tableau, seule `release` reste, renommée ; les trois mesures restent.
+          fields = "/.*/";
+          # Quatre valeurs dans la largeur d'une tuile : plus petites que les autres.
+          valueSize = 20;
+          transformations = [
+            {
+              id = "filterFieldsByName";
+              # Les libellés des trois mesures ci-dessus, et la colonne du noyau.
+              options.include.pattern = "^(cœurs|RAM|stockage|release)$";
+            }
+            {
+              id = "organize";
+              options.renameByName.release = "noyau";
             }
           ];
           overrides = [
