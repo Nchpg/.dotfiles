@@ -8,8 +8,8 @@ import (
 	"strings"
 )
 
-// Pages « Ajouter » d'Authelia et de SSH : rien n'est écrit d'ici, elles donnent seulement les
-// commandes à taper (un compte se sème dans les secrets, une clé se déclare dans le code Nix).
+// Pages « Ajouter » d'Authelia et de SSH : ce qui passe par un commit part d'ici (accès d'un compte,
+// clé SSH) ; le reste se donne en commandes à taper (un compte se sème dans les secrets).
 
 var (
 	reNewAccount = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
@@ -24,30 +24,68 @@ func yamlString(v string) string {
 	return string(b)
 }
 
+// accountNew : le formulaire (identité, services et sites cochés). Envoyé (POST), les accès partent
+// tout de suite par un commit (apps.yml, `account`) et la page donne les commandes pour le compte.
 func (s *Server) accountNew(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	name, display, email := strings.TrimSpace(q.Get("name")), strings.TrimSpace(q.Get("displayname")), strings.TrimSpace(q.Get("email"))
-	data := map[string]any{"Nav": "accounts", "Name": name, "DisplayName": display, "Email": email,
-		"Secret": s.cfg.Authelia.UsersSecret, "Portal": s.cfg.Authelia.PortalHost}
-	if q.Has("name") {
-		var errs []string
-		if !reNewAccount.MatchString(name) {
-			errs = append(errs, "Identifiant : minuscules, chiffres, . _ -, 32 caractères au plus.")
-		} else if slices.Contains(s.accountChoices(nil), name) {
-			errs = append(errs, "Le compte "+name+" existe déjà.")
-		}
-		if display == "" || len(display) > 64 || strings.ContainsAny(display, "\n\r") {
-			errs = append(errs, "Nom affiché : une ligne, 64 caractères au plus.")
-		}
-		if !reEmail.MatchString(email) {
-			errs = append(errs, "Adresse e-mail invalide.")
-		}
-		if len(errs) > 0 {
-			data["Error"] = strings.Join(errs, " ")
-		} else {
-			data["Snippet"] = name + ":\n    displayname: " + yamlString(display) + "\n    email: " + yamlString(email)
+	ctx := r.Context()
+	_ = r.ParseForm()
+	name, display, email := strings.TrimSpace(r.FormValue("name")), strings.TrimSpace(r.FormValue("displayname")), strings.TrimSpace(r.FormValue("email"))
+	sites, err := s.ssoSites(ctx, "")
+	services := []string{}
+	for _, sv := range s.cfg.Authelia.Services {
+		if slices.Contains(r.Form["service"], sv.Name) {
+			services = append(services, sv.Name)
 		}
 	}
+	checked := map[string]bool{}
+	for _, sv := range services {
+		checked[sv] = true
+	}
+	if r.Method == http.MethodPost {
+		sites = formSites(r, sites)
+	}
+	data := map[string]any{"Nav": "accounts", "Name": name, "DisplayName": display, "Email": email, "Services": s.cfg.Authelia.Services,
+		"Checked": checked, "Sites": sites, "SSO": true, "Secret": s.cfg.Authelia.UsersSecret, "Portal": s.cfg.Authelia.PortalHost, "Error": errString(err)}
+	if r.Method != http.MethodPost {
+		s.render(w, "account-new", data)
+		return
+	}
+	var errs []string
+	if !reNewAccount.MatchString(name) {
+		errs = append(errs, "Identifiant : minuscules, chiffres, . _ -, 32 caractères au plus.")
+	} else if s.knownAccount(ctx, name) {
+		errs = append(errs, "Le compte "+name+" existe déjà.")
+	}
+	if display == "" || len(display) > 64 || strings.ContainsAny(display, "\n\r") {
+		errs = append(errs, "Nom affiché : une ligne, 64 caractères au plus.")
+	}
+	if !reEmail.MatchString(email) {
+		errs = append(errs, "Adresse e-mail invalide.")
+	}
+	if len(errs) > 0 {
+		data["Error"] = strings.Join(errs, " ")
+		s.render(w, "account-new", data)
+		return
+	}
+	changes := []siteAccess{}
+	var opened []string
+	for _, a := range sites {
+		if a.On && !a.Inherited {
+			changes = append(changes, siteAccess{a.Site, a.Env, true})
+			opened = append(opened, a.App)
+		}
+	}
+	if len(services) > 0 || len(changes) > 0 {
+		entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
+		if err := s.gh.Dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
+			data["Error"] = "Accès non enregistrés (apps.yml) : " + err.Error()
+			s.render(w, "account-new", data)
+			return
+		}
+		data["Granted"] = true
+	}
+	data["GrantedServices"], data["GrantedSites"] = services, opened
+	data["Snippet"] = name + ":\n    displayname: " + yamlString(display) + "\n    email: " + yamlString(email)
 	s.render(w, "account-new", data)
 }
 

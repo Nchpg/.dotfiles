@@ -59,7 +59,7 @@ func TestInfraTemplates(t *testing.T) {
 		"vpn-added":   {"Nav": "vpn", "Name": "pixel", "Address": "10.8.0.9", "Conf": "[Interface]\n", "QR": qrSVG(t.Context(), "x"), "Download": "data:text/plain;base64,eA==", "Secret": "wireguard:\n  pixel_preshared_key: K", "SecretKey": "wireguard/pixel_preshared_key"},
 		"ssh":         {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
 		"ssh-new":     {"Nav": "ssh", "User": "nchpg", "Users": []string{"nchpg"}, "Device": "pixel", "Ready": true, "Comment": "nchpg@pixel", "Line": "ssh-ed25519 AAAA nchpg@pixel", "Info": SSHInfo{Port: 3249, Host: "10.8.0.1", Files: []string{"profiles/server/default.nix"}}, "Fingerprint": "SHA256:x", "Added": true},
-		"account-new": {"Nav": "accounts", "Name": "marie", "Snippet": "  marie:", "Secret": "authelia/users", "Portal": "auth.x"},
+		"account-new": {"Nav": "accounts", "Name": "marie", "Snippet": "marie:", "Secret": "authelia/users", "Portal": "auth.x", "Granted": true, "GrantedServices": []string{"nextcloud"}, "SSO": true},
 		"accounts":    {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h", Services: []string{"admin"}, Sites: []string{"myetf-preview"}}}},
 		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
 			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true}}, "Self": true},

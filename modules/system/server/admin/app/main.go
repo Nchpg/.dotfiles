@@ -82,6 +82,7 @@ func main() {
 	mux.HandleFunc("POST /ssh/remove", s.sshRemove)
 	mux.HandleFunc("GET /accounts", s.accounts)
 	mux.HandleFunc("GET /accounts/new", s.accountNew)
+	mux.HandleFunc("POST /accounts/new", s.accountNew)
 	mux.HandleFunc("GET /accounts/{name}/access", s.accountAccess)
 	mux.HandleFunc("POST /accounts/{name}/access", s.accountAccessSave)
 	if cfg.MetricsURL != "" {

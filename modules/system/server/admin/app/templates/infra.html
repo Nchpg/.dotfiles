@@ -249,34 +249,42 @@
 {{define "account-new"}}{{template "top" .}}
 <header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" "Nouveau compte")}}</header>
 <main class="page">
-  <h1>Nouveau compte</h1>
+  <h1>{{if .Snippet}}{{.Name}}{{else}}Nouveau compte{{end}}</h1>
   {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
   <div class="overview">
-    <form method="get" action="/accounts/new" class="card stack gap narrow">
-      <label class="field"><span>Identifiant <small class="muted">(pour se connecter)</small></span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9][a-z0-9._\-]{0,31}" placeholder="marie" {{if not .Snippet}}autofocus{{end}}></label>
-      <label class="field"><span>Nom affiché</span><input name="displayname" value="{{.DisplayName}}" required maxlength="64" placeholder="Marie"></label>
-      <label class="field"><span>Adresse e-mail <small class="muted">(pour choisir son mot de passe)</small></span><input name="email" type="email" value="{{.Email}}" required placeholder="marie@exemple.fr"></label>
-      <button class="btn btn-primary">Donner les commandes</button>
-    </form>
-    {{with .Snippet}}
+    {{if .Snippet}}
     <section class="card" aria-label="Étapes">
       <ol class="howto">
+        <li><div class="howto-title">Ses accès{{if .Granted}}<span class="howto-where">enregistrés : commit sur main dans la minute</span>{{end}}</div>
+          <p>{{if .Granted}}{{with .GrantedServices}}Services : {{join . ", "}}. {{end}}{{with .GrantedSites}}Sites : {{join . ", "}}.{{end}}{{else}}Aucun : il n'ouvrira rien tant que tu ne coches rien dans « Gérer ».{{end}}</p></li>
         <li><div class="howto-title">Ajouter le compte aux secrets<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
-          {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" $.Secret))}}
+          {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" .Secret))}}
           <p>Coller à côté des comptes existants, au même retrait. Sans mot de passe : think en tire un au hasard.</p>
-          {{template "cmd" (args "Text" .)}}</li>
+          {{template "cmd" (args "Text" .Snippet)}}</li>
         <li><div class="howto-title">Appliquer</div>
-          {{template "cmd" (args "Sh" true "Text" "rebuild")}}</li>
+          {{if .Granted}}{{template "cmd" (args "Sh" true "Text" "git pull")}}{{end}}
+          {{template "cmd" (args "Sh" true "Text" "rebuild")}}
+          {{if .Granted}}<p>Il montre ses accès et demande confirmation.</p>{{end}}</li>
         <li><div class="howto-title">La personne choisit son mot de passe</div>
-          <p>Sur <a href="https://{{$.Portal}}/" target="_blank" rel="noopener" class="mono">{{$.Portal}}</a> : « Mot de passe oublié ? », identifiant <code>{{$.Name}}</code>. Elle reçoit un lien par e-mail, choisit son mot de passe, puis sa double authentification.</p></li>
-        <li><div class="howto-title">Lui ouvrir des accès</div>
-          <p>Ici, « Gérer » sur son compte, dès qu'il apparaît dans la liste (relue toutes les 5 minutes). Avant, il n'a accès à rien.</p></li>
+          <p>Sur <a href="https://{{.Portal}}/" target="_blank" rel="noopener" class="mono">{{.Portal}}</a> : « Mot de passe oublié ? », identifiant <code>{{.Name}}</code>. Elle reçoit un lien par e-mail, choisit son mot de passe, puis sa double authentification.</p></li>
       </ol>
     </section>
+    {{else}}
+    <form method="post" action="/accounts/new" class="stack gap-lg narrow">
+      <section class="card stack gap">
+        <label class="field"><span>Identifiant <small class="muted">(pour se connecter)</small></span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9][a-z0-9._\-]{0,31}" placeholder="marie" autofocus></label>
+        <label class="field"><span>Nom affiché</span><input name="displayname" value="{{.DisplayName}}" required maxlength="64" placeholder="Marie"></label>
+        <label class="field"><span>Adresse e-mail <small class="muted">(pour choisir son mot de passe)</small></span><input name="email" type="email" value="{{.Email}}" required placeholder="marie@exemple.fr"></label>
+      </section>
+      <section class="card stack gap">{{template "service-checks" .}}</section>
+      <section class="card stack gap">{{template "site-checks" .}}</section>
+      <div class="line"><button class="btn btn-primary">Créer le compte</button><small class="muted">Les accès partent par un commit ; la page donne ensuite les commandes.</small></div>
+    </form>
     {{end}}
   </div>
 </main>
 {{template "bottom" .}}{{end}}
+
 
 {{define "ssh-new"}}{{template "top" .}}
 <header class="topbar">{{template "crumbs" (args "Title" "SSH" "Link" "/ssh" "Sub" "Nouvelle clé")}}</header>
