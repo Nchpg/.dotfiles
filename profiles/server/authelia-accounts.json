@@ -1,0 +1,14 @@
+{
+  "nathan": {
+    "services": [
+      "admin",
+      "grafana",
+      "nextcloud"
+    ]
+  },
+  "olivier": {
+    "services": [
+      "nextcloud"
+    ]
+  }
+}

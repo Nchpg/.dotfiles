@@ -94,6 +94,16 @@ let
     }) wireguard.services;
   };
 
+  # Page Authelia : services ouverts compte par compte (registre du portail), et ce que la
+  # génération active donne à chaque compte (main se lit dans authelia-accounts.json).
+  autheliaInfo = {
+    services = lib.mapAttrsToList (name: s: {
+      inherit name;
+      inherit (s) label host;
+    }) authelia.services;
+    accounts = lib.mapAttrs (_: a: a.services) authelia.accounts;
+  };
+
   # Page SSH : clés autorisées de chaque compte (publiques).
   sshInfo = map (u: {
     inherit (u) name;
@@ -165,12 +175,6 @@ in
       default = 8095;
       description = "Port de bouclage du service, derrière nginx.";
     };
-
-    subject = lib.mkOption {
-      type = lib.types.listOf lib.types.str;
-      default = [ "user:nathan" ];
-      description = "Comptes Authelia admis, en 2FA.";
-    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -179,11 +183,20 @@ in
       label = "Dashboard admin";
       inherit host;
     };
+    # Et compte par compte (page Authelia), au registre du portail.
+    systemSettings.authelia.services.admin = {
+      label = "Dashboard admin";
+      inherit host;
+    };
 
     assertions = [
       {
         assertion = wireguard.sourcesFor "admin" != [ ];
         message = "systemSettings.admin : aucun appareil VPN n'a le service « admin » (vpn-peers.json) : plus personne n'ouvrirait le dashboard.";
+      }
+      {
+        assertion = lib.any (a: lib.elem "admin" a.services) (lib.attrValues authelia.accounts);
+        message = "systemSettings.admin : aucun compte Authelia n'a le service « admin » (authelia-accounts.json) : plus personne n'ouvrirait le dashboard.";
       }
       {
         assertion = authelia.enable && config.systemSettings.proxy.enable;
@@ -230,6 +243,7 @@ in
         ADMIN_VPN_FILE = pkgs-stable.writeText "admin-vpn.json" (builtins.toJSON vpnInfo);
         ADMIN_SSH_FILE = pkgs-stable.writeText "admin-ssh.json" (builtins.toJSON sshInfo);
         ADMIN_ACCOUNTS_FILE = "/var/lib/admin-accounts/accounts.json";
+        ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
         ADMIN_METRICS_URL = lib.optionalString config.systemSettings.monitoring.enable "https://${config.systemSettings.monitoring.grafana.hostName}/d/${target.host}-systeme/systeme?orgId=1&from=now-6h&to=now&timezone=browser&var-gravite=error&var-gravite=warn&var-unite=$__all&var-contient=&refresh=1m";
@@ -353,6 +367,14 @@ in
       locations = {
         "/" = {
           proxyPass = "http://127.0.0.1:${toString cfg.port}";
+          # Le compte connecté, pour que la page Authelia ne le laisse pas se fermer le dashboard.
+          # Un niveau qui déclare un `auth_request_set` remplace la liste du parent : recopiés.
+          extraConfig = ''
+            auth_request_set $redirection_url $upstream_http_location;
+            auth_request_set $auth_status $upstream_status;
+            auth_request_set $authelia_user $upstream_http_remote_user;
+            proxy_set_header Remote-User $authelia_user;
+          '';
         };
       }
       // authelia.nginxProtect.locations;
@@ -362,13 +384,7 @@ in
       + authelia.nginxProtect.extraConfig;
     };
 
-    systemSettings.authelia.rules = [
-      {
-        domain = host;
-        policy = "two_factor";
-        inherit (cfg) subject;
-      }
-    ];
+    systemSettings.authelia.rules = [ (authelia.ruleFor "admin") ];
 
     systemSettings.proxy.sites.${host} = {
       public = false;

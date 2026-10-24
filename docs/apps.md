@@ -112,8 +112,9 @@ le tunnel WireGuard.
 | (nom) | | identifiant interne : unités `podman-<nom>-<conteneur>`, réseau, port, données. 12 caractères au plus ; le changer recrée le site |
 | `subdomain` | le nom | adresse sous le domaine (`"@"` : le domaine lui-même) |
 | `expose` | `"public"` | `"vpn"` : seulement les appareils de `devices` |
-| `devices` | | noms des peers de `profiles/server/vpn.nix`, en `vpn` |
+| `devices` | | noms des appareils de `profiles/server/vpn-peers.json`, en `vpn` |
 | `sso` | `false` | le portail Authelia en plus, public ou VPN |
+| `accounts` | tous | comptes Authelia admis, avec `sso` (page Authelia du dashboard) |
 | `internetAccess` | `false` | connexions sortantes vers internet (jamais vers le LAN) |
 | `probe` | `"/"` | chemin sondé |
 | `entrypoint` | | conteneur servi par nginx, s'il y en a plusieurs |
@@ -173,7 +174,7 @@ autre nom).
 
   | Section | Repère | Clés |
   |---|---|---|
-  | accès | `expose` | `expose`, `devices`, `sso` |
+  | accès | `expose` | `expose`, `devices`, `sso`, `accounts` |
   | conteneurs | `containers` | `containers` (images, mémoire, données, secrets, `dependsOn`), `entrypoint` |
   | options | `internetAccess` | `internetAccess`, `probe`, `rateLimit` |
 

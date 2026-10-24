@@ -25,6 +25,16 @@ in
       };
     };
 
+    # Grafana donne Editor à quiconque franchit le portail : ouvert compte par compte (page
+    # Authelia), jamais à tout compte authentifié.
+    systemSettings.authelia = lib.mkIf authelia.enable {
+      services.grafana = {
+        label = "Grafana";
+        host = cfg.grafana.hostName;
+      };
+      rules = [ (authelia.ruleFor "grafana") ];
+    };
+
     services.grafana = {
       enable = true;
 

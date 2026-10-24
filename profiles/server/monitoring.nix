@@ -26,15 +26,5 @@ in
     };
 
     proxy.sites."metrics.vpn.${domain}".probes.grafana.module = "http_authelia";
-
-    authelia.rules = [
-      # Grafana donne Admin à quiconque franchit le portail : `subject` écarte les comptes familiaux
-      # (nom du fichier d'utilisateurs Authelia). Pas de `networks`.
-      {
-        domain = "metrics.vpn.${domain}";
-        policy = "two_factor";
-        subject = [ "user:nathan" ];
-      }
-    ];
   };
 }

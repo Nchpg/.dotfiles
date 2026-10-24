@@ -49,6 +49,13 @@ in
         host = if internalHost != null then internalHost else cfg.hostName;
       };
     };
+    # Et compte par compte (page Authelia) : le nom public, celui que garde le portail.
+    systemSettings.authelia.services = lib.mkIf authelia.enable {
+      nextcloud = {
+        label = "Nextcloud";
+        host = cfg.hostName;
+      };
+    };
 
     assertions = [
       {
@@ -119,12 +126,8 @@ in
             resources = [ "^/ocs/v2\\.php/apps/serverinfo/api/v1/info" ];
           }
         )
-        ++ [
-          {
-            domain = cfg.hostName;
-            policy = "two_factor";
-          }
-        ]
+        # Les autres : les comptes qui ont le service (page Authelia), en 2FA.
+        ++ [ (authelia.ruleFor "nextcloud") ]
       )
     );
 

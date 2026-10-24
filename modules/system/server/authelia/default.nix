@@ -126,6 +126,78 @@ in
       '';
     };
 
+    services = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            label = lib.mkOption {
+              type = lib.types.str;
+              description = "Nom affiché (dashboard).";
+            };
+            host = lib.mkOption {
+              type = lib.types.str;
+              description = "Nom servi derrière le portail.";
+            };
+          };
+        }
+      );
+      default = { };
+      description = ''
+        Services de ce host derrière le portail, ouverts compte par compte (`accounts`). Chaque
+        module déclare le sien et pose sa règle avec `ruleFor`.
+      '';
+    };
+
+    accountsFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      example = lib.literalExpression "./authelia-accounts.json";
+      description = ''
+        Services de chaque compte, `{ "<compte>": { "services": [ … ] } }` : écrit par le dashboard
+        et `apps.yml`. Les sites, eux, listent leurs comptes dans apps.json (`accounts`).
+      '';
+    };
+
+    accounts = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options.services = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [ ];
+            description = "Services (`services`) ouverts à ce compte.";
+          };
+        }
+      );
+      default = if cfg.accountsFile == null then { } else lib.importJSON cfg.accountsFile;
+      defaultText = lib.literalExpression "le contenu d'accountsFile";
+      description = "Comptes (nom du fichier d'utilisateurs) et les services qui leur sont ouverts.";
+    };
+
+    ruleFor = lib.mkOption {
+      type = lib.types.functionTo (lib.types.attrsOf lib.types.anything);
+      readOnly = true;
+      default =
+        name:
+        let
+          users = lib.attrNames (lib.filterAttrs (_: a: lib.elem name a.services) cfg.accounts);
+        in
+        {
+          domain = cfg.services.${name}.host;
+        }
+        # Un `subject` vide laisserait passer tout compte : sans personne, la règle refuse.
+        // (
+          if users == [ ] then
+            { policy = "deny"; }
+          else
+            {
+              policy = "two_factor";
+              subject = map (u: "user:${u}") users;
+            }
+        );
+      defaultText = lib.literalExpression "la règle d'un service : 2FA pour ses comptes, refus sans compte";
+      description = "Règle d'accès d'un service déclaré (`services`), d'après `accounts`.";
+    };
+
     nginxAuthRequest = lib.mkOption {
       type = lib.types.attrsOf lib.types.anything;
       readOnly = true;
@@ -208,6 +280,18 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions = [
+      {
+        assertion = lib.all (n: builtins.match "[A-Za-z0-9._@-]{1,64}" n != null) (
+          lib.attrNames cfg.accounts
+        );
+        message = "systemSettings.authelia.accounts : noms de comptes invalides.";
+      }
+      {
+        assertion = lib.all (s: cfg.services ? ${s}) (
+          lib.concatMap (a: a.services) (lib.attrValues cfg.accounts)
+        );
+        message = "systemSettings.authelia.accounts : service(s) inconnu(s) (déclarés : ${toString (lib.attrNames cfg.services)}).";
+      }
       {
         assertion = cfg.domain != null && cfg.portalHost != null;
         message = "systemSettings.authelia : domain (parent commun pour le cookie) et portalHost (nom du portail) sont requis.";

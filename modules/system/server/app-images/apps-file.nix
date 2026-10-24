@@ -34,6 +34,7 @@ let
     "expose"
     "devices"
     "sso"
+    "accounts"
   ];
 
   containersKeys = [
@@ -122,8 +123,8 @@ let
           ])
         then
           fail where "`data` : separate, copy ou shared"
-        else if !(v ? expose) && (v ? devices || v ? sso) then
-          fail where "`devices` et `sso` vont avec `expose` (la section accès est à lui dès que `expose` est là)"
+        else if !(v ? expose) && (v ? devices || v ? sso || v ? accounts) then
+          fail where "`devices`, `sso` et `accounts` vont avec `expose` (la section accès est à lui dès que `expose` est là)"
         else if !(v ? containers) && v ? entrypoint then
           fail where "`entrypoint` va avec `containers`"
         else if !(v ? internetAccess) && (v ? probe || v ? rateLimit) then
@@ -254,10 +255,27 @@ let
     d:
     let
       expose = d.access.expose or "public";
+      sso = d.access.sso or false;
+      # Comptes Authelia admis (absent : tout compte authentifié) ; jamais vide, ce serait tout le monde.
+      accounts =
+        if !(d.access ? accounts) then
+          null
+        else if !sso then
+          fail d.app "`accounts` va avec `sso`"
+        else if
+          d.access.accounts == [ ]
+          || !lib.all (a: builtins.match "[A-Za-z0-9._@-]{1,64}" a != null) d.access.accounts
+        then
+          fail d.app "`accounts` : des noms de comptes Authelia, au moins un"
+        else
+          d.access.accounts;
     in
     {
       inherit expose;
-      sso.enable = d.access.sso or false;
+      sso = {
+        enable = sso;
+      }
+      // lib.optionalAttrs (accounts != null) { subject = map (a: "user:${a}") accounts; };
       internetAccess = d.options.internetAccess or false;
       # Une préversion publique n'a rien à faire dans les moteurs de recherche.
       noindex = d.child && expose == "public";

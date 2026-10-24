@@ -23,6 +23,8 @@ in
       # Sinon on reste bloqué sur le portail après un lien d'enrôlement.
       defaultRedirect = "https://cloud.${domain}";
 
+      # Services de think ouverts à chaque compte (page Authelia du dashboard, apps.yml).
+      accountsFile = ./authelia-accounts.json;
     };
   };
 }

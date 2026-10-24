@@ -8,6 +8,9 @@
 #          les secrets (exigé par le module wireguard), donc jamais par ce seul commit.
 #   access : APP (appareil), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses services
 #          réservés (vpn-peers.json) et sa place dans la liste `devices` des sites en VPN (apps.json).
+#   account : APP (compte Authelia), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}], "all":
+#          [tous les comptes]}) : ses services (authelia-accounts.json) et sa place dans la liste
+#          `accounts` des sites avec Authelia (apps.json).
 # Écrit apps.json et/ou le lock, et sur stdout `subject=<message de commit>` (vide si rien ne change).
 # Les entrées viennent d'un appel externe : tout est vérifié avant d'écrire, et le lock reste cohérent
 # avec apps.json (chaque image suivie y a son digest, aucune entrée orpheline).
@@ -16,6 +19,7 @@ set -euo pipefail
 apps=profiles/server/apps.json
 lock=profiles/server/apps.lock.json
 peers=profiles/server/vpn-peers.json
+accounts=profiles/server/authelia-accounts.json
 
 die() {
     echo "::error::$*" >&2
@@ -101,7 +105,9 @@ validate_entry() {
             (if .expose == "vpn" and ((.devices | type) != "array" or (.devices | length) == 0) then "\($w)vpn : au moins un appareil dans devices" else empty end),
             (if has("devices") and .expose != "vpn" then "\($w)devices : seulement avec expose = vpn" else empty end),
             (if has("devices") and (.devices | strs("^[A-Za-z0-9_-]{1,32}$") | not) then "\($w)devices : noms invalides" else empty end),
-            (if has("sso") and (.sso | type) != "boolean" then "\($w)sso : booléen" else empty end);
+            (if has("sso") and (.sso | type) != "boolean" then "\($w)sso : booléen" else empty end),
+            (if has("accounts") and .sso != true then "\($w)accounts : seulement avec sso" else empty end),
+            (if has("accounts") and ((.accounts | strs("^[A-Za-z0-9._@-]{1,64}$") | not) or (.accounts | length) == 0) then "\($w)accounts : des noms de comptes, au moins un" else empty end);
         def options($w):
             (if has("internetAccess") and (.internetAccess | type) != "boolean" then "\($w)internetAccess : booléen" else empty end),
             (if has("probe") and ((.probe | type) != "string" or (.probe | test(path) | not)) then "\($w)probe : chemin invalide" else empty end),
@@ -135,7 +141,7 @@ validate_entry() {
         # Un environnement remonte ses parents sans boucle (16 niveaux au plus).
         def rooted($envs; $id; $n): if $id == null then true elif $n > 16 or ($id | type) != "string" or ($envs[$id] | type) != "object" then false else rooted($envs; $envs[$id].from; $n + 1) end;
         if type != "object" then "entrée : objet attendu" else
-        keys_in(["name", "subdomain", "expose", "devices", "sso", "internetAccess", "probe", "entrypoint", "rateLimit", "containers", "environments"]; ""),
+        keys_in(["name", "subdomain", "expose", "devices", "sso", "accounts", "internetAccess", "probe", "entrypoint", "rateLimit", "containers", "environments"]; ""),
         named(""), subdomain(""), access(""), options(""), containers(""; false),
         (if has("environments") then
             if (.environments | type) != "object" or (.environments | length) > 8 then "environments : 8 environnements au plus" else
@@ -143,14 +149,14 @@ validate_entry() {
             | ($envs | to_entries[] | .key as $id | "\($id) : " as $w | .value
                 | if ($id | test("^[a-z][a-z0-9-]{0,15}$") | not) then "environnement « \($id) » : identifiant invalide"
                   elif type != "object" then "\($w)objet attendu" else
-                  keys_in(["name", "branch", "from", "data", "pin", "subdomain", "expose", "devices", "sso", "containers", "entrypoint", "internetAccess", "probe", "rateLimit"]; $w),
+                  keys_in(["name", "branch", "from", "data", "pin", "subdomain", "expose", "devices", "sso", "accounts", "containers", "entrypoint", "internetAccess", "probe", "rateLimit"]; $w),
                   named($w), subdomain($w),
                   (if (.branch | type) != "string" or (.branch | test("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$") | not) then "\($w)branch manquante ou invalide" else empty end),
                   (if has("from") and ((.from | type) != "string" or .from == $id or (.from as $f | $envs | has($f) | not)) then "\($w)from : un autre environnement du site" else empty end),
                   (if rooted($envs; $id; 0) | not then "\($w)boucle d'\''héritage (from)" else empty end),
                   (if has("data") and (.data | IN("separate", "copy", "shared") | not) then "\($w)data : separate, copy ou shared" else empty end),
                   (if has("pin") and ((.pin | type) != "string" or (.pin | test("^sha-[0-9a-f]{7,40}$") | not)) then "\($w)pin : un tag sha-<commit>" else empty end),
-                  (if has("expose") then access($w) elif has("devices") or has("sso") then "\($w)devices et sso vont avec expose" else empty end),
+                  (if has("expose") then access($w) elif has("devices") or has("sso") or has("accounts") then "\($w)devices, sso et accounts vont avec expose" else empty end),
                   (if has("internetAccess") then options($w) elif has("probe") or has("rateLimit") then "\($w)probe et rateLimit vont avec internetAccess" else empty end),
                   (if has("containers") then containers($w; true) elif has("entrypoint") then "\($w)entrypoint va avec containers" else empty end)
                   end)
@@ -297,10 +303,62 @@ access() {
     echo "subject=feat(vpn): access for $APP"
 }
 
+# Il reste au moins un compte avec « admin » : sans lui, plus personne ne passe le portail du dashboard.
+keep_admin_account() {
+    jq -e '[.[] | select(.services // [] | index("admin"))] | length > 0' "$accounts" >/dev/null \
+        || die "plus aucun compte n'aurait accès au dashboard : refusé"
+}
+
+# Sites [{site, env, on}] avec Authelia et leur propre accès : le compte $APP entre dans (ou sort de)
+# leur liste `accounts`. Sans liste, tout compte passe : en sortir donne tous les comptes ($all) moins
+# lui, et une liste qui redevient tous les comptes s'efface (les comptes à venir passent aussi).
+set_account_sites() {
+    local sites=$1 all=$2 bad empty
+    bad=$(jq -r --argjson s "$sites" '. as $a | $s[]
+        | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
+        | select(($t | type) != "object" or $t.sso != true or ((.env // "") != "" and ($t | has("expose") | not)))
+        | "\(.site)\(if (.env // "") != "" then "-" + .env else "" end)"' "$apps")
+    [ -z "$bad" ] || die "pas d'Authelia avec son propre accès : $(paste -sd, - <<<"$bad")"
+    jq -S --indent 2 --arg n "$APP" --argjson s "$sites" --argjson all "$all" 'reduce $s[] as $x (.;
+        (if ($x.env // "") == "" then [$x.site] else [$x.site, "environments", $x.env] end) as $p
+        | getpath($p + ["accounts"]) as $cur
+        | (if $x.on then (if $cur == null then null else ($cur + [$n] | unique) end)
+           else (($cur // $all) - [$n]) end) as $new
+        | if $new == null or ($all - $new) == [] then delpaths([$p + ["accounts"]])
+          else setpath($p + ["accounts"]; $new | unique) end)' \
+        "$apps" | replace "$apps"
+    empty=$(jq -r 'to_entries[] | (select(.value.accounts == []) | .key),
+        (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.accounts == []) | "\($k)-\(.key)")' "$apps")
+    [ -z "$empty" ] || die "un site avec Authelia doit garder au moins un compte : $(paste -sd, - <<<"$empty")"
+}
+
+# Accès d'un compte Authelia : ses services (authelia-accounts.json, un compte sans service en sort) et
+# sa présence dans la liste `accounts` de chaque site avec Authelia. Un seul commit.
+account() {
+    local names_ok='type == "array" and all(.[]; type == "string" and test("^[A-Za-z0-9._@-]{1,64}$"))'
+    [[ "${APP:-}" =~ ^[A-Za-z0-9._@-]{1,64}$ ]] || die "APP : nom de compte invalide"
+    jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
+    jq -e --arg n "$APP" "type == \"object\" and (keys - [\"services\", \"sites\", \"all\"] | length == 0)
+        and (.services | $services_ok) and (.sites | $sites_ok)
+        and (.all | $names_ok) and (.all | index(\$n) != null)" <<<"$ENTRY" >/dev/null \
+        || die "ENTRY : {services: [noms], sites: [{site, env, on}], all: [comptes, dont $APP]} attendu"
+    [ -f "$accounts" ] || echo '{}' >"$accounts"
+    jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" \
+        'if $e.services == [] then del(.[$n]) else .[$n].services = ($e.services | unique) end' "$accounts" | replace "$accounts"
+    keep_admin_account
+    set_account_sites "$(jq -c .sites <<<"$ENTRY")" "$(jq -c .all <<<"$ENTRY")"
+    if git diff --quiet -- "$accounts" "$apps"; then
+        echo "subject="
+        return 0
+    fi
+    echo "subject=feat(authelia): access for $APP"
+}
+
 case "${1:-}" in
     pin) pin ;;
     edit) edit ;;
     peer) peer ;;
     access) access ;;
-    *) die "usage : apps.sh pin|edit|peer|access" ;;
+    account) account ;;
+    *) die "usage : apps.sh pin|edit|peer|access|account" ;;
 esac

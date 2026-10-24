@@ -23,6 +23,8 @@ let
   sitePaths = [
     "profiles/server/apps.json"
     "profiles/server/apps.lock.json"
+    # Services des comptes Authelia : des règles du portail, rien d'autre.
+    "profiles/server/authelia-accounts.json"
   ];
   # Appareils VPN : part seul aussi, mais seulement si les appareils restent les mêmes (nom, clé,
   # adresse) et que seuls leurs services changent. Un ajout ou un retrait attend un rebuild à la main
