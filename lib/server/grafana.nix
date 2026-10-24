@@ -131,6 +131,7 @@ let
       targets ? null,
       overrides ? [ ],
       graph ? true,
+      justify ? "auto",
     }:
     {
       inherit id title;
@@ -151,7 +152,13 @@ let
       options = {
         colorMode = "value";
         graphMode = if graph then "area" else "none";
-        justifyMode = "auto";
+        justifyMode = justify;
+        # Tailles fixes : en automatique, une valeur avec courbe sort petite et une sans courbe
+        # énorme, et une rangée de tuiles devient illisible.
+        text = {
+          valueSize = 30;
+          titleSize = 13;
+        };
         textMode = if targets == null then "auto" else "value_and_name";
         reduceOptions = {
           calcs = [ "lastNotNull" ];

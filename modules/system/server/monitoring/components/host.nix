@@ -240,18 +240,20 @@ in
         demarreDepuis = mkStat {
           id = 45;
           title = "Démarré depuis";
-          unit = "dtdurations";
-          description = "Temps écoulé depuis le dernier démarrage de think, et le noyau chargé à ce démarrage (un rebuild qui en installe un autre ne le charge qu'au prochain : le dashboard admin le signale). Orange pendant l'heure qui suit un démarrage : s'il n'était pas voulu (coupure de courant, plantage), c'est là qu'on le voit.";
+          # En jours entiers : `dtdurations` écrirait « 3 weeks », en anglais.
+          unit = "suffix: j";
+          description = "Temps écoulé depuis le dernier démarrage de think, et le noyau chargé à ce démarrage (un rebuild qui en installe un autre ne le charge qu'au prochain : le dashboard admin le signale). Orange le premier jour : s'il n'était pas voulu (coupure de courant, plantage), c'est là qu'on le voit.";
           # Le noyau vient de node_uname_info : `release` devient le nom de la valeur.
           targets = [
             {
-              expr = "(time() - node_boot_time_seconds) * on(instance) group_left(release) node_uname_info";
+              expr = "floor((time() - node_boot_time_seconds) / 86400) * on(instance) group_left(release) node_uname_info";
               legend = "noyau {{release}}";
             }
           ];
           graph = false;
+          justify = "center";
           steps = steps "orange" [
-            3600
+            1
             "text"
           ];
         };

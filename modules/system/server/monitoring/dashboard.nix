@@ -21,6 +21,10 @@ let
           "processeur"
           "ramUtilisee"
           "stockageUtilise"
+        ]
+        # Seconde ligne, plus large : sept panneaux sur une seule coupaient les titres et
+        # réduisaient « Matériel » (trois valeurs) à des chiffres illisibles.
+        [
           "sondesEnEchec"
           "demarreDepuis"
           "materiel"
