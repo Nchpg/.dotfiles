@@ -2,6 +2,6 @@
   "nchpg": [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upf nchpg@gram",
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFLQKGgSPS//aBeJ0ZnXvDV9sr7XYC7Qu/NUIHy9B+9 nchpg@xiaomi-17t-termux",
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upd nchpg@test"
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIC1ZsoIRAXJRR0crPgfWJRPCNBQ+pdWqkMX6qmCq+4y1 nchpg@windows"
   ]
 }

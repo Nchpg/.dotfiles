@@ -31,14 +31,12 @@
     },
     "devices": [
       "gram",
-      "test",
       "windows_gram",
       "xiaomi_17t"
     ],
     "environments": {
       "preview": {
         "accounts": [
-          "dorine",
           "nathan",
           "olivier"
         ],
@@ -96,7 +94,6 @@
     },
     "devices": [
       "gram",
-      "test",
       "windows_gram",
       "xiaomi_17t"
     ],
