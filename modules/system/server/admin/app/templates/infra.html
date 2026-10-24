@@ -251,7 +251,6 @@
       <label class="field"><span>Identifiant <small class="muted">(pour se connecter)</small></span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9][a-z0-9._\-]{0,31}" placeholder="marie" {{if not .Snippet}}autofocus{{end}}></label>
       <label class="field"><span>Nom affiché</span><input name="displayname" value="{{.DisplayName}}" required maxlength="64" placeholder="Marie"></label>
       <label class="field"><span>Adresse e-mail <small class="muted">(pour choisir son mot de passe)</small></span><input name="email" type="email" value="{{.Email}}" required placeholder="marie@exemple.fr"></label>
-      <label class="field"><span>Groupe</span><input name="group" value="{{.Group}}" class="mono" list="groups" required><datalist id="groups">{{range .Groups}}<option value="{{.}}">{{end}}</datalist></label>
       <button class="btn btn-primary">Donner les commandes</button>
     </form>
     {{with .Snippet}}

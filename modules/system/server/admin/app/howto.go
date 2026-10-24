@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -16,7 +15,6 @@ var (
 	reNewAccount = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`)
 	reEmail      = regexp.MustCompile(`^[^@\s"]+@[^@\s"]+\.[^@\s"]+$`)
 	reLabel      = regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`)
-	reGroup      = regexp.MustCompile(`^[a-z0-9_-]{1,32}$`)
 	rePubKey     = regexp.MustCompile(`^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^"\\\x00-\x1f]{0,100})?$`)
 )
 
@@ -29,18 +27,7 @@ func yamlString(v string) string {
 func (s *Server) accountNew(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	name, display, email := strings.TrimSpace(q.Get("name")), strings.TrimSpace(q.Get("displayname")), strings.TrimSpace(q.Get("email"))
-	group := strings.TrimSpace(q.Get("group"))
-	list, _ := s.readAccounts()
-	var groups []string
-	for _, a := range list {
-		groups = append(groups, a.Groups...)
-	}
-	sort.Strings(groups)
-	groups = slices.Compact(groups)
-	if group == "" {
-		group = "users"
-	}
-	data := map[string]any{"Nav": "accounts", "Name": name, "DisplayName": display, "Email": email, "Group": group, "Groups": groups,
+	data := map[string]any{"Nav": "accounts", "Name": name, "DisplayName": display, "Email": email,
 		"Secret": s.cfg.Authelia.UsersSecret, "Portal": s.cfg.Authelia.PortalHost}
 	if q.Has("name") {
 		var errs []string
@@ -55,13 +42,10 @@ func (s *Server) accountNew(w http.ResponseWriter, r *http.Request) {
 		if !reEmail.MatchString(email) {
 			errs = append(errs, "Adresse e-mail invalide.")
 		}
-		if !reGroup.MatchString(group) {
-			errs = append(errs, "Groupe : minuscules, chiffres, _ -.")
-		}
 		if len(errs) > 0 {
 			data["Error"] = strings.Join(errs, " ")
 		} else {
-			data["Snippet"] = name + ":\n    displayname: " + yamlString(display) + "\n    email: " + yamlString(email) + "\n    groups:\n        - " + group
+			data["Snippet"] = name + ":\n    displayname: " + yamlString(display) + "\n    email: " + yamlString(email)
 		}
 	}
 	s.render(w, "account-new", data)
