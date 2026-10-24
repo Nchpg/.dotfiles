@@ -505,3 +505,4 @@ table.list .ellipsis-cell { max-width: 0; width: 45%; overflow: hidden; text-ove
 .qr svg { display: block; width: 100%; height: auto; stroke: none; }
 pre.conf { margin: 8px 0 0; padding: 10px 12px; background: #F8F9FB; border: 1px solid var(--line); overflow-x: auto; white-space: pre; user-select: all; }
 .steps-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+td.nowrap .line { flex-wrap: nowrap; }

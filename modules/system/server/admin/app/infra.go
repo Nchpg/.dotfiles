@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -34,6 +35,9 @@ type VPNInfo struct {
 	Subnet        string    `json:"subnet"`
 	ServerAddress string    `json:"serverAddress"`
 	Peers         []VPNPeer `json:"peers"`
+	// Services limités à certains appareils : le dashboard (sa liste), ceux des appareils `trusted`.
+	AdminDevices    []string `json:"adminDevices"`
+	TrustedServices []string `json:"trustedServices"`
 }
 
 type VPNPeer struct {
@@ -146,7 +150,8 @@ type PeerRow struct {
 	VPNPeer
 	Connected, Seen bool
 	LastSeen        string
-	RemoteIP        string // IP publique d'où il se connecte (exporteur, withRemoteIp)
+	RemoteIP        string   // IP publique d'où il se connecte (exporteur, withRemoteIp)
+	Access          []string // services limités auxquels il a droit
 	Received, Sent  string
 	Pending         bool // inscrit sur main, pas encore actif (secret + rebuild à faire)
 }
@@ -189,10 +194,33 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	rx := s.promByKey(ctx, "wireguard_received_bytes_total", "public_key")
 	tx := s.promByKey(ctx, "wireguard_sent_bytes_total", "public_key")
 	remote := s.promLabel(ctx, "wireguard_latest_handshake_seconds", "public_key", "remote_ip")
+	// Sites en VPN qui listent l'appareil (génération de main, lue en cache).
+	sitesOf := map[string][]string{}
+	if snap, err := s.snapshot(ctx); err == nil {
+		for _, site := range snap.Apps.Names() {
+			for _, d := range snap.Apps.Entries[site].Deploys(site) {
+				if d.VPN() {
+					for _, dev := range d.Access.Devices {
+						sitesOf[dev] = append(sitesOf[dev], d.App)
+					}
+				}
+			}
+		}
+	}
+	access := func(p VPNPeer) []string {
+		var out []string
+		if slices.Contains(s.cfg.VPN.AdminDevices, p.Name) {
+			out = append(out, "dashboard")
+		}
+		if p.Trusted {
+			out = append(out, s.cfg.VPN.TrustedServices...)
+		}
+		return append(out, sitesOf[p.Name]...)
+	}
 	var rows []PeerRow
 	connected := 0
 	for _, p := range s.cfg.VPN.Peers {
-		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey]}
+		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey], Access: access(p)}
 		if t := hs[p.PublicKey]; t > 0 {
 			d := time.Since(time.Unix(int64(t), 0))
 			// Un appareil actif refait sa poignée de main toutes les 2 minutes.
@@ -204,7 +232,7 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, row)
 	}
 	for _, p := range s.pendingPeers(ctx) {
-		rows = append(rows, PeerRow{VPNPeer: p, Pending: true})
+		rows = append(rows, PeerRow{VPNPeer: p, Pending: true, Access: access(p)})
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
 	s.render(w, "vpn", map[string]any{"Nav": "vpn", "Rows": rows, "Connected": connected, "Total": len(s.cfg.VPN.Peers),

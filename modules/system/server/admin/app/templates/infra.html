@@ -29,24 +29,25 @@
       </div>
     </section>
     <section class="block" aria-labelledby="devices-title">
-      <div class="block-head"><h2 id="devices-title">Appareils</h2></div>
+      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services ouverts à certains appareils seulement (dashboard, Vaultwarden, sites en VPN qui le listent) ; les autres services en VPN sont ouverts à tous les appareils.")}}</h2></div>
       <section class="card table-card" aria-label="Liste des appareils">
         <table class="list">
-          <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col">Accès réservés</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
-              <td><span class="stack tight"><span class="line">{{.Name}}{{if .Trusted}}<span class="chip green">de confiance</span>{{end}}</span><small class="mono muted">{{slice .PublicKey 0 10}}…</small></span></td>
+              <td><span class="stack tight">{{.Name}}<small class="mono muted">{{slice .PublicKey 0 10}}…</small></span></td>
               <td class="mono small">{{.Address}}</td>
-              <td>{{if .Pending}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="warn-ink">en attente : secret puis rebuild</span></span>
+              <td class="nowrap">{{if .Pending}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="warn-ink">en attente : secret puis rebuild</span></span>
                 {{else if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connecté</span>
                 {{else if .Seen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vu {{.LastSeen}}</span></span>
                 {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">jamais vu</span></span>{{end}}</td>
               <td class="mono small muted">{{if .RemoteIP}}{{.RemoteIP}}{{else}}—{{end}}</td>
-              <td class="mono small muted">{{if .Seen}}↓ {{.Received}} ↑ {{.Sent}}{{else}}—{{end}}</td>
+              <td class="mono small muted nowrap" title="Depuis la dernière mise en route du tunnel sur think, vu de l'appareil">{{if .Seen}}↑ {{.Received}} ↓ {{.Sent}}{{else}}—{{end}}</td>
+              <td><span class="line wrap">{{range .Access}}<span class="chip">{{.}}</span>{{else}}<span class="muted">aucun</span>{{end}}</span></td>
               <td class="end">{{if .Added}}<form method="post" action="/vpn/{{.Name}}/remove" class="inline-confirm"><details><summary class="btn btn-sm btn-danger-ghost">Retirer…</summary><button class="btn btn-sm btn-danger">Retirer {{.Name}}</button></details></form>{{end}}</td>
             </tr>
-            {{else}}<tr><td colspan="6" class="muted">Aucun appareil.</td></tr>{{end}}
+            {{else}}<tr><td colspan="7" class="muted">Aucun appareil.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
@@ -63,7 +64,7 @@
   <form method="post" action="/vpn/new" class="card stack gap narrow">
     <label class="field"><span>Nom de l'appareil</span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9_]{1,24}" placeholder="pixel_9" autofocus></label>
     <label class="field"><span>IP dans le tunnel <small class="muted">({{.Subnet}}, la première libre est proposée)</small></span><input name="address" value="{{.Address}}" class="mono" required inputmode="decimal"></label>
-    <label class="row-toggle"><span class="stack tight"><strong>De confiance</strong><small class="muted">Accès aussi à Vaultwarden (réservé aux appareils de confiance).</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
+    <label class="row-toggle"><span class="stack tight"><strong>Accès à Vaultwarden</strong><small class="muted">Le coffre de mots de passe, réservé aux appareils choisis. Les sites en VPN se donnent site par site.</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
     <button class="btn btn-primary">Créer l'appareil</button>
     <small class="muted">Les clés sont créées ici et ne sont gardées nulle part : la page suivante est la seule à les montrer.</small>
   </form>
@@ -129,13 +130,13 @@
 {{template "bottom" .}}{{end}}
 
 {{define "accounts"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "Comptes")}}</header>
+<header class="topbar">{{template "crumbs" (args "Title" "Authelia")}}</header>
 <main class="page">
-  <h1>Comptes</h1>
+  <h1>Authelia</h1>
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="accounts-title">
-      <div class="block-head"><h2 id="accounts-title" class="line">Comptes Authelia{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ».")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ».")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
           <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th></tr></thead>

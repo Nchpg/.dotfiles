@@ -91,6 +91,10 @@ let
         ;
       added = lib.elem p.name addedPeers;
     }) wireguard.peers;
+    # Services limités à certains appareils (colonne Accès) ; les sites VPN viennent d'apps.json.
+    adminDevices = cfg.devices;
+    # Réservés aux appareils `trusted` (trustedSources) : Vaultwarden aujourd'hui.
+    trustedServices = lib.optional config.systemSettings.vaultwarden.enable "vaultwarden";
   };
 
   # Page SSH : clés autorisées de chaque compte (publiques).
