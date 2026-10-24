@@ -116,12 +116,13 @@
 </fieldset>
 {{end}}
 
-{{/* Cases des sites en VPN (.Sites) ; un environnement qui reprend l'accès de son parent est grisé. */}}
+{{/* Cases des sites (.Sites : en VPN, ou avec Authelia si .SSO) ; un environnement qui reprend
+     l'accès de son parent est grisé. */}}
 {{define "site-checks"}}
 <fieldset class="checks">
-  <legend>Sites en VPN</legend>
-  {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
-  {{else}}<p class="small muted">Aucun site en VPN.</p>{{end}}
+  <legend>{{if .SSO}}Sites avec Authelia{{else}}Sites en VPN{{end}}</legend>
+  {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{else if .All}}, tous les comptes{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
+  {{else}}<p class="small muted">{{if .SSO}}Aucun site avec Authelia.{{else}}Aucun site en VPN.{{end}}</p>{{end}}
 </fieldset>
 {{end}}
 
@@ -186,10 +187,10 @@
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="accounts-title">
-      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ».")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de think et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer ») ; un site sans liste est ouvert à tous les comptes.")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
-          <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th></tr></thead>
+          <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
@@ -198,12 +199,38 @@
               <td>{{if or .TOTP .SecurityKeys}}<span class="line"><span class="dot up" aria-hidden="true"></span>{{if .TOTP}}code{{end}}{{if and .TOTP .SecurityKeys}}, {{end}}{{if .SecurityKeys}}{{.SecurityKeys}} clé{{if gt .SecurityKeys 1}}s{{end}}{{end}}</span>{{else}}<span class="line"><span class="dot down" aria-hidden="true"></span><span class="bad">aucune</span></span>{{end}}</td>
               <td class="muted">{{.Last}}</td>
               <td>{{if .Failures24h}}<span class="bad">{{.Failures24h}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td><span class="stack tight access-cell">
+                {{with .Services}}<span><span class="muted">Services</span> {{join . ", "}}</span>{{end}}
+                {{with .Sites}}<span><span class="muted">Sites</span> {{join . ", "}}</span>{{end}}
+                {{if not (or .Services .Sites)}}<span class="muted">aucun</span>{{end}}
+              </span></td>
+              <td class="end"><a class="btn btn-sm" href="/accounts/{{.Name}}/access">Gérer</a></td>
             </tr>
-            {{else}}<tr><td colspan="5" class="muted">Aucun compte lu.</td></tr>{{end}}
+            {{else}}<tr><td colspan="7" class="muted">Aucun compte lu.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
     </section>
   </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "account-access"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}</header>
+<main class="page">
+  <h1>{{.Name}}</h1>
+  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  <form method="post" action="/accounts/{{.Name}}/access" class="stack gap-lg narrow">
+    <section class="card stack gap">
+      {{template "service-checks" .}}
+      {{if .Self}}<small class="warn-ink">Tu es connecté avec ce compte : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
+    </section>
+    <section class="card stack gap">
+      {{template "site-checks" (args "SSO" true "Sites" .Sites)}}
+      <small class="muted">Décocher un site ouvert à tous les comptes le réserve aux autres ; tous cochés, il redevient ouvert à tous (comptes à venir compris).</small>
+    </section>
+    <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
+    <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/accounts">Annuler</a></div>
+  </form>
 </main>
 {{template "bottom" .}}{{end}}

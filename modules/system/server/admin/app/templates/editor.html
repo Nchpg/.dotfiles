@@ -121,6 +121,12 @@
       <label class="row-toggle">
         <span class="stack tight"><strong>Connexion Authelia</strong><small class="muted">Compte et 2FA exigés.</small></span>
         <input type="checkbox" name="sso" {{if .SSO}}checked{{end}}></label>
+      <fieldset class="devices" data-sso-only {{if not .SSO}}hidden{{end}}>
+        <legend>Comptes autorisés</legend>
+        <input type="hidden" name="acct_shown" value="1">
+        <div class="pills">{{range .Accounts}}<label class="pill"><input type="checkbox" name="acct" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>
+        <small class="muted">Tous cochés : ouvert aussi aux comptes créés plus tard.</small>
+      </fieldset>
       {{else}}
       <p class="inherited"><span>{{.AccessFrom}}</span>{{range .AccessSummary}}<span class="chip">{{.}}</span>{{end}}</p>
       {{end}}

@@ -78,6 +78,8 @@ func main() {
 	mux.HandleFunc("POST /vpn/{name}/access", s.vpnAccessSave)
 	mux.HandleFunc("GET /ssh", s.ssh)
 	mux.HandleFunc("GET /accounts", s.accounts)
+	mux.HandleFunc("GET /accounts/{name}/access", s.accountAccess)
+	mux.HandleFunc("POST /accounts/{name}/access", s.accountAccessSave)
 	if cfg.MetricsURL != "" {
 		mux.HandleFunc("GET /metrics", s.metrics)
 	} else {

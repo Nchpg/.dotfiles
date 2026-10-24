@@ -26,13 +26,14 @@ type Config struct {
 	Fonts        string
 	Peers        []string
 	SecretKeys   []string
-	Services     []Service // services de think hors apps.json (lecture seule)
-	VPN          VPNInfo   // tunnel et appareils (page VPN)
-	SSH          []SSHUser // clés autorisées (page SSH)
-	AccountsFile string    // résumé des comptes Authelia, écrit par admin-accounts (root)
-	WGPubkeyFile string    // clé publique du serveur WireGuard, dérivée au démarrage
-	RecopyStatus string    // résultats d'admin-recopy (root), lus seulement
-	MetricsURL   string    // tableau de bord Grafana de la page Métriques (vide : page « bientôt »)
+	Services     []Service    // services de think hors apps.json (lecture seule)
+	VPN          VPNInfo      // tunnel et appareils (page VPN)
+	SSH          []SSHUser    // clés autorisées (page SSH)
+	AccountsFile string       // résumé des comptes Authelia, écrit par admin-accounts (root)
+	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
+	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage
+	RecopyStatus string       // résultats d'admin-recopy (root), lus seulement
+	MetricsURL   string       // tableau de bord Grafana de la page Métriques (vide : page « bientôt »)
 
 	DispatchToken string // lance apps.yml, rien d'autre
 	RegistryToken string // lit les images et la liste des packages
@@ -87,6 +88,9 @@ func loadConfig() (*Config, error) {
 	}
 	if err := readJSON(os.Getenv("ADMIN_SSH_FILE"), &c.SSH); err != nil {
 		return nil, fmt.Errorf("ssh : %w", err)
+	}
+	if err := readJSON(os.Getenv("ADMIN_AUTHELIA_FILE"), &c.Authelia); err != nil {
+		return nil, fmt.Errorf("authelia : %w", err)
 	}
 
 	// Credentials systemd : jamais dans l'environnement (lisible dans /proc).

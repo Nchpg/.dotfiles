@@ -26,6 +26,13 @@ document.addEventListener("change", (ev) => {
   form.querySelectorAll("[data-suffix]").forEach((el) => (el.textContent = vpn ? el.dataset.vpn : el.dataset.public));
 });
 
+// Connexion Authelia : les comptes autorisés suivent la case.
+document.addEventListener("change", (ev) => {
+  const form = ev.target.closest?.("#site-form");
+  if (!form || ev.target.name !== "sso") return;
+  form.querySelectorAll("[data-sso-only]").forEach((el) => (el.hidden = !ev.target.checked));
+});
+
 // Choix du dépôt : filtre et sélection visibles (le formulaire arrive par htmx).
 document.addEventListener("input", (ev) => {
   if (!ev.target.matches?.("[data-repo-filter]")) return;

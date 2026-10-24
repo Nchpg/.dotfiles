@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -247,5 +248,29 @@ func TestDescribeCommit(t *testing.T) {
 		if got := [3]string{it.Name, it.What, it.Kind}; got != c.want {
 			t.Errorf("%q : %v, attendu %v", c.subject, got, c.want)
 		}
+	}
+}
+
+// Comptes d'un site avec Authelia : gardés tels quels, tous cochés la liste s'efface, aucun refusé.
+func TestEnvFormAccounts(t *testing.T) {
+	s, snap, e := withEnvs(t)
+	s.cfg.AccountsFile = ""
+	s.cfg.Authelia.Accounts = map[string][]string{"nathan": {"admin"}, "olivier": {"nextcloud"}}
+	pv := e.Environments["preview"]
+	pv.Expose, pv.SSO, pv.Accounts = "public", true, []string{"nathan"}
+	e.Environments["preview"] = pv
+	if got := submit(t, s, snap, e, "preview", nil); !slices.Equal(got.Environments["preview"].Accounts, []string{"nathan"}) {
+		t.Errorf("comptes perdus : %+v", got.Environments["preview"])
+	}
+	got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["acct"] = []string{"nathan", "olivier"} })
+	if got.Environments["preview"].Accounts != nil {
+		t.Errorf("tous cochés : liste attendue absente, %v", got.Environments["preview"].Accounts)
+	}
+	got = submit(t, s, snap, e, "preview", func(v map[string][]string) { delete(v, "sso") })
+	if a := got.Environments["preview"]; a.SSO || a.Accounts != nil {
+		t.Errorf("sans Authelia, plus de comptes : %+v", a)
+	}
+	if errs := validateAccounts("preview : ", true, accountsFromForm(nil, s.accountChoices(nil))); len(errs) != 1 {
+		t.Errorf("aucun compte coché accepté")
 	}
 }

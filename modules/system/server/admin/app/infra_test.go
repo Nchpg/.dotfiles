@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,13 +57,38 @@ func TestInfraTemplates(t *testing.T) {
 			"Sites": []AccessSite{{Site: "myetf", App: "myetf", Domain: "etf.vpn", On: true}, {Site: "myetf", Env: "staging", App: "myetf-staging", Inherited: true, From: "production"}}, "Self": true},
 		"vpn-added": {"Nav": "vpn", "Name": "pixel", "Address": "10.8.0.9", "Conf": "[Interface]\n", "QR": qrSVG(t.Context(), "x"), "Download": "data:text/plain;base64,eA==", "Secret": "wireguard:\n  pixel_preshared_key: K", "SecretKey": "wireguard/pixel_preshared_key"},
 		"ssh":       {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
-		"accounts":  {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h"}}},
+		"accounts":  {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h", Services: []string{"admin"}, Sites: []string{"myetf-preview"}}}},
+		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
+			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true, All: true}}, "Self": true},
 	}
 	for name, data := range pages {
 		var buf bytes.Buffer
 		if err := s.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
 			t.Errorf("%s : %v", name, err)
 		}
+	}
+}
+
+// Comptes d'un site : tous cochés, la liste s'efface ; aucun, liste vide (refusée).
+func TestAccountsFromForm(t *testing.T) {
+	all := []string{"nathan", "olivier"}
+	if got := accountsFromForm([]string{"olivier", "nathan"}, all); got != nil {
+		t.Errorf("tous cochés : %v, attendu nil", got)
+	}
+	if got := accountsFromForm([]string{"nathan", "intrus"}, all); !slices.Equal(got, []string{"nathan"}) {
+		t.Errorf("un coché : %v", got)
+	}
+	if got := accountsFromForm(nil, all); got == nil || len(got) != 0 {
+		t.Errorf("aucun coché : %v, attendu []", got)
+	}
+	if errs := validateAccounts("", true, []string{}); len(errs) != 1 {
+		t.Errorf("liste vide acceptée")
+	}
+	if errs := validateAccounts("preview : ", false, []string{"nathan"}); len(errs) != 1 {
+		t.Errorf("comptes sans Authelia acceptés")
+	}
+	if errs := validateAccounts("", true, nil); errs != nil {
+		t.Errorf("sans liste : %v", errs)
 	}
 }
 

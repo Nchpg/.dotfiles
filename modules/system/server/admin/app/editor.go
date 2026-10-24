@@ -112,6 +112,7 @@ type FormVM struct {
 	RLPaths      string
 	Probe        string
 	Peers        []Opt
+	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis (tous sans liste)
 	Containers   []CtrVM
 	CtrList      string
 	Multi        bool
@@ -387,6 +388,9 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 	for _, p := range s.cfg.Peers {
 		f.Peers = append(f.Peers, Opt{Value: p, Label: p, Selected: devices[p]})
 	}
+	for _, a := range s.accountChoices(d.Access.Accounts) {
+		f.Accounts = append(f.Accounts, Opt{Value: a, Label: a, Selected: d.Access.Accounts == nil || slices.Contains(d.Access.Accounts, a)})
+	}
 
 	if d.Child {
 		v := e.Environments[env]
@@ -414,6 +418,9 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		}
 		if d.Access.SSO {
 			f.AccessSummary = append(f.AccessSummary, "Authelia")
+			if d.Access.Accounts != nil {
+				f.AccessSummary[len(f.AccessSummary)-1] += " : " + strings.Join(d.Access.Accounts, ", ")
+			}
 		}
 		f.OptionsSummary = []string{"internet fermé"}
 		if d.Options.Internet {
@@ -686,14 +693,23 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 	return out, entry, errs
 }
 
-func accessFromForm(r *http.Request) (expose string, devices []string, sso bool) {
+// accessFromForm : la section accès du formulaire. `current` : les comptes avant, gardés si leurs
+// cases ne sont pas dans la page.
+func (s *Server) accessFromForm(r *http.Request, current []string) (expose string, devices []string, sso bool, accounts []string) {
 	expose = "public"
 	if r.FormValue("expose") == "vpn" {
 		expose = "vpn"
 		devices = r.Form["dev"]
 		sort.Strings(devices)
 	}
-	return expose, devices, r.FormValue("sso") == "on"
+	sso = r.FormValue("sso") == "on"
+	if sso {
+		accounts = current
+		if _, shown := r.Form["acct_shown"]; shown {
+			accounts = accountsFromForm(r.Form["acct"], s.accountChoices(current))
+		}
+	}
+	return expose, devices, sso, accounts
 }
 
 func optionsFromForm(r *http.Request) (internet bool, probe string, rl *[]string) {
@@ -733,8 +749,8 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 		if sub != "" && sub != name {
 			e.Subdomain = sub
 		}
-		expose, devices, sso := accessFromForm(r)
-		e.Expose, e.Devices, e.SSO = "", nil, sso
+		expose, devices, sso, accounts := s.accessFromForm(r, current.Accounts)
+		e.Expose, e.Devices, e.SSO, e.Accounts = "", nil, sso, accounts
 		if expose == "vpn" {
 			e.Expose, e.Devices = "vpn", devices
 		}
@@ -780,12 +796,12 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	}
 	if r.FormValue("own_access") == "1" {
 		if _, shown := r.Form["expose"]; shown && v.OwnAccess() {
-			v.Expose, v.Devices, v.SSO = accessFromForm(r)
+			v.Expose, v.Devices, v.SSO, v.Accounts = s.accessFromForm(r, v.Accounts)
 		} else if !v.OwnAccess() {
-			v.Expose, v.Devices, v.SSO = pa.Expose, pa.Devices, pa.SSO
+			v.Expose, v.Devices, v.SSO, v.Accounts = pa.Expose, pa.Devices, pa.SSO, pa.Accounts
 		}
 	} else {
-		v.Expose, v.Devices, v.SSO = "", nil, false
+		v.Expose, v.Devices, v.SSO, v.Accounts = "", nil, false, nil
 	}
 	if r.FormValue("own_containers") == "1" {
 		if !v.OwnContainers() {
@@ -833,7 +849,7 @@ func cloneEntry(e Entry) Entry {
 func (s *Server) newEnv(e Entry, branch, from string) Env {
 	v := Env{Branch: branch, From: from, Expose: "vpn"}
 	if pa, _, _, err := e.sections(from, 0); err == nil && pa.Expose == "vpn" {
-		v.Devices, v.SSO = pa.Devices, pa.SSO
+		v.Devices, v.SSO, v.Accounts = pa.Devices, pa.SSO, pa.Accounts
 	} else {
 		v.Devices = append([]string(nil), s.cfg.Peers...)
 		sort.Strings(v.Devices)
@@ -1016,6 +1032,8 @@ func (s *Server) deployChanges(name string, old, cur Entry, id string) []string 
 		} else {
 			parts = append(parts, "drop login")
 		}
+	} else if b.Access.SSO && strings.Join(a.Access.Accounts, ",") != strings.Join(b.Access.Accounts, ",") {
+		parts = append(parts, "update accounts")
 	}
 	if a.Options.Internet != b.Options.Internet {
 		if b.Options.Internet {

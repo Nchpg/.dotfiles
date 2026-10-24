@@ -34,6 +34,7 @@ type Entry struct {
 	Expose         string               `json:"expose,omitempty"`
 	Devices        []string             `json:"devices,omitempty"`
 	SSO            bool                 `json:"sso,omitempty"`
+	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis (absent : tous)
 	InternetAccess bool                 `json:"internetAccess,omitempty"`
 	Probe          string               `json:"probe,omitempty"`
 	Entrypoint     string               `json:"entrypoint,omitempty"`
@@ -328,6 +329,7 @@ func validate(cfg *Config, name string, e Entry, others map[string]Entry) []stri
 			add("Appareil inconnu : %s.", d)
 		}
 	}
+	errs = append(errs, validateAccounts("", e.SSO, e.Accounts)...)
 	if e.Probe != "" && !rePath.MatchString(e.Probe) {
 		add("Page de santé : un chemin qui commence par /.")
 	}

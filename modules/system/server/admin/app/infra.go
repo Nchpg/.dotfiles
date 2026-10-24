@@ -476,6 +476,7 @@ func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 type AccessSite struct {
 	Site, Env, App, Domain, From string
 	On, Inherited                bool
+	All                          bool // page Authelia : pas de liste, tout compte passe
 }
 
 // accessSites : les sites en VPN de main, et si l'appareil y est.
@@ -608,39 +609,6 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows})
-}
-
-// AccountRow : un compte Authelia et sa dernière connexion, lisible.
-type AccountRow struct {
-	Account
-	Last string
-}
-
-func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
-	var list []Account
-	data := map[string]any{"Nav": "accounts"}
-	b, err := os.ReadFile(s.cfg.AccountsFile)
-	if err == nil {
-		err = json.Unmarshal(b, &list)
-	}
-	if err != nil {
-		data["Error"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
-	}
-	if st, e := os.Stat(s.cfg.AccountsFile); e == nil {
-		data["Updated"] = ago(time.Since(st.ModTime()))
-	}
-	var rows []AccountRow
-	for _, a := range list {
-		row := AccountRow{Account: a, Last: "jamais"}
-		if a.LastLogin != nil {
-			if t, ok := parseSQLiteTime(*a.LastLogin); ok {
-				row.Last = ago(time.Since(t))
-			}
-		}
-		rows = append(rows, row)
-	}
-	data["Rows"] = rows
-	s.render(w, "accounts", data)
 }
 
 // parseSQLiteTime : les dates de la base d'Authelia (texte, avec ou sans fuseau ni fraction).

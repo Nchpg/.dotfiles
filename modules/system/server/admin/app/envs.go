@@ -23,6 +23,7 @@ type Env struct {
 	Expose         string               `json:"expose,omitempty"`
 	Devices        []string             `json:"devices,omitempty"`
 	SSO            bool                 `json:"sso,omitempty"`
+	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis (absent : tous)
 	Containers     map[string]Container `json:"containers,omitempty"`
 	Entrypoint     string               `json:"entrypoint,omitempty"`
 	InternetAccess *bool                `json:"internetAccess,omitempty"`
@@ -43,9 +44,10 @@ func (v Env) DataMode() string {
 
 // Sections effectives d'un déploiement.
 type Access struct {
-	Expose  string // public ou vpn
-	Devices []string
-	SSO     bool
+	Expose   string // public ou vpn
+	Devices  []string
+	SSO      bool
+	Accounts []string // comptes Authelia admis, avec SSO (vide : tout compte)
 }
 
 type Options struct {
@@ -102,7 +104,7 @@ func (e Entry) EnvIDs() []string {
 // sections : accès, conteneurs (images sans tag pour un enfant) et options effectifs.
 func (e Entry) sections(id string, depth int) (Access, Ctrs, Options, error) {
 	if id == "" {
-		a := Access{Expose: "public", Devices: e.Devices, SSO: e.SSO}
+		a := Access{Expose: "public", Devices: e.Devices, SSO: e.SSO, Accounts: e.Accounts}
 		if e.VPN() {
 			a.Expose = "vpn"
 		}
@@ -120,7 +122,7 @@ func (e Entry) sections(id string, depth int) (Access, Ctrs, Options, error) {
 		return a, c, o, err
 	}
 	if v.OwnAccess() {
-		a = Access{Expose: v.Expose, Devices: v.Devices, SSO: v.SSO}
+		a = Access{Expose: v.Expose, Devices: v.Devices, SSO: v.SSO, Accounts: v.Accounts}
 	}
 	if v.OwnContainers() {
 		c = Ctrs{Containers: v.Containers, Entrypoint: v.Entrypoint}
@@ -261,8 +263,11 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 			add("%ssous-domaine invalide.", w)
 		}
 		// Une section n'est à lui que par sa clé repère : ses autres clés seules feraient échouer l'évaluation.
-		if !v.OwnAccess() && (len(v.Devices) > 0 || v.SSO) {
+		if !v.OwnAccess() && (len(v.Devices) > 0 || v.SSO || v.Accounts != nil) {
 			add("%s« appareils » et « login » vont avec l'accès propre.", w)
+		}
+		if v.OwnAccess() {
+			errs = append(errs, validateAccounts(w, v.SSO, v.Accounts)...)
 		}
 		if !v.OwnContainers() && v.Entrypoint != "" {
 			add("%sle point d'entrée va avec des conteneurs propres.", w)
