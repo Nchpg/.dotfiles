@@ -515,3 +515,18 @@ fieldset.checks legend { padding: 0 0 4px; font-weight: 600; font-size: 14px; }
 .access-cell { font-size: 13px; line-height: 1.5; } .access-cell .muted { display: inline-block; min-width: 56px; }
 form fieldset.checks + fieldset.checks, form .field + fieldset.checks { margin-top: 10px; }
 textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card); color: var(--text); min-width: 0; resize: vertical; font: inherit; }
+/* Étapes à suivre (pages « Ajouter ») : pastilles reliées, commandes façon terminal. */
+.howto { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+.howto > li { counter-increment: step; position: relative; padding: 0 0 24px 44px; }
+.howto > li:last-child { padding-bottom: 0; }
+.howto > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; font-weight: 600; }
+.howto > li::after { content: ""; position: absolute; left: 14px; top: 34px; bottom: 6px; width: 1px; background: var(--line); }
+.howto > li:last-child::after { display: none; }
+.howto-title { font-weight: 500; line-height: 28px; }
+.howto-where { margin-left: 8px; color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.howto p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+.cmd { position: relative; margin-top: 8px; background: var(--side); color: #E2E6EC; }
+.cmd pre { margin: 0; padding: 10px 84px 10px 14px; font: 12.5px/1.6 var(--mono); white-space: pre; overflow-x: auto; }
+.cmd.sh pre::before { content: "$ "; color: var(--side-faint); }
+.cmd-copy { position: absolute; top: 6px; right: 6px; height: 26px; padding: 0 10px; border: 0; background: var(--side-2); color: var(--side-text); font-size: 12px; font-weight: 500; cursor: pointer; }
+.cmd-copy:hover { color: #fff; }

@@ -176,3 +176,13 @@ document.addEventListener("DOMContentLoaded", syncGrafana);
 document.addEventListener("htmx:afterSettle", syncGrafana);
 addEventListener("resize", syncGrafana);
 addEventListener("scroll", syncGrafana, { passive: true });
+
+// Bouton « Copier » des blocs de commande.
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest?.("[data-copy]");
+  if (!btn) return;
+  navigator.clipboard?.writeText(btn.previousElementSibling.textContent).then(() => {
+    btn.textContent = "Copié";
+    setTimeout(() => (btn.textContent = "Copier"), 1500);
+  });
+});

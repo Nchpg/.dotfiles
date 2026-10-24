@@ -254,18 +254,19 @@
       <button class="btn btn-primary">Donner les commandes</button>
     </form>
     {{with .Snippet}}
-    <section class="block" aria-labelledby="steps-title">
-      <div class="block-head"><h2 id="steps-title">Sur think, dans ~/.dotfiles</h2></div>
-      <div class="card stack gap">
-        <ol class="steps-list">
-          <li><code>secrets edit {{$.Secret}}</code>, puis, dans le bloc des comptes, ajouter à côté des autres (même retrait que les comptes existants) :
-            <pre class="conf mono small">{{.}}</pre>
-            <small class="muted">Sans mot de passe : think lui en donne un au hasard, que personne ne connaît.</small></li>
-          <li><code>rebuild</code></li>
-          <li>La personne ouvre <a href="https://{{$.Portal}}/" target="_blank" rel="noopener" class="mono">{{$.Portal}}</a>, « Mot de passe oublié ? » avec son adresse, choisit son mot de passe, puis sa double authentification.</li>
-          <li>Ici, quand le compte apparaît dans la liste (relue toutes les 5 minutes) : « Gérer » pour lui ouvrir des services et des sites. Avant, il n'a accès à rien.</li>
-        </ol>
-      </div>
+    <section class="card" aria-label="Étapes">
+      <ol class="howto">
+        <li><div class="howto-title">Ajouter le compte aux secrets<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+          {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" $.Secret))}}
+          <p>Coller à côté des comptes existants, au même retrait. Sans mot de passe : think en tire un au hasard.</p>
+          {{template "cmd" (args "Text" .)}}</li>
+        <li><div class="howto-title">Appliquer</div>
+          {{template "cmd" (args "Sh" true "Text" "rebuild")}}</li>
+        <li><div class="howto-title">La personne choisit son mot de passe</div>
+          <p>Sur <a href="https://{{$.Portal}}/" target="_blank" rel="noopener" class="mono">{{$.Portal}}</a> : « Mot de passe oublié ? », identifiant <code>{{$.Name}}</code>. Elle reçoit un lien par e-mail, choisit son mot de passe, puis sa double authentification.</p></li>
+        <li><div class="howto-title">Lui ouvrir des accès</div>
+          <p>Ici, « Gérer » sur son compte, dès qu'il apparaît dans la liste (relue toutes les 5 minutes). Avant, il n'a accès à rien.</p></li>
+      </ol>
     </section>
     {{end}}
   </div>
@@ -286,29 +287,27 @@
       <button class="btn btn-primary">Donner les commandes</button>
     </form>
     {{if .Ready}}
-    {{if not .Key}}
-    <section class="block" aria-labelledby="device-title">
-      <div class="block-head"><h2 id="device-title">1. Sur l'appareil</h2></div>
-      <div class="card stack gap">
-        <ol class="steps-list">
-          <li><code>ssh-keygen -t ed25519 -C "{{.Comment}}"</code></li>
-          <li><code>cat ~/.ssh/id_ed25519.pub</code> : la ligne affichée est la clé publique (la colle ci-dessus pour avoir la ligne exacte).</li>
-        </ol>
-      </div>
-    </section>
-    {{end}}
-    <section class="block" aria-labelledby="think-title">
-      <div class="block-head"><h2 id="think-title">{{if not .Key}}2. {{end}}Sur think, dans ~/.dotfiles</h2></div>
-      <div class="card stack gap">
-        <ol class="steps-list">
-          <li>Dans {{range $i, $f := .Info.Files}}{{if $i}} ou {{end}}<code>{{$f}}</code>{{end}}, ajouter aux <code>sshKeys</code> du compte <code>{{.User}}</code> :
-            <pre class="conf mono small">"{{.Line}}"</pre></li>
-          <li><code>rebuild</code></li>
-          <li>Depuis l'appareil, par le VPN : <code>ssh -p {{.Info.Port}} {{.User}}@{{.Info.Host}}</code></li>
-        </ol>
-      </div>
+    <section class="card" aria-label="Étapes">
+      <ol class="howto">
+        {{if not .Key}}
+        <li><div class="howto-title">Créer la clé<span class="howto-where">sur l'appareil</span></div>
+          {{template "cmd" (args "Sh" true "Text" (printf "ssh-keygen -t ed25519 -C \"%s\"" .Comment))}}
+          {{template "cmd" (args "Sh" true "Text" "cat ~/.ssh/id_ed25519.pub")}}
+          <p>La ligne affichée est la clé publique : colle-la dans le formulaire pour avoir la ligne exacte.</p></li>
+        {{end}}
+        <li><div class="howto-title">L'autoriser<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+          <p>Dans {{range $i, $f := .Info.Files}}{{if $i}} ou {{end}}<code>{{$f}}</code>{{end}}, aux <code>sshKeys</code> du compte <code>{{.User}}</code> :</p>
+          {{template "cmd" (args "Text" (printf "\"%s\"" .Line))}}</li>
+        <li><div class="howto-title">Appliquer</div>
+          {{template "cmd" (args "Sh" true "Text" "rebuild")}}</li>
+        <li><div class="howto-title">Se connecter<span class="howto-where">depuis l'appareil, par le VPN</span></div>
+          {{template "cmd" (args "Sh" true "Text" (printf "ssh -p %d %s@%s" .Info.Port .User .Info.Host))}}</li>
+      </ol>
     </section>
     {{end}}
   </div>
 </main>
 {{template "bottom" .}}{{end}}
+
+{{/* Bloc de commande (.Text ; .Sh : une commande, précédée de « $ ») avec un bouton Copier. */}}
+{{define "cmd"}}<div class="cmd{{if .Sh}} sh{{end}}"><pre>{{.Text}}</pre><button type="button" class="cmd-copy" data-copy>Copier</button></div>{{end}}
