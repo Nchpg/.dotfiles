@@ -37,6 +37,7 @@
     "environments": {
       "preview": {
         "accounts": [
+          "dorine",
           "nathan",
           "olivier"
         ],
