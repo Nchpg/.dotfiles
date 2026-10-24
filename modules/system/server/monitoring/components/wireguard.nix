@@ -48,8 +48,9 @@ in
           description = "Ancienneté de la dernière poignée de main, par pair. Un long silence est NORMAL — ce sont des téléphones. Le panneau sert à répondre à « pourquoi mon téléphone ne passe plus », pas à prévenir.";
           targets = [
             {
-              # Le `and` écarte les pairs jamais connectés (horodatage 0).
-              expr = "(time() - wireguard_latest_handshake_seconds) and (wireguard_latest_handshake_seconds > 0)";
+              # Le `and` écarte les pairs jamais connectés (horodatage 0). Le `max by` : avec `withRemoteIp`,
+              # chaque IP et port d'où un téléphone se connecte fait une série à part ; une courbe par pair.
+              expr = "max by (friendly_name) ((time() - wireguard_latest_handshake_seconds) and (wireguard_latest_handshake_seconds > 0))";
               legend = "{{ friendly_name }}";
             }
           ];
