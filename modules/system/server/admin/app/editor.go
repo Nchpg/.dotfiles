@@ -112,7 +112,7 @@ type FormVM struct {
 	RLPaths      string
 	Probe        string
 	Peers        []Opt
-	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis (tous sans liste)
+	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis
 	Containers   []CtrVM
 	CtrList      string
 	Multi        bool
@@ -389,7 +389,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.Peers = append(f.Peers, Opt{Value: p, Label: p, Selected: devices[p]})
 	}
 	for _, a := range s.accountChoices(d.Access.Accounts) {
-		f.Accounts = append(f.Accounts, Opt{Value: a, Label: a, Selected: d.Access.Accounts == nil || slices.Contains(d.Access.Accounts, a)})
+		f.Accounts = append(f.Accounts, Opt{Value: a, Label: a, Selected: slices.Contains(d.Access.Accounts, a)})
 	}
 
 	if d.Child {

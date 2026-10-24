@@ -8,9 +8,9 @@
 #          les secrets (exigé par le module wireguard), donc jamais par ce seul commit.
 #   access : APP (appareil), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses services
 #          réservés (vpn-peers.json) et sa place dans la liste `devices` des sites en VPN (apps.json).
-#   account : APP (compte Authelia), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}], "all":
-#          [tous les comptes]}) : ses services (authelia-accounts.json) et sa place dans la liste
-#          `accounts` des sites avec Authelia (apps.json).
+#   account : APP (compte Authelia), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses
+#          services (authelia-accounts.json) et sa place dans la liste `accounts` des sites avec
+#          Authelia (apps.json).
 # Écrit apps.json et/ou le lock, et sur stdout `subject=<message de commit>` (vide si rien ne change).
 # Les entrées viennent d'un appel externe : tout est vérifié avant d'écrire, et le lock reste cohérent
 # avec apps.json (chaque image suivie y a son digest, aucune entrée orpheline).
@@ -107,7 +107,7 @@ validate_entry() {
             (if has("devices") and (.devices | strs("^[A-Za-z0-9_-]{1,32}$") | not) then "\($w)devices : noms invalides" else empty end),
             (if has("sso") and (.sso | type) != "boolean" then "\($w)sso : booléen" else empty end),
             (if has("accounts") and .sso != true then "\($w)accounts : seulement avec sso" else empty end),
-            (if has("accounts") and ((.accounts | strs("^[A-Za-z0-9._@-]{1,64}$") | not) or (.accounts | length) == 0) then "\($w)accounts : des noms de comptes, au moins un" else empty end);
+            (if .sso == true and ((.accounts | strs("^[A-Za-z0-9._@-]{1,64}$") | not) or (.accounts | length) == 0) then "\($w)sso : au moins un compte dans accounts" else empty end);
         def options($w):
             (if has("internetAccess") and (.internetAccess | type) != "boolean" then "\($w)internetAccess : booléen" else empty end),
             (if has("probe") and ((.probe | type) != "string" or (.probe | test(path) | not)) then "\($w)probe : chemin invalide" else empty end),
@@ -310,22 +310,17 @@ keep_admin_account() {
 }
 
 # Sites [{site, env, on}] avec Authelia et leur propre accès : le compte $APP entre dans (ou sort de)
-# leur liste `accounts`. Sans liste, tout compte passe : en sortir donne tous les comptes ($all) moins
-# lui, et une liste qui redevient tous les comptes s'efface (les comptes à venir passent aussi).
+# leur liste `accounts`, qui ne peut pas finir vide.
 set_account_sites() {
-    local sites=$1 all=$2 bad empty
+    local sites=$1 bad empty
     bad=$(jq -r --argjson s "$sites" '. as $a | $s[]
         | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
         | select(($t | type) != "object" or $t.sso != true or ((.env // "") != "" and ($t | has("expose") | not)))
         | "\(.site)\(if (.env // "") != "" then "-" + .env else "" end)"' "$apps")
     [ -z "$bad" ] || die "pas d'Authelia avec son propre accès : $(paste -sd, - <<<"$bad")"
-    jq -S --indent 2 --arg n "$APP" --argjson s "$sites" --argjson all "$all" 'reduce $s[] as $x (.;
+    jq -S --indent 2 --arg n "$APP" --argjson s "$sites" 'reduce $s[] as $x (.;
         (if ($x.env // "") == "" then [$x.site] else [$x.site, "environments", $x.env] end) as $p
-        | getpath($p + ["accounts"]) as $cur
-        | (if $x.on then (if $cur == null then null else ($cur + [$n] | unique) end)
-           else (($cur // $all) - [$n]) end) as $new
-        | if $new == null or ($all - $new) == [] then delpaths([$p + ["accounts"]])
-          else setpath($p + ["accounts"]; $new | unique) end)' \
+        | setpath($p + ["accounts"]; ((getpath($p + ["accounts"]) // []) - [$n]) + (if $x.on then [$n] else [] end) | sort))' \
         "$apps" | replace "$apps"
     empty=$(jq -r 'to_entries[] | (select(.value.accounts == []) | .key),
         (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.accounts == []) | "\($k)-\(.key)")' "$apps")
@@ -335,18 +330,16 @@ set_account_sites() {
 # Accès d'un compte Authelia : ses services (authelia-accounts.json, un compte sans service en sort) et
 # sa présence dans la liste `accounts` de chaque site avec Authelia. Un seul commit.
 account() {
-    local names_ok='type == "array" and all(.[]; type == "string" and test("^[A-Za-z0-9._@-]{1,64}$"))'
     [[ "${APP:-}" =~ ^[A-Za-z0-9._@-]{1,64}$ ]] || die "APP : nom de compte invalide"
     jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
-    jq -e --arg n "$APP" "type == \"object\" and (keys - [\"services\", \"sites\", \"all\"] | length == 0)
-        and (.services | $services_ok) and (.sites | $sites_ok)
-        and (.all | $names_ok) and (.all | index(\$n) != null)" <<<"$ENTRY" >/dev/null \
-        || die "ENTRY : {services: [noms], sites: [{site, env, on}], all: [comptes, dont $APP]} attendu"
+    jq -e "type == \"object\" and (keys - [\"services\", \"sites\"] | length == 0)
+        and (.services | $services_ok) and (.sites | $sites_ok)" <<<"$ENTRY" >/dev/null \
+        || die "ENTRY : {services: [noms], sites: [{site, env, on}]} attendu"
     [ -f "$accounts" ] || echo '{}' >"$accounts"
     jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" \
         'if $e.services == [] then del(.[$n]) else .[$n].services = ($e.services | unique) end' "$accounts" | replace "$accounts"
     keep_admin_account
-    set_account_sites "$(jq -c .sites <<<"$ENTRY")" "$(jq -c .all <<<"$ENTRY")"
+    set_account_sites "$(jq -c .sites <<<"$ENTRY")"
     if git diff --quiet -- "$accounts" "$apps"; then
         echo "subject="
         return 0

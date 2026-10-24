@@ -36,7 +36,7 @@ on:
         required: false
         type: string
       entry:
-        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access : {services, sites} ; account : {services, sites, all} ; null pour retirer"
+        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access, account : {services, sites} ; null pour retirer"
         required: false
         type: string
       base:

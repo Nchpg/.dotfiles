@@ -59,7 +59,7 @@ func TestInfraTemplates(t *testing.T) {
 		"ssh":       {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
 		"accounts":  {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h", Services: []string{"admin"}, Sites: []string{"myetf-preview"}}}},
 		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
-			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true, All: true}}, "Self": true},
+			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true}}, "Self": true},
 	}
 	for name, data := range pages {
 		var buf bytes.Buffer
@@ -69,11 +69,11 @@ func TestInfraTemplates(t *testing.T) {
 	}
 }
 
-// Comptes d'un site : tous cochés, la liste s'efface ; aucun, liste vide (refusée).
+// Comptes d'un site : toujours nommés ; aucun coché, liste vide (refusée).
 func TestAccountsFromForm(t *testing.T) {
 	all := []string{"nathan", "olivier"}
-	if got := accountsFromForm([]string{"olivier", "nathan"}, all); got != nil {
-		t.Errorf("tous cochés : %v, attendu nil", got)
+	if got := accountsFromForm([]string{"olivier", "nathan"}, all); !slices.Equal(got, all) {
+		t.Errorf("tous cochés : %v, attendu la liste entière", got)
 	}
 	if got := accountsFromForm([]string{"nathan", "intrus"}, all); !slices.Equal(got, []string{"nathan"}) {
 		t.Errorf("un coché : %v", got)
@@ -87,8 +87,11 @@ func TestAccountsFromForm(t *testing.T) {
 	if errs := validateAccounts("preview : ", false, []string{"nathan"}); len(errs) != 1 {
 		t.Errorf("comptes sans Authelia acceptés")
 	}
-	if errs := validateAccounts("", true, nil); errs != nil {
-		t.Errorf("sans liste : %v", errs)
+	if errs := validateAccounts("", true, nil); len(errs) != 1 {
+		t.Errorf("Authelia sans liste acceptée")
+	}
+	if errs := validateAccounts("", false, nil); errs != nil {
+		t.Errorf("sans Authelia : %v", errs)
 	}
 }
 

@@ -476,7 +476,6 @@ func (s *Server) vpnRemove(w http.ResponseWriter, r *http.Request) {
 type AccessSite struct {
 	Site, Env, App, Domain, From string
 	On, Inherited                bool
-	All                          bool // page Authelia : pas de liste, tout compte passe
 }
 
 // accessSites : les sites en VPN de main, et si l'appareil y est.

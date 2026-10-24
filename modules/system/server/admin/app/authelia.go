@@ -14,8 +14,9 @@ import (
 )
 
 // Page Authelia : les comptes (résumé d'admin-accounts) et leurs accès. Services de think dans
-// authelia-accounts.json, sites avec Authelia par leur liste `accounts` d'apps.json (absente : tout
-// compte). Écrits par apps.yml (`account`), en un commit qu'apps-deploy applique seul.
+// authelia-accounts.json, sites avec Authelia par leur liste `accounts` d'apps.json, toujours
+// nommée : un compte créé plus tard n'entre nulle part seul. Écrits par apps.yml (`account`), en un
+// commit qu'apps-deploy applique seul.
 
 // AutheliaInfo : registre des services derrière le portail et ce que la génération active ouvre à
 // chaque compte (cf. `autheliaInfo`, ../default.nix).
@@ -30,9 +31,6 @@ var reAccount = regexp.MustCompile(`^[A-Za-z0-9._@-]{1,64}$`)
 
 // validateAccounts : la liste `accounts` d'une section accès (`w` : préfixe d'un environnement).
 func validateAccounts(w string, sso bool, accounts []string) []string {
-	if accounts == nil {
-		return nil
-	}
 	msg := func(m string) []string {
 		if w == "" {
 			return []string{strings.ToUpper(m[:1]) + m[1:]}
@@ -40,7 +38,10 @@ func validateAccounts(w string, sso bool, accounts []string) []string {
 		return []string{w + m}
 	}
 	if !sso {
-		return msg("comptes Authelia : seulement avec la connexion Authelia.")
+		if accounts != nil {
+			return msg("comptes Authelia : seulement avec la connexion Authelia.")
+		}
+		return nil
 	}
 	if len(accounts) == 0 {
 		return msg("connexion Authelia : coche au moins un compte.")
@@ -78,17 +79,13 @@ func (s *Server) accountChoices(extra []string) []string {
 	return slices.Compact(out)
 }
 
-// accountsFromForm : les comptes cochés ; tous cochés, la liste s'efface (les comptes à venir passent
-// aussi). Aucun coché : liste vide, que la validation refuse.
+// accountsFromForm : les comptes cochés parmi ceux proposés ; aucun : liste vide, que la validation refuse.
 func accountsFromForm(checked, choices []string) []string {
 	out := []string{}
 	for _, a := range choices {
 		if slices.Contains(checked, a) {
 			out = append(out, a)
 		}
-	}
-	if len(choices) > 0 && len(out) == len(choices) {
-		return nil
 	}
 	return out
 }
@@ -112,8 +109,7 @@ func (s *Server) accountServices(ctx context.Context) map[string][]string {
 	return s.cfg.Authelia.Accounts
 }
 
-// ssoSites : les sites (et environnements) avec Authelia sur main, et si le compte y entre. All :
-// pas de liste, tout compte passe.
+// ssoSites : les sites (et environnements) avec Authelia sur main, et si le compte y entre.
 func (s *Server) ssoSites(ctx context.Context, account string) ([]AccessSite, error) {
 	snap, err := s.snapshot(ctx)
 	if err != nil {
@@ -126,8 +122,7 @@ func (s *Server) ssoSites(ctx context.Context, account string) ([]AccessSite, er
 			if !d.Access.SSO {
 				continue
 			}
-			a := AccessSite{Site: site, Env: d.ID, App: d.App, Domain: d.Domain(s.cfg.Domain),
-				All: d.Access.Accounts == nil, On: d.Access.Accounts == nil || slices.Contains(d.Access.Accounts, account)}
+			a := AccessSite{Site: site, Env: d.ID, App: d.App, Domain: d.Domain(s.cfg.Domain), On: slices.Contains(d.Access.Accounts, account)}
 			if d.ID != "" && !e.Environments[d.ID].OwnAccess() {
 				a.Inherited, a.From = true, e.labelOf(e.Environments[d.ID].From)
 			}
@@ -162,10 +157,8 @@ func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 				if !d.Access.SSO {
 					continue
 				}
-				for _, a := range list {
-					if d.Access.Accounts == nil || slices.Contains(d.Access.Accounts, a.Name) {
-						sitesOf[a.Name] = append(sitesOf[a.Name], d.App)
-					}
+				for _, a := range d.Access.Accounts {
+					sitesOf[a] = append(sitesOf[a], d.App)
 				}
 			}
 		}
@@ -246,7 +239,7 @@ func (s *Server) accountAccessSave(w http.ResponseWriter, r *http.Request) {
 			changes = append(changes, siteAccess{a.Site, a.Env, on})
 		}
 	}
-	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes, "all": s.accountChoices([]string{name})})
+	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
 	if err := s.gh.Dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"}); err != nil {
 		back("Changement impossible (apps.yml) : " + err.Error())
 		return

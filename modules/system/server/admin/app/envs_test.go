@@ -251,7 +251,7 @@ func TestDescribeCommit(t *testing.T) {
 	}
 }
 
-// Comptes d'un site avec Authelia : gardés tels quels, tous cochés la liste s'efface, aucun refusé.
+// Comptes d'un site avec Authelia : gardés tels quels, tous cochés tous nommés, aucun refusé.
 func TestEnvFormAccounts(t *testing.T) {
 	s, snap, e := withEnvs(t)
 	s.cfg.AccountsFile = ""
@@ -263,8 +263,8 @@ func TestEnvFormAccounts(t *testing.T) {
 		t.Errorf("comptes perdus : %+v", got.Environments["preview"])
 	}
 	got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["acct"] = []string{"nathan", "olivier"} })
-	if got.Environments["preview"].Accounts != nil {
-		t.Errorf("tous cochés : liste attendue absente, %v", got.Environments["preview"].Accounts)
+	if a := got.Environments["preview"].Accounts; !slices.Equal(a, []string{"nathan", "olivier"}) {
+		t.Errorf("tous cochés : %v", a)
 	}
 	got = submit(t, s, snap, e, "preview", func(v map[string][]string) { delete(v, "sso") })
 	if a := got.Environments["preview"]; a.SSO || a.Accounts != nil {

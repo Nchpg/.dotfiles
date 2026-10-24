@@ -121,7 +121,7 @@
 {{define "site-checks"}}
 <fieldset class="checks">
   <legend>{{if .SSO}}Sites avec Authelia{{else}}Sites en VPN{{end}}</legend>
-  {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{else if .All}}, tous les comptes{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
+  {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
   {{else}}<p class="small muted">{{if .SSO}}Aucun site avec Authelia.{{else}}Aucun site en VPN.{{end}}</p>{{end}}
 </fieldset>
 {{end}}
@@ -187,7 +187,7 @@
   {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="accounts-title">
-      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de think et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer ») ; un site sans liste est ouvert à tous les comptes.")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de think et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché.")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
           <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -227,7 +227,6 @@
     </section>
     <section class="card stack gap">
       {{template "site-checks" (args "SSO" true "Sites" .Sites)}}
-      <small class="muted">Décocher un site ouvert à tous les comptes le réserve aux autres ; tous cochés, il redevient ouvert à tous (comptes à venir compris).</small>
     </section>
     <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/accounts">Annuler</a></div>

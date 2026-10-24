@@ -256,14 +256,12 @@ let
     let
       expose = d.access.expose or "public";
       sso = d.access.sso or false;
-      # Comptes Authelia admis (absent : tout compte authentifié) ; jamais vide, ce serait tout le monde.
+      # Comptes Authelia admis, toujours nommés : un compte créé plus tard n'entre nulle part seul.
       accounts =
-        if !(d.access ? accounts) then
-          null
-        else if !sso then
-          fail d.app "`accounts` va avec `sso`"
+        if !sso then
+          if d.access ? accounts then fail d.app "`accounts` va avec `sso`" else null
         else if
-          d.access.accounts == [ ]
+          (d.access.accounts or [ ]) == [ ]
           || !lib.all (a: builtins.match "[A-Za-z0-9._@-]{1,64}" a != null) d.access.accounts
         then
           fail d.app "`accounts` : des noms de comptes Authelia, au moins un"

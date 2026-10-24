@@ -34,7 +34,7 @@ type Entry struct {
 	Expose         string               `json:"expose,omitempty"`
 	Devices        []string             `json:"devices,omitempty"`
 	SSO            bool                 `json:"sso,omitempty"`
-	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis (absent : tous)
+	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis, avec SSO
 	InternetAccess bool                 `json:"internetAccess,omitempty"`
 	Probe          string               `json:"probe,omitempty"`
 	Entrypoint     string               `json:"entrypoint,omitempty"`

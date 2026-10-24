@@ -114,7 +114,7 @@ le tunnel WireGuard.
 | `expose` | `"public"` | `"vpn"` : seulement les appareils de `devices` |
 | `devices` | | noms des appareils de `profiles/server/vpn-peers.json`, en `vpn` |
 | `sso` | `false` | le portail Authelia en plus, public ou VPN |
-| `accounts` | tous | comptes Authelia admis, avec `sso` (page Authelia du dashboard) |
+| `accounts` | | comptes Authelia admis, au moins un, avec `sso` (page Authelia du dashboard) |
 | `internetAccess` | `false` | connexions sortantes vers internet (jamais vers le LAN) |
 | `probe` | `"/"` | chemin sondé |
 | `entrypoint` | | conteneur servi par nginx, s'il y en a plusieurs |

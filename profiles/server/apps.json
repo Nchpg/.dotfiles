@@ -36,6 +36,10 @@
     ],
     "environments": {
       "preview": {
+        "accounts": [
+          "nathan",
+          "olivier"
+        ],
         "branch": "preview",
         "data": "shared",
         "expose": "public",

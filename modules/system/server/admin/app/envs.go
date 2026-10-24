@@ -23,7 +23,7 @@ type Env struct {
 	Expose         string               `json:"expose,omitempty"`
 	Devices        []string             `json:"devices,omitempty"`
 	SSO            bool                 `json:"sso,omitempty"`
-	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis (absent : tous)
+	Accounts       []string             `json:"accounts,omitempty"` // comptes Authelia admis, avec SSO
 	Containers     map[string]Container `json:"containers,omitempty"`
 	Entrypoint     string               `json:"entrypoint,omitempty"`
 	InternetAccess *bool                `json:"internetAccess,omitempty"`
@@ -47,7 +47,7 @@ type Access struct {
 	Expose   string // public ou vpn
 	Devices  []string
 	SSO      bool
-	Accounts []string // comptes Authelia admis, avec SSO (vide : tout compte)
+	Accounts []string // comptes Authelia admis, avec SSO
 }
 
 type Options struct {
