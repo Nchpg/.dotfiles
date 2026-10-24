@@ -23,11 +23,6 @@
       "nextcloud"
     ]
   },
-  "test": {
-    "address": "10.8.0.9",
-    "publicKey": "U4gUIgOnfrER+010nyJUIlU8NzJhFPxfI8t9rRnD0jM=",
-    "services": []
-  },
   "windows_gram": {
     "address": "10.8.0.4",
     "publicKey": "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=",
