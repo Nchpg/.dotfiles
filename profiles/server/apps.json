@@ -37,8 +37,7 @@
     "environments": {
       "preview": {
         "accounts": [
-          "nathan",
-          "olivier"
+          "nathan"
         ],
         "branch": "preview",
         "data": "shared",
