@@ -32,6 +32,8 @@
   </nav>
 </aside>
 <div class="content">
+{{/* Un rebuild a installé un autre noyau que celui démarré : visible sur toutes les pages. */}}
+{{with reboot}}<div class="reboot-banner" role="status"><span class="track-dot" aria-hidden="true"></span><span class="grow"><strong>Redémarrage nécessaire</strong> : noyau {{.Current}} installé, {{.Booted}} encore chargé. Il ne s'appliquera qu'au prochain démarrage.</span><code>sudo reboot</code></div>{{end}}
 {{end}}
 
 {{define "bottom"}}

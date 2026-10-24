@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -133,5 +135,28 @@ func TestViaTunnel(t *testing.T) {
 	}
 	if _, known := (&Server{cfg: &Config{}}).viaTunnel("localhost"); known {
 		t.Error("sans VPN configuré : rien ne doit être affirmé")
+	}
+}
+
+// Redémarrage : noyau, initrd ou modules différents entre le système démarré et l'actif.
+func TestRebootOf(t *testing.T) {
+	dir := t.TempDir()
+	mk := func(root, kernel, initrd string) string {
+		p := filepath.Join(dir, root)
+		_ = os.MkdirAll(p, 0o755)
+		_ = os.Symlink("/nix/store/aaa-linux-"+kernel+"/bzImage", filepath.Join(p, "kernel"))
+		_ = os.Symlink("/nix/store/bbb-initrd-linux-"+kernel+"/"+initrd, filepath.Join(p, "initrd"))
+		_ = os.Symlink("/nix/store/ccc-linux-"+kernel+"-modules", filepath.Join(p, "kernel-modules"))
+		return p
+	}
+	same, other := mk("a", "7.2.7", "initrd"), mk("b", "7.2.7", "initrd")
+	if r := rebootOf(same, other); r != nil {
+		t.Errorf("même noyau : %+v", r)
+	}
+	if r := rebootOf(same, mk("c", "7.3.1", "initrd")); r == nil || r.Booted != "7.2.7" || r.Current != "7.3.1" {
+		t.Errorf("noyau changé : %+v", r)
+	}
+	if r := rebootOf(same, mk("d", "7.2.7", "initrd2")); r == nil {
+		t.Errorf("initrd changé : pas de redémarrage demandé")
 	}
 }
