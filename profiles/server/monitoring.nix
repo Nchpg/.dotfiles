@@ -8,10 +8,9 @@ in
     monitoring = {
       enable = true;
 
-      grafana = {
-        hostName = "metrics.${domain}";
-        public = true;
-      };
+      # Comme le dashboard : par le VPN (appareils qui ont le service « grafana », page VPN), puis
+      # Authelia en 2FA. Le joker DNS *.vpn pointe déjà sur think dans le tunnel.
+      grafana.hostName = "metrics.vpn.${domain}";
 
       disks.enable = true;
 
@@ -26,19 +25,13 @@ in
       apps.nextcloudTokenKey = "nextcloud/serverinfo_token";
     };
 
-    proxy.sites."metrics.${domain}" = {
-      # `public` reste faux : la route du tunnel est posée par `grafana.public`.
-      lanShortcut = true;
-
-      # Les sondes partent de think et ne traversent pas le tunnel : seul le dead man's switch voit une panne de cloudflared.
-      probes.grafana.module = "http_authelia";
-    };
+    proxy.sites."metrics.vpn.${domain}".probes.grafana.module = "http_authelia";
 
     authelia.rules = [
       # Grafana donne Admin à quiconque franchit le portail : `subject` écarte les comptes familiaux
       # (nom du fichier d'utilisateurs Authelia). Pas de `networks`.
       {
-        domain = "metrics.${domain}";
+        domain = "metrics.vpn.${domain}";
         policy = "two_factor";
         subject = [ "user:nathan" ];
       }

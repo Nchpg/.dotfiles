@@ -4,6 +4,7 @@
     "publicKey": "/gV7axgKpUvtPD/oEnbgC4CFpvRULEMAmGVekD4B/zI=",
     "services": [
       "admin",
+      "grafana",
       "nextcloud",
       "vaultwarden"
     ]
@@ -27,6 +28,7 @@
     "publicKey": "9q/Vrdgd2Q+o+GWGi8GePNlbQM9lLJ9SNNKwVWHDsWs=",
     "services": [
       "admin",
+      "grafana",
       "nextcloud",
       "vaultwarden"
     ]
@@ -43,6 +45,7 @@
     "publicKey": "2XpsKYhyyKszaFd91V8cQ7yynz04RZ37S040S2OU5DY=",
     "services": [
       "admin",
+      "grafana",
       "nextcloud",
       "vaultwarden"
     ]

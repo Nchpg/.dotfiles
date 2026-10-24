@@ -10,10 +10,21 @@ let
   cfg = config.systemSettings.monitoring;
   authelia = config.systemSettings.authelia;
   admin = config.systemSettings.admin;
+  wireguard = config.systemSettings.vpn.wireguard;
+  # Servi par le VPN (pas de route publique) : ouvert appareil par appareil, comme le dashboard.
+  byVpn = wireguard.enable && !cfg.grafana.public;
   inherit (cfg.internal) ports;
 in
 {
   config = lib.mkIf cfg.enable {
+    # Ouvert appareil par appareil (page VPN) : il se déclare au registre du VPN.
+    systemSettings.vpn.wireguard.services = lib.mkIf byVpn {
+      grafana = {
+        label = "Grafana";
+        host = cfg.grafana.hostName;
+      };
+    };
+
     services.grafana = {
       enable = true;
 
@@ -120,6 +131,11 @@ in
         # Adresse réelle plutôt que 127.0.0.1 (tout arrive par cloudflared).
         extraConfig = ''
           access_log /var/log/nginx/access.log cf_combined;
+        ''
+        + lib.optionalString byVpn ''
+          ${myLib.server.nginxAllowOnly (
+            wireguard.sourcesFor "grafana" ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource
+          )}
         ''
         + lib.optionalString admin.enable ''
           # Un add_header ici masque ceux du niveau http : HSTS répété.
