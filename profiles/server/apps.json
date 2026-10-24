@@ -31,6 +31,7 @@
     },
     "devices": [
       "gram",
+      "test",
       "windows_gram",
       "xiaomi_17t"
     ],
@@ -95,6 +96,7 @@
     },
     "devices": [
       "gram",
+      "test",
       "windows_gram",
       "xiaomi_17t"
     ],
