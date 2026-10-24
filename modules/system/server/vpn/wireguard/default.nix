@@ -17,23 +17,35 @@ let
   # nom fixe ; elle doit exister dans les secrets, sinon l'évaluation s'arrête (cf. assertions).
   # Un appareil inscrit sans elle n'est donc jamais autorisé.
   pskKeyOf = name: "wireguard/${name}_preshared_key";
+  # Services réservés qu'un appareil peut recevoir (cf. `services`) ; les sites, eux, sont dans apps.json.
+  knownServices = [
+    "dashboard"
+    "vaultwarden"
+  ];
+  # Rangés par adresse : l'ordre des [WireGuardPeer] reste celui d'avant le fichier (et du tunnel).
+  lastOctet = p: lib.toInt (lib.last (lib.splitString "." p.address));
   filePeers =
     if cfg.peersFile == null then
       [ ]
     else
-      lib.mapAttrsToList (name: p: {
-        inherit name;
-        inherit (p) publicKey address;
-        trusted = p.trusted or false;
-        presharedKeyKey = pskKeyOf name;
-      }) (lib.importJSON cfg.peersFile);
+      lib.sort (a: b: lastOctet a < lastOctet b) (
+        lib.mapAttrsToList (name: p: {
+          inherit name;
+          inherit (p) publicKey address;
+          services = p.services or [ ];
+          # Vaultwarden lit `trustedSources` : ses appareils sont ceux qui ont ce service.
+          trusted = lib.elem "vaultwarden" (p.services or [ ]);
+          presharedKeyKey = pskKeyOf name;
+        }) (lib.importJSON cfg.peersFile)
+      );
   # /24 seulement : les trois premiers octets du sous-réseau, que toute adresse d'appareil partage.
   subnetPrefix = lib.concatStringsSep "." (lib.take 3 (lib.splitString "." cfg.subnet));
   badFilePeers = lib.filter (
     p:
     builtins.match "[a-z0-9_]{1,24}" p.name == null
     || builtins.match "[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=" p.publicKey == null
-    || builtins.match "${lib.escapeRegex subnetPrefix}\.([0-9]{1,3})" p.address == null
+    || builtins.match "${lib.escapeRegex subnetPrefix}\\.([0-9]{1,3})" p.address == null
+    || lib.subtractLists knownServices p.services != [ ]
   ) filePeers;
   missingPsk = lib.filter (
     p: !builtins.pathExists "${inputs.secrets}/${p.presharedKeyKey}.yaml"
@@ -190,6 +202,15 @@ in
               default = false;
               description = ''
                 Appareil de confiance : inclus dans `trustedSources`.
+              '';
+            };
+
+            services = lib.mkOption {
+              type = lib.types.listOf (lib.types.enum knownServices);
+              default = [ ];
+              description = ''
+                Services réservés auxquels l'appareil a accès : `dashboard` (systemSettings.admin.devices
+                le reprend) et `vaultwarden` (il fait l'appareil `trusted`).
               '';
             };
           };
