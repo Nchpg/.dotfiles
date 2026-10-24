@@ -181,8 +181,9 @@ addEventListener("scroll", syncGrafana, { passive: true });
 document.addEventListener("click", (ev) => {
   const btn = ev.target.closest?.("[data-copy]");
   if (!btn) return;
-  navigator.clipboard?.writeText(btn.previousElementSibling.textContent).then(() => {
+  const label = btn.textContent;
+  navigator.clipboard?.writeText(btn.dataset.copy || btn.previousElementSibling.textContent).then(() => {
     btn.textContent = "Copié";
-    setTimeout(() => (btn.textContent = "Copier"), 1500);
+    setTimeout(() => (btn.textContent = label), 1500);
   });
 });

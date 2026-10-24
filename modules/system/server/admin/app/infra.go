@@ -588,11 +588,12 @@ func sortedCopy(v []string) []string {
 // SSHKeyRow : une clé autorisée, son type, son commentaire et son empreinte (comme ssh-keygen -l).
 type SSHKeyRow struct {
 	User, Type, Comment, Fingerprint string
+	Key                              string // la ligne entière, publique
 }
 
 func sshKeyRow(user, key string) SSHKeyRow {
 	f := strings.Fields(key)
-	row := SSHKeyRow{User: user}
+	row := SSHKeyRow{User: user, Key: key}
 	if len(f) >= 1 {
 		row.Type = strings.TrimPrefix(f[0], "ssh-")
 	}

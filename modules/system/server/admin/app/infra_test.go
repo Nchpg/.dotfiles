@@ -9,8 +9,9 @@ import (
 
 // Empreinte d'une clé SSH : la même que `ssh-keygen -lf`.
 func TestSSHKeyRow(t *testing.T) {
-	row := sshKeyRow("nchpg", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upf nchpg@gram")
-	want := SSHKeyRow{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:S0DdI1dbptXWeKg+yLOpVbtPVyN4LtdHl7zvKOa+LxE"}
+	key := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILtpLQKGuQttRPNQTdMOjLpx1kn5oM94wj97klIh5Upf nchpg@gram"
+	row := sshKeyRow("nchpg", key)
+	want := SSHKeyRow{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:S0DdI1dbptXWeKg+yLOpVbtPVyN4LtdHl7zvKOa+LxE", Key: key}
 	if row != want {
 		t.Errorf("%+v, attendu %+v", row, want)
 	}

@@ -163,18 +163,19 @@
   <h1>SSH</h1>
   <div class="overview">
     <section class="block" aria-labelledby="keys-title">
-      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think, déclarées dans la config (systemSettings.users). Elles se changent dans le code Nix, puis un rebuild.")}}</h2></div>
+      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think, déclarées dans la config (systemSettings.users). Elles se changent dans le code Nix, puis un rebuild. Empreinte : le résumé court de la clé (SHA256), celui que ssh-keygen -l affiche et que le journal de think note à chaque connexion (« Accepted publickey … SHA256:… ») : il dit quelle clé s'est connectée.")}}</h2></div>
       <section class="card table-card" aria-label="Liste des clés">
         <table class="list">
-          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Empreinte</th></tr></thead>
+          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Empreinte</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
               <td>{{.User}}</td>
               <td><span class="stack tight"><span>{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}</span><small class="mono muted">{{.Type}}</small></span></td>
               <td class="mono small muted ellipsis-cell" title="{{.Fingerprint}}">{{.Fingerprint}}</td>
+              <td class="end"><button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier la clé</button></td>
             </tr>
-            {{else}}<tr><td colspan="3" class="muted">Aucune clé.</td></tr>{{end}}
+            {{else}}<tr><td colspan="4" class="muted">Aucune clé.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
@@ -196,12 +197,11 @@
       <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de think et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché.")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
-          <thead><tr><th scope="col">Compte</th><th scope="col">Groupes</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Compte</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
               <td><span class="stack tight"><span class="line">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}{{if .Disabled}}<span class="chip">désactivé</span>{{end}}</span><small class="muted">{{.Name}}{{with .Email}}, {{.}}{{end}}</small></span></td>
-              <td><span class="line wrap">{{range .Groups}}<span class="chip">{{.}}</span>{{else}}<span class="muted">aucun</span>{{end}}</span></td>
               <td>{{if or .TOTP .SecurityKeys}}<span class="line"><span class="dot up" aria-hidden="true"></span>{{if .TOTP}}code{{end}}{{if and .TOTP .SecurityKeys}}, {{end}}{{if .SecurityKeys}}{{.SecurityKeys}} clé{{if gt .SecurityKeys 1}}s{{end}}{{end}}</span>{{else}}<span class="line"><span class="dot down" aria-hidden="true"></span><span class="bad">aucune</span></span>{{end}}</td>
               <td class="muted">{{.Last}}</td>
               <td>{{if .Failures24h}}<span class="bad">{{.Failures24h}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
@@ -212,7 +212,7 @@
               </span></td>
               <td class="end"><a class="btn btn-sm" href="/accounts/{{.Name}}/access">Gérer</a></td>
             </tr>
-            {{else}}<tr><td colspan="7" class="muted">Aucun compte lu.</td></tr>{{end}}
+            {{else}}<tr><td colspan="6" class="muted">Aucun compte lu.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
