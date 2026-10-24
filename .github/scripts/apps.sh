@@ -3,9 +3,11 @@
 #   pin  : IMAGES='[{"ref":…,"digest":…,"revision":…,"port":…}]' — nouveaux digests d'images déjà suivies.
 #   edit : APP, ENTRY (JSON, ou `null` pour supprimer), BASE (empreinte de l'entrée lue, `new` si absente),
 #          IMAGES (digests des références que l'entrée ajoute), MESSAGE (facultatif), REGISTRY.
-#   peer : APP (nom de l'appareil VPN), ENTRY ({"publicKey", "address", "trusted"}, ou `null` pour le
+#   peer : APP (nom de l'appareil VPN), ENTRY ({"publicKey", "address", "services"}, ou `null` pour le
 #          retirer). Écrit vpn-peers.json ; l'appareil n'est autorisé qu'avec sa clé pré-partagée dans
 #          les secrets (exigé par le module wireguard), donc jamais par ce seul commit.
+#   access : APP (appareil), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses services
+#          réservés (vpn-peers.json) et sa place dans la liste `devices` des sites en VPN (apps.json).
 # Écrit apps.json et/ou le lock, et sur stdout `subject=<message de commit>` (vide si rien ne change).
 # Les entrées viennent d'un appel externe : tout est vérifié avant d'écrire, et le lock reste cohérent
 # avec apps.json (chaque image suivie y a son digest, aucune entrée orpheline).
@@ -210,8 +212,17 @@ edit() {
     echo "subject=$subject"
 }
 
-# Appareil VPN : ajout ou retrait dans vpn-peers.json (les appareils de vpn.nix n'y sont pas : leur
-# unicité est vérifiée par le dashboard et par l'évaluation Nix).
+# Services réservés qu'un appareil peut recevoir (même liste que le module wireguard).
+services_ok='(type == "array") and all(.[]; IN("admin", "vaultwarden"))'
+
+# Il reste au moins un appareil avec le dashboard : sans lui, plus personne ne l'ouvre.
+keep_dashboard() {
+    jq -e '[.[] | select(.services // [] | index("admin"))] | length > 0' "$peers" >/dev/null \
+        || die "plus aucun appareil n'aurait accès au dashboard : refusé"
+}
+
+# Appareil VPN : ajout ou retrait dans vpn-peers.json (unicité vérifiée aussi par le dashboard et
+# par l'évaluation Nix).
 peer() {
     local subject
     [[ "${APP:-}" =~ ^[a-z0-9_]{1,24}$ ]] || die "APP : nom d'appareil en [a-z0-9_], 24 caractères au plus"
@@ -219,14 +230,20 @@ peer() {
     if [ "${ENTRY:-}" = null ]; then
         jq -e --arg n "$APP" 'has($n)' "$peers" >/dev/null || die "$APP n'est pas dans $peers"
         jq -S --indent 2 --arg n "$APP" 'del(.[$n])' "$peers" | replace "$peers"
+        keep_dashboard
+        # Il disparaît aussi des listes `devices` des sites (sinon l'évaluation refuse un appareil inconnu).
+        jq -S --indent 2 --arg n "$APP" 'map_values(
+            (if has("devices") then .devices -= [$n] else . end)
+            | (if has("environments") then .environments |= map_values(if has("devices") then .devices -= [$n] else . end) else . end))' \
+            "$apps" | replace "$apps"
         subject="feat(vpn): remove $APP"
     else
         jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
-        jq -e 'type == "object" and (keys - ["publicKey", "address", "trusted"] | length == 0)
-            and (.publicKey | type == "string" and test("^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$"))
-            and (.address | type == "string" and test("^[0-9]{1,3}(\\.[0-9]{1,3}){3}$"))
-            and ((.trusted // false) | type == "boolean")' <<<"$ENTRY" >/dev/null \
-            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), trusted (booléen)} attendu"
+        jq -e "type == \"object\" and (keys - [\"publicKey\", \"address\", \"services\"] | length == 0)
+            and (.publicKey | type == \"string\" and test(\"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\$\"))
+            and (.address | type == \"string\" and test(\"^[0-9]{1,3}(\\\\.[0-9]{1,3}){3}\$\"))
+            and (.services // [] | $services_ok)" <<<"$ENTRY" >/dev/null \
+            || die "ENTRY : {publicKey (clé WireGuard), address (IPv4), services (admin, vaultwarden)} attendu"
         jq -e --arg n "$APP" 'has($n) | not' "$peers" >/dev/null || die "$APP existe déjà dans $peers"
         jq -e --arg n "$APP" --argjson e "$ENTRY" '[to_entries[] | select(.value.address == $e.address or .value.publicKey == $e.publicKey)] | length == 0' "$peers" >/dev/null \
             || die "adresse ou clé publique déjà prise dans $peers"
@@ -236,9 +253,43 @@ peer() {
     echo "subject=$subject"
 }
 
+# Accès d'un appareil : ses services réservés, et sa présence dans la liste `devices` de chaque site
+# (ou environnement) en VPN qui a son propre accès. Un seul commit pour les deux fichiers.
+access() {
+    [[ "${APP:-}" =~ ^[a-z0-9_]{1,24}$ ]] || die "APP : nom d'appareil en [a-z0-9_], 24 caractères au plus"
+    jq -e --arg n "$APP" 'has($n)' "$peers" >/dev/null 2>&1 || die "$APP n'est pas un appareil de $peers"
+    jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
+    jq -e "type == \"object\" and (keys - [\"services\", \"sites\"] | length == 0)
+        and (.services | $services_ok)
+        and (.sites | type == \"array\" and all(.[]; type == \"object\" and (.site | type == \"string\")
+            and ((.env // \"\") | type == \"string\") and (.on | type == \"boolean\")))" <<<"$ENTRY" >/dev/null \
+        || die "ENTRY : {services: [admin, vaultwarden], sites: [{site, env, on}]} attendu"
+    # Chaque cible : un site (ou environnement) existant, en VPN, avec son propre accès.
+    bad=$(jq -r --argjson e "$ENTRY" '. as $a | $e.sites[]
+        | (if (.env // "") == "" then $a[.site] else $a[.site].environments[.env] end) as $t
+        | select(($t | type) != "object" or $t.expose != "vpn")
+        | "\(.site)\(if (.env // "") != "" then "-" + .env else "" end)"' "$apps")
+    [ -z "$bad" ] || die "pas en VPN avec son propre accès : $(paste -sd, - <<<"$bad")"
+    jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" '.[$n].services = ($e.services | unique)' "$peers" | replace "$peers"
+    keep_dashboard
+    jq -S --indent 2 --arg n "$APP" --argjson e "$ENTRY" 'reduce $e.sites[] as $s (.;
+        (if ($s.env // "") == "" then [$s.site] else [$s.site, "environments", $s.env] end) as $p
+        | setpath($p + ["devices"]; ((getpath($p + ["devices"]) // []) - [$n]) + (if $s.on then [$n] else [] end) | sort))' \
+        "$apps" | replace "$apps"
+    empty=$(jq -r 'to_entries[] | (select(.value.expose == "vpn" and (.value.devices // []) == []) | .key),
+        (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.expose == "vpn" and (.value.devices // []) == []) | "\($k)-\(.key)")' "$apps")
+    [ -z "$empty" ] || die "un site en VPN doit garder au moins un appareil : $(paste -sd, - <<<"$empty")"
+    if git diff --quiet -- "$peers" "$apps"; then
+        echo "subject="
+        return 0
+    fi
+    echo "subject=feat(vpn): access for $APP"
+}
+
 case "${1:-}" in
     pin) pin ;;
     edit) edit ;;
     peer) peer ;;
-    *) die "usage : apps.sh pin|edit|peer" ;;
+    access) access ;;
+    *) die "usage : apps.sh pin|edit|peer|access" ;;
 esac

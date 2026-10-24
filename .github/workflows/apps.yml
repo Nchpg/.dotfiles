@@ -4,7 +4,9 @@ name: apps
 # - pin  : apps-watch a vu une nouvelle image, son digest entre dans le lock ;
 # - edit : le dashboard modifie, ajoute ou supprime un site dans apps.json (et le lock) ;
 # - peer : le dashboard inscrit ou retire un appareil VPN dans vpn-peers.json (autorisé seulement une
-#   fois sa clé pré-partagée dans les secrets, puis un rebuild à la main).
+#   fois sa clé pré-partagée dans les secrets, puis un rebuild à la main) ;
+# - access : le dashboard change les accès d'un appareil (services de think dans vpn-peers.json, sites
+#   en VPN dans apps.json), en un commit ; les services attendent un rebuild à la main.
 # think applique seul ces commits (apps-deploy : ils ne touchent qu'apps.json et le lock).
 # Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
 # d'appeler, et apps.sh vérifie chaque entrée.
@@ -13,24 +15,25 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: pin, edit ou peer
+        description: pin, edit, peer ou access
         required: true
         type: choice
         options:
           - pin
           - edit
           - peer
+          - access
       images:
         description: 'JSON [{"ref": "ghcr.io/…:tag", "digest": "sha256:…", "revision": "<sha>", "port": 8080}]'
         required: false
         default: "[]"
         type: string
       app:
-        description: "edit : nom du site ; peer : nom de l'appareil"
+        description: "edit : nom du site ; peer, access : nom de l'appareil"
         required: false
         type: string
       entry:
-        description: "edit : entrée JSON du site ; peer : {publicKey, address, trusted} ; null pour retirer"
+        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access : {services, sites} ; null pour retirer"
         required: false
         type: string
       base:
