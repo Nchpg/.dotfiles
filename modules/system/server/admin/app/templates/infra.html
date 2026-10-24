@@ -32,7 +32,7 @@
       <div class="block-head"><h2 id="devices-title">Appareils</h2></div>
       <section class="card table-card" aria-label="Liste des appareils">
         <table class="list">
-          <thead><tr><th scope="col">Appareil</th><th scope="col">Adresse</th><th scope="col">État</th><th scope="col">Trafic</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
@@ -42,10 +42,11 @@
                 {{else if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connecté</span>
                 {{else if .Seen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vu {{.LastSeen}}</span></span>
                 {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">jamais vu</span></span>{{end}}</td>
+              <td class="mono small muted">{{if .RemoteIP}}{{.RemoteIP}}{{else}}—{{end}}</td>
               <td class="mono small muted">{{if .Seen}}↓ {{.Received}} ↑ {{.Sent}}{{else}}—{{end}}</td>
               <td class="end">{{if .Added}}<form method="post" action="/vpn/{{.Name}}/remove" class="inline-confirm"><details><summary class="btn btn-sm btn-danger-ghost">Retirer…</summary><button class="btn btn-sm btn-danger">Retirer {{.Name}}</button></details></form>{{end}}</td>
             </tr>
-            {{else}}<tr><td colspan="5" class="muted">Aucun appareil.</td></tr>{{end}}
+            {{else}}<tr><td colspan="6" class="muted">Aucun appareil.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
@@ -61,8 +62,8 @@
   {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
   <form method="post" action="/vpn/new" class="card stack gap narrow">
     <label class="field"><span>Nom de l'appareil</span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9_]{1,24}" placeholder="pixel_9" autofocus></label>
-    <label class="row-toggle"><span class="stack tight"><strong>De confiance</strong><small class="muted">Accès aux services réservés aux appareils de confiance.</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
-    {{with .Address}}<small class="muted">Adresse dans le tunnel : <span class="mono">{{.}}</span></small>{{end}}
+    <label class="field"><span>IP dans le tunnel <small class="muted">({{.Subnet}}, la première libre est proposée)</small></span><input name="address" value="{{.Address}}" class="mono" required inputmode="decimal"></label>
+    <label class="row-toggle"><span class="stack tight"><strong>De confiance</strong><small class="muted">Accès aussi à Vaultwarden (réservé aux appareils de confiance).</small></span><input type="checkbox" name="trusted" {{if .Trusted}}checked{{end}}></label>
     <button class="btn btn-primary">Créer l'appareil</button>
     <small class="muted">Les clés sont créées ici et ne sont gardées nulle part : la page suivante est la seule à les montrer.</small>
   </form>

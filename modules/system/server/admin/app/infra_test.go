@@ -71,3 +71,14 @@ func TestParseSQLiteTime(t *testing.T) {
 		}
 	}
 }
+
+// Adresse choisie : dans le réseau, ni serveur, ni réservée, ni déjà prise (en attente compris).
+func TestCheckAddress(t *testing.T) {
+	s := &Server{cfg: &Config{VPN: VPNInfo{Subnet: "10.8.0.0/24", ServerAddress: "10.8.0.1", Peers: []VPNPeer{{Name: "gram", Address: "10.8.0.3"}}}}}
+	pending := []VPNPeer{{Name: "pixel", Address: "10.8.0.9"}}
+	for addr, ok := range map[string]bool{"10.8.0.20": true, "10.8.0.1": false, "10.8.0.3": false, "10.8.0.9": false, "10.8.0.0": false, "10.8.0.255": false, "10.9.0.5": false, "10.8.0.020": false, "pixel": false, "": false} {
+		if err := s.checkAddress(addr, pending); (err == nil) != ok {
+			t.Errorf("%q : %v", addr, err)
+		}
+	}
+}

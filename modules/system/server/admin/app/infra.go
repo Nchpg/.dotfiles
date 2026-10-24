@@ -69,6 +69,32 @@ var reDeviceName = regexp.MustCompile(`^[a-z0-9_]{1,24}$`)
 
 // promByKey : une requête Prometheus, valeur par étiquette `label`.
 func (s *Server) promByKey(ctx context.Context, query, label string) map[string]float64 {
+	m := map[string]float64{}
+	for _, r := range s.promQuery(ctx, query) {
+		if v, ok := r.Value[1].(string); ok {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				m[r.Metric[label]] = f
+			}
+		}
+	}
+	return m
+}
+
+// promLabel : une requête Prometheus, étiquette `value` par étiquette `key`.
+func (s *Server) promLabel(ctx context.Context, query, key, value string) map[string]string {
+	m := map[string]string{}
+	for _, r := range s.promQuery(ctx, query) {
+		m[r.Metric[key]] = r.Metric[value]
+	}
+	return m
+}
+
+type promSample struct {
+	Metric map[string]string `json:"metric"`
+	Value  [2]any            `json:"value"`
+}
+
+func (s *Server) promQuery(ctx context.Context, query string) []promSample {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", s.cfg.Prometheus+"/api/v1/query?query="+url.QueryEscape(query), nil)
@@ -79,24 +105,13 @@ func (s *Server) promByKey(ctx context.Context, query, label string) map[string]
 	defer resp.Body.Close()
 	var out struct {
 		Data struct {
-			Result []struct {
-				Metric map[string]string `json:"metric"`
-				Value  [2]any            `json:"value"`
-			} `json:"result"`
+			Result []promSample `json:"result"`
 		} `json:"data"`
 	}
 	if json.NewDecoder(resp.Body).Decode(&out) != nil {
 		return nil
 	}
-	m := map[string]float64{}
-	for _, r := range out.Data.Result {
-		if v, ok := r.Value[1].(string); ok {
-			if f, err := strconv.ParseFloat(v, 64); err == nil {
-				m[r.Metric[label]] = f
-			}
-		}
-	}
-	return m
+	return out.Data.Result
 }
 
 // ago : « à l'instant », « il y a 5 min », « il y a 3 h », « il y a 2 j ».
@@ -131,6 +146,7 @@ type PeerRow struct {
 	VPNPeer
 	Connected, Seen bool
 	LastSeen        string
+	RemoteIP        string // IP publique d'où il se connecte (exporteur, withRemoteIp)
 	Received, Sent  string
 	Pending         bool // inscrit sur main, pas encore actif (secret + rebuild à faire)
 }
@@ -172,10 +188,11 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	hs := s.promByKey(ctx, "wireguard_latest_handshake_seconds", "public_key")
 	rx := s.promByKey(ctx, "wireguard_received_bytes_total", "public_key")
 	tx := s.promByKey(ctx, "wireguard_sent_bytes_total", "public_key")
+	remote := s.promLabel(ctx, "wireguard_latest_handshake_seconds", "public_key", "remote_ip")
 	var rows []PeerRow
 	connected := 0
 	for _, p := range s.cfg.VPN.Peers {
-		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey])}
+		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey]}
 		if t := hs[p.PublicKey]; t > 0 {
 			d := time.Since(time.Unix(int64(t), 0))
 			// Un appareil actif refait sa poignée de main toutes les 2 minutes.
@@ -220,7 +237,29 @@ func (s *Server) nextAddress(pending []VPNPeer) (string, error) {
 
 func (s *Server) vpnNew(w http.ResponseWriter, r *http.Request) {
 	addr, err := s.nextAddress(s.pendingPeers(r.Context()))
-	s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Address": addr, "Error": errString(err)})
+	s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Address": addr, "Error": errString(err), "Subnet": s.cfg.VPN.Subnet})
+}
+
+// checkAddress : une adresse IPv4 du réseau du tunnel, ni celle du serveur, ni celle d'un autre
+// appareil (en attente compris).
+func (s *Server) checkAddress(addr string, pending []VPNPeer) error {
+	ip := net.ParseIP(addr)
+	_, network, err := net.ParseCIDR(s.cfg.VPN.Subnet)
+	if ip == nil || ip.To4() == nil || err != nil || !network.Contains(ip) || addr != ip.String() {
+		return fmt.Errorf("Adresse : une IPv4 de %s.", s.cfg.VPN.Subnet)
+	}
+	if ip.Equal(network.IP) || ip.To4()[3] == 255 {
+		return fmt.Errorf("Adresse : %s est réservée (réseau ou diffusion).", addr)
+	}
+	if addr == s.cfg.VPN.ServerAddress {
+		return fmt.Errorf("Adresse : %s est celle du serveur.", addr)
+	}
+	for _, p := range append(append([]VPNPeer(nil), s.cfg.VPN.Peers...), pending...) {
+		if p.Address == addr {
+			return fmt.Errorf("Adresse : %s est déjà celle de %s.", addr, p.Name)
+		}
+	}
+	return nil
 }
 
 func errString(err error) string {
@@ -237,7 +276,7 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.FormValue("name"))
 	trusted := r.FormValue("trusted") == "on"
 	fail := func(msg string) {
-		s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Name": name, "Trusted": trusted, "Error": msg})
+		s.render(w, "vpn-new", map[string]any{"Nav": "vpn", "Name": name, "Address": r.FormValue("address"), "Trusted": trusted, "Error": msg, "Subnet": s.cfg.VPN.Subnet})
 	}
 	if !reDeviceName.MatchString(name) {
 		fail("Nom : lettres minuscules, chiffres et _ (24 caractères au plus).")
@@ -250,8 +289,8 @@ func (s *Server) vpnCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	addr, err := s.nextAddress(pending)
-	if err != nil {
+	addr := strings.TrimSpace(r.FormValue("address"))
+	if err := s.checkAddress(addr, pending); err != nil {
 		fail(err.Error())
 		return
 	}

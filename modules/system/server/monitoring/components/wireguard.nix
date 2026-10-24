@@ -29,6 +29,8 @@ in
       (lib.mkIf wireguard.enable {
         services.prometheus.exporters.wireguard = helpers.mkLocalExporter ports.wireguardExporter // {
           wireguardConfig = wireguardNames;
+          # IP publique d'où chaque appareil se connecte (étiquette remote_ip) : page VPN du dashboard.
+          withRemoteIp = true;
         };
 
         systemSettings.monitoring.internal.scrapeJobs.wireguard =
