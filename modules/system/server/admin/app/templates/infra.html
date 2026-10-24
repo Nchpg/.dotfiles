@@ -352,12 +352,13 @@
 {{/* Bloc de commande (.Text ; .Sh : une commande, précédée de « $ ») avec un bouton Copier. */}}
 {{define "cmd"}}<div class="cmd{{if .Sh}} sh{{end}}"><pre>{{.Text}}</pre><button type="button" class="cmd-copy" data-copy>Copier</button></div>{{end}}
 
-{{/* Voyant d'une demande à apps.yml : orange tant que le run court (htmx le relit), vert une fois
-     commité sur main, rouge si refusé. */}}
-{{define "track"}}<div class="track track-{{.State}}" role="status"{{if eq .State "running"}} hx-get="/track/{{.ID}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
+{{/* Voyant d'une demande à apps.yml : orange tant qu'elle court (htmx le relit), vert une fois
+     commitée (ou appliquée sur think, pour ce qu'il applique seul), rouge si refusée. Sur une page de
+     liste (.Reload), chaque changement d'état relit aussi le contenu (app.js). */}}
+{{define "track"}}{{$live := or (eq .State "running") (eq .State "deploying")}}<div class="track track-{{if eq .State "deploying"}}running{{else}}{{.State}}{{end}}" role="status" data-state="{{.State}}"{{if .Reload}} data-reload{{end}}{{if $live}} hx-get="/track/{{.ID}}{{if .Reload}}?reload=1{{end}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
   <span class="track-dot" aria-hidden="true"></span>
-  <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "done"}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{else}}{{.Detail}}{{end}}</span>
-  {{with .Link}}<a class="small" href="{{.}}" target="_blank" rel="noopener">{{if eq $.State "done"}}voir le commit{{else}}voir le run{{end}}</a>{{end}}
+  <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "deploying"}}commité sur main (<span class="mono">{{.SHA}}</span>), application sur think…{{with .Detail}} <span class="warn-ink">{{.}}</span>{{end}}{{else if eq .State "done"}}{{if .Auto}}appliqué sur think (<span class="mono">{{.SHA}}</span>).{{else}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{end}}{{else}}{{.Detail}}{{end}}</span>
+  {{with .Link}}<a class="small" href="{{.}}" target="_blank" rel="noopener">{{if $.SHA}}voir le commit{{else}}voir le run{{end}}</a>{{end}}
 </div>{{end}}
 
 {{define "account-removed"}}{{template "top" .}}

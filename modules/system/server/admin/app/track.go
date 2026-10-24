@@ -9,18 +9,22 @@ import (
 )
 
 // Suivi d'une demande à apps.yml (appareil VPN, accès, compte, clé SSH) : le run GitHub qu'elle a
-// lancé est retrouvé, puis suivi jusqu'au commit sur main. La page affiche un voyant (orange : en
-// cours, vert : commité, rouge : refusé) que htmx rafraîchit.
+// lancé est retrouvé, puis suivi jusqu'au commit sur main ; pour ce que think applique seul
+// (`Auto`), jusqu'à ce qu'apps-deploy l'ait appliqué. La page affiche un voyant (orange : en
+// cours, vert : fait, rouge : refusé) que htmx relit.
 
 type Track struct {
 	ID, Label string
-	Next      string // ce qui reste à faire une fois commité
-	State     string // running, done, failed
+	Next      string // ce qui reste à faire une fois commité (sans Auto)
+	Auto      bool   // apps-deploy l'applique seul : suivi jusqu'à think
+	State     string // running, deploying, done, failed
 	Detail    string
 	Link      string
 	SHA       string
+	Reload    bool // page de liste : son contenu est relu à chaque changement d'état
 	t0        time.Time
 	run       int64
+	committed time.Time
 }
 
 var tracks = struct {
@@ -48,12 +52,13 @@ func (t *Track) set(state, detail, link, sha string) {
 }
 
 // dispatch : lance apps.yml et suit le run ; l'identifiant sert au voyant de la page (?suivi=).
+// `next` vide : think l'applique seul, le voyant suit jusqu'à son application.
 func (s *Server) dispatch(ctx context.Context, inputs map[string]string, label, next string) (string, error) {
 	t0 := time.Now()
 	if err := s.gh.Dispatch(ctx, inputs); err != nil {
 		return "", err
 	}
-	t := &Track{ID: newID(), Label: label, Next: next, State: "running", t0: t0}
+	t := &Track{ID: newID(), Label: label, Next: next, Auto: next == "", State: "running", t0: t0}
 	tracks.Lock()
 	tracks.m[t.ID] = t
 	tracks.Unlock()
@@ -92,28 +97,76 @@ func (s *Server) follow(t *Track) {
 				t.set("failed", "apps.yml a refusé la demande ("+r.Conclusion+") : le détail est dans le run.", r.HTMLURL, "")
 				return
 			}
-			sha := ""
-			if head, err := s.gh.Head(ctx); err == nil && len(head) >= 7 {
-				sha = head[:7]
+			// La tête relue ici rafraîchit aussi le cache des pages : elles montrent le commit.
+			head, _ := s.gh.Head(ctx)
+			sha := head
+			if len(sha) >= 7 {
+				sha = sha[:7]
 			}
-			t.set("done", "", "https://github.com/"+s.cfg.Repo+"/commit/"+sha, sha)
+			link := "https://github.com/" + s.cfg.Repo + "/commit/" + head
+			if !t.Auto {
+				t.set("done", "", link, sha)
+				return
+			}
+			tracks.Lock()
+			t.committed = time.Now()
+			tracks.Unlock()
+			t.set("deploying", "", link, sha)
+			s.followDeploy(ctx, t, head)
 			return
 		}
 	}
 	t.set("failed", "pas de fin de run après 8 minutes (GitHub Actions en retard ?)", actions, "")
 }
 
-// trackFragment : le voyant seul, rafraîchi par htmx tant que la demande court.
+// followDeploy : apps-deploy a appliqué le commit (think tourne lui ou un commit après) ; s'il
+// attend un rebuild à la main, le voyant le dit et reste orange.
+func (s *Server) followDeploy(ctx context.Context, t *Track, head string) {
+	waiting := map[string]string{
+		"attente":    "think attend un rebuild à la main (main contient aussi d'autres changements).",
+		"non_pousse": "think tourne des commits pas encore poussés : git push, puis rebuild.",
+		"en_avance":  "think a des commits pas encore poussés : git push.",
+		"diverge":    "l'historique de think a divergé de main : à régler dans le terminal.",
+		"local":      "think tourne une version locale : rebuild à la main.",
+	}
+	for sleep(ctx, 3*time.Second) {
+		st, err := readDeployStatus(s.cfg.DeployStatus)
+		if err != nil || !st.Fresh() || time.Unix(st.Checked, 0).Before(t.committed) {
+			continue
+		}
+		if st.Deployed == head || (st.State == "a_jour" && st.Head == st.Deployed) {
+			t.set("done", "", t.Link, t.SHA)
+			return
+		}
+		detail := waiting[st.State]
+		tracks.Lock()
+		t.Detail = detail
+		tracks.Unlock()
+	}
+	t.set("failed", "pas appliqué après 8 minutes : voir l'état de think sur la page Sites.", t.Link, t.SHA)
+}
+
+// trackFragment : le voyant seul, relu par htmx tant que la demande court. Inconnu : le dashboard a
+// redémarré entre-temps (think a appliqué une nouvelle version qui le concerne).
 func (s *Server) trackFragment(w http.ResponseWriter, r *http.Request) {
 	t := trackOf(r.PathValue("id"))
 	if t == nil {
-		w.WriteHeader(http.StatusNoContent)
-		return
+		t = &Track{ID: r.PathValue("id"), State: "lost", Label: "Demande", Detail: "le dashboard a redémarré (nouvelle version de think) : la page est relue."}
 	}
+	t.Reload = r.URL.Query().Has("reload")
 	s.render(w, "track", t)
 }
 
 // tracked : retour sur une page de liste, avec le voyant de la demande.
 func tracked(w http.ResponseWriter, r *http.Request, page, id string) {
 	http.Redirect(w, r, page+"?suivi="+id, http.StatusSeeOther)
+}
+
+// listTrack : le voyant d'une page de liste (?suivi=), qui relit son contenu à chaque étape.
+func listTrack(r *http.Request) *Track {
+	t := trackOf(r.URL.Query().Get("suivi"))
+	if t != nil {
+		t.Reload = true
+	}
+	return t
 }

@@ -143,7 +143,7 @@ type AccountRow struct {
 
 func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	data := map[string]any{"Nav": "accounts", "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))}
+	data := map[string]any{"Nav": "accounts", "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r)}
 	list, err := s.readAccounts()
 	if err != nil {
 		data["Error"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
@@ -243,7 +243,7 @@ func (s *Server) accountAccessSave(w http.ResponseWriter, r *http.Request) {
 	}
 	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
 	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"},
-		"Accès de "+name, "think l'applique seul dans la minute, sauf si un rebuild est déjà en attente.")
+		"Accès de "+name, "")
 	if err != nil {
 		back("Changement impossible (apps.yml) : " + err.Error())
 		return
@@ -268,7 +268,7 @@ func (s *Server) accountRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": "null", "source": "dashboard"},
-		"Accès de "+name+" retirés", "think l'applique seul dans la minute : il n'ouvre plus rien. Reste à supprimer le compte ci-dessous.")
+		"Accès de "+name+" retirés", "")
 	if err != nil {
 		back("Suppression impossible (apps.yml) : " + err.Error())
 		return

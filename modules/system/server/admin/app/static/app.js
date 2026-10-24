@@ -187,3 +187,19 @@ document.addEventListener("click", (ev) => {
     setTimeout(() => (btn.textContent = label), 1500);
   });
 });
+
+// Voyant d'une demande : sur une page de liste, chaque changement d'état relit le contenu (les
+// tableaux montrent alors le commit, puis ce que think applique), sans recharger la page.
+document.addEventListener("htmx:beforeSwap", (ev) => {
+  const old = ev.detail.target;
+  if (!old.classList?.contains("track") || !("reload" in old.dataset)) return;
+  const state = (ev.detail.serverResponse.match(/data-state="([a-z]+)"/) || [])[1];
+  if (!state || state === old.dataset.state) return;
+  setTimeout(() => htmx.ajax("GET", location.pathname + location.search, { target: ".content", select: ".content", swap: "outerHTML" }), 50);
+});
+
+// Navigation par le menu : la nouvelle page part du haut. htmx amènerait sinon le contenu en haut
+// de l'écran (scrollIntoViewOnBoost, coupé dans layout.html), sous la barre du haut sur téléphone.
+document.addEventListener("htmx:afterSwap", (ev) => {
+  if (ev.detail.boosted || ev.detail.requestConfig?.boosted) window.scrollTo(0, 0);
+});

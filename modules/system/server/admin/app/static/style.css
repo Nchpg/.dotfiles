@@ -545,3 +545,4 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .row-remove summary { list-style: none; }
 .row-remove summary::-webkit-details-marker { display: none; }
 .row-remove details:not([open]) .if-open, .row-remove details[open] .if-closed { display: none; }
+.track-lost .track-dot { background: var(--faint); }

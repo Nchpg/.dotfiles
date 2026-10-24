@@ -193,8 +193,15 @@ type PeerRow struct {
 	Pending         bool // inscrit sur main, pas encore actif (secret + rebuild à faire)
 }
 
-// pendingPeers : appareils de vpn-peers.json sur main qui ne sont pas dans la génération active.
-func (s *Server) pendingPeers(ctx context.Context) []VPNPeer {
+type peerEntry struct {
+	PublicKey string   `json:"publicKey"`
+	Address   string   `json:"address"`
+	Services  []string `json:"services"`
+}
+
+// mainPeers : vpn-peers.json sur main (nil s'il est illisible). Les accès s'y lisent : un
+// changement se voit dès son commit, avant qu'apps-deploy l'applique.
+func (s *Server) mainPeers(ctx context.Context) map[string]peerEntry {
 	head, err := s.gh.HeadCached(ctx)
 	if err != nil {
 		return nil
@@ -203,14 +210,24 @@ func (s *Server) pendingPeers(ctx context.Context) []VPNPeer {
 	if err != nil {
 		return nil
 	}
-	var file map[string]struct {
-		PublicKey string   `json:"publicKey"`
-		Address   string   `json:"address"`
-		Services  []string `json:"services"`
-	}
+	var file map[string]peerEntry
 	if json.Unmarshal(b, &file) != nil {
 		return nil
 	}
+	return file
+}
+
+// withMainServices : les services d'un appareil tels que main les donne, s'il y est.
+func withMainServices(p VPNPeer, main map[string]peerEntry) VPNPeer {
+	if e, ok := main[p.Name]; ok {
+		p.Services = e.Services
+	}
+	return p
+}
+
+// pendingPeers : appareils de vpn-peers.json sur main qui ne sont pas dans la génération active.
+func (s *Server) pendingPeers(ctx context.Context) []VPNPeer {
+	file := s.mainPeers(ctx)
 	active := map[string]bool{}
 	for _, p := range s.cfg.VPN.Peers {
 		active[p.Name] = true
@@ -246,7 +263,9 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	}
 	var rows []PeerRow
 	connected := 0
+	main := s.mainPeers(ctx)
 	for _, p := range s.cfg.VPN.Peers {
+		p = withMainServices(p, main)
 		row := PeerRow{VPNPeer: p, Received: humanBytes(rx[p.PublicKey]), Sent: humanBytes(tx[p.PublicKey]), RemoteIP: remote[p.PublicKey], Services: p.Services, Sites: sitesOf[p.Name]}
 		if t := hs[p.PublicKey]; t > 0 {
 			d := time.Since(time.Unix(int64(t), 0))
@@ -263,7 +282,7 @@ func (s *Server) vpn(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
 	s.render(w, "vpn", map[string]any{"Nav": "vpn", "Rows": rows, "Connected": connected, "Total": len(s.cfg.VPN.Peers),
-		"Endpoint": s.cfg.VPN.Endpoint, "Subnet": s.cfg.VPN.Subnet, "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))})
+		"Endpoint": s.cfg.VPN.Endpoint, "Subnet": s.cfg.VPN.Subnet, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r)})
 }
 
 // nextAddress : la première adresse libre du /24 du tunnel (serveur et appareils exclus, ceux en
@@ -518,9 +537,10 @@ func (s *Server) accessSites(ctx context.Context, device string) ([]AccessSite, 
 
 // peerByName : un appareil actif ou en attente.
 func (s *Server) peerByName(ctx context.Context, name string) (VPNPeer, bool) {
+	main := s.mainPeers(ctx)
 	for _, p := range append(append([]VPNPeer(nil), s.cfg.VPN.Peers...), s.pendingPeers(ctx)...) {
 		if p.Name == name {
-			return p, true
+			return withMainServices(p, main), true
 		}
 	}
 	return VPNPeer{}, false
@@ -576,7 +596,7 @@ func (s *Server) vpnAccessSave(w http.ResponseWriter, r *http.Request) {
 	}
 	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
 	id, err := s.dispatch(ctx, map[string]string{"action": "access", "app": p.Name, "entry": string(entry), "source": "dashboard"},
-		"Accès de "+p.Name, "think l'applique seul dans la minute, sauf si un rebuild est déjà en attente.")
+		"Accès de "+p.Name, "")
 	if err != nil {
 		back("Changement impossible (apps.yml) : " + err.Error())
 		return
@@ -630,7 +650,7 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": trackOf(r.URL.Query().Get("suivi"))})
+	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r)})
 }
 
 const sshKeysPath = "profiles/server/ssh-keys.json"
