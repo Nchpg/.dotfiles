@@ -246,6 +246,14 @@
     <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/accounts">Annuler</a></div>
   </form>
+  {{if not .Self}}
+  <form method="post" action="/accounts/{{.Name}}/remove" class="card sec-danger narrow">
+    <span class="stack tight grow"><strong class="bad">Supprimer {{.Name}}</strong><small class="muted">Il perd tous ses accès dans la minute ; le compte lui-même se supprime ensuite dans le secret.</small></span>
+    <details><summary class="btn btn-danger-ghost"><span class="if-closed">Supprimer…</span><span class="if-open">Annuler</span></summary>
+      <div class="confirm"><button class="btn btn-danger">Supprimer</button></div>
+    </details>
+  </form>
+  {{end}}
 </main>
 {{template "bottom" .}}{{end}}
 
@@ -351,3 +359,24 @@
   <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "done"}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{else}}{{.Detail}}{{end}}</span>
   {{with .Link}}<a class="small" href="{{.}}" target="_blank" rel="noopener">{{if eq $.State "done"}}voir le commit{{else}}voir le run{{end}}</a>{{end}}
 </div>{{end}}
+
+{{define "account-removed"}}{{template "top" .}}
+<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}</header>
+<main class="page">
+  <h1>{{.Name}}</h1>
+  {{with .Track}}{{template "track" .}}{{end}}
+  <div class="overview">
+    <section class="card" aria-label="Étapes">
+      <ol class="howto">
+        <li><div class="howto-title">Retirer le compte du secret<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+          {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" .Secret))}}
+          <p>Effacer le bloc <code>{{.Name}}:</code> et ses lignes.</p></li>
+        <li><div class="howto-title">Appliquer</div>
+          {{template "cmd" (args "Sh" true "Text" "git pull")}}
+          {{template "cmd" (args "Sh" true "Text" "rebuild")}}
+          <p>think le retire de son fichier d'utilisateurs, avec son second facteur : il ne peut plus se connecter.</p></li>
+      </ol>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}

@@ -250,3 +250,28 @@ func (s *Server) accountAccessSave(w http.ResponseWriter, r *http.Request) {
 	}
 	tracked(w, r, "/accounts", id)
 }
+
+// accountRemove : le compte perd tous ses accès (commit, appliqué seul par think) ; la page donne
+// ensuite les commandes pour le supprimer lui-même (secret, puis rebuild).
+func (s *Server) accountRemove(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name := r.PathValue("name")
+	if !s.knownAccount(ctx, name) {
+		http.NotFound(w, r)
+		return
+	}
+	back := func(msg string) {
+		http.Redirect(w, r, "/accounts?erreur="+url.QueryEscape(msg), http.StatusSeeOther)
+	}
+	if name == r.Header.Get("Remote-User") {
+		back("Tu es connecté avec " + name + " : supprime-le avec un autre compte.")
+		return
+	}
+	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": "null", "source": "dashboard"},
+		"Accès de "+name+" retirés", "think l'applique seul dans la minute : il n'ouvre plus rien. Reste à supprimer le compte ci-dessous.")
+	if err != nil {
+		back("Suppression impossible (apps.yml) : " + err.Error())
+		return
+	}
+	s.render(w, "account-removed", map[string]any{"Nav": "accounts", "Name": name, "Secret": s.cfg.Authelia.UsersSecret, "Track": trackOf(id)})
+}

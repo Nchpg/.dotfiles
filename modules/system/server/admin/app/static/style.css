@@ -282,6 +282,7 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
 .sec-danger:has(details[open]) > .stack { visibility: hidden; }
 .sec-danger .confirm { position: absolute; left: 24px; right: 136px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .sec-danger .confirm input { width: min(220px, 100%); }
+.card.sec-danger { display: flex; gap: 16px; }
 
 /* Environnements : onglets soulignés (comme le filtre des sites), « + Environnement » au bout de la ligne. */
 .envs { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); }

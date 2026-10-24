@@ -86,6 +86,7 @@ func main() {
 	mux.HandleFunc("POST /accounts/new", s.accountNew)
 	mux.HandleFunc("GET /accounts/{name}/access", s.accountAccess)
 	mux.HandleFunc("POST /accounts/{name}/access", s.accountAccessSave)
+	mux.HandleFunc("POST /accounts/{name}/remove", s.accountRemove)
 	if cfg.MetricsURL != "" {
 		mux.HandleFunc("GET /metrics", s.metrics)
 	} else {

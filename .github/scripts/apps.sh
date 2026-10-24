@@ -10,7 +10,7 @@
 #          réservés (vpn-peers.json) et sa place dans la liste `devices` des sites en VPN (apps.json).
 #   account : APP (compte Authelia), ENTRY ({"services": [...], "sites": [{"site", "env", "on"}]}) : ses
 #          services (authelia-accounts.json) et sa place dans la liste `accounts` des sites avec
-#          Authelia (apps.json).
+#          Authelia (apps.json). ENTRY `null` : il perd tout (compte supprimé ou à supprimer).
 #   sshkey : APP (compte de think), ENTRY ({"add": "<clé publique>"} ou {"remove": "<clé publique>"}) :
 #          ssh-keys.json. Jamais appliqué seul : `rebuild` montre la clé et demande confirmation.
 # Écrit apps.json et/ou le lock, et sur stdout `subject=<message de commit>` (vide si rien ne change).
@@ -334,6 +334,25 @@ set_account_sites() {
 # sa présence dans la liste `accounts` de chaque site avec Authelia. Un seul commit.
 account() {
     [[ "${APP:-}" =~ ^[A-Za-z0-9._@-]{1,64}$ ]] || die "APP : nom de compte invalide"
+    if [ "${ENTRY:-}" = null ]; then
+        [ -f "$accounts" ] || echo '{}' >"$accounts"
+        jq -S --indent 2 --arg n "$APP" 'del(.[$n])' "$accounts" | replace "$accounts"
+        keep_admin_account
+        jq -S --indent 2 --arg n "$APP" 'map_values(
+            (if has("accounts") then .accounts -= [$n] else . end)
+            | (if has("environments") then .environments |= map_values(if has("accounts") then .accounts -= [$n] else . end) else . end))' \
+            "$apps" | replace "$apps"
+        local empty
+        empty=$(jq -r 'to_entries[] | (select(.value.accounts == []) | .key),
+            (.key as $k | (.value.environments // {}) | to_entries[] | select(.value.accounts == []) | "\($k)-\(.key)")' "$apps")
+        [ -z "$empty" ] || die "$APP est le seul compte de : $(paste -sd, - <<<"$empty") (donne-le à un autre compte, ou retire-lui Authelia, d'abord)"
+        if git diff --quiet -- "$accounts" "$apps"; then
+            echo "subject="
+            return 0
+        fi
+        echo "subject=feat(authelia): remove all access for $APP"
+        return 0
+    fi
     jq -e . <<<"${ENTRY:-}" >/dev/null 2>&1 || die "ENTRY n'est pas du JSON"
     jq -e "type == \"object\" and (keys - [\"services\", \"sites\"] | length == 0)
         and (.services | $services_ok) and (.sites | $sites_ok)" <<<"$ENTRY" >/dev/null \

@@ -39,7 +39,7 @@ on:
         required: false
         type: string
       entry:
-        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access, account : {services, sites} ; sshkey : {add} ou {remove} ; null pour retirer"
+        description: "edit : entrée JSON du site ; peer : {publicKey, address, services} ; access, account : {services, sites} ; sshkey : {add} ou {remove} ; null pour retirer (peer, account)"
         required: false
         type: string
       base:
