@@ -69,6 +69,7 @@ func main() {
 	mux.HandleFunc("GET /jobs/{id}", s.job)
 	mux.HandleFunc("GET /fragments/{name}", s.fragment)
 	mux.HandleFunc("GET /static/{file}", s.static)
+	mux.HandleFunc("GET /manifest.webmanifest", s.manifest)
 	mux.HandleFunc("GET /fonts/{file}", s.font)
 	mux.HandleFunc("GET /vpn", s.vpn)
 	mux.HandleFunc("GET /vpn/new", s.vpnNew)
@@ -93,6 +94,7 @@ func main() {
 		mux.HandleFunc("GET /metrics", s.soon("metrics"))
 	}
 	metricsReady = cfg.MetricsURL != ""
+	machineName = cfg.Machine
 
 	if s.reg != nil {
 		go s.warm(context.Background())
@@ -162,9 +164,32 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	case ".js":
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	case ".png":
+		w.Header().Set("Content-Type", "image/png")
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(b)
+}
+
+// manifest : de quoi installer le dashboard comme une application (téléphone, ordinateur). Pas de
+// service worker : rien n'est mis en cache, chaque page montre l'état de think tel qu'il est.
+func (s *Server) manifest(w http.ResponseWriter, r *http.Request) {
+	icon := func(src, size, purpose string) map[string]string {
+		return map[string]string{"src": src, "sizes": size, "type": "image/png", "purpose": purpose}
+	}
+	w.Header().Set("Content-Type", "application/manifest+json")
+	w.Header().Set("Cache-Control", "no-cache")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"name": "admin " + s.cfg.Machine, "short_name": s.cfg.Machine, "lang": "fr",
+		"start_url": "/sites", "scope": "/", "display": "standalone",
+		// Barre du haut : la couleur du menu ; fond au lancement : celle des pages.
+		"theme_color": "#0C0F15", "background_color": "#F5F6F8",
+		"icons": []map[string]string{
+			icon("/static/icon-192.png", "192x192", "any"),
+			icon("/static/icon-512.png", "512x512", "any"),
+			icon("/static/icon-512.png", "512x512", "maskable"),
+		},
+	})
 }
 
 func (s *Server) font(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +204,9 @@ func (s *Server) font(w http.ResponseWriter, r *http.Request) {
 
 // metricsReady : la page Métriques montre Grafana (le menu n'affiche plus « bientôt »).
 var metricsReady bool
+
+// machineName : le nom de la machine, pour l'en-tête et l'application installée.
+var machineName = "serveur"
 
 // metrics : le tableau de bord Grafana en kiosque, sur toute la page, en thème clair comme le reste.
 func (s *Server) metrics(w http.ResponseWriter, r *http.Request) {

@@ -2,9 +2,18 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{{/* Installable comme une application (manifeste servi par le dashboard) ; iPhone : balises Apple. */}}
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<meta name="theme-color" content="#0C0F15">
+<link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{machine}}">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="htmx-config" content='{"scrollIntoViewOnBoost": false}'>
-<title>{{block "title" .}}admin think{{end}}</title>
+<title>{{block "title" .}}admin {{machine}}{{end}}</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/htmx.min.js" defer></script>
 <script src="/static/app.js" defer></script>
@@ -16,7 +25,7 @@
 <aside class="side" hx-boost="true" hx-target=".content" hx-select=".content" hx-select-oob="#main-nav" hx-swap="outerHTML">
   <a class="brand" href="/sites">
     <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"/></svg></span>
-    <span class="brand-text"><strong>think</strong><small>admin.vpn</small></span>
+    <span class="brand-text"><strong>{{machine}}</strong><small>admin.vpn</small></span>
   </a>
   <nav aria-label="Navigation principale" id="main-nav">
     <span class="nav-title">Serveur</span>

@@ -17,6 +17,7 @@ type Config struct {
 	Branch       string
 	Target       string // configuration NixOS évaluée avant chaque modification
 	Domain       string // domaine de base des sites
+	Machine      string // nom de la machine (en-tête, application installée)
 	Registry     string // ghcr.io/nchpg
 	RegistryUser string
 	Prometheus   string
@@ -49,6 +50,7 @@ func loadConfig() (*Config, error) {
 		Branch:       env("ADMIN_BRANCH", "main"),
 		Target:       env("ADMIN_TARGET", ""),
 		Domain:       env("ADMIN_DOMAIN", ""),
+		Machine:      env("ADMIN_MACHINE", "serveur"),
 		Registry:     env("ADMIN_REGISTRY", ""),
 		RegistryUser: env("ADMIN_REGISTRY_USER", ""),
 		Prometheus:   env("ADMIN_PROMETHEUS", "http://127.0.0.1:9090"),

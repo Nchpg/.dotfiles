@@ -247,6 +247,7 @@ in
         ADMIN_REPO = images.deploy.repository;
         ADMIN_BRANCH = images.deploy.branch;
         ADMIN_TARGET = target.name;
+        ADMIN_MACHINE = target.host;
         ADMIN_DOMAIN = config.systemSettings.proxy.domain;
         ADMIN_REGISTRY = images.registry;
         ADMIN_REGISTRY_USER = images.login.username;
@@ -404,7 +405,19 @@ in
       + authelia.nginxProtect.extraConfig;
     };
 
-    systemSettings.authelia.rules = [ (authelia.ruleFor "admin") ];
+    systemSettings.authelia.rules = [
+      # Manifeste et icônes de l'application installée : le navigateur les lit parfois sans le cookie
+      # de session. Rien de privé dedans, et nginx exige toujours le VPN.
+      {
+        domain = host;
+        policy = "bypass";
+        resources = [
+          "^/manifest\\.webmanifest$"
+          "^/static/(icon-[0-9]+|apple-touch-icon)\\.png$"
+        ];
+      }
+      (authelia.ruleFor "admin")
+    ];
 
     systemSettings.proxy.sites.${host} = {
       public = false;
