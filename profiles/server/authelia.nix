@@ -18,7 +18,8 @@ in
       inherit domain;
       portalHost = "auth.${domain}";
 
-      # sops ne fait que semer ; retirer quelqu'un de sops ne le supprime pas du fichier vivant.
+      # Le secret fait foi : un compte ajouté y est semé, un compte retiré quitte le fichier vivant
+      # (mots de passe gardés pour les autres).
       mutableUsers = true;
       # Sinon on reste bloqué sur le portail après un lien d'enrôlement.
       defaultRedirect = "https://cloud.${domain}";

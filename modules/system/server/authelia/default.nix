@@ -356,11 +356,12 @@ in
     ++ lib.optional mail.enable "smtp";
 
     systemd.services.authelia-seed-users = lib.mkIf cfg.mutableUsers {
-      description = "Sème le fichier d'utilisateurs Authelia depuis sops";
+      description = "Sème le fichier d'utilisateurs Authelia depuis sops (et retire les comptes qui n'y sont plus)";
       before = [ "authelia-main.service" ];
       requiredBy = [ "authelia-main.service" ];
       path = [
         pkgs-stable.yq-go
+        pkgs-stable.sqlite
         config.services.authelia.instances.main.package
       ];
       serviceConfig = {
@@ -372,6 +373,7 @@ in
       script = ''
         live=${lib.escapeShellArg liveUsers}
         seed=${lib.escapeShellArg seedUsers}
+        db=${lib.escapeShellArg "${instanceDir}/db.sqlite3"}
       ''
       + builtins.readFile ./seed-users.sh;
     };

@@ -22,4 +22,25 @@ for user in $(yq -r '(.users // {}) | keys | .[]' "$tmp"); do
   fi
 done
 
+# Le secret fait foi : un compte qui n'y est plus quitte aussi le fichier vivant, avec son second
+# facteur (sinon un compte recréé plus tard sous ce nom en hériterait). Jamais si le secret ne liste
+# aucun compte : une lecture ratée effacerait tout le monde.
+seeded=$(yq -r '(.users // {}) | keys | .[]' "$seed")
+if [ -n "$seeded" ]; then
+  for user in $(yq -r '(.users // {}) | keys | .[]' "$tmp"); do
+    grep -qxF -- "$user" <<< "$seeded" && continue
+    yq -i "del(.users.\"$user\")" "$tmp"
+    if [ -f "$db" ]; then
+      for table in totp_configurations webauthn_credentials webauthn_devices duo_devices user_preferences; do
+        if [ -n "$(sqlite3 "$db" "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '$table'")" ]; then
+          sqlite3 "$db" "DELETE FROM $table WHERE username = '${user//\'/\'\'}'"
+        fi
+      done
+    fi
+    echo "compte '$user' : retiré (absent du secret), second facteur compris"
+  done
+else
+  echo "secret sans aucun compte : rien n'est retiré du fichier vivant" >&2
+fi
+
 install -m 0600 "$tmp" "$live"
