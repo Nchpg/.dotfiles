@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..c50fa4edf
+index 000000000..a858715a7
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,994 @@
+@@ -0,0 +1,1071 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -345,10 +345,27 @@ index 000000000..c50fa4edf
 +    max-width: 30rem;
 +}
 +
++/*
++ * The page fills the viewport below the top bar instead of 90vh under it, so
++ * it only scrolls when the content really doesn't fit (dvh: the visible area
++ * on mobile, browser toolbars excluded).
++ */
++div:has(> .min-h-\[90vh\]) {
++    display: flex;
++    flex-direction: column;
++    min-height: 100vh;
++    min-height: 100dvh;
++}
++
++.min-h-\[90vh\] {
++    flex: 1 0 auto;
++    min-height: 0;
++}
++
 +/* On small screens the card fills the viewport without its chrome. */
 +@media (max-width: 480px) {
 +    .min-h-\[90vh\] > div:first-child {
-+        padding-inline: 1.25rem;
++        padding: 1rem 1.25rem;
 +        border-color: transparent;
 +        background-color: transparent;
 +        box-shadow: none;
@@ -512,6 +529,7 @@ index 000000000..c50fa4edf
 +
 +#second-factor-stage div:has(> #logout-button) > * {
 +    flex: 1 1 0;
++    min-width: 0;
 +}
 +
 +#second-factor-stage div:has(> #logout-button) > * + * {
@@ -519,14 +537,40 @@ index 000000000..c50fa4edf
 +}
 +
 +#second-factor-stage div:has(> #logout-button) > :is([data-slot="button"], .inline-flex.uppercase) {
-+    height: 2.5rem;
-+    padding-inline: 1rem;
++    height: auto;
++    min-height: 2.5rem;
++    padding: 0.375rem 0.75rem;
 +    border: 1px solid var(--border);
 +    background-color: var(--muted);
 +    color: var(--foreground);
 +    font-size: 0.875rem;
 +    font-weight: 500;
++    line-height: 1.25;
++    white-space: normal;
++    overflow-wrap: break-word;
++    text-wrap: balance;
 +    box-shadow: none;
++}
++
++/*
++ * With "Switch User" there are three buttons: tighter on phones, and a long
++ * label ("Changer d'utilisateur") wraps onto two lines instead of overflowing.
++ */
++@media (max-width: 480px) {
++    #second-factor-stage div:has(> #logout-button) > * + * {
++        margin-left: 0.5rem;
++    }
++
++    #second-factor-stage div:has(> #logout-button) > :is([data-slot="button"], .inline-flex.uppercase) {
++        padding-inline: 0.5rem;
++    }
++}
++
++@media (max-width: 380px) {
++    #second-factor-stage div:has(> #logout-button) > :is([data-slot="button"], .inline-flex.uppercase) {
++        padding-inline: 0.375rem;
++        font-size: 0.8125rem;
++    }
 +}
 +
 +#second-factor-stage div:has(> #logout-button) > :is([data-slot="button"], .inline-flex.uppercase):hover {
@@ -668,6 +712,39 @@ index 000000000..c50fa4edf
 +
 +#otp-input input[aria-invalid="true"] {
 +    border-color: var(--destructive);
++}
++
++/*
++ * One-time code timer (the method dialog keeps its own colors): a tinted badge
++ * with the elapsed time in the primary color, neutral white on dark themes.
++ */
++#\32 fa-container svg:has(> circle[r="9"] + circle[r="5"]) {
++    --timer: var(--primary);
++}
++
++:is([data-theme="dark"], [data-theme="grey"], [data-theme="oled"])
++    #\32
++    fa-container
++    svg:has(> circle[r="9"] + circle[r="5"]) {
++    --timer: var(--foreground);
++}
++
++#\32 fa-container svg:has(> circle[r="9"] + circle[r="5"]) > circle[r="12"] {
++    stroke: color-mix(in oklch, var(--timer) 25%, transparent);
++    stroke-width: 1.5;
++}
++
++#\32 fa-container svg:has(> circle[r="9"] + circle[r="5"]) > circle[r="9"] {
++    fill: color-mix(in oklch, var(--timer) 10%, transparent);
++}
++
++#\32 fa-container svg:has(> circle[r="9"] + circle[r="5"]) > circle[r="5"] {
++    stroke: var(--timer);
++}
++
++#\32 fa-container svg:has(> circle[r="9"] + circle[r="5"]) {
++    width: 3.5rem;
++    height: 3.5rem;
 +}
 +
 +/* "Register device" and "Retry": solid primary actions (shadow and hover in section 3). */
