@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..a858715a7
+index 000000000..e6a40962a
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,1071 @@
+@@ -0,0 +1,1146 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -593,7 +593,7 @@ index 000000000..a858715a7
 +    padding-block: 1rem 0.5rem;
 +}
 +
-+:is(#\32 fa-container.state-not-registered, #\32 fa-container:has(.failure-icon)) > div {
++:is(#\32 fa-container.state-not-registered, #\32 fa-container:has(.failure-icon:not(.hidden *))) > div {
 +    display: grid;
 +    grid-template-columns: auto 1fr;
 +    align-content: center;
@@ -604,7 +604,7 @@ index 000000000..a858715a7
 +    text-align: left;
 +}
 +
-+:is(#\32 fa-container.state-not-registered, #\32 fa-container:has(.failure-icon)) > div > p {
++:is(#\32 fa-container.state-not-registered, #\32 fa-container:has(.failure-icon:not(.hidden *))) > div > p {
 +    margin: 0;
 +    font-size: 0.9375rem;
 +    line-height: 1.5;
@@ -636,31 +636,67 @@ index 000000000..a858715a7
 +    font-weight: 500;
 +}
 +
++/* Failed: no fixed height, the message and "Retry" set the height. */
++#\32 fa-container:has(.failure-icon:not(.hidden *)) {
++    height: auto;
++    padding-block: 1.25rem 0.25rem;
++}
++
 +/* Failed: the wrapper of the icon and the "Retry" button is flattened onto the grid. */
-+#\32 fa-container:has(.failure-icon) > div > div.mb-4 {
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 {
 +    display: contents;
 +}
 +
-+#\32 fa-container:has(.failure-icon) > div > div.mb-4 > div.w-full:has(.failure-icon) {
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 > div.w-full:has(.failure-icon) {
 +    grid-column: 1;
 +    grid-row: 1;
 +    width: auto;
 +}
 +
-+#\32 fa-container:has(.failure-icon) > div > p {
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > p {
 +    grid-column: 2;
 +    grid-row: 1;
 +    color: var(--foreground);
 +}
 +
-+#\32 fa-container:has(.failure-icon) > div > div.mb-4 > div:has(> [data-variant="ghost"]) {
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 > div:has(> [data-variant="ghost"]) {
 +    grid-column: 1 / -1;
 +    grid-row: 2;
 +    justify-self: center;
 +    margin-top: 1.25rem;
 +}
 +
-+#\32 fa-container:has(.failure-icon) #rate-limit-countdown {
++/* WebAuthn "touch your key" hand: drawn in the text color instead of hardcoded black. */
++#\32 fa-container svg[viewBox="0 0 500 500"] path {
++    fill: var(--foreground);
++    stroke: var(--foreground);
++}
++
++/* WebAuthn nests the icon and "Retry" one level deeper: flattened onto the same grid. */
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 > .inline-block,
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 > .inline-block > div:not(.hidden) {
++    display: contents;
++}
++
++#\32 fa-container:has(.failure-icon:not(.hidden *)) > div > div.mb-4 > .inline-block > div > div:has(.failure-icon) {
++    grid-column: 1;
++    grid-row: 1;
++}
++
++#\32
++    fa-container:has(.failure-icon:not(.hidden *))
++    > div
++    > div.mb-4
++    > .inline-block
++    > div
++    > div:has(> [data-variant="ghost"]) {
++    grid-column: 1 / -1;
++    grid-row: 2;
++    justify-self: center;
++    margin-top: 1.25rem;
++}
++
++#\32 fa-container:has(.failure-icon:not(.hidden *)) #rate-limit-countdown {
 +    grid-column: 1 / -1;
 +    grid-row: 3;
 +    margin-top: 0.75rem;
@@ -771,6 +807,23 @@ index 000000000..a858715a7
 +    text-decoration: none;
 +}
 +
++/*
++ * "Manage devices" (a device is registered) is a secondary action: neutral
++ * outlined, so the method's own action ("Retry") stays the only solid one.
++ */
++#\32 fa-container:not(.state-not-registered) ~ #register-link {
++    margin-top: 1.25rem;
++    border: 1px solid var(--border);
++    background-color: var(--muted);
++    color: var(--foreground);
++    box-shadow: none;
++}
++
++#\32 fa-container:not(.state-not-registered) ~ #register-link:hover {
++    border-color: var(--theme-hover-border);
++    background-color: color-mix(in oklch, var(--foreground) 5%, var(--muted));
++}
++
 +#selection-link {
 +    margin-top: 0.75rem;
 +    font-size: 0.875rem;
@@ -816,6 +869,12 @@ index 000000000..a858715a7
 +#methods-dialog .method-option p {
 +    font-size: 0.9375rem;
 +    font-weight: 500;
++    line-height: 1.35;
++    white-space: normal;
++}
++
++#methods-dialog .method-option > :is([data-slot="button"], .inline-flex.uppercase) > div:last-child {
++    min-width: 0;
 +}
 +
 +/* ---------- 8. Dialogs ---------- */
@@ -1040,9 +1099,29 @@ index 000000000..a858715a7
 +    display: none;
 +}
 +
-+/* Options panel. */
++/*
++ * Options panel: one row per setting (account default, then this browser's
++ * default), separated by a rule, with the choices on a single line each.
++ */
 +nav.fixed.bg-primary ~ main [data-slot="card"]:has([id^="method-"]) .grid.p-4 {
++    grid-template-columns: 1fr;
++    gap: 0;
 +    padding: 0;
++}
++
++nav.fixed.bg-primary ~ main [data-slot="card"]:has([id^="method-"]) .grid.p-4 > div + div {
++    margin-top: 1rem;
++    padding-top: 1rem;
++    border-top: 1px solid var(--border);
++}
++
++nav.fixed.bg-primary ~ main [data-slot="card"]:has([id^="method-"]) [data-slot="radio-group"] {
++    flex-wrap: wrap;
++    gap: 0.625rem 1.75rem;
++}
++
++nav.fixed.bg-primary ~ main [id^="method-"] [data-slot="label"] {
++    white-space: nowrap;
 +}
 +
 +/*
@@ -1074,13 +1153,9 @@ index 000000000..a858715a7
 +
 +/* Small screens: keep a gutter so the cards don't touch the edges. */
 +@media (max-width: 639px) {
++    /* The top bar is taller than the space the page keeps for it (56px). */
 +    nav.fixed.bg-primary ~ main {
-+        padding-inline: 0.75rem;
-+        padding-bottom: 1rem;
-+    }
-+
-+    nav.fixed.bg-primary ~ main .grid.gap-4:not([data-slot="card-content"]) {
-+        padding-top: 0.75rem;
++        padding: 4.5rem 0.75rem 1rem;
 +    }
 +
 +    nav.fixed.bg-primary ~ main [data-slot="card-content"] {
