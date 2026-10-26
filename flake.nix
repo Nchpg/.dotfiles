@@ -61,6 +61,7 @@
       pkgs-stable = mkPkgs inputs.nixpkgs-stable [
         (import ./overlays/displaylink)
         (import ./overlays/sway myLib)
+        (import ./overlays/authelia { inherit myLib pkgs-unstable; })
       ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
 

@@ -380,6 +380,8 @@ in
 
     services.authelia.instances.main = {
       enable = true;
+      # Thème maison (overlays/authelia).
+      package = pkgs-stable.authelia;
 
       # Par fichier : la configuration finit dans le store.
       environmentVariables = lib.mkIf mail.enable {
