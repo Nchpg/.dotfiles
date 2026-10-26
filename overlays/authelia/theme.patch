@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..1c9de193e
+index 000000000..767c976bd
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,1161 @@
+@@ -0,0 +1,1164 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -174,10 +174,12 @@ index 000000000..1c9de193e
 +}
 +
 +/*
-+ * Neutral outlined secondary actions: passkey sign in, secondary dialog
-+ * actions (Previous, Cancel...) and the method selection "Close" button.
++ * Neutral outlined secondary actions: passkey sign in, the reset password
++ * "Cancel", secondary dialog actions (Previous, Cancel...) and the method
++ * selection "Close" button.
 + */
 +#passkey-sign-in-button,
++#cancel-button,
 +[data-slot="dialog-footer"] > [data-variant="ghost"],
 +[data-slot="dialog-content"]:has(#methods-dialog) [data-slot="dialog-footer"] > [data-variant="default"] {
 +    border: 1px solid var(--input);
@@ -187,6 +189,7 @@ index 000000000..1c9de193e
 +}
 +
 +#passkey-sign-in-button:hover:not(:disabled),
++#cancel-button:hover:not(:disabled),
 +[data-slot="dialog-footer"] > [data-variant="ghost"]:hover:not(:disabled),
 +[data-slot="dialog-content"]:has(#methods-dialog) [data-slot="dialog-footer"] > [data-variant="default"]:hover {
 +    background-color: var(--muted);
