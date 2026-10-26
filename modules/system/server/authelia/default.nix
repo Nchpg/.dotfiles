@@ -424,7 +424,7 @@ in
 
           expiration = "12h";
           inactivity = "2h";
-          remember_me = "1M";
+          remember_me = "1w";
         };
 
         regulation = {
@@ -448,6 +448,14 @@ in
             { filesystem.filename = "${instanceDir}/notification.txt"; };
 
         totp.issuer = cfg.domain;
+
+        # Passkey sans mot de passe. Empreinte ou PIN exigés : la passkey vaut alors les deux facteurs.
+        webauthn = {
+          enable_passkey_login = true;
+          # Expérimental (Authelia annonce son retrait) : relire les notes de version à chaque bump.
+          experimental_enable_passkey_uv_two_factors = true;
+          selection_criteria.user_verification = "required";
+        };
 
         access_control = {
           default_policy = "deny";

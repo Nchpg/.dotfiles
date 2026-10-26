@@ -22,13 +22,20 @@ let
         proxy_send_timeout ${app.proxyTimeout};
       '';
 
+      # Le cookie de session Authelia (domaine parent) n'a rien à faire chez l'appli : compromise,
+      # elle pourrait le rejouer sur les autres services. `auth_request` le lit avant, intact.
+      upstream = ''
+        proxy_set_header Cookie $authelia_stripped_cookie;
+      ''
+      + timeout;
+
       target = {
         proxyPass = "http://127.0.0.1:${toString app.hostPortEffective}";
         proxyWebsockets = true;
-      }
-      // lib.optionalAttrs (timeout != "") { extraConfig = timeout; };
+        extraConfig = upstream;
+      };
 
-      limit = timeout + ''
+      limit = upstream + ''
         limit_req zone=${app.zone} burst=${toString app.rateLimit.burst} nodelay;
       '';
 
@@ -47,14 +54,23 @@ let
 in
 {
   config = lib.mkIf (cfg != { }) {
-    # `mkAfter` : nginx refuse une variable pas encore vue, il faut suivre le `map` de `$real_client_ip`.
-    services.nginx.commonHttpConfig = lib.mkIf (limitedApps != [ ]) (
-      lib.mkAfter (
-        lib.concatMapStrings (
-          n: "limit_req_zone $real_client_ip zone=${cfg.${n}.zone}:10m rate=${cfg.${n}.rateLimit.rate};\n"
-        ) limitedApps
-      )
-    );
+    services.nginx.commonHttpConfig = lib.mkMerge [
+      ''
+        # En-tête Cookie sans `authelia_session` (les autres cookies passent tels quels).
+        map $http_cookie $authelia_stripped_cookie {
+          default $http_cookie;
+          "~^(?<before>.*?)(?:^|;\s*)authelia_session=[^;]*(?<after>.*)$" "$before$after";
+        }
+      ''
+      # `mkAfter` : nginx refuse une variable pas encore vue, il faut suivre le `map` de `$real_client_ip`.
+      (lib.mkIf (limitedApps != [ ]) (
+        lib.mkAfter (
+          lib.concatMapStrings (
+            n: "limit_req_zone $real_client_ip zone=${cfg.${n}.zone}:10m rate=${cfg.${n}.rateLimit.rate};\n"
+          ) limitedApps
+        )
+      ))
+    ];
 
     # Les locations n'ont pas d'`auth_request_set` : elles héritent de celles posées par `nginxProtect`.
     # Liste d'appareils et portail se cumulent : le filtrage d'adresse passe avant le portail.
