@@ -85,10 +85,6 @@ in
       dns.dependentUnits = [ "cloudflared-tunnel-${cfg.tunnelId}" ];
     };
 
-    # Le module amont lance le binaire par son chemin du store sans l'installer :
-    # même paquet que le démon pour `cloudflared tunnel list/info…`.
-    environment.systemPackages = [ config.services.cloudflared.package ];
-
     # Par l'environnement : le module amont fixe son ExecStart.
     systemd.services = lib.mkIf (cfg.tunnelId != null && cfg.metricsAddress != null) {
       "cloudflared-tunnel-${cfg.tunnelId}".environment.TUNNEL_METRICS = cfg.metricsAddress;
