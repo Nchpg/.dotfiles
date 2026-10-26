@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..5beb41714
+index 000000000..1c9de193e
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,1144 @@
+@@ -0,0 +1,1161 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -877,6 +877,13 @@ index 000000000..5beb41714
 +
 +/* ---------- 8. Dialogs ---------- */
 +
++/* A dialog never grows past the viewport: its content scrolls instead (long WebAuthn details on a phone). */
++[data-slot="dialog-content"] {
++    max-height: calc(100dvh - 2rem);
++    overflow-y: auto;
++    overscroll-behavior: contain;
++}
++
 +/* Narrow dialogs are widened a little. */
 +[data-slot="dialog-content"].sm\:max-w-xs {
 +    max-width: min(26rem, calc(100% - 2rem));
@@ -969,6 +976,11 @@ index 000000000..5beb41714
 +nav.fixed.bg-primary h6 {
 +    font-weight: 600;
 +    letter-spacing: -0.01em;
++}
++
++/* Security: a full-viewport block under the top bar padding made the page scroll for nothing. */
++nav.fixed.bg-primary ~ main > .h-screen {
++    height: auto;
 +}
 +
 +/* Centered content column. */
@@ -1154,6 +1166,11 @@ index 000000000..5beb41714
 +    /* The top bar is taller than the space the page keeps for it (56px). */
 +    nav.fixed.bg-primary ~ main {
 +        padding: 4.5rem 0.75rem 1rem;
++    }
++
++    /* Security: no extra top padding, the main area already clears the top bar. */
++    nav.fixed.bg-primary ~ main > .h-screen.pt-16 {
++        padding-top: 0;
 +    }
 +
 +    nav.fixed.bg-primary ~ main [data-slot="card-content"] {
