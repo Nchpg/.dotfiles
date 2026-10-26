@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..e6a40962a
+index 000000000..5beb41714
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,1146 @@
+@@ -0,0 +1,1144 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -636,6 +636,16 @@ index 000000000..e6a40962a
 +    font-weight: 500;
 +}
 +
++/*
++ * The method's own block (OTP digits, WebAuthn hand, push phone...) always
++ * takes its own line above the explanation, whatever the card width.
++ */
++#\32 fa-container.state-method > div > div.mb-4 {
++    display: flex;
++    flex-basis: 100%;
++    justify-content: center;
++}
++
 +/* Failed: no fixed height, the message and "Retry" set the height. */
 +#\32 fa-container:has(.failure-icon:not(.hidden *)) {
 +    height: auto;
@@ -807,21 +817,9 @@ index 000000000..e6a40962a
 +    text-decoration: none;
 +}
 +
-+/*
-+ * "Manage devices" (a device is registered) is a secondary action: neutral
-+ * outlined, so the method's own action ("Retry") stays the only solid one.
-+ */
-+#\32 fa-container:not(.state-not-registered) ~ #register-link {
-+    margin-top: 1.25rem;
-+    border: 1px solid var(--border);
-+    background-color: var(--muted);
-+    color: var(--foreground);
-+    box-shadow: none;
-+}
-+
-+#\32 fa-container:not(.state-not-registered) ~ #register-link:hover {
-+    border-color: var(--theme-hover-border);
-+    background-color: color-mix(in oklch, var(--foreground) 5%, var(--muted));
++/* Push notification: the link exists without a label; it is not drawn as an empty button. */
++#register-link:empty {
++    display: none;
 +}
 +
 +#selection-link {
