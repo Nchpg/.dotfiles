@@ -146,14 +146,8 @@ in
     };
   };
 
-  # `update` vérifie les images privées sans sudo : jeton en lecture seule (read:packages), lisible
-  # des seuls admins, qui y accédaient déjà par sudo. Les services le lisent en root, inchangés.
+  # Chemin du jeton pour `update` (images privées) : le secret reste à root (0400), lu par sudo.
   config = lib.mkIf (cfg.login != null) {
-    sops.secrets.${cfg.login.passwordKey} = {
-      group = "wheel";
-      mode = "0440";
-    };
-
     environment.variables.GHCR_TOKEN_FILE = config.sops.secrets.${cfg.login.passwordKey}.path;
   };
 }

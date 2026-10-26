@@ -110,6 +110,17 @@ if [ -z "${GITHUB_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
 fi
 [ -n "${GITHUB_TOKEN:-}" ] && export GITHUB_TOKEN
 
+# Images privées : le jeton du serveur reste à root (0400). Lu une fois par sudo, gardé en mémoire
+# le temps de la commande ; registry.sh ne l'envoie qu'à ghcr.io.
+if [ -z "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_TOKEN_FILE:-}" ]; then
+    if [ -t 0 ]; then
+        GHCR_TOKEN=$(sudo -p "🔑 sudo (jeton GHCR des images privées) : " cat -- "$GHCR_TOKEN_FILE") || GHCR_TOKEN=""
+    else
+        GHCR_TOKEN=$(sudo -n cat -- "$GHCR_TOKEN_FILE" 2>/dev/null) || GHCR_TOKEN=""
+    fi
+    if [ -n "$GHCR_TOKEN" ]; then export GHCR_TOKEN; else unset GHCR_TOKEN; fi
+fi
+
 matches() {
     [ ${#filters[@]} -eq 0 ] && return 0
     local f

@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
 # Suit le tag de chaque image de profiles/server/apps.lock.json et y reporte son digest et son port exposé.
 # Filet de sécurité : d'ordinaire, think repère lui-même une nouvelle image et déclenche apps.yml (action pin).
-# Image privée : GHCR_TOKEN (portée read:packages), lu dans GHCR_TOKEN_FILE à défaut ; sinon elle est
-# signalée et laissée telle quelle.
+# Image privée : GHCR_TOKEN (portée read:packages ; `update` le lit par sudo sur le serveur), sinon elle
+# est signalée et laissée telle quelle.
 set -euo pipefail
 # shellcheck source=scripts/lib/update-module.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/update-module.sh"
 # shellcheck source=scripts/lib/registry.sh
 . "${MY_FLAKE:-$HOME/.dotfiles}/scripts/lib/registry.sh"
 um_init "$@"
-
-# Sur le serveur, le jeton du registre est lisible des admins (GHCR_TOKEN_FILE, app-images).
-if [ -z "${GHCR_TOKEN:-}" ] && [ -r "${GHCR_TOKEN_FILE:-}" ]; then
-    GHCR_TOKEN=$(<"$GHCR_TOKEN_FILE")
-fi
 
 lock="$UM_FLAKE/profiles/server/apps.lock.json"
 [ -f "$lock" ] || um_die "lock introuvable : $lock"
