@@ -64,7 +64,6 @@
       ];
       pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [
         (import ./overlays/authelia myLib)
-        (import ./overlays/cloudflared)
       ];
 
       dotsCommands = pkgs-stable.callPackage ./scripts {

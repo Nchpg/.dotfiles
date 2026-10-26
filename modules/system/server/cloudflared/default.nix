@@ -7,6 +7,25 @@
 
 let
   cfg = config.systemSettings.cloudflared;
+
+  # Dernière release, épinglée par update.sh : les correctifs de sécurité de cloudflared sortent
+  # avant nixos-unstable. La plus récente des deux gagne, l'épinglage ne fait jamais reculer.
+  pinned = lib.importJSON ./pinned.json;
+  package =
+    if lib.versionOlder pkgs-unstable.cloudflared.version pinned.version then
+      pkgs-unstable.cloudflared.overrideAttrs (
+        finalAttrs: _: {
+          inherit (pinned) version vendorHash;
+          src = pkgs-unstable.fetchFromGitHub {
+            owner = "cloudflare";
+            repo = "cloudflared";
+            tag = finalAttrs.version;
+            inherit (pinned) hash;
+          };
+        }
+      )
+    else
+      pkgs-unstable.cloudflared;
 in
 {
   options.systemSettings.cloudflared = {
@@ -77,8 +96,8 @@ in
 
     services.cloudflared = {
       enable = true;
-      # Unstable : l'edge Cloudflare évolue vite, les versions de 26.05 prennent du retard.
-      package = pkgs-unstable.cloudflared;
+      # Unstable ou la dernière release (update.sh) : les versions de 26.05 prennent du retard.
+      inherit package;
 
       # Un nom d'attribut s'évalue avant les assertions.
       tunnels = lib.optionalAttrs (cfg.tunnelId != null) {
