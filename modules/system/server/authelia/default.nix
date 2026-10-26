@@ -3,6 +3,7 @@
   lib,
   myLib,
   pkgs-stable,
+  pkgs-unstable,
   ...
 }:
 
@@ -380,8 +381,8 @@ in
 
     services.authelia.instances.main = {
       enable = true;
-      # Thème maison (overlays/authelia).
-      package = pkgs-stable.authelia;
+      # Unstable, avec le thème maison (overlays/authelia).
+      package = pkgs-unstable.authelia;
 
       # Par fichier : la configuration finit dans le store.
       environmentVariables = lib.mkIf mail.enable {

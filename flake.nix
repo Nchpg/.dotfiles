@@ -61,9 +61,10 @@
       pkgs-stable = mkPkgs inputs.nixpkgs-stable [
         (import ./overlays/displaylink)
         (import ./overlays/sway myLib)
-        (import ./overlays/authelia { inherit myLib pkgs-unstable; })
       ];
-      pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [ ];
+      pkgs-unstable = mkPkgs inputs.nixpkgs-unstable [
+        (import ./overlays/authelia myLib)
+      ];
 
       dotsCommands = pkgs-stable.callPackage ./scripts {
         settings.DOTS_SOPS_MARKER = myLib.sops.policy.marker;
