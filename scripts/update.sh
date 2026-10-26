@@ -121,6 +121,19 @@ if [ -z "${GHCR_TOKEN:-}" ] && [ -n "${GHCR_TOKEN_FILE:-}" ]; then
     if [ -n "$GHCR_TOKEN" ]; then export GHCR_TOKEN; else unset GHCR_TOKEN; fi
 fi
 
+# Quota de l'API GitHub (cette requête n'en consomme pas) : une vingtaine d'appels par `update`.
+# Jeton passé à curl par stdin, pas en argument (lisible par tous dans /proc).
+if gh_rate=$(printf '%s' "${GITHUB_TOKEN:+header = \"Authorization: Bearer $GITHUB_TOKEN\"}" \
+    | curl -fsS --max-time 10 --config - https://api.github.com/rate_limit 2>/dev/null \
+    | jq -er '.resources.core | "\(.remaining) \(.limit) \(.reset)"' 2>/dev/null); then
+    read -r gh_left gh_limit gh_reset <<<"$gh_rate"
+    if [ "$gh_left" -lt 25 ]; then
+        gh_msg="API GitHub : $gh_left/$gh_limit requêtes restantes jusqu'à $(date -d "@$gh_reset" +%H:%M)"
+        [ "$gh_limit" -le 60 ] && gh_msg+=" (sans jeton : \`gh auth login\` passe à 5000/h)"
+        warn "⚠  $gh_msg ; les modules suivis par GitHub risquent d'échouer."
+    fi
+fi
+
 matches() {
     [ ${#filters[@]} -eq 0 ] && return 0
     local f
