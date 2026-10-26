@@ -12,10 +12,10 @@ index cdd056624..1fbf9fe88 100644
      * {
 diff --git a/src/themes/custom.css b/src/themes/custom.css
 new file mode 100644
-index 000000000..6e3cbb48e
+index 000000000..c50fa4edf
 --- /dev/null
 +++ b/src/themes/custom.css
-@@ -0,0 +1,934 @@
+@@ -0,0 +1,994 @@
 +/*
 + * SPDX-FileCopyrightText: 2026 Authelia
 + *
@@ -622,6 +622,54 @@ index 000000000..6e3cbb48e
 +    margin-top: 0.75rem;
 +}
 +
++/* Already authenticated: the check badge beside its label, without the fixed height. */
++#\32 fa-container.state-already-authenticated {
++    height: auto;
++    padding-block: 1.25rem 0.25rem;
++}
++
++#\32 fa-container #authenticated-stage {
++    flex-direction: row;
++    gap: 0.75rem;
++}
++
++#\32 fa-container #authenticated-stage > div {
++    display: flex;
++    margin: 0;
++}
++
++#\32 fa-container #authenticated-stage > p {
++    margin: 0;
++    font-size: 0.9375rem;
++    font-weight: 500;
++}
++
++/* One-time code: every digit box is outlined, like the other fields. */
++#otp-input input {
++    width: 2.75rem;
++    height: 3rem;
++    border-color: color-mix(in oklch, var(--foreground) 20%, transparent);
++    border-radius: var(--radius-md);
++    background-color: var(--muted);
++    font-weight: 500;
++    transition:
++        border-color 150ms ease,
++        box-shadow 150ms ease;
++}
++
++#otp-input input:hover:not(:focus-visible, :disabled) {
++    border-color: color-mix(in oklch, var(--foreground) 32%, transparent);
++}
++
++#otp-input input:focus-visible {
++    border-color: var(--ring);
++    box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent);
++}
++
++#otp-input input[aria-invalid="true"] {
++    border-color: var(--destructive);
++}
++
 +/* "Register device" and "Retry": solid primary actions (shadow and hover in section 3). */
 +#register-link,
 +#\32 fa-container div:has(> [data-variant="ghost"]) > [data-variant="ghost"] {
@@ -901,6 +949,18 @@ index 000000000..6e3cbb48e
 +
 +:is(#one-time-password-panel, #webauthn-credentials-panel) p.text-muted-foreground {
 +    line-height: 1.5;
++}
++
++/* WebAuthn credentials: full-width rows like the One-Time Password, not a grid of narrow tiles. */
++#webauthn-credentials-panel [data-slot="card-content"] .grid-cols-12 {
++    display: flex;
++    flex-direction: column;
++    gap: 0.75rem;
++}
++
++/* The attestation format ("(NONE)"...) reads like an error; it stays in the information dialog. */
++[id^="webauthn-credential-"] [id$="-description"] + span {
++    display: none;
 +}
 +
 +/* Options panel. */
