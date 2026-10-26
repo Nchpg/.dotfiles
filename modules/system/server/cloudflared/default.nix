@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs-unstable,
   ...
 }:
 
@@ -72,6 +73,8 @@ in
 
     services.cloudflared = {
       enable = true;
+      # Unstable : l'edge Cloudflare évolue vite, les versions de 26.05 prennent du retard.
+      package = pkgs-unstable.cloudflared;
 
       # Un nom d'attribut s'évalue avant les assertions.
       tunnels = lib.optionalAttrs (cfg.tunnelId != null) {
