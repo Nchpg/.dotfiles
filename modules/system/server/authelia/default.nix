@@ -18,6 +18,16 @@ let
   liveUsers = "${instanceDir}/users.yml";
   seedUsers = config.sops.secrets.${cfg.usersSecret}.path;
 
+  # E-mails bilingues, français puis anglais : Authelia ne les traduit pas et ne transmet pas la langue
+  # du visiteur aux modèles. Le domaine est inscrit au build (les notifications n'en reçoivent pas) ;
+  # les titres anglais du code sont traduits dans les modèles.
+  mailTemplates = pkgs-stable.runCommand "authelia-mail-templates" { } ''
+    mkdir "$out"
+    for f in ${./templates}/*; do
+      substitute "$f" "$out/$(basename "$f")" --replace-quiet @domain@ ${lib.escapeShellArg cfg.domain}
+    done
+  '';
+
   # Le domaine lui-même ou un sous-domaine (hasSuffix seul accepterait `malexemple.fr`).
   isUnder = domain: host: host == domain || lib.hasSuffix ".${domain}" host;
 
@@ -442,19 +452,23 @@ in
 
         storage.local.path = "${instanceDir}/db.sqlite3";
 
-        notifier =
+        notifier = {
+          template_path = "${mailTemplates}";
+        }
+        // (
           if mail.enable then
             {
               smtp = {
                 address = mail.url;
                 username = mail.user;
-                # Nom et objet parlants pour le destinataire, au lieu de « Authelia ».
+                # Nom et objet parlants, au lieu de « Authelia ». Objet fixe : `{title}` ne se traduit pas.
                 sender = "Connexion ${cfg.domain} <${cfg.mailFrom}>";
-                subject = "[${cfg.domain}] {title}";
+                subject = "[${cfg.domain}] Sécurité de votre compte · Account security";
               };
             }
           else
-            { filesystem.filename = "${instanceDir}/notification.txt"; };
+            { filesystem.filename = "${instanceDir}/notification.txt"; }
+        );
 
         totp.issuer = cfg.domain;
 
@@ -494,7 +508,15 @@ in
         extraConfig = ''
           proxy_http_version 1.1;
           proxy_set_header Connection "";
-          ${forwardedHeaders}proxy_set_header X-Forwarded-For $remote_addr;
+          proxy_set_header Host $host;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header X-Forwarded-Host $host;
+
+          # Adresse réelle du visiteur (CF-Connecting-IP derrière le tunnel, cf. $real_client_ip) :
+          # journal, e-mails et limitation des essais. Jamais au point de contrôle (authzLocation),
+          # qui décide des accès sur $remote_addr seul.
+          proxy_set_header X-Real-IP $real_client_ip;
+          proxy_set_header X-Forwarded-For $real_client_ip;
         '';
       };
     };

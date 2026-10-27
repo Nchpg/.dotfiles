@@ -1,0 +1,34 @@
+{{ $t := .Title }}{{ if eq .Title "Confirm your identity" }}{{ $t = "Confirmez votre identité" }}{{ else if eq .Title "Reset your password" }}{{ $t = "Réinitialisation du mot de passe" }}{{ else if eq .Title "Password changed successfully" }}{{ $t = "Mot de passe modifié" }}{{ else if eq .Title "Second Factor Method Added" }}{{ $t = "Méthode de connexion ajoutée" }}{{ else if eq .Title "Second Factor Method Removed" }}{{ $t = "Méthode de connexion retirée" }}{{ end }}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<title>{{ $t }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Confirmez une demande · Confirm a request</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
+<tr><td style="padding:32px;">
+<p style="margin:0;font-size:13px;line-height:20px;font-weight:600;letter-spacing:0.02em;color:#4f46e5;">@domain@</p>
+<h1 style="margin:24px 0 4px;font-size:20px;line-height:28px;font-weight:600;color:#18181b;">{{ $t }}</h1>
+<p lang="en" style="margin:0 0 20px;font-size:14px;line-height:20px;color:#71717a;">{{ .Title }}</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;">Bonjour {{ .DisplayName }},</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;">Une demande liée à la sécurité de votre compte a été faite. Si c&rsquo;est bien vous, continuez avec le bouton ci-dessous.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 16px;"><tr><td style="background-color:#4f46e5;border-radius:8px;"><a href="{{ .LinkURL }}" target="_blank" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">{{ if eq .Title "Reset your password" }}Réinitialiser le mot de passe{{ else }}Continuer{{ end }}</a></td></tr></table><p style="margin:0 0 16px;font-size:12px;line-height:18px;color:#71717a;word-break:break-all;">{{ .LinkURL }}</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;"><strong>Ne transférez pas cet e-mail.</strong> Le lien n&rsquo;est valable qu&rsquo;une fois et pendant peu de temps.</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">Si ce n&rsquo;est pas vous qui avez fait cette demande, vos identifiants sont peut-être compromis : révoquez ce lien, puis changez votre mot de passe.</p>
+<p style="margin:0;font-size:14px;line-height:22px;"><a href="{{ .RevocationLinkURL }}" target="_blank" style="color:#dc2626;font-weight:600;text-decoration:none;">Révoquer ce lien</a></p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 20px;"><tr><td style="border-top:1px solid #e4e4e7;font-size:0;line-height:0;">&nbsp;</td></tr></table>
+<div lang="en">
+<p style="margin:0 0 12px;font-size:12px;line-height:16px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#a1a1aa;">English</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">Hi {{ .DisplayName }},</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">A security request was made for your account. If it was you, use the button below. <strong>Do not forward this e-mail</strong>: the link works once and only for a short time.</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">If you did not make this request, your credentials may be compromised: revoke this link, then change your password.</p><table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 16px;"><tr><td style="background-color:#4f46e5;border-radius:8px;"><a href="{{ .LinkURL }}" target="_blank" style="display:inline-block;padding:12px 20px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">{{ if eq .Title "Reset your password" }}Reset password{{ else }}Continue{{ end }}</a></td></tr></table><p style="margin:0;font-size:14px;line-height:22px;"><a href="{{ .RevocationLinkURL }}" target="_blank" style="color:#dc2626;font-weight:600;text-decoration:none;">Revoke this link</a></p>
+</div>
+<p style="margin:16px 0 0;font-size:12px;line-height:18px;color:#71717a;word-break:break-all;">{{ .RevocationLinkURL }}</p>
+</td></tr>
+</table>
+<p style="max-width:480px;margin:16px auto 0;font-size:12px;line-height:18px;color:#71717a;">Envoyé à {{ .DisplayName }} suite à une action depuis l&rsquo;adresse IP {{ .RemoteIP }}. Si ce n&rsquo;était pas vous, changez votre mot de passe et prévenez l&rsquo;administrateur.</p>
+<p lang="en" style="max-width:480px;margin:8px auto 0;font-size:12px;line-height:18px;color:#a1a1aa;">Sent to {{ .DisplayName }} following an action from IP address {{ .RemoteIP }}. If this was not you, change your password and contact the administrator.</p>
+</td></tr>
+</table>
+</body>
+</html>

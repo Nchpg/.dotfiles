@@ -1,0 +1,24 @@
+{{ $t := .Title }}{{ if eq .Title "Confirm your identity" }}{{ $t = "Confirmez votre identité" }}{{ else if eq .Title "Reset your password" }}{{ $t = "Réinitialisation du mot de passe" }}{{ else if eq .Title "Password changed successfully" }}{{ $t = "Mot de passe modifié" }}{{ else if eq .Title "Second Factor Method Added" }}{{ $t = "Méthode de connexion ajoutée" }}{{ else if eq .Title "Second Factor Method Removed" }}{{ $t = "Méthode de connexion retirée" }}{{ end }}{{ $t }} · {{ .Title }}
+@domain@
+
+Bonjour {{ .DisplayName }},
+
+Une demande liée à la sécurité de votre compte a été faite. Si c'est bien vous, ouvrez ce lien :
+
+{{ .LinkURL }}
+
+Ne transférez pas cet e-mail. Le lien n'est valable qu'une fois et pendant peu de temps.
+Si ce n'est pas vous qui avez fait cette demande, vos identifiants sont peut-être compromis : révoquez ce lien, puis changez votre mot de passe.
+
+---------------- English ----------------
+
+Hi {{ .DisplayName }},
+
+A security request was made for your account. If it was you, open the link above. Do not forward this e-mail: the link works once and only for a short time.
+If you did not make this request, your credentials may be compromised: revoke this link, then change your password.
+
+Révoquer ce lien / Revoke this link : {{ .RevocationLinkURL }}
+
+----------------------------------------
+Envoyé à {{ .DisplayName }} suite à une action depuis l'adresse IP {{ .RemoteIP }}. Si ce n'était pas vous, changez votre mot de passe et prévenez l'administrateur.
+Sent to {{ .DisplayName }} following an action from IP address {{ .RemoteIP }}. If this was not you, change your password and contact the administrator.

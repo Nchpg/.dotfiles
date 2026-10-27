@@ -1,0 +1,19 @@
+{{ $t := .Title }}{{ if eq .Title "Confirm your identity" }}{{ $t = "Confirmez votre identité" }}{{ else if eq .Title "Reset your password" }}{{ $t = "Réinitialisation du mot de passe" }}{{ else if eq .Title "Password changed successfully" }}{{ $t = "Mot de passe modifié" }}{{ else if eq .Title "Second Factor Method Added" }}{{ $t = "Méthode de connexion ajoutée" }}{{ else if eq .Title "Second Factor Method Removed" }}{{ $t = "Méthode de connexion retirée" }}{{ end }}{{ $t }} · {{ .Title }}
+@domain@
+
+Bonjour {{ .DisplayName }},
+
+Pour information, {{ if eq .Title "Second Factor Method Added" }}une méthode de connexion a été ajoutée à votre compte.{{ else if eq .Title "Second Factor Method Removed" }}une méthode de connexion a été retirée de votre compte.{{ else if eq .BodyEvent "Password Reset" }}votre mot de passe a été réinitialisé.{{ else if eq .BodyEvent "Password Change" }}votre mot de passe a été modifié.{{ else }}{{ .BodyPrefix }} {{ .BodyEvent }} {{ .BodySuffix }}{{ end }}
+{{ if index .Details "Category" }}
+Type : {{ with index .Details "Category" }}{{ if eq (print .) "One-Time Password" }}Application d'authentification (code TOTP){{ else if eq (print .) "WebAuthn Credential" }}Clé de sécurité ou passkey (WebAuthn){{ else }}{{ . }}{{ end }}{{ end }} / {{ with index .Details "Category" }}{{ if eq (print .) "One-Time Password" }}Authenticator app (TOTP code){{ else if eq (print .) "WebAuthn Credential" }}Security key or passkey (WebAuthn){{ else }}{{ . }}{{ end }}{{ end }}{{ with index .Details "Description" }}
+Nom / Name : {{ . }}{{ end }}
+{{ end }}
+---------------- English ----------------
+
+Hi {{ .DisplayName }},
+
+For your information, {{ .BodyPrefix }} {{ .BodyEvent }} {{ .BodySuffix }}
+
+----------------------------------------
+Envoyé à {{ .DisplayName }} suite à une action depuis l'adresse IP {{ .RemoteIP }}. Si ce n'était pas vous, changez votre mot de passe et prévenez l'administrateur.
+Sent to {{ .DisplayName }} following an action from IP address {{ .RemoteIP }}. If this was not you, change your password and contact the administrator.

@@ -1,0 +1,24 @@
+{{ $t := .Title }}{{ if eq .Title "Confirm your identity" }}{{ $t = "Confirmez votre identité" }}{{ else if eq .Title "Reset your password" }}{{ $t = "Réinitialisation du mot de passe" }}{{ else if eq .Title "Password changed successfully" }}{{ $t = "Mot de passe modifié" }}{{ else if eq .Title "Second Factor Method Added" }}{{ $t = "Méthode de connexion ajoutée" }}{{ else if eq .Title "Second Factor Method Removed" }}{{ $t = "Méthode de connexion retirée" }}{{ end }}{{ $t }} · {{ .Title }}
+@domain@
+
+Bonjour {{ .DisplayName }},
+
+Voici le code à saisir dans votre navigateur pour confirmer une modification de sécurité de votre compte :
+
+    {{ .OneTimeCode }}
+
+Ne communiquez ce code à personne, même à quelqu'un qui se présente comme l'administrateur.
+Si ce n'est pas vous qui avez fait cette demande, vos identifiants sont peut-être compromis : révoquez ce code, puis changez votre mot de passe.
+
+---------------- English ----------------
+
+Hi {{ .DisplayName }},
+
+Enter the code above in your browser to confirm a security change to your account. Do not share this code with anyone, even someone claiming to be the administrator.
+If you did not make this request, your credentials may be compromised: revoke this code, then change your password.
+
+Révoquer ce code / Revoke this code : {{ .RevocationLinkURL }}
+
+----------------------------------------
+Envoyé à {{ .DisplayName }} suite à une action depuis l'adresse IP {{ .RemoteIP }}. Si ce n'était pas vous, changez votre mot de passe et prévenez l'administrateur.
+Sent to {{ .DisplayName }} following an action from IP address {{ .RemoteIP }}. If this was not you, change your password and contact the administrator.

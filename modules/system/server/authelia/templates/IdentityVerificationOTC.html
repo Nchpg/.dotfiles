@@ -1,0 +1,34 @@
+{{ $t := .Title }}{{ if eq .Title "Confirm your identity" }}{{ $t = "Confirmez votre identité" }}{{ else if eq .Title "Reset your password" }}{{ $t = "Réinitialisation du mot de passe" }}{{ else if eq .Title "Password changed successfully" }}{{ $t = "Mot de passe modifié" }}{{ else if eq .Title "Second Factor Method Added" }}{{ $t = "Méthode de connexion ajoutée" }}{{ else if eq .Title "Second Factor Method Removed" }}{{ $t = "Méthode de connexion retirée" }}{{ end }}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<title>{{ $t }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Code / code : {{ .OneTimeCode }}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+<tr><td align="center" style="padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background-color:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
+<tr><td style="padding:32px;">
+<p style="margin:0;font-size:13px;line-height:20px;font-weight:600;letter-spacing:0.02em;color:#4f46e5;">@domain@</p>
+<h1 style="margin:24px 0 4px;font-size:20px;line-height:28px;font-weight:600;color:#18181b;">{{ $t }}</h1>
+<p lang="en" style="margin:0 0 20px;font-size:14px;line-height:20px;color:#71717a;">{{ .Title }}</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;">Bonjour {{ .DisplayName }},</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;">Voici le code à saisir dans votre navigateur pour confirmer une modification de sécurité de votre compte.</p><p style="margin:8px 0 24px;padding:16px;background-color:#f4f4f5;border-radius:8px;text-align:center;font-family:SFMono-Regular,Menlo,Consolas,monospace;font-size:28px;line-height:36px;font-weight:700;letter-spacing:6px;color:#18181b;">{{ .OneTimeCode }}</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#3f3f46;"><strong>Ne communiquez ce code à personne</strong>, même à quelqu&rsquo;un qui se présente comme l&rsquo;administrateur.</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">Si ce n&rsquo;est pas vous qui avez fait cette demande, vos identifiants sont peut-être compromis : révoquez ce code, puis changez votre mot de passe.</p>
+<p style="margin:0;font-size:14px;line-height:22px;"><a href="{{ .RevocationLinkURL }}" target="_blank" style="color:#dc2626;font-weight:600;text-decoration:none;">Révoquer ce code</a></p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 20px;"><tr><td style="border-top:1px solid #e4e4e7;font-size:0;line-height:0;">&nbsp;</td></tr></table>
+<div lang="en">
+<p style="margin:0 0 12px;font-size:12px;line-height:16px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#a1a1aa;">English</p>
+<p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">Hi {{ .DisplayName }},</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">Enter the code above in your browser to confirm a security change to your account. <strong>Do not share this code with anyone</strong>, even someone claiming to be the administrator.</p><p style="margin:0 0 16px;font-size:14px;line-height:22px;color:#52525b;">If you did not make this request, your credentials may be compromised: revoke this code, then change your password.</p><p style="margin:0;font-size:14px;line-height:22px;"><a href="{{ .RevocationLinkURL }}" target="_blank" style="color:#dc2626;font-weight:600;text-decoration:none;">Revoke this code</a></p>
+</div>
+<p style="margin:16px 0 0;font-size:12px;line-height:18px;color:#71717a;word-break:break-all;">{{ .RevocationLinkURL }}</p>
+</td></tr>
+</table>
+<p style="max-width:480px;margin:16px auto 0;font-size:12px;line-height:18px;color:#71717a;">Envoyé à {{ .DisplayName }} suite à une action depuis l&rsquo;adresse IP {{ .RemoteIP }}. Si ce n&rsquo;était pas vous, changez votre mot de passe et prévenez l&rsquo;administrateur.</p>
+<p lang="en" style="max-width:480px;margin:8px auto 0;font-size:12px;line-height:18px;color:#a1a1aa;">Sent to {{ .DisplayName }} following an action from IP address {{ .RemoteIP }}. If this was not you, change your password and contact the administrator.</p>
+</td></tr>
+</table>
+</body>
+</html>
