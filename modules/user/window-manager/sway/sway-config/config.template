@@ -11,6 +11,8 @@ input type:touchpad {
 @wallpaperBg@
 
 seat * xcursor_theme Adwaita 24
+# Avec le regroupement (smart par défaut), chaque raccourci du clavier interne se déclenche deux fois
+seat * keyboard_grouping none
 
 # Chaîné pour garantir l'ordre (les exec de sway sont concurrents). Le `sh -c` est
 # obligatoire à cause du `;` : sway découpe la ligne dessus ; `sway --validate` ne
