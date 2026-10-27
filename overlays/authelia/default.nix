@@ -1,5 +1,5 @@
-# Thème visuel maison pour le portail Authelia : uniquement du CSS, appliqué au
-# build du frontend. Overlay de pkgs-unstable : le thème vise le frontend
+# Thème visuel maison pour le portail Authelia : du CSS et deux icônes SVG statiques, appliqués
+# au build du frontend. Overlay de pkgs-unstable : le thème vise le frontend
 # Tailwind, absent de la version de nixos-26.05.
 #
 # Un bump touchant ces CSS fait échouer le build : rebaser ou retirer le patch.
