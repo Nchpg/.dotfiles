@@ -44,7 +44,7 @@ in
         enable = true;
         host = "smtp.resend.com";
         user = "resend";
-        from = "nextcloud@nathanchampagne.com";
+        domain = "nathanchampagne.com";
       };
 
       proxy = {

@@ -51,6 +51,13 @@ in
   options.systemSettings.vaultwarden = {
     enable = lib.mkEnableOption "coffre-fort de mots de passe Vaultwarden";
 
+    mailFrom = lib.mkOption {
+      type = lib.types.str;
+      default = "vault@${config.systemSettings.mail.domain}";
+      defaultText = lib.literalExpression ''"vault@''${systemSettings.mail.domain}"'';
+      description = "Adresse d'expéditeur du coffre-fort (une adresse par service).";
+    };
+
     hostName = lib.mkOption {
       type = lib.types.str;
       default = "";
@@ -252,7 +259,7 @@ in
             SMTP_PORT = mail.port;
             SMTP_SECURITY = if mail.implicitTls then "force_tls" else "starttls";
             SMTP_USERNAME = mail.user;
-            SMTP_FROM = mail.from;
+            SMTP_FROM = cfg.mailFrom;
             SMTP_FROM_NAME = "Coffre-fort";
           };
         };

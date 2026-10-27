@@ -108,6 +108,13 @@ in
       '';
     };
 
+    mailFrom = lib.mkOption {
+      type = lib.types.str;
+      default = "auth@${config.systemSettings.mail.domain}";
+      defaultText = lib.literalExpression ''"auth@''${systemSettings.mail.domain}"'';
+      description = "Adresse d'expéditeur du portail (une adresse par service).";
+    };
+
     logLevel = lib.mkOption {
       type = lib.types.enum [
         "error"
@@ -441,7 +448,9 @@ in
               smtp = {
                 address = mail.url;
                 username = mail.user;
-                sender = "Authelia <${mail.from}>";
+                # Nom et objet parlants pour le destinataire, au lieu de « Authelia ».
+                sender = "Connexion ${cfg.domain} <${cfg.mailFrom}>";
+                subject = "[${cfg.domain}] {title}";
               };
             }
           else

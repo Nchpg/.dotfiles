@@ -26,6 +26,13 @@
       '';
     };
 
+    mailFrom = lib.mkOption {
+      type = lib.types.str;
+      default = "cloud@${config.systemSettings.mail.domain}";
+      defaultText = lib.literalExpression ''"cloud@''${systemSettings.mail.domain}"'';
+      description = "Adresse d'expéditeur de Nextcloud (une adresse par service).";
+    };
+
     adminUser = lib.mkOption {
       type = lib.types.str;
       default = "admin";

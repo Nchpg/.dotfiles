@@ -39,11 +39,14 @@ in
       description = "Identifiant d'authentification, en général l'adresse de la boîte.";
     };
 
-    from = lib.mkOption {
+    domain = lib.mkOption {
       type = lib.types.str;
-      default = cfg.user;
-      defaultText = lib.literalExpression "systemSettings.mail.user";
-      description = "Adresse d'expéditeur.";
+      default = "";
+      example = "exemple.fr";
+      description = ''
+        Domaine des expéditeurs, vérifié chez le relais : chaque service envoie depuis sa propre
+        adresse (`auth@`, `cloud@`, `vault@`…), réglable par son option `mailFrom`.
+      '';
     };
 
     passwordKey = lib.mkOption {
@@ -72,8 +75,8 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.host != "" && cfg.user != "";
-        message = "systemSettings.mail : host et user sont requis dès que le relais est activé.";
+        assertion = cfg.host != "" && cfg.user != "" && cfg.domain != "";
+        message = "systemSettings.mail : host, user et domain sont requis dès que le relais est activé.";
       }
     ];
 

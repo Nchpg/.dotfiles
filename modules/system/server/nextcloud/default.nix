@@ -234,8 +234,8 @@ in
         mail_smtpsecure = if mail.implicitTls then "ssl" else "tls";
         mail_smtpauth = true;
         mail_smtpname = mail.user;
-        mail_from_address = lib.head (lib.splitString "@" mail.from);
-        mail_domain = lib.last (lib.splitString "@" mail.from);
+        mail_from_address = lib.head (lib.splitString "@" cfg.mailFrom);
+        mail_domain = lib.last (lib.splitString "@" cfg.mailFrom);
       };
 
       extraApps =
