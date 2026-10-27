@@ -104,6 +104,12 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 			g.Rows = append(g.Rows, r)
 			g.VPN = g.VPN || r.VPN
 			g.Public = g.Public || !r.VPN
+			// Compteurs du filtre : une adresse par environnement (myetf en compte deux).
+			if r.VPN {
+				vpn++
+			} else {
+				public++
+			}
 			total++
 			if r.Probed {
 				probed++
@@ -114,12 +120,6 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 		}
 		if job != nil && !placed && len(g.Rows) > 0 {
 			g.Rows[0].SiteJob = job
-		}
-		if g.VPN {
-			vpn++
-		}
-		if g.Public {
-			public++
 		}
 		groups = append(groups, g)
 	}
@@ -164,7 +164,7 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	return map[string]any{"Nav": "sites", "Groups": groups, "Adding": adding, "Every": every,
 		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public,
 		"Services": services, "ServicesUp": svcUp,
-		"CountAll": len(groups) + len(services), "CountPublic": public + svcPublic, "CountVPN": vpn + len(services) - svcPublic,
+		"CountAll": total + len(services), "CountPublic": public + svcPublic, "CountVPN": vpn + len(services) - svcPublic,
 		"UpCount": upCount, "ProbedCount": probedCount, "OnlineInk": onlineInk,
 		"ProbedSites": probed, "ProbedServices": svcProbed}
 }

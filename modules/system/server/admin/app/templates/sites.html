@@ -89,7 +89,7 @@
     {{range .Groups}}
     <tbody data-vpn="{{.VPN}}" data-public="{{.Public}}">
       {{range .Rows}}
-      <tr class="{{if .First}}first{{end}}">
+      <tr class="{{if .First}}first{{end}}" data-row-vpn="{{.VPN}}">
         {{if .First}}
         <td rowspan="{{.Span}}" class="site-td">
           <span class="stack tight">

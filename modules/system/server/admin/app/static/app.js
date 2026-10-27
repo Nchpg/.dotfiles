@@ -4,9 +4,27 @@
 let filter = "all";
 function applyFilter() {
   document.querySelectorAll("[data-filter]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.filter === filter)));
-  // Un site reste groupé : visible dès qu'un de ses environnements correspond au filtre.
+  const keep = (vpn) => filter === "all" || (filter === "vpn") === vpn;
   document.querySelectorAll("table.sites tbody[data-vpn]").forEach((g) => {
-    g.hidden = (filter === "vpn" ? g.dataset.vpn !== "true" : filter === "public" ? g.dataset.public !== "true" : false);
+    const rows = [...g.querySelectorAll("tr[data-row-vpn]")];
+    // Service : une ligne, filtrée d'un bloc.
+    if (!rows.length) {
+      g.hidden = !keep(g.dataset.vpn === "true");
+      return;
+    }
+    // Site : seuls ses environnements qui correspondent restent ; la cellule du nom (fusionnée sur
+    // ses lignes) passe sur la première ligne visible, à la hauteur des lignes restantes.
+    const shown = rows.filter((r) => keep(r.dataset.rowVpn === "true"));
+    rows.forEach((r) => {
+      r.hidden = !shown.includes(r);
+      r.classList.toggle("first", r === shown[0]);
+    });
+    g.hidden = shown.length === 0;
+    const cell = g.querySelector("td.site-td");
+    if (cell && shown.length) {
+      cell.rowSpan = shown.length;
+      if (cell.parentElement !== shown[0]) shown[0].prepend(cell);
+    }
   });
 }
 document.addEventListener("click", (ev) => {
