@@ -20,7 +20,8 @@ USAGE
 lines=()
 gitf() { git -C "$flake" "$@"; }
 
-# Aucune invite possible : le timer n'a pas de terminal.
+# Aucune invite possible : le timer n'a pas de terminal. Sans l'agent SSH,
+# sinon gcr ouvre une invite de déverrouillage que BatchMode n'empêche pas.
 fetchUpstream() {
   local branch url https="" ok=1
   branch="$(gitf branch --show-current)"
@@ -32,7 +33,7 @@ fetchUpstream() {
     https://github.com/*) https="$url" ;;
   esac
   export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS="" \
-    GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10"
+    GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10 -o IdentityAgent=none"
   if timeout 20 git -C "$flake" fetch -q origin "$branch" 2> /dev/null; then
     ok=0
   elif [ -n "$https" ]; then
