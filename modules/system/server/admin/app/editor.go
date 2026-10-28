@@ -17,6 +17,7 @@ import (
 type Opt struct {
 	Value, Label, Note string
 	Selected           bool
+	Fixed              bool // cochée, pas modifiable ici (réglée plus haut dans l'héritage)
 }
 
 // DD : liste déroulante maison (icône par option) ; la valeur part dans un champ caché `Name`.
@@ -114,8 +115,11 @@ type FormVM struct {
 	Probe        string
 	Peers        []Opt
 	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis
-	// Environnement aux conteneurs hérités : ses secrets, chacun remplaçable pour lui seul.
+	// Environnement aux conteneurs hérités : ses secrets, remplacés, retirés ou ajoutés pour lui seul.
+	SecretsShown    bool
 	SecretOverrides []SecretOverride
+	SecretAdds      []SecretAdd
+	SecretNew       string // nom proposé pour un nouveau secret à lui (`secrets edit …`)
 	SecretsFrom     string // l'environnement dont viennent les secrets hérités
 	Containers      []CtrVM
 	CtrList         string
@@ -343,10 +347,24 @@ var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "25
 
 // SecretOverride : un secret hérité et ce qui le remplace dans cet environnement.
 type SecretOverride struct {
-	Key     string
-	D       DD
-	Choices bool   // d'autres secrets du site existent (sinon, seulement la commande pour en créer)
-	NewKey  string // nom proposé pour son remplaçant
+	Key string
+	D   DD
+}
+
+// SecretAdd : les secrets ajoutables à un conteneur hérité.
+type SecretAdd struct {
+	Container string
+	Opts      []Opt
+}
+
+// newSecretName : un nom libre pour un secret propre à un environnement (`envSecretName`, sinon un
+// modèle à compléter si ce nom est déjà pris).
+func (s *Server) newSecretName(site, env, from string) string {
+	n := envSecretName(site, env, from)
+	if slices.Contains(s.secretsFor(site), n) {
+		return site + "/" + env + "_<nom>"
+	}
+	return n
 }
 
 // envSecretName : un secret propre à un environnement, tiré de celui qu'il remplace :
@@ -357,6 +375,101 @@ func envSecretName(site, env, from string) string {
 		base = b
 	}
 	return site + "/" + env + "_" + base
+}
+
+// envSecretsVM : les secrets d'un environnement aux conteneurs hérités. Chaque secret hérité :
+// comme le parent, retiré, ou remplacé ; et ceux à ajouter, par conteneur.
+func (s *Server) envSecretsVM(f *FormVM, e Entry, name, env, label string) {
+	v := e.Environments[env]
+	own := v.Secrets
+	if own == nil {
+		own = &EnvSecrets{}
+	}
+	parent := e.secretOverrides(v.From)
+	inherited := e.inheritedSecrets(env)
+	known := s.secretsFor(name)
+	from := e.labelOf(v.From)
+	// Un secret déjà ajouté (ici ou plus haut) n'est pas proposé comme remplaçant.
+	added := map[string]bool{}
+	for _, m := range []map[string][]string{parent.Add, own.Add} {
+		for _, ks := range m {
+			for _, k := range ks {
+				added[k] = true
+			}
+		}
+	}
+	for _, k := range inherited {
+		given, set := parent.Replace[k]
+		if !set {
+			given = k
+		}
+		chosen, mine := own.Replace[k]
+		value := ""
+		if mine {
+			value = chosen
+			if chosen == "" {
+				value = "-"
+			}
+		}
+		sub := given
+		if given == "" {
+			sub = "retiré"
+		}
+		opts := []DDOpt{
+			ddOpt("", "comme "+from, sub, icEnv, colGray, value == ""),
+			ddOpt("-", "retiré", "pas de ce secret pour "+label, icCommit, colRed, value == "-"),
+		}
+		listed := value == "" || value == "-"
+		for _, sk := range known {
+			if sk == k || sk == given || slices.Contains(inherited, sk) || (added[sk] && sk != value) {
+				continue
+			}
+			listed = listed || sk == value
+			opts = append(opts, ddOpt(sk, sk, "pour "+label+" seulement", icCommit, colAmber, sk == value))
+		}
+		if !listed {
+			o := ddOpt(value, value, "absent des secrets : secrets edit "+value, icCommit, colRed, true)
+			o.SubInk = colRed[1]
+			opts = append(opts, o)
+		}
+		f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+label, opts, "", icCommit)})
+	}
+	// Un secret déjà remplaçant (ici ou plus haut) n'est pas proposé en plus.
+	replacing := map[string]bool{}
+	for _, m := range []map[string]string{parent.Replace, own.Replace} {
+		for _, r := range m {
+			replacing[r] = true
+		}
+	}
+	ctrs := e.inheritedContainers(env)
+	names := make([]string, 0, len(ctrs))
+	for c := range ctrs {
+		names = append(names, c)
+	}
+	sort.Strings(names)
+	for _, c := range names {
+		a := SecretAdd{Container: c}
+		for _, sk := range known {
+			if slices.Contains(inherited, sk) {
+				continue
+			}
+			switch {
+			case replacing[sk] && !slices.Contains(own.Add[c], sk):
+				continue
+			case slices.Contains(parent.Add[c], sk):
+				a.Opts = append(a.Opts, Opt{Value: sk, Label: sk, Selected: true, Fixed: true, Note: "de " + from})
+			default:
+				a.Opts = append(a.Opts, Opt{Value: sk, Label: sk, Selected: slices.Contains(own.Add[c], sk)})
+			}
+		}
+		f.SecretAdds = append(f.SecretAdds, a)
+	}
+	first := ""
+	if len(inherited) > 0 {
+		first = inherited[0]
+	}
+	f.SecretsShown = true
+	f.SecretNew = s.newSecretName(name, env, first)
 }
 
 // formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
@@ -435,32 +548,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.CtrsFrom = origin(Env.OwnContainers)
 		f.SecretsFrom = e.labelOf(v.From)
 		if !v.OwnContainers() {
-			// Ce que le parent donne déjà (ses propres remplacements compris), puis le choix de celui-ci.
-			parentOv := e.secretOverrides(v.From)
-			known := s.secretsFor(name)
-			for _, k := range e.inheritedSecrets(env) {
-				given := k
-				if r, ok := parentOv[k]; ok {
-					given = r
-				}
-				chosen := v.Secrets[k]
-				opts := []DDOpt{ddOpt("", "comme "+e.labelOf(v.From), given, icEnv, colGray, chosen == "")}
-				listed := false
-				for _, sk := range known {
-					if sk == given {
-						continue
-					}
-					listed = listed || sk == chosen
-					opts = append(opts, ddOpt(sk, sk, "pour "+d.Label+" seulement", icCommit, colAmber, sk == chosen))
-				}
-				if chosen != "" && !listed {
-					o := ddOpt(chosen, chosen, "absent des secrets : secrets edit "+chosen, icCommit, colRed, true)
-					o.SubInk = colRed[1]
-					opts = append(opts, o)
-				}
-				f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+d.Label, opts, "", icCommit),
-					Choices: len(opts) > 1, NewKey: envSecretName(name, env, given)})
-			}
+			s.envSecretsVM(&f, e, name, env, d.Label)
 		}
 		f.OptionsFrom = origin(Env.OwnOptions)
 		f.AccessSummary = []string{"public"}
@@ -547,7 +635,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 			if len(c.Secrets) > 0 {
 				first = c.Secrets[0]
 			}
-			vm.NewKey = envSecretName(name, env, first)
+			vm.NewKey = s.newSecretName(name, env, first)
 		}
 		choices := append([]string{}, images...)
 		if !slices.Contains(choices, img) {
@@ -863,16 +951,14 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	}
 	if r.FormValue("own_containers") == "1" {
 		if !v.OwnContainers() {
-			// Conteneurs copiés du parent, secrets remplacés compris : rien ne change en route.
+			// Conteneurs copiés du parent, avec les secrets de cet environnement : rien ne change en route.
 			ov := tmp.secretOverrides(env)
 			v.Containers = map[string]Container{}
 			for n, c := range pc.Containers {
 				c.Image = untag(c.Image)
-				c.Secrets = append([]string(nil), c.Secrets...)
-				for i, k := range c.Secrets {
-					if r, ok := ov[k]; ok {
-						c.Secrets[i] = r
-					}
+				c.Secrets = ov.apply(n, c.Secrets)
+				if len(c.Secrets) == 0 {
+					c.Secrets = nil
 				}
 				v.Containers[n] = c
 			}
@@ -885,17 +971,9 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 		}
 	} else {
 		v.Containers, v.Entrypoint = nil, ""
-		// Secrets remplacés : ceux choisis dans la page (vide : comme le parent).
+		// Secrets de l'environnement, tels que choisis dans la page.
 		if _, shown := r.Form["secov_shown"]; shown {
-			v.Secrets = nil
-			for k, vals := range r.Form {
-				if key, ok := strings.CutPrefix(k, "secov_"); ok && key != "shown" && len(vals) > 0 && vals[0] != "" && vals[0] != key {
-					if v.Secrets == nil {
-						v.Secrets = map[string]string{}
-					}
-					v.Secrets[key] = vals[0]
-				}
-			}
+			v.Secrets = envSecretsFromForm(r)
 		}
 	}
 	if r.FormValue("own_options") == "1" {
@@ -911,6 +989,42 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	}
 	e.Environments[env] = v
 	return e, errs
+}
+
+// sameJSON : deux valeurs s'écrivent pareil en JSON.
+func sameJSON(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
+}
+
+// envSecretsFromForm : `secov_<secret>` (vide : comme le parent ; "-" : retiré ; sinon le remplaçant)
+// et `secadd_<conteneur>` (cases cochées). nil s'il n'y a rien.
+func envSecretsFromForm(r *http.Request) *EnvSecrets {
+	out := &EnvSecrets{}
+	for k, vals := range r.Form {
+		if len(vals) == 0 {
+			continue
+		}
+		if key, ok := strings.CutPrefix(k, "secov_"); ok && key != "shown" && vals[0] != "" && vals[0] != key {
+			if out.Replace == nil {
+				out.Replace = map[string]string{}
+			}
+			out.Replace[key] = strings.TrimPrefix(vals[0], "-")
+		}
+		if c, ok := strings.CutPrefix(k, "secadd_"); ok {
+			ks := slices.Clone(vals)
+			sort.Strings(ks)
+			if out.Add == nil {
+				out.Add = map[string][]string{}
+			}
+			out.Add[c] = slices.Compact(ks)
+		}
+	}
+	if out.empty() {
+		return nil
+	}
+	return out
 }
 
 // cloneEntry : copie profonde (par JSON) : le formulaire ne touche jamais l'entrée lue sur main.
@@ -1065,8 +1179,8 @@ func (s *Server) deployChanges(name string, old, cur Entry, id string) []string 
 		if ov.Name != nv.Name {
 			parts = append(parts, "rename to "+b.Label)
 		}
-		if fmt.Sprint(ov.Secrets) != fmt.Sprint(nv.Secrets) {
-			parts = append(parts, "override secrets")
+		if !sameJSON(ov.Secrets, nv.Secrets) {
+			parts = append(parts, "change secrets")
 		}
 		if ov.DataMode() != nv.DataMode() {
 			parts = append(parts, map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.DataMode()])

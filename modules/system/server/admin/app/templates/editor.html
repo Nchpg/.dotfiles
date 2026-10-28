@@ -163,32 +163,33 @@
             <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Dossier du conteneur à garder (plusieurs : séparés par des espaces)" data-enter-click><button type="button" class="btn btn-sm" hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML">Ajouter</button></span>
           </details>{{end}}
         </div>
-        {{/* Hérités avec des secrets : ils se montrent (et se remplacent) dans le bloc dessous. */}}
-        {{if not (and $locked $f.SecretOverrides)}}
+        {{/* Hérités : les secrets se montrent (et se changent) dans le bloc dessous. */}}
+        {{if not (and $locked $f.SecretsShown)}}
         <div class="stack tight">
           <span class="small strong">Secrets</span>
           {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
           {{else if not .NewKey}}<small class="muted">Aucun. <code>secrets edit {{$f.Name}}/env</code></small>{{end}}
-          {{with .NewKey}}<small class="muted">Un secret à {{$f.EnvLabel}} seulement : <code>secrets edit {{.}}</code>, proposé ici au prochain rebuild.</small>{{end}}
+          {{with .NewKey}}<small class="muted">Nouveau secret pour {{$f.EnvLabel}} : <code>secrets edit {{.}}</code>, proposé ici au prochain rebuild. Le conteneur reçoit les variables du fichier, quel que soit son nom.</small>{{end}}
         </div>
         {{end}}
       </div>
       {{end}}
-      {{if .SecretOverrides}}
-      {{/* Conteneurs hérités : chaque secret peut être remplacé pour cet environnement seul. */}}
-      <div class="stack tight secret-overrides">
+      {{if .SecretsShown}}
+      {{/* Conteneurs hérités : secrets du parent, chacun remplaçable ou retirable, et ajouts. */}}
+      <div class="stack secret-overrides">
         <input type="hidden" name="secov_shown" value="1">
-        <span class="small strong">Secrets</span>
-        <small class="muted">Ceux de {{.SecretsFrom}}. Remplace ici ceux qui ne doivent jamais toucher la production (base, envoi d'e-mails, paiements).</small>
-        {{range .SecretOverrides}}
-        <div class="secret-row">
-          <span class="mono small">{{.Key}}</span>
-          {{if .Choices}}{{template "dd" (args "D" .D)}}{{else}}<span class="small muted">comme {{$f.SecretsFrom}}</span>{{end}}
+        <span class="line small strong">Secrets{{template "info" (args "ID" "info-env-secrets" "Text" (printf "Ceux de %s, sauf ce qui est changé ici. Remplace ou retire ce qui ne doit jamais toucher la production (base, envoi d'e-mails, paiements), ajoute ce qui est propre à %s. Le conteneur reçoit les variables du fichier, quel que soit son nom : un remplaçant doit définir les mêmes." .SecretsFrom .EnvLabel))}}</span>
+        {{range .SecretOverrides}}<div class="secret-row"><span class="mono small">{{.Key}}</span>{{template "dd" (args "D" .D)}}</div>{{end}}
+        {{range .SecretAdds}}{{$c := .Container}}
+        <div class="secret-row"><span class="small muted">Ajoutés{{if $f.Multi}} à {{.Container}}{{end}}</span>
+          {{if .Opts}}<div class="pills">{{range .Opts}}<label class="pill"><input type="checkbox" name="secadd_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if .Fixed}}disabled{{end}}><span class="mono">{{.Label}}</span>{{with .Note}}<small class="muted">{{.}}</small>{{end}}</label>{{end}}</div>
+          {{else}}<span class="small muted">aucun autre secret dans {{$f.Name}}/</span>{{end}}
         </div>
-        <small class="muted secret-new">{{if .Choices}}Ou un nouveau{{else}}Pour le remplacer, crée-le d'abord{{end}} : <code>secrets edit {{.NewKey}}</code>, proposé ici au prochain rebuild.</small>
         {{end}}
+        <small class="muted">Nouveau : <code>secrets edit {{.SecretNew}}</code>, proposé ici au prochain rebuild.</small>
       </div>
       {{end}}
+
       {{range .NewImages}}
       <div class="new-image">
         <span class="small">Nouvelle image <span class="mono">{{.Label}}</span></span>
