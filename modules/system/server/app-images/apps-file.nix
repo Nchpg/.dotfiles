@@ -64,6 +64,8 @@ let
     "data"
     "pin"
     "subdomain"
+    # Secrets remplacés (`{ "<site>/db": "<site>/preview_db" }`), avec des conteneurs hérités.
+    "secrets"
   ]
   ++ accessKeys
   ++ containersKeys
@@ -127,6 +129,21 @@ let
           fail where "`devices`, `sso` et `accounts` vont avec `expose` (la section accès est à lui dès que `expose` est là)"
         else if !(v ? containers) && v ? entrypoint then
           fail where "`entrypoint` va avec `containers`"
+        else if v ? secrets && v ? containers then
+          fail where "`secrets` remplace des secrets hérités : avec des conteneurs propres, ils se choisissent dans `containers`"
+        else if
+          v ? secrets
+          && !(
+            lib.isAttrs v.secrets
+            && lib.all (
+              k:
+              builtins.match "${lib.escapeRegex site}/[A-Za-z0-9._-]+" k != null
+              && lib.isString v.secrets.${k}
+              && builtins.match "${lib.escapeRegex site}/[A-Za-z0-9._-]+" v.secrets.${k} != null
+            ) (lib.attrNames v.secrets)
+          )
+        then
+          fail where "`secrets` : des secrets `${site}/…` remplacés par d'autres `${site}/…`"
         else if !(v ? internetAccess) && (v ? probe || v ? rateLimit) then
           fail where "`probe` et `rateLimit` vont avec `internetAccess` (la section options est à lui dès qu'il est là)"
         else
@@ -190,10 +207,22 @@ let
             auto = true;
           };
 
+      # Secrets remplacés d'un environnement aux conteneurs hérités : les siens, puis ceux de ses
+      # parents jusqu'à celui qui a ses propres conteneurs ; le plus proche l'emporte.
+      overridesOf =
+        depth: id:
+        if id == null || envs.${id} ? containers then
+          { }
+        else if depth > 16 then
+          fail site "boucle d'héritage entre environnements (`from`)"
+        else
+          overridesOf (depth + 1) (envs.${id}.from or null) // (envs.${id}.secrets or { });
+
       deployment =
         id:
         let
           v = if id == null then e else envs.${id};
+          overrides = overridesOf 0 id;
           s = sectionsOf 0 id;
           app = appOf id;
           ownContainers = id == null || v ? containers;
@@ -215,7 +244,7 @@ let
                 image = if id == null then c.image else "${untag c.image}:${tag}";
                 memory = c.memory or null;
                 dependsOn = c.dependsOn or [ ];
-                secrets = c.secrets or [ ];
+                secrets = map (k: overrides.${k} or k) (c.secrets or [ ]);
                 data = map (
                   d0:
                   let
