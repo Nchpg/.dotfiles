@@ -233,6 +233,8 @@ let
     walk "${inputs.secrets}" "";
 in
 {
+  imports = [ ./inventory.nix ];
+
   options.systemSettings.admin = {
     enable = lib.mkEnableOption "le dashboard d'administration (sites)";
 
@@ -322,6 +324,8 @@ in
         ADMIN_SSH_FILE = pkgs-stable.writeText "admin-ssh.json" (builtins.toJSON sshInfo);
         ADMIN_ACCOUNTS_FILE = "/var/lib/admin-accounts/accounts.json";
         ADMIN_TRAFFIC_FILE = "/var/lib/admin-traffic/traffic.json";
+        # Onglet Mises à jour : les versions de la génération active (cf. inventory.nix).
+        ADMIN_INVENTORY = "/etc/dotfiles/inventory.json";
         ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
@@ -346,7 +350,11 @@ in
           "ghcr:${config.sops.secrets.${images.login.passwordKey}.path}"
           # Jeton du dépôt de secrets, pour évaluer la config comme le fait `rebuild`.
           "nix-access:/var/lib/nix/access-tokens.conf"
-        ];
+        ]
+        # Le récapitulatif quotidien des mises à jour, sur Discord.
+        ++ lib.optional config.systemSettings.notify.discord.enable "discord:${
+          config.sops.secrets.${config.systemSettings.notify.discord.webhookKey}.path
+        }";
         # Une évaluation de la config entière tient en quelques Go.
         MemoryMax = "4G";
         NoNewPrivileges = true;
