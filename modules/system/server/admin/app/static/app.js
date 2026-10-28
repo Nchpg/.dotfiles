@@ -235,3 +235,52 @@ document.addEventListener("htmx:afterSettle", () => {
     body.scrollLeft = previewScroll.left;
   }
 });
+
+// Brouillon de la page d'un site : gardé dans l'onglet (sessionStorage) à chaque modification, rejoué
+// au rechargement si le site n'a pas changé sur main (empreinte `base`), oublié une fois appliqué.
+const draftKey = () => "draft:" + location.pathname + location.search;
+const draftOf = (form) => new URLSearchParams(new FormData(form)).toString();
+let draftPristine = null; // la page telle que main l'a donnée
+function draftStore(value) {
+  try {
+    if (value == null) sessionStorage.removeItem(draftKey());
+    else sessionStorage.setItem(draftKey(), value);
+  } catch {}
+}
+function draftLoad() {
+  try { return sessionStorage.getItem(draftKey()); } catch { return null; }
+}
+function draftBar(show) {
+  const bar = document.getElementById("draft-bar");
+  if (bar) bar.hidden = !show;
+}
+function draftInit() {
+  const form = document.getElementById("site-form");
+  if (!form || location.pathname === "/sites/new" || !/^\/sites\/[^/]+$/.test(location.pathname)) return;
+  // Une demande court (formulaire inerte) : ce qui était en brouillon vient d'être appliqué.
+  if (form.hasAttribute("inert")) return draftStore(null);
+  draftPristine = draftOf(form);
+  const saved = draftLoad();
+  if (!saved || saved === draftPristine) return;
+  if (new URLSearchParams(saved).get("base") !== form.elements.base.value) return draftStore(null);
+  fetch(form.dataset.formUrl, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true" }, body: saved })
+    .then((r) => (r.ok ? r.text() : Promise.reject(r.status)))
+    .then((html) => {
+      htmx.swap("#editor-body", html, { swapStyle: "outerHTML" });
+      draftBar(true);
+    })
+    .catch(() => draftStore(null));
+}
+document.addEventListener("DOMContentLoaded", draftInit);
+document.addEventListener("htmx:afterSettle", () => {
+  const form = document.getElementById("site-form");
+  if (!form || draftPristine === null || form.hasAttribute("inert")) return;
+  const now = draftOf(form);
+  draftStore(now === draftPristine ? null : now);
+  draftBar(now !== draftPristine);
+});
+document.addEventListener("click", (ev) => {
+  if (!ev.target.closest?.("[data-draft-drop]")) return;
+  draftStore(null);
+  location.reload();
+});

@@ -559,3 +559,4 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .icon-btn:hover:not(:disabled) { background: #F1F2F5; color: var(--text); }
 .icon-btn:disabled { opacity: .3; cursor: default; }
 .icon-btn svg { width: 16px; height: 16px; }
+.draft-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .draft-bar p { margin: 0; }

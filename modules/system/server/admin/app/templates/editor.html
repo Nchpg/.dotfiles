@@ -38,6 +38,8 @@
     </details>
     {{end}}
   </nav>
+  {{/* Brouillon rejoué au rechargement (app.js) : montré tant qu'il diffère de main. */}}
+  <div id="draft-bar" class="alert alert-amber draft-bar" hidden><p>Modifications non appliquées, gardées depuis ton dernier passage.</p><button type="button" class="btn btn-sm" data-draft-drop>Abandonner</button></div>
   {{template "form" .}}
 </main>
 {{end}}
@@ -74,7 +76,7 @@
 
 {{define "form"}}
 <div class="layout layout-edit" id="editor-body">
-<form id="site-form" class="panel" {{if .Running}}inert{{end}} hx-post="{{.PreviewURL}}" hx-trigger="change[!target.closest('[data-structural]')], input delay:500ms[!target.closest('[data-structural]')]" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
+<form id="site-form" class="panel" data-form-url="{{.FormURL}}" {{if .Running}}inert{{end}} hx-post="{{.PreviewURL}}" hx-trigger="change[!target.closest('[data-structural]')], input delay:500ms[!target.closest('[data-structural]')]" hx-target="#preview" hx-swap="outerHTML" autocomplete="off">
   <input type="hidden" name="base" value="{{.Base}}">
   <input type="hidden" name="env" value="{{.Env}}">
   {{if .New}}<input type="hidden" name="repo" value="{{.Repo}}">{{end}}
