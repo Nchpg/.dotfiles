@@ -236,32 +236,55 @@ var viaLabels = map[string]string{"public": "internet", "vpn": "VPN", "lan": "lo
 type mapPoint struct {
 	Lat, Lon    float64
 	Label, Kind string
+	Site        string // le domaine visité (ou le service où l'on s'est connecté)
 }
 
 // MapDot : un lieu sur la carte (projection de static/world.svg : x = lon + 180, y = 84 - lat) ; R
 // grandit avec le nombre de visites (la page le garde constant à l'écran quand on zoome).
 type MapDot struct {
-	X, Y, R     float64
-	Title, Kind string
+	X, Y, R      float64
+	Title, Kind  string
+	Label, Count string    // le lieu, « 7 visites » : l'info-bulle
+	Sites        []SiteHit // les sites visités depuis ce lieu, les plus visités d'abord
+}
+
+type SiteHit struct {
+	Domain string
+	N      int
 }
 
 func mapDots(points []mapPoint, one, many string) []MapDot {
 	type spot struct {
 		mapPoint
-		n int
+		n     int
+		sites map[string]int
 	}
 	spots := map[string]*spot{}
 	for _, p := range points {
 		k := fmt.Sprintf("%s|%s|%.1f,%.1f", p.Kind, p.Label, p.Lat, p.Lon)
 		if spots[k] == nil {
-			spots[k] = &spot{mapPoint: p}
+			spots[k] = &spot{mapPoint: p, sites: map[string]int{}}
 		}
 		spots[k].n++
+		if p.Site != "" {
+			spots[k].sites[p.Site]++
+		}
 	}
 	var out []MapDot
 	for _, sp := range spots {
-		out = append(out, MapDot{X: math.Round((sp.Lon+180)*10) / 10, Y: math.Round((84-sp.Lat)*10) / 10,
-			R: math.Min(2.2+math.Sqrt(float64(sp.n))*1.1, 9), Kind: sp.Kind, Title: sp.Label + " : " + plural(sp.n, one, many)})
+		d := MapDot{X: math.Round((sp.Lon+180)*10) / 10, Y: math.Round((84-sp.Lat)*10) / 10,
+			R: math.Min(2.2+math.Sqrt(float64(sp.n))*1.1, 9), Kind: sp.Kind, Label: sp.Label, Count: plural(sp.n, one, many)}
+		d.Title = d.Label + " : " + d.Count
+		for site, n := range sp.sites {
+			d.Sites = append(d.Sites, SiteHit{site, n})
+		}
+		sort.Slice(d.Sites, func(i, j int) bool {
+			if d.Sites[i].N != d.Sites[j].N {
+				return d.Sites[i].N > d.Sites[j].N
+			}
+			return d.Sites[i].Domain < d.Sites[j].Domain
+		})
+		out = append(out, d)
 	}
 	// Les plus gros d'abord : un petit point reste visible par-dessus.
 	sort.Slice(out, func(i, j int) bool { return out[i].R > out[j].R })
@@ -286,16 +309,16 @@ func (g geoPlaces) point(via, ip string, lat, lon *float64, city, country string
 	case "public":
 		if lat != nil && lon != nil {
 			label, _ := origin("public", ip, city, country, nil)
-			return mapPoint{*lat, *lon, label, "internet"}, true
+			return mapPoint{Lat: *lat, Lon: *lon, Label: label, Kind: "internet"}, true
 		}
 		if geo := g.s.geo(ip); geo.OK {
 			label, _ := origin("public", ip, geo.City, geo.Country, nil)
-			return mapPoint{geo.Lat, geo.Lon, label, "internet"}, true
+			return mapPoint{Lat: geo.Lat, Lon: geo.Lon, Label: label, Kind: "internet"}, true
 		}
 	case "vpn":
 		if geo := g.s.geo(g.endpoints[ip]); geo.OK {
 			name := firstOf(g.devices[ip], ip)
-			return mapPoint{geo.Lat, geo.Lon, name + " (VPN, " + firstOf(geo.City, geo.Country) + ")", "vpn"}, true
+			return mapPoint{Lat: geo.Lat, Lon: geo.Lon, Label: name + " (VPN, " + firstOf(geo.City, geo.Country) + ")", Kind: "vpn"}, true
 		}
 	}
 	return mapPoint{}, false
@@ -305,6 +328,7 @@ func (g geoPlaces) visitDots(visits []Visit) []MapDot {
 	var pts []mapPoint
 	for _, v := range visits {
 		if p, ok := g.point(v.Via, v.IP, v.Lat, v.Lon, v.City, v.Country); ok {
+			p.Site = v.Site
 			pts = append(pts, p)
 		}
 	}
@@ -437,6 +461,7 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 type loginEvent struct {
 	At                         time.Time
 	User, IP, Via, City, Place string
+	Site                       string // le domaine où l'on s'est connecté
 	Lat, Lon                   *float64
 	Client                     string
 	OK                         bool
@@ -496,7 +521,7 @@ func (s *Server) loginServices(ctx context.Context, sum trafficSummary, period t
 				l.LoginUser = p.LoginUser
 			}
 			ls.events = append(ls.events, loginEvent{At: l.At, User: l.LoginUser, IP: l.IP, Via: l.Via, City: l.City, Place: l.place(),
-				Lat: l.Lat, Lon: l.Lon, Client: l.Client, OK: l.Login == "ok"})
+				Site: l.Site, Lat: l.Lat, Lon: l.Lon, Client: l.Client, OK: l.Login == "ok"})
 		}
 		out = append(out, ls)
 	}
@@ -514,6 +539,12 @@ func (s *Server) loginServices(ctx context.Context, sum trafficSummary, period t
 	}
 	for _, ls := range out {
 		ls.Link = "/traffic/connexions/" + ls.ID + "?p=" + key
+		// Authelia, Vaultwarden : une seule adresse, celle du service.
+		for i := range ls.events {
+			if ls.events[i].Site == "" && len(ls.Domains) > 0 {
+				ls.events[i].Site = ls.Domains[0]
+			}
+		}
 		accounts := map[string]bool{}
 		var last time.Time
 		for _, e := range ls.events {
@@ -858,6 +889,7 @@ func loginDots(g geoPlaces, events []loginEvent) []MapDot {
 	var pts []mapPoint
 	for _, e := range events {
 		if p, ok := g.point(e.Via, e.IP, e.Lat, e.Lon, e.City, e.Place); ok {
+			p.Site = e.Site
 			pts = append(pts, p)
 		}
 	}

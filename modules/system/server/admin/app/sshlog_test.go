@@ -110,3 +110,14 @@ func TestGroupTraffic(t *testing.T) {
 		t.Errorf("groupes : %+v", g)
 	}
 }
+
+// Info-bulle d'un point : les sites visités depuis ce lieu, les plus visités d'abord.
+func TestMapDotSites(t *testing.T) {
+	p := func(site string) mapPoint {
+		return mapPoint{Lat: 45.76, Lon: 4.83, Label: "Lyon, France", Kind: "internet", Site: site}
+	}
+	d := mapDots([]mapPoint{p("etf.x"), p("cloud.x"), p("cloud.x")}, "visite", "visites")
+	if len(d) != 1 || d[0].Count != "3 visites" || len(d[0].Sites) != 2 || d[0].Sites[0] != (SiteHit{"cloud.x", 2}) || d[0].Sites[1] != (SiteHit{"etf.x", 1}) {
+		t.Errorf("point : %+v", d)
+	}
+}

@@ -287,8 +287,10 @@ document.addEventListener("click", (ev) => {
 
 // Carte du Trafic, en 16:9 : zoom à la molette, au pincement (pavé tactile : molette + Ctrl ; écran :
 // deux doigts), aux boutons ou au double clic ; déplacement en glissant ou à deux doigts sur le pavé.
-// Le zoom glisse vers sa cible (animation) ; la vue reste dans la carte, les points gardent à peu
-// près leur taille à l'écran. Au départ : cadrée sur les points, sinon le monde entier.
+// Le zoom glisse vers sa cible (animation) ; la carte tourne sans fin de gauche à droite (trois
+// copies, la vue ramenée sur celle du milieu), reste bornée en haut et en bas ; les points gardent à
+// peu près leur taille à l'écran, et leur survol montre les sites visités depuis là.
+// Au départ : cadrée sur les points, sinon le monde entier.
 const MAP_W = 360, MAP_H = 142, MAP_MAX = 150, MAP_RATIO = 9 / 16;
 function mapInit() {
   document.querySelectorAll("[data-map]:not([data-ready])").forEach((frame) => {
@@ -297,13 +299,12 @@ function mapInit() {
     const world = () => ({ x: 0, y: (MAP_H - MAP_W * MAP_RATIO) / 2, w: MAP_W });
     const clamp = (v) => {
       const w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, v.w)), h = w * MAP_RATIO;
-      const x = Math.min(MAP_W - w, Math.max(0, v.x));
       const y = h >= MAP_H ? (MAP_H - h) / 2 : Math.min(MAP_H - h, Math.max(0, v.y));
-      return { x, y, w };
+      return { x: v.x, y, w };
     };
     // Cadrage de départ : les points, avec de la marge (au moins 30° de large).
     const fit = () => {
-      const cs = [...svg.querySelectorAll("circle.core")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
+      const cs = [...svg.querySelectorAll("[data-main] circle.core")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
       if (!cs.length) return world();
       const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
       const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -319,6 +320,12 @@ function mapInit() {
     // Vers la cible, à chaque image (zoom en douceur) ; `now` : sans animation (glisser, pincer).
     const go = (v, now) => {
       target = clamp(v);
+      // Sortie de la copie du milieu : la vue (et l'animation en cours) recule ou avance d'un tour.
+      const turn = Math.floor(target.x / MAP_W) * MAP_W;
+      if (turn) {
+        target = { ...target, x: target.x - turn };
+        view = { ...view, x: view.x - turn };
+      }
       if (now) {
         view = target;
         draw();
@@ -375,6 +382,7 @@ function mapInit() {
       pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
       pinch = pointers.size === 2 ? pair() : null;
       frame.classList.add("dragging");
+      frame.querySelector(".map-tip").hidden = true;
     });
     frame.addEventListener("pointermove", (ev) => {
       const prev = pointers.get(ev.pointerId);
@@ -401,6 +409,41 @@ function mapInit() {
     };
     frame.addEventListener("pointerup", release);
     frame.addEventListener("pointercancel", release);
+    // Info-bulle d'un point : le lieu, le nombre, et les sites visités depuis là (texte seul).
+    const tip = frame.querySelector(".map-tip");
+    const place = (ev) => {
+      const b = frame.getBoundingClientRect();
+      const x = ev.clientX - b.left, y = ev.clientY - b.top;
+      tip.style.left = `${Math.min(x + 14, b.width - tip.offsetWidth - 8)}px`;
+      tip.style.top = `${y + tip.offsetHeight + 24 > b.height ? y - tip.offsetHeight - 12 : y + 14}px`;
+    };
+    svg.addEventListener("pointerover", (ev) => {
+      const spot = ev.target.closest(".spot");
+      if (!spot || pointers.size > 1) return;
+      const head = document.createElement("strong");
+      head.textContent = spot.dataset.label;
+      const count = document.createElement("small");
+      count.textContent = spot.dataset.count;
+      const list = document.createElement("ul");
+      for (const line of (spot.dataset.sites || "").split("\n").filter(Boolean)) {
+        const [domain, n] = line.split("\t");
+        const li = document.createElement("li");
+        const d = document.createElement("span");
+        d.textContent = domain;
+        const c = document.createElement("span");
+        c.textContent = n;
+        li.append(d, c);
+        list.append(li);
+      }
+      tip.replaceChildren(head, count, ...(list.children.length ? [list] : []));
+      tip.className = `map-tip tip-${spot.classList.contains("spot-vpn") ? "vpn" : "internet"}`;
+      tip.hidden = false;
+      place(ev);
+    });
+    svg.addEventListener("pointermove", (ev) => { if (!tip.hidden) place(ev); });
+    svg.addEventListener("pointerout", (ev) => {
+      if (ev.target.closest(".spot") && !ev.relatedTarget?.closest?.(".spot")) tip.hidden = true;
+    });
     draw();
   });
 }
