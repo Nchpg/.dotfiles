@@ -70,9 +70,9 @@ type DataVM struct {
 	Auto              bool
 	// Environnement : le mode de ce dossier (champ `dmode_<conteneur>:<chemin>`), et sa recopie
 	// quand il est en copie sur main.
-	Key, ModeField, Mode string
-	Recopy               *RecopyVM
-	RecopyURL, RecopyID  string
+	Ctr, Key, ModeField, Mode string
+	Recopy                    *RecopyVM
+	RecopyURL, RecopyID       string
 }
 
 type CtrVM struct {
@@ -155,7 +155,8 @@ type FormVM struct {
 	OptionsFrom              string
 	AccessSummary            []string
 	OptionsSummary           []string
-	DataFrom                 string // environnement : le parent dont un dossier se copie ou se partage
+	DataFrom                 string   // environnement : le parent dont un dossier se copie ou se partage
+	DataModes                []DataVM // environnement : section Données, le mode de chaque dossier (toujours le sien)
 	RemoveEnvURL             string
 	Noindex                  bool
 	Children                 []string // environnements qui en héritent
@@ -538,6 +539,10 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 				}
 			}
 			vm.Data = append(vm.Data, dv)
+			if dv.ModeField != "" {
+				dv.Ctr = n
+				f.DataModes = append(f.DataModes, dv)
+			}
 		}
 		for i, k := range c.Secrets {
 			sv := SecretVM{Value: k, First: i == 0, Last: i == len(c.Secrets)-1}
