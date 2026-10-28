@@ -162,12 +162,15 @@ validate_entry() {
                   (if has("expose") then access($w) elif has("devices") or has("sso") or has("accounts") then "\($w)devices, sso et accounts vont avec expose" else empty end),
                   (if has("internetAccess") then options($w) elif has("probe") or has("rateLimit") then "\($w)probe et rateLimit vont avec internetAccess" else empty end),
                   (if has("containers") then containers($w; true) elif has("entrypoint") then "\($w)entrypoint va avec containers" else empty end),
-                  # Secrets remplacés : seulement avec des conteneurs hérités, des secrets du site vers d'\''autres.
-                  (if has("secrets") and has("containers") then "\($w)secrets remplace des secrets hérités (conteneurs propres : à choisir dans containers)"
-                   elif has("secrets") and ((.secrets | type) != "object" or (.secrets | length) > 20
-                       or any(.secrets | to_entries[]; (.key | test("^\($app)/[A-Za-z0-9._-]+$") | not)
-                           or (.value | type) != "string" or (.value | test("^\($app)/[A-Za-z0-9._-]+$") | not)))
-                   then "\($w)secrets : des secrets \($app)/… remplacés par d'\''autres \($app)/…" else empty end)
+                  # Secrets, avec des conteneurs hérités : `replace` (secret -> secret, "" : retiré) et
+                  # `add` (conteneur -> secrets en plus), tous rangés sous le site.
+                  (def key: type == "string" and test("^\($app)/[A-Za-z0-9._-]+$");
+                   if has("secrets") and has("containers") then "\($w)secrets agit sur des conteneurs hérités (conteneurs propres : à choisir dans containers)"
+                   elif has("secrets") and ((.secrets | type) != "object" or ((.secrets | keys) - ["replace", "add"]) != []
+                       or ((.secrets.replace // {}) | type) != "object" or ((.secrets.add // {}) | type) != "object"
+                       or any((.secrets.replace // {}) | to_entries[]; (.key | key | not) or ((.value == "" or (.value | key)) | not))
+                       or any((.secrets.add // {}) | to_entries[]; (.key | test("^[a-z][a-z0-9-]{0,15}$") | not) or (.value | type) != "array" or any(.value[]; key | not)))
+                   then "\($w)secrets : replace (\($app)/x -> \($app)/y, ou vide) et add (conteneur -> [\($app)/z])" else empty end)
                   end)
             end
          else empty end)

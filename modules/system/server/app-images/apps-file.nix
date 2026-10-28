@@ -30,6 +30,11 @@ let
 
   fail = where: msg: throw "${toString file} : ${where} : ${msg}";
 
+  # `secrets` d'un environnement : `replace` (secret -> secret, ou "" pour le retirer) et `add`
+  # (conteneur -> secrets en plus), tous rangés sous le site.
+  siteKey =
+    site: k: lib.isString k && builtins.match "${lib.escapeRegex site}/[A-Za-z0-9._-]+" k != null;
+
   accessKeys = [
     "expose"
     "devices"
@@ -64,7 +69,7 @@ let
     "data"
     "pin"
     "subdomain"
-    # Secrets remplacés (`{ "<site>/db": "<site>/preview_db" }`), avec des conteneurs hérités.
+    # Avec des conteneurs hérités : secrets remplacés (vide : retiré) et ajoutés, cf. `envSecrets`.
     "secrets"
   ]
   ++ accessKeys
@@ -105,6 +110,25 @@ let
     let
       e = only rootKeys site e0;
 
+      envSecretsOk =
+        s:
+        lib.isAttrs s
+        && lib.all (
+          k:
+          lib.elem k [
+            "replace"
+            "add"
+          ]
+        ) (lib.attrNames s)
+        && lib.isAttrs (s.replace or { })
+        && lib.all (k: siteKey site k && (s.replace.${k} == "" || siteKey site s.replace.${k})) (
+          lib.attrNames (s.replace or { })
+        )
+        && lib.isAttrs (s.add or { })
+        && lib.all (c: lib.isList s.add.${c} && lib.all (siteKey site) s.add.${c}) (
+          lib.attrNames (s.add or { })
+        );
+
       envs = lib.mapAttrs (
         id: v0:
         let
@@ -130,20 +154,9 @@ let
         else if !(v ? containers) && v ? entrypoint then
           fail where "`entrypoint` va avec `containers`"
         else if v ? secrets && v ? containers then
-          fail where "`secrets` remplace des secrets hérités : avec des conteneurs propres, ils se choisissent dans `containers`"
-        else if
-          v ? secrets
-          && !(
-            lib.isAttrs v.secrets
-            && lib.all (
-              k:
-              builtins.match "${lib.escapeRegex site}/[A-Za-z0-9._-]+" k != null
-              && lib.isString v.secrets.${k}
-              && builtins.match "${lib.escapeRegex site}/[A-Za-z0-9._-]+" v.secrets.${k} != null
-            ) (lib.attrNames v.secrets)
-          )
-        then
-          fail where "`secrets` : des secrets `${site}/…` remplacés par d'autres `${site}/…`"
+          fail where "`secrets` agit sur des conteneurs hérités : avec des conteneurs propres, les secrets se choisissent dans `containers`"
+        else if v ? secrets && !(envSecretsOk v.secrets) then
+          fail where "`secrets` : { replace = { \"${site}/x\" = \"${site}/y\" (ou \"\" : retiré) }; add = { <conteneur> = [ \"${site}/z\" ]; }; }"
         else if !(v ? internetAccess) && (v ? probe || v ? rateLimit) then
           fail where "`probe` et `rateLimit` vont avec `internetAccess` (la section options est à lui dès qu'il est là)"
         else
@@ -207,16 +220,29 @@ let
             auto = true;
           };
 
-      # Secrets remplacés d'un environnement aux conteneurs hérités : les siens, puis ceux de ses
-      # parents jusqu'à celui qui a ses propres conteneurs ; le plus proche l'emporte.
+      # Secrets d'un environnement aux conteneurs hérités : les siens, puis ceux de ses parents jusqu'à
+      # celui qui a ses propres conteneurs. Remplacements : le plus proche l'emporte ; ajouts : cumulés.
       overridesOf =
         depth: id:
         if id == null || envs.${id} ? containers then
-          { }
+          {
+            replace = { };
+            add = { };
+          }
         else if depth > 16 then
           fail site "boucle d'héritage entre environnements (`from`)"
         else
-          overridesOf (depth + 1) (envs.${id}.from or null) // (envs.${id}.secrets or { });
+          let
+            parent = overridesOf (depth + 1) (envs.${id}.from or null);
+            own = envs.${id}.secrets or { };
+          in
+          {
+            replace = parent.replace // (own.replace or { });
+            add = lib.zipAttrsWith (_: lists: lib.unique (lib.concatLists lists)) [
+              parent.add
+              (own.add or { })
+            ];
+          };
 
       deployment =
         id:
@@ -244,7 +270,10 @@ let
                 image = if id == null then c.image else "${untag c.image}:${tag}";
                 memory = c.memory or null;
                 dependsOn = c.dependsOn or [ ];
-                secrets = map (k: overrides.${k} or k) (c.secrets or [ ]);
+                # Remplacés (un remplacement vide retire le secret), puis ceux ajoutés à ce conteneur.
+                secrets =
+                  lib.filter (k: k != "") (map (k: overrides.replace.${k} or k) (c.secrets or [ ]))
+                  ++ (overrides.add.${name} or [ ]);
                 data = map (
                   d0:
                   let

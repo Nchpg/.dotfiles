@@ -187,12 +187,14 @@ autre nom).
   - `shared` : le dossier du parent lui-même (attention aux migrations de
     schéma lancées par la branche).
 - **Secrets** : ceux du site (`<site>/…`). Un environnement aux conteneurs
-  hérités reçoit les mêmes que son parent, sauf ceux qu'il remplace :
-  `"secrets": { "<site>/db": "<site>/preview_db" }`. Les remplacements se
-  cumulent le long de l'héritage (le plus proche l'emporte) ; avec des
-  conteneurs propres, les secrets se choisissent dans chaque conteneur. Pour
-  tout ce qui ne doit pas toucher la production (base, envoi d'e-mails,
-  paiements).
+  hérités reçoit ceux de son parent, sauf ce qu'il change :
+  `"secrets": { "replace": { "<site>/db": "<site>/preview_db", "<site>/pay": "" },
+  "add": { "web": ["<site>/preview_extra"] } }` (un remplaçant vide retire le
+  secret). Le long de l'héritage, le remplacement le plus proche l'emporte et
+  les ajouts se cumulent ; avec des conteneurs propres, les secrets se
+  choisissent dans chaque conteneur. Un conteneur reçoit les variables du
+  fichier, quel que soit son nom : un remplaçant définit les mêmes. Pour tout
+  ce qui ne doit pas toucher la production (base, envoi d'e-mails, paiements).
 - Un environnement public n'est pas indexé par les moteurs de recherche
   (`X-Robots-Tag: noindex`).
 - Retirer un environnement : ceux qui en héritaient héritent de son parent ;
