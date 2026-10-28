@@ -464,9 +464,12 @@ cmd_edit() {
 
   # Règle du secret, ou celle de son site (`<site>/<clé>`, cf. lib/sops/policy.nix).
   site="${2%%/*}"
-  if [ ! -f "$file" ] && ! grep -qF "path_regex: ^${2//./\\.}\\.ya?ml\$" "$sopsConfig" \
-    && ! { [ "$site/${2#*/}" = "$2" ] && [ "${2#*/}" = "${2##*/}" ] \
-      && grep -qF "path_regex: ^${site//./\\.}/[^/]+\\.ya?ml\$" "$sopsConfig"; }; then
+  siteSecret=""
+  if [ "$site/${2#*/}" = "$2" ] && [ "${2#*/}" = "${2##*/}" ] \
+    && grep -qF "path_regex: ^${site//./\\.}/[^/]+\\.ya?ml\$" "$sopsConfig"; then
+    siteSecret=1
+  fi
+  if [ ! -f "$file" ] && ! grep -qF "path_regex: ^${2//./\\.}\\.ya?ml\$" "$sopsConfig" && [ -z "$siteSecret" ]; then
     echo "secrets : aucune règle pour « $2 » : ce secret n'est déclaré dans aucun module." >&2
     echo "  Déclare d'abord sops.secrets.\"$2\" dans le module qui l'utilise (git add si" >&2
     echo "  le fichier est nouveau : un flake ne voit que les fichiers suivis), puis relance." >&2
@@ -480,20 +483,41 @@ cmd_edit() {
   if [ ! -f "$file" ]; then
     # `--config` explicite, seulement ici : pour un secret existant, une config risquerait de réécrire l'audience.
     echo "secrets : $2 n'existe pas, création." >&2
-    echo "  Structure attendue dans l'éditeur :" >&2
-    ind="    "
-    IFS=/ read -ra parts <<< "$2"
-    for i in "${!parts[@]}"; do
-      if [ "$i" -eq $((${#parts[@]} - 1)) ]; then
-        echo "$ind${parts[$i]}: <valeur>" >&2
-      else
-        echo "$ind${parts[$i]}:" >&2
-      fi
-      ind="$ind    "
-    done
-    echo >&2
+    # L'éditeur s'ouvre sur la structure attendue (le squelette, sans valeur, est scellé avant) ;
+    # un secret de site est un fichier d'environnement : des lignes NOM=valeur.
     mkdir -p "$(dirname "$file")"
-    EDITOR="$editorBin" "$sopsBin" --config "$sopsConfig" "$file"
+    ind=""
+    IFS=/ read -ra parts <<< "$2"
+    {
+      for i in "${!parts[@]}"; do
+        if [ "$i" -lt $((${#parts[@]} - 1)) ]; then
+          echo "$ind${parts[$i]}:"
+        elif [ -n "$siteSecret" ]; then
+          echo "$ind${parts[$i]}: |"
+          echo "$ind  NOM=valeur"
+        else
+          echo "$ind${parts[$i]}: <valeur>"
+        fi
+        ind="$ind  "
+      done
+    } > "$file"
+    if ! "$sopsBin" --config "$sopsConfig" --encrypt --in-place "$file"; then
+      rm -f -- "$file"
+      exit 1
+    fi
+    editRc=0
+    if forUser "$file"; then
+      EDITOR="$editorBin" "$sopsBin" "$file" || editRc=$?
+    else
+      keepOwner "$file" asRoot "$file" || editRc=$?
+    fi
+    # Quitté sans enregistrer : le squelette n'est pas un secret, rien n'est créé.
+    if [ "$editRc" != 0 ]; then
+      rm -f -- "$file"
+      echo "secrets : $2 pas créé." >&2
+      [ "$editRc" = 200 ] && exit 0
+      exit "$editRc"
+    fi
     sync "chore: add secret $2"
     exit 0
   fi
