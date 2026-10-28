@@ -5,7 +5,8 @@
     {{if .Dirty}}<span class="mono small warn">+{{.Adds}} −{{.Dels}}</span>{{else}}<span class="mono small okc">à jour</span>{{end}}
   </div>
   <div class="code-body">
-    {{range .Lines}}<div class="code-line {{.Kind}}"><span class="mark">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}
+    {{/* Bloc aussi large que la plus longue ligne : les bandes ajout/retrait vont jusqu'au bout. */}}
+    <div class="code-lines">{{range .Lines}}<div class="code-line {{.Kind}}"><span class="mark">{{if eq .Kind "add"}}+{{else if eq .Kind "del"}}−{{end}}</span><span>{{.Text}}</span></div>{{end}}</div>
   </div>
   {{if or .To .Errors .Dirty}}
   <div class="code-foot stack gap">

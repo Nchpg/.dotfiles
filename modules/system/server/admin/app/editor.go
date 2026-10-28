@@ -41,6 +41,10 @@ const (
 	icFollow = "M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"
 	icImage  = "M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"
 	icMem    = "M7 4h10a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zM9 8h6M9 12h6M9 16h3"
+	// Secrets d'un environnement : un secret (clé), repris du parent (flèche), retiré (barré).
+	icKey     = "M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"
+	icInherit = "M5 4v7a4 4 0 0 0 4 4h11M16 11l4 4-4 4"
+	icRemoved = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M5.6 5.6l12.8 12.8"
 )
 
 var (
@@ -416,8 +420,8 @@ func (s *Server) envSecretsVM(f *FormVM, e Entry, name, env, label string) {
 			sub = "retiré"
 		}
 		opts := []DDOpt{
-			ddOpt("", "comme "+from, sub, icEnv, colGray, value == ""),
-			ddOpt("-", "retiré", "pas de ce secret pour "+label, icCommit, colRed, value == "-"),
+			ddOpt("", "comme "+from, sub, icInherit, colGray, value == ""),
+			ddOpt("-", "retiré", "pas de ce secret pour "+label, icRemoved, colRed, value == "-"),
 		}
 		listed := value == "" || value == "-"
 		for _, sk := range known {
@@ -425,14 +429,14 @@ func (s *Server) envSecretsVM(f *FormVM, e Entry, name, env, label string) {
 				continue
 			}
 			listed = listed || sk == value
-			opts = append(opts, ddOpt(sk, sk, "pour "+label+" seulement", icCommit, colAmber, sk == value))
+			opts = append(opts, ddOpt(sk, sk, "pour "+label+" seulement", icKey, colIndigo, sk == value))
 		}
 		if !listed {
-			o := ddOpt(value, value, "absent des secrets : secrets edit "+value, icCommit, colRed, true)
+			o := ddOpt(value, value, "absent des secrets : secrets edit "+value, icKey, colRed, true)
 			o.SubInk = colRed[1]
 			opts = append(opts, o)
 		}
-		f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+label, opts, "", icCommit)})
+		f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+label, opts, "", icKey)})
 	}
 	// Un secret déjà remplaçant (ici ou plus haut) n'est pas proposé en plus.
 	replacing := map[string]bool{}

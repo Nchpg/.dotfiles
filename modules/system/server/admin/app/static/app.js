@@ -221,3 +221,17 @@ document.addEventListener("htmx:beforeSwap", (ev) => {
 document.addEventListener("htmx:afterSwap", (ev) => {
   if (ev.detail.boosted || ev.detail.requestConfig?.boosted) window.scrollTo(0, 0);
 });
+
+// Aperçu JSON : remplacé à chaque modification ; sa position de défilement est gardée.
+let previewScroll = null;
+document.addEventListener("htmx:beforeSwap", () => {
+  const body = document.querySelector("#preview .code-body");
+  if (body) previewScroll = { top: body.scrollTop, left: body.scrollLeft };
+});
+document.addEventListener("htmx:afterSettle", () => {
+  const body = document.querySelector("#preview .code-body");
+  if (body && previewScroll) {
+    body.scrollTop = previewScroll.top;
+    body.scrollLeft = previewScroll.left;
+  }
+});
