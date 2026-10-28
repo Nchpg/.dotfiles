@@ -236,6 +236,8 @@ in
 
           auth_request /internal/authelia/authz;
           auth_request_set $redirection_url $upstream_http_location;
+          # Compte de la session, pour le journal des visites (onglet Trafic).
+          auth_request_set $authelia_user $upstream_http_remote_user;
         '';
         locations."/internal/authelia/authz" = authzLocation;
       };
@@ -494,10 +496,17 @@ in
       };
     };
 
+    # Journal des visites : le compte Authelia de la session (vide hors des vhosts protégés, d'où
+    # l'avertissement coupé ; le `set` du portail déclare la variable même sans vhost protégé).
+    systemSettings.proxy.visits.fields.sso = "$authelia_user";
+    services.nginx.commonHttpConfig = "uninitialized_variable_warn off;";
+
     services.nginx.virtualHosts.${cfg.portalHost} = myLib.server.mkTlsVhost {
       # cloudflared se connecte depuis 127.0.0.1 : cf_combined journalise l'adresse réelle.
       extraConfig = ''
         access_log /var/log/nginx/access.log cf_combined;
+        ${config.systemSettings.proxy.visits.directive}
+        set $authelia_user "";
       '';
 
       locations."/" = {

@@ -1,0 +1,79 @@
+# Journal des visites de nginx (format `visits`, une ligne JSON) : d'où vient la requête (`via`), de
+# quel genre elle est (`kind`), et où se trouve une IP publique. Lu par l'onglet Trafic du dashboard.
+# Remplacés au build : @VPN@ (réseau du tunnel), @SITES@ (domaines servis, liste JSON).
+
+v = object(parse_json(to_string(.message) ?? "") ?? null) ?? {}
+if v == {} {
+  abort
+}
+. = v
+.host = get_hostname!()
+.timestamp = parse_timestamp(to_string(.t) ?? "", "%+") ?? now()
+.epoch = to_unix_timestamp(.timestamp)
+del(.t)
+
+addr = to_string(.addr) ?? ""
+ip = to_string(.ip) ?? ""
+ua = to_string(.ua) ?? ""
+user = to_string(.user) ?? ""
+
+# Étiquette Loki : un domaine servi, sinon « autre » (un en-tête Host inventé ne crée pas de flux).
+sites = array(parse_json!(s'@SITES@')) ?? []
+.site_label = if includes(sites, .site) { .site } else { "autre" }
+
+# Le tunnel Cloudflare arrive de 127.0.0.1 avec l'IP réelle ; sans elle, c'est think lui-même.
+if addr == "127.0.0.1" || addr == "::1" {
+  .via = if ip != "" && ip != addr { "public" } else { "machine" }
+} else if ip_cidr_contains("@VPN@", addr) ?? false {
+  .via = "vpn"
+} else if ip_cidr_contains(["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10"], addr) ?? false {
+  .via = "lan"
+} else {
+  .via = "public"
+}
+
+# Applis de synchro : comptées à part des visites.
+client = if match(ua, r'mirall/') {
+  "Nextcloud bureau"
+} else if match(ua, r'Nextcloud-android') {
+  "Nextcloud Android"
+} else if match(ua, r'Nextcloud-iOS') {
+  "Nextcloud iOS"
+} else if match(ua, r'DAVx5') {
+  "DAVx⁵"
+} else if match(ua, r'Bitwarden_Mobile') {
+  "Bitwarden mobile"
+} else if match(ua, r'Bitwarden.*Electron|Electron.*Bitwarden') {
+  "Bitwarden bureau"
+} else {
+  ""
+}
+
+# Une page visitée : une navigation du navigateur (Sec-Fetch-Dest: document), qu'un robot n'envoie pas.
+if .via == "machine" {
+  .kind = "probe"
+} else if client != "" {
+  .kind = "app"
+  .client = client
+} else if ua == "" || match(ua, r'(?i)bot|crawl|spider|slurp|curl|wget|python|go-http|java/|libwww|headless|blackbox|uptime|scan|httpclient|okhttp|zgrab|nmap') {
+  .kind = "bot"
+} else if .dest == "document" {
+  .kind = "page"
+} else if user != "" {
+  .kind = "app"
+  .client = "WebDAV"
+} else {
+  .kind = "other"
+}
+
+# Localisation d'une IP publique (DB-IP Lite, locale) ; le pays de Cloudflare garde la priorité.
+if .via == "public" && ip != "" {
+  r, err = get_enrichment_table_record("dbip", {"ip": ip})
+  if err == null {
+    .city = string(r.city.names.fr) ?? string(r.city.names.en) ?? ""
+    .country_name = string(r.country.names.fr) ?? string(r.country.names.en) ?? ""
+    if (to_string(.country) ?? "") == "" {
+      .country = string(r.country.iso_code) ?? ""
+    }
+  }
+}

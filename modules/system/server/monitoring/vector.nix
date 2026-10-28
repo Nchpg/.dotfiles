@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs-stable,
   ...
 }:
 
@@ -45,6 +46,48 @@ in
           source = builtins.replaceStrings [ "@TZ@" ] [ config.time.timeZone ] (
             builtins.readFile ./vector/nginx.vrl
           );
+        };
+
+        # Visites (onglet Trafic du dashboard) : à part du journal d'accès, avec leurs étiquettes.
+        sources.visits = {
+          type = "file";
+          include = [ config.systemSettings.proxy.visits.path ];
+          read_from = "beginning";
+        };
+
+        # Localisation des IP publiques, sans service externe ni clé.
+        enrichment_tables.dbip = {
+          type = "mmdb";
+          path = "${pkgs-stable.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
+        };
+
+        transforms.visits_normalise = {
+          type = "remap";
+          inputs = [ "visits" ];
+          source =
+            builtins.replaceStrings
+              [ "@VPN@" "@SITES@" ]
+              [
+                config.systemSettings.vpn.wireguard.subnet
+                (builtins.toJSON (lib.attrNames config.systemSettings.proxy.sites))
+              ]
+              (builtins.readFile ./vector/visits.vrl);
+        };
+
+        sinks.loki_visits = {
+          type = "loki";
+          inputs = [ "visits_normalise" ];
+          endpoint = "http://127.0.0.1:${toString ports.loki}";
+          encoding.codec = "json";
+          out_of_order_action = "accept";
+          # Cardinalité bornée : domaines servis (« autre » sinon), cinq genres, quatre provenances.
+          labels = {
+            identifier = "nginx-visits";
+            host = "{{ host }}";
+            site = "{{ site_label }}";
+            kind = "{{ kind }}";
+            via = "{{ via }}";
+          };
         };
 
         sources.internes.type = "internal_metrics";

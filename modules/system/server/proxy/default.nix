@@ -13,6 +13,11 @@ let
 
   certNames = lib.attrNames config.security.acme.certs;
 
+  # Journal des visites (onglet Trafic du dashboard, via Vector et Loki) : une ligne JSON par requête.
+  visitsFormat = lib.concatStringsSep "," (
+    lib.mapAttrsToList (k: v: ''"${k}":"${v}"'') cfg.visits.fields
+  );
+
   # Lit l'expiration du certificat réellement servi : le onFailure des unités ACME ne voit pas un rechargement manqué.
   expiryCheckText = ''
     minDays=${toString cfg.expiryCheck.minDays}
@@ -80,6 +85,34 @@ in
         Domaine de base des noms servis, d'où les apps tirent leur nom par défaut
         (`<app>.<domain>`, `<app>.vpn.<domain>`).
       '';
+    };
+
+    visits = {
+      path = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        default = "/var/log/nginx/visits.log";
+        description = "Journal JSON des visites, lu par Vector (onglet Trafic du dashboard).";
+      };
+
+      fields = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        default = { };
+        description = ''
+          Champs du journal des visites (nom → variable nginx). Un module en ajoute (Authelia : le
+          compte de la session).
+        '';
+      };
+
+      directive = lib.mkOption {
+        type = lib.types.str;
+        readOnly = true;
+        default = "access_log ${cfg.visits.path} visits;";
+        description = ''
+          À reprendre dans un vhost qui pose son propre `access_log` (il remplace ceux du niveau
+          http), sinon ses visites manquent.
+        '';
+      };
     };
 
     acmeEmail = lib.mkOption {
@@ -264,6 +297,23 @@ in
             "acme-order-renew-${cert}"
           ]) certNames
           ++ [ "nginx" ];
+
+        # `$uri` : le chemin sans ses paramètres (un jeton peut passer dans l'URL).
+        systemSettings.proxy.visits.fields = {
+          t = "$time_iso8601";
+          site = "$host";
+          addr = "$remote_addr";
+          ip = "$real_client_ip";
+          country = "$cf_country";
+          method = "$request_method";
+          path = "$uri";
+          status = "$status";
+          bytes = "$body_bytes_sent";
+          ua = "$http_user_agent";
+          dest = "$http_sec_fetch_dest";
+          user = "$remote_user";
+        };
+
         services.nginx = {
           enable = true;
           recommendedTlsSettings = true;
@@ -291,6 +341,17 @@ in
             log_format cf_combined '$real_client_ip - $remote_user [$time_local] '
                                    '"$request" $status $body_bytes_sent '
                                    '"$http_referer" "$http_user_agent"';
+
+            # Pays du visiteur, donné par Cloudflare : seulement derrière le tunnel.
+            map $remote_addr $cf_country {
+              default     "";
+              127.0.0.1   $http_cf_ipcountry;
+            }
+
+            log_format visits escape=json '{${visitsFormat}}';
+            # Les deux au niveau http ; un vhost qui pose son access_log reprend `visits.directive`.
+            access_log /var/log/nginx/access.log combined;
+            ${cfg.visits.directive}
 
             # Posé ici une fois (doublon interdit).
             limit_req_status 429;

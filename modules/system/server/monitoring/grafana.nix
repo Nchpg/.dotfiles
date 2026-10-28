@@ -141,6 +141,7 @@ in
         # Adresse réelle plutôt que 127.0.0.1 (tout arrive par cloudflared).
         extraConfig = ''
           access_log /var/log/nginx/access.log cf_combined;
+          ${config.systemSettings.proxy.visits.directive}
         ''
         + lib.optionalString byVpn ''
           ${myLib.server.nginxAllowOnly (
