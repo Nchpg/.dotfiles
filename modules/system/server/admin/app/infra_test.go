@@ -66,6 +66,11 @@ func TestInfraTemplates(t *testing.T) {
 		"account-removed": {"Nav": "accounts", "Name": "olivier", "Secret": "authelia/users", "Track": &Track{ID: "x", Label: "Accès", State: "done", SHA: "abc1234"}},
 		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
 			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true}}, "Self": true},
+		"traffic": {"Nav": "traffic", "Rows": []TrafficRow{{Name: "nextcloud", Domain: "cloud.x", Link: "/traffic/cloud.x?p=7j", Visits: 3, Via: map[string]int{"vpn": 3}, Accounts: []string{"nathan"}, Apps: 120, Last: "il y a 2 min"}}, "Period": "7j", "Periods": []Opt{{Value: "7j", Label: "7j", Selected: true}}, "Total": 3, "LogsOK": true, "Complete": true},
+		"traffic-site": {"Nav": "traffic", "Target": &TrafficRow{Name: "nextcloud", Domain: "cloud.x"}, "Period": "24h", "Periods": []Opt{{Value: "24h", Label: "24h", Selected: true}}, "Visits": 2, "Pages": 5, "ByVia": map[string]int{"vpn": 2}, "Bars": []Bar{{Label: "10h", Visits: 2, Height: 100}},
+			"Origins": []*OriginRow{{Label: "gram", Detail: "VPN · 10.8.0.3", Via: "VPN", Visits: 2, Pages: 5, Last: "il y a 1 h"}}, "Accounts": []*CountRow{{Name: "nathan", Count: 2}}, "Paths": []*CountRow{{Name: "/apps/files/", Count: 4}},
+			"Syncs": []*CountRow{{Name: "nathan", Detail: "Nextcloud bureau", Sub: "gram · VPN · 10.8.0.3", Count: 300}}, "Logins": []*CountRow{{Name: "bob", Sub: "Lyon · 1.2.3.4", Failed: 2}},
+			"Sessions": []*CountRow{{Name: "nathan", Detail: "Firefox (Linux)"}}, "Connected": []*CountRow{{Name: "nathan", Detail: "gram (Desktop Client - Linux)", Last: "il y a 1 min"}}, "Service": "nextcloud", "LogsOK": true, "Complete": false},
 	}
 	for name, data := range pages {
 		var buf bytes.Buffer

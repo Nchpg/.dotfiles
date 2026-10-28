@@ -196,7 +196,7 @@ let
       result=$(jq -n --argjson r "$result" --argjson v "$devices" --argjson d '${
         builtins.toJSON [ vaultwarden.hostName ]
       }' \
-        '$r + {vaultwarden: {domains: $d, devices: $v}}')
+        '$r + {vaultwarden: {domains: $d, unit: "vaultwarden.service", devices: $v}}')
     ''
     + ''
       jq -n --argjson r "$result" '$r + {updated: now | floor}' > "$out.new"

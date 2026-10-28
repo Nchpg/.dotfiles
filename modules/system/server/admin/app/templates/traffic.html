@@ -1,0 +1,149 @@
+{{define "period-tabs"}}<nav class="period-tabs" aria-label="Période">{{range .Periods}}<a href="?p={{.Value}}" {{if .Selected}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}</nav>{{end}}
+
+{{define "traffic"}}{{template "top" .}}
+<header class="topbar">
+  {{template "crumbs" (args "Title" "Trafic")}}
+  {{template "period-tabs" .}}
+</header>
+<main class="page">
+  <h1>Trafic</h1>
+  {{if not .LogsOK}}<div class="alert alert-amber"><p>Journal des visites illisible (Loki absent ou injoignable).</p></div>{{end}}
+  {{if not .Complete}}<div class="alert alert-amber"><p>Trop de pages vues sur la période pour tout relire : les plus anciennes manquent, les comptes sont minorés.</p></div>{{end}}
+  <div class="overview">
+    <section class="block" aria-labelledby="traffic-title">
+      <div class="block-head"><h2 id="traffic-title" class="line">Sites et services{{template "info" (args "ID" "info-traffic" "Text" "Visite : des pages ouvertes d'affilée par un même navigateur (même IP), sans pause de plus de 30 minutes. Les robots, les sondes de think et les applis de synchro n'en sont pas : les applis se comptent à part, en requêtes. Public : par internet (tunnel Cloudflare) ; VPN : un appareil du tunnel ; local : le réseau de la maison. Comptes : ceux vus sur la période (session Authelia, ou appli et session de Nextcloud et Vaultwarden).")}}</h2><small class="muted">{{.Total}} visite{{if gt .Total 1}}s{{end}} sur {{.Period}}</small></div>
+      <section class="card table-card" aria-label="Visites par site">
+        <table class="list">
+          <thead><tr><th scope="col">Site</th><th scope="col">Visites</th><th scope="col">Public · VPN · local</th><th scope="col">Comptes</th><th scope="col">Applis</th><th scope="col">Dernière visite</th></tr></thead>
+          <tbody>
+            {{range .Rows}}
+            <tr>
+              <td><a href="{{.Link}}" class="stack tight"><span class="line"><strong>{{.Name}}</strong>{{with .Env}}<span class="chip">{{.}}</span>{{end}}</span><small class="mono muted">{{.Domain}}</small></a></td>
+              <td>{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td class="mono small nowrap">{{if .Visits}}{{index .Via "public"}} · {{index .Via "vpn"}} · {{index .Via "lan"}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td class="small">{{if .Accounts}}{{join .Accounts ", "}}{{else}}<span class="muted">—</span>{{end}}</td>
+              <td class="muted">{{if .Apps}}{{.Apps}} req.{{else}}—{{end}}</td>
+              <td class="muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
+            </tr>
+            {{else}}<tr><td colspan="6" class="muted">Aucun site.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{define "count-table"}}
+<section class="card table-card" aria-label="{{.Title}}">
+  <table class="list">
+    <thead><tr>{{range .Heads}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+    <tbody>
+      {{$mode := .Mode}}
+      {{range .Rows}}
+      <tr>
+        <td><span class="stack tight"><span>{{.Name}}</span>{{with .Sub}}<small class="mono muted">{{.}}</small>{{end}}</span></td>
+        {{if eq $mode "logins"}}
+        <td>{{if .OK}}{{.OK}}{{else}}<span class="muted">0</span>{{end}}</td>
+        <td>{{if .Failed}}<span class="bad">{{.Failed}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
+        {{else if eq $mode "apps"}}
+        <td class="small">{{.Detail}}</td>
+        {{else if eq $mode "syncs"}}
+        <td class="small">{{.Detail}}</td>
+        <td class="muted">{{.Count}}</td>
+        {{else if eq $mode "paths"}}
+        <td class="muted">{{.Count}}</td></tr>{{continue}}
+        {{else}}
+        <td class="muted">{{.Count}}</td>
+        {{end}}
+        <td class="muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
+      </tr>
+      {{else}}<tr><td colspan="{{len .Heads}}" class="muted">{{.Empty}}</td></tr>{{end}}
+    </tbody>
+  </table>
+</section>
+{{end}}
+
+{{define "traffic-site"}}{{template "top" .}}
+<header class="topbar">
+  {{template "crumbs" (args "Link" (printf "/traffic?p=%s" .Period) "Title" "Trafic" "Sub" .Target.Name)}}
+  {{template "period-tabs" .}}
+</header>
+<main class="page">
+  <h1 class="line">{{.Target.Name}}{{with .Target.Env}}<span class="chip">{{.}}</span>{{end}}</h1>
+  <p class="mono small muted">{{.Target.Domain}}</p>
+  {{if not .LogsOK}}<div class="alert alert-amber"><p>Journal des visites illisible (Loki absent ou injoignable).</p></div>{{end}}
+  {{if not .Complete}}<div class="alert alert-amber"><p>Trop de pages vues sur la période pour tout relire : les plus anciennes manquent.</p></div>{{end}}
+  <div class="overview">
+    <section class="strip" aria-label="Résumé">
+      <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Visits}}</span><span class="mono small muted">{{.Pages}} page{{if gt .Pages 1}}s{{end}} vue{{if gt .Pages 1}}s{{end}} sur {{.Period}}</span></div>
+      <div class="strip-cell"><span class="strip-label">Public · VPN · local</span><span class="strip-value mono">{{index .ByVia "public"}} · {{index .ByVia "vpn"}} · {{index .ByVia "lan"}}</span><span class="mono small muted">par où elles arrivent</span></div>
+      <div class="strip-cell"><span class="strip-label">Origines</span><span class="strip-value">{{len .Origins}}</span><span class="mono small muted">appareils, lieux ou réseaux</span></div>
+    </section>
+
+    <section class="block" aria-label="Visites dans le temps">
+      <div class="bars" role="img" aria-label="Visites par {{if eq .Period "24h"}}heure{{else}}jour{{end}}">
+        {{range .Bars}}<div class="bar" title="{{.Label}} : {{.Visits}} visite{{if gt .Visits 1}}s{{end}}"><span style="height: {{.Height}}%"></span><small>{{.Label}}</small></div>{{end}}
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="origins-title">
+      <div class="block-head"><h2 id="origins-title" class="line">D'où{{template "info" (args "ID" "info-origins" "Text" "Un appareil du VPN par son nom, le réseau de la maison, ou pour internet la ville et le pays de l'IP (base DB-IP Lite, sur think ; approximatif).")}}</h2></div>
+      <section class="card table-card" aria-label="Origines des visites">
+        <table class="list">
+          <thead><tr><th scope="col">Origine</th><th scope="col">Par</th><th scope="col">Visites</th><th scope="col">Pages</th><th scope="col">Dernière</th></tr></thead>
+          <tbody>
+            {{range .Origins}}
+            <tr>
+              <td><span class="stack tight"><span>{{.Label}}</span><small class="mono muted">{{.Detail}}</small></span></td>
+              <td class="muted">{{.Via}}</td>
+              <td>{{.Visits}}</td>
+              <td class="muted">{{.Pages}}</td>
+              <td class="muted nowrap">{{.Last}}</td>
+            </tr>
+            {{else}}<tr><td colspan="5" class="muted">Aucune visite sur {{.Period}}.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
+
+    {{if .Accounts}}
+    <section class="block" aria-labelledby="sso-title">
+      <div class="block-head"><h2 id="sso-title">Comptes Authelia</h2></div>
+      {{template "count-table" (args "Title" "Comptes Authelia" "Heads" (list "Compte" "Visites" "Dernière") "Rows" .Accounts "Mode" "count" "Empty" "")}}
+    </section>
+    {{end}}
+
+    {{if .Service}}
+    <section class="block" aria-labelledby="logins-title">
+      <div class="block-head"><h2 id="logins-title" class="line">Connexions{{if eq .Service "nextcloud"}}{{template "info" (args "ID" "info-logins" "Text" "Nextcloud ne note que les essais ratés (avec l'IP) ; une connexion réussie ouvre une session web, listée en dessous.")}}{{else}}{{template "info" (args "ID" "info-logins" "Text" "Connexions par mot de passe notées par Vaultwarden, réussies et ratées. Une appli déjà connectée se synchronise sans se reconnecter.")}}{{end}}</h2></div>
+      {{template "count-table" (args "Title" "Connexions" "Heads" (list "Compte" "Réussies" "Ratées" "Dernière") "Rows" .Logins "Mode" "logins" "Empty" (printf "Aucune sur %s." .Period))}}
+    </section>
+    {{if eq .Service "nextcloud"}}
+    <section class="block" aria-labelledby="sessions-title">
+      <div class="block-head"><h2 id="sessions-title">Sessions web</h2><small class="muted">actives sur {{.Period}}</small></div>
+      {{template "count-table" (args "Title" "Sessions web" "Heads" (list "Compte" "Navigateur" "Dernière activité") "Rows" .Sessions "Mode" "apps" "Empty" "Aucune.")}}
+    </section>
+    {{end}}
+    <section class="block" aria-labelledby="apps-title">
+      <div class="block-head"><h2 id="apps-title" class="line">Applis connectées{{template "info" (args "ID" "info-apps" "Text" "Les appareils qui ont un accès en ce moment (jeton gardé), lus dans la base du service toutes les 5 minutes, sans aucun jeton.")}}</h2></div>
+      {{template "count-table" (args "Title" "Applis connectées" "Heads" (list "Compte" "Appli" "Dernière activité") "Rows" .Connected "Mode" "apps" "Empty" "Aucune.")}}
+    </section>
+    {{end}}
+
+    {{if .Syncs}}
+    <section class="block" aria-labelledby="syncs-title">
+      <div class="block-head"><h2 id="syncs-title" class="line">Synchros{{template "info" (args "ID" "info-syncs" "Text" "Requêtes des applis (client de bureau, appli mobile, WebDAV) sur la période, par compte, appli et provenance.")}}</h2></div>
+      {{template "count-table" (args "Title" "Synchros" "Heads" (list "Compte" "Appli" "Requêtes" "Dernière") "Rows" .Syncs "Mode" "syncs" "Empty" "")}}
+    </section>
+    {{end}}
+
+    {{if .Paths}}
+    <section class="block" aria-labelledby="paths-title">
+      <div class="block-head"><h2 id="paths-title">Pages les plus vues</h2></div>
+      {{template "count-table" (args "Title" "Pages les plus vues" "Heads" (list "Page" "Vues") "Rows" .Paths "Mode" "paths" "Empty" "")}}
+    </section>
+    {{end}}
+  </div>
+</main>
+{{template "bottom" .}}{{end}}

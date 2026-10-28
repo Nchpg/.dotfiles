@@ -47,6 +47,7 @@ type Config struct {
 	VPN          VPNInfo      // tunnel et appareils (page VPN)
 	SSH          SSHInfo      // clés autorisées (page SSH)
 	AccountsFile string       // résumé des comptes Authelia, écrit par admin-accounts (root)
+	TrafficFile  string       // applis et sessions de Nextcloud et Vaultwarden, écrit par admin-traffic (root)
 	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
 	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage
 	RecopyStatus string       // résultats d'admin-recopy (root), lus seulement
@@ -80,6 +81,7 @@ func loadConfig() (*Config, error) {
 		RecopyStatus: env("ADMIN_RECOPY_STATUS", "/var/lib/admin-recopy"),
 		MetricsURL:   os.Getenv("ADMIN_METRICS_URL"),
 		AccountsFile: env("ADMIN_ACCOUNTS_FILE", "/var/lib/admin-accounts/accounts.json"),
+		TrafficFile:  env("ADMIN_TRAFFIC_FILE", "/var/lib/admin-traffic/traffic.json"),
 		WGPubkeyFile: env("ADMIN_WG_PUBKEY", "/run/admin/wg-server.pub"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse

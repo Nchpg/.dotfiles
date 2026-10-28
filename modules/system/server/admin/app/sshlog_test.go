@@ -43,3 +43,27 @@ func TestSSHLog(t *testing.T) {
 		}
 	}
 }
+
+// Visites : des pages d'affilée (même site, IP et navigateur, moins de 30 min d'écart).
+func TestVisitsOf(t *testing.T) {
+	t0 := time.Date(2026, 10, 28, 10, 0, 0, 0, time.UTC)
+	l := func(min int, ip, ua string) visitLine {
+		return visitLine{At: t0.Add(time.Duration(min) * time.Minute), Site: "cloud.x", IP: ip, UA: ua, Via: "vpn"}
+	}
+	v := visitsOf([]visitLine{l(0, "a", "ff"), l(10, "a", "ff"), l(35, "a", "ff"), l(80, "a", "ff"), l(5, "a", "chrome"), l(5, "b", "ff")})
+	if len(v) != 4 {
+		t.Fatalf("%d visites, attendu 4 : %+v", len(v), v)
+	}
+	if label, detail := origin("vpn", "10.8.0.3", "", "", map[string]string{"10.8.0.3": "gram"}); label != "gram" || detail != "VPN · 10.8.0.3" {
+		t.Errorf("origine VPN : %s, %s", label, detail)
+	}
+	if label, _ := origin("public", "1.2.3.4", "Lyon", "France", nil); label != "Lyon, France" {
+		t.Errorf("origine publique : %s", label)
+	}
+	if viaOf("10.8.0.3", "10.8.0.0/24") != "vpn" || viaOf("192.168.1.2", "10.8.0.0/24") != "lan" || viaOf("8.8.8.8", "10.8.0.0/24") != "public" {
+		t.Error("viaOf")
+	}
+	if m := reVWFail.FindStringSubmatch("[2026-10-27][ERROR] Username or password is incorrect. Try again. IP: 10.8.0.3. Username: n@x.fr."); m == nil || m[1] != "10.8.0.3" || m[2] != "n@x.fr" {
+		t.Errorf("échec Vaultwarden : %q", m)
+	}
+}

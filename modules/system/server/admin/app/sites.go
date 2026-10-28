@@ -518,6 +518,7 @@ var funcs = template.FuncMap{
 	"lower": strings.ToLower,
 	"join":  strings.Join,
 	"add":   func(a, b int) int { return a + b },
+	"list":  func(v ...string) []string { return v },
 	// args : paramètres nommés d'un sous-template (`{{template "dd" (args "D" .Branch "URL" $.FormURL)}}`).
 	"args": func(kv ...any) map[string]any {
 		m := map[string]any{}

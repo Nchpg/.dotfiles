@@ -567,3 +567,13 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .seg-data span { height: 28px; line-height: 28px; padding: 0 10px; font-size: 12.5px; }
 .seg-data input:checked + span { background: var(--card); color: var(--text); font-weight: 500; }
 .recopy { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Trafic : choix de la période, et graphe des visites (une colonne par heure ou par jour). */
+.period-tabs { display: inline-flex; background: #EEF0F3; padding: 3px; gap: 2px; }
+.period-tabs a { padding: 5px 12px; font-size: 13.5px; color: var(--muted); text-decoration: none; }
+.period-tabs a[aria-current] { background: var(--card); color: var(--ink, inherit); box-shadow: 0 1px 2px rgba(15, 23, 42, .08); }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 140px; padding: 12px 12px 22px; background: var(--card); border: 1px solid var(--line); }
+.bar { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; position: relative; }
+.bar span { display: block; min-height: 1px; background: var(--accent); opacity: .85; }
+.bar small { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.bars:has(.bar:nth-child(13)) .bar:not(:nth-child(4n+1)) small { display: none; }
