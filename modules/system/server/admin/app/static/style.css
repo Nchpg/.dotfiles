@@ -615,6 +615,16 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 @media (min-width: 721px) {
   table.sites.traffic { table-layout: auto; }
   table.sites.traffic th { width: auto !important; }
+  /* Sites et services : mêmes largeurs, les colonnes tombent au même endroit d'un tableau à l'autre
+     (Service = Site + Environnement ; l'adresse prend le reste). */
+  table.sites.traffic.cols { table-layout: fixed; }
+  table.sites.traffic.cols th.c-site { width: 19% !important; }
+  table.sites.traffic.cols th.c-env { width: 17% !important; }
+  table.sites.traffic.cols th.c-svc { width: 36% !important; }
+  table.sites.traffic.cols th.c-acc { width: 128px !important; }
+  table.sites.traffic.cols th.c-num { width: 84px !important; }
+  table.sites.traffic.cols th.c-last { width: 128px !important; }
+  table.sites.traffic.cols td.addr-td { max-width: none; }
   table.traffic td.num-td { font-variant-numeric: tabular-nums; }
 }
 @media (max-width: 720px) {

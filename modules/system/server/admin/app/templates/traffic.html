@@ -63,8 +63,8 @@
     <section class="block" aria-labelledby="sites-title">
       <div class="block-head"><h2 id="sites-title" class="line">Sites{{template "info" (args "ID" "info-sites" "Text" "Visite : des pages ouvertes d'affilée par un même navigateur (même IP), sans pause de plus de 30 minutes. Robots, sondes de think et applis de synchro n'en sont pas. Internet : par le tunnel Cloudflare ; VPN : un appareil du tunnel ; local : le réseau de la maison. Pour un service à compte, une visite est une arrivée sur ses pages (la connexion se compte en dessous).")}}</h2></div>
       <section class="card table-card" aria-label="Visites par site">
-        <table class="sites traffic">
-          <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
+        <table class="sites traffic cols">
+          <thead><tr><th scope="col" class="c-site">Site</th><th scope="col" class="c-env">Environnement</th><th scope="col">Adresse</th><th scope="col" class="c-acc">Accès</th><th scope="col" class="c-num">Visites</th><th scope="col" class="c-last">Dernière visite</th></tr></thead>
           {{range .Groups}}
           <tbody data-vpn>
             {{range .Rows}}
@@ -87,8 +87,8 @@
     <section class="block" aria-labelledby="services-title">
       <div class="block-head"><h2 id="services-title">Services de think</h2></div>
       <section class="card table-card" aria-label="Visites par service">
-        <table class="sites services traffic svc">
-          <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
+        <table class="sites services traffic svc cols">
+          <thead><tr><th scope="col" class="c-svc">Service</th><th scope="col">Adresse</th><th scope="col" class="c-acc">Accès</th><th scope="col" class="c-num">Visites</th><th scope="col" class="c-last">Dernière visite</th></tr></thead>
           {{range .Services}}
           <tbody data-vpn>
             <tr>
