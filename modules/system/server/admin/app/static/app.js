@@ -285,18 +285,19 @@ document.addEventListener("click", (ev) => {
   location.reload();
 });
 
-// Carte du Trafic, en 16:9 : zoom à la molette, au pincement (pavé tactile : molette + Ctrl ; écran :
+// Carte du Trafic (Mercator, à ses proportions) : zoom à la molette, au pincement (pavé tactile : molette + Ctrl ; écran :
 // deux doigts), aux boutons ou au double clic ; déplacement en glissant ou à deux doigts sur le pavé.
 // Le zoom glisse vers sa cible (animation) ; la carte tourne sans fin de gauche à droite (trois
 // copies, la vue ramenée sur celle du milieu), reste bornée en haut et en bas ; les points gardent à
 // peu près leur taille à l'écran, et leur survol montre les sites visités depuis là.
 // Au départ : cadrée sur les points, sinon le monde entier.
-const MAP_W = 360, MAP_H = 142, MAP_MAX = 150, MAP_RATIO = 9 / 16;
+const MAP_W = 360, MAP_MAX = 150;
 function mapInit() {
   document.querySelectorAll("[data-map]:not([data-ready])").forEach((frame) => {
     frame.dataset.ready = "1";
     const svg = frame.querySelector("svg");
-    const world = () => ({ x: 0, y: (MAP_H - MAP_W * MAP_RATIO) / 2, w: MAP_W });
+    const MAP_H = +svg.dataset.h, MAP_RATIO = MAP_H / MAP_W;
+    const world = () => ({ x: 0, y: 0, w: MAP_W });
     const clamp = (v) => {
       const w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, v.w)), h = w * MAP_RATIO;
       const y = h >= MAP_H ? (MAP_H - h) / 2 : Math.min(MAP_H - h, Math.max(0, v.y));
@@ -304,7 +305,7 @@ function mapInit() {
     };
     // Cadrage de départ : les points, avec de la marge (au moins 30° de large).
     const fit = () => {
-      const cs = [...svg.querySelectorAll("[data-main] circle.core")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
+      const cs = [...svg.querySelectorAll("[data-main] circle.bubble")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
       if (!cs.length) return world();
       const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
       const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];

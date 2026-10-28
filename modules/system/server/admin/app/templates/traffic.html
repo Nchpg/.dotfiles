@@ -11,12 +11,12 @@
 {{define "world-map"}}
 <section class="card world-card" aria-label="Carte">
   <div class="world-frame" data-map>
-    <svg viewBox="0 -30.25 360 202.5" class="world" role="img" aria-label="Carte : {{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
+    <svg viewBox="0 0 360 {{mapHeight}}" data-h="{{mapHeight}}" class="world" role="img" aria-label="Carte : {{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
       {{/* Trois copies côte à côte : la carte tourne sans fin de gauche à droite (app.js). */}}
       {{range $off := list "-360" "0" "360"}}<g transform="translate({{$off}} 0)"{{if eq $off "0"}} data-main{{end}}>
         <use href="/static/world.svg#land" class="land"/>
         <use href="/static/world.svg#borders" class="borders"/>
-        {{range $.Dots}}<g class="spot spot-{{.Kind}}" data-label="{{.Label}}" data-count="{{.Count}}" data-sites="{{range $i, $s := .Sites}}{{if $i}}&#10;{{end}}{{$s.Domain}}&#9;{{$s.N}}{{end}}"><circle class="halo" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" data-r="{{.R}}"/><circle class="core" cx="{{.X}}" cy="{{.Y}}" r="1.3" data-r="1.3"/></g>{{end}}
+        {{range $.Dots}}<g class="spot spot-{{.Kind}}" data-label="{{.Label}}" data-count="{{.Count}}" data-sites="{{range $i, $s := .Sites}}{{if $i}}&#10;{{end}}{{$s.Domain}}&#9;{{$s.N}}{{end}}"><circle class="bubble" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" data-r="{{.R}}"/></g>{{end}}
       </g>{{end}}
     </svg>
     <div class="map-tip" hidden></div>
@@ -29,6 +29,7 @@
   <div class="world-legend small muted">
     <span class="line"><i class="key key-internet"></i>internet : la ville de l'IP</span>
     <span class="line"><i class="key key-vpn"></i>VPN : là d'où l'appareil joint le tunnel aujourd'hui</span>
+    <span>Taille : le nombre. Projection de Mercator : les pays gardent leur forme, plus grands près des pôles.</span>
     {{if not .Dots}}<span>Rien à placer sur la période (le réseau local n'a pas de position).</span>{{end}}
   </div>
 </section>

@@ -239,8 +239,19 @@ type mapPoint struct {
 	Site        string // le domaine visité (ou le service où l'on s'est connecté)
 }
 
-// MapDot : un lieu sur la carte (projection de static/world.svg : x = lon + 180, y = 84 - lat) ; R
-// grandit avec le nombre de visites (la page le garde constant à l'écran quand on zoome).
+// Projection de static/world.svg : Mercator (les pays gardent leur forme ; plus grands près des
+// pôles), latitudes bornées à [-58, 84] : x = lon + 180, y = mapTop - mercator(lat), en degrés.
+const mapHeight = 240.5
+
+var mapTop = mercator(84)
+
+func mercator(lat float64) float64 {
+	lat = math.Max(-58, math.Min(84, lat))
+	return math.Log(math.Tan(math.Pi/4+lat*math.Pi/360)) * 180 / math.Pi
+}
+
+// MapDot : un lieu sur la carte ; R grandit avec le nombre de visites (la page le garde à peu près
+// constant à l'écran quand on zoome).
 type MapDot struct {
 	X, Y, R      float64
 	Title, Kind  string
@@ -272,7 +283,7 @@ func mapDots(points []mapPoint, one, many string) []MapDot {
 	}
 	var out []MapDot
 	for _, sp := range spots {
-		d := MapDot{X: math.Round((sp.Lon+180)*10) / 10, Y: math.Round((84-sp.Lat)*10) / 10,
+		d := MapDot{X: math.Round((sp.Lon+180)*10) / 10, Y: math.Round((mapTop-mercator(sp.Lat))*10) / 10,
 			R: math.Min(2.2+math.Sqrt(float64(sp.n))*1.1, 9), Kind: sp.Kind, Label: sp.Label, Count: plural(sp.n, one, many)}
 		d.Title = d.Label + " : " + d.Count
 		for site, n := range sp.sites {

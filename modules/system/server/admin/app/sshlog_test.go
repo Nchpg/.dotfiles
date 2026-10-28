@@ -75,7 +75,7 @@ func TestTrafficMap(t *testing.T) {
 	g := geoPlaces{s: &Server{cfg: &Config{}}, devices: map[string]string{"10.8.0.3": "gram"}, endpoints: map[string]string{}}
 	d := g.visitDots([]Visit{{Via: "public", IP: "1.2.3.4", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon},
 		{Via: "public", IP: "1.2.3.5", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {Via: "vpn", IP: "10.8.0.3"}, {Via: "lan", IP: "192.168.1.2"}})
-	if len(d) != 1 || d[0].X != 184.8 || d[0].Y != 38.2 || d[0].Kind != "internet" || d[0].Title != "Lyon, France : 2 visites" {
+	if len(d) != 1 || d[0].X != 184.8 || d[0].Y != 117.4 || d[0].Kind != "internet" || d[0].Title != "Lyon, France : 2 visites" {
 		t.Errorf("carte : %+v", d)
 	}
 	vpn := mapDots([]mapPoint{{Lat: lat, Lon: lon, Label: "gram (VPN, Lyon)", Kind: "vpn"}}, "visite", "visites")
