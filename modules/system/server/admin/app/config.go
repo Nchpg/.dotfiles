@@ -5,8 +5,21 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
+
+// retention : une durée de Loki (`30d`, `720h`) ; 30 jours si illisible.
+func retention(v string) time.Duration {
+	if n, err := strconv.Atoi(strings.TrimSuffix(v, "d")); err == nil && strings.HasSuffix(v, "d") && n > 0 {
+		return time.Duration(n) * 24 * time.Hour
+	}
+	if d, err := time.ParseDuration(v); err == nil && d > 0 {
+		return d
+	}
+	return 30 * 24 * time.Hour
+}
 
 // Config vient de l'environnement posé par le module NixOS (modules/system/server/admin).
 type Config struct {
@@ -21,6 +34,9 @@ type Config struct {
 	Registry     string // ghcr.io/nchpg
 	RegistryUser string
 	Prometheus   string
+	Loki         string // journaux (vide : pas de monitoring, la page SSH s'en passe)
+	LogsWindow   time.Duration
+	SSHUnit      string
 	DeployStatus string // status.json d'apps-deploy
 	StateDir     string
 	Htmx         string
@@ -54,6 +70,9 @@ func loadConfig() (*Config, error) {
 		Registry:     env("ADMIN_REGISTRY", ""),
 		RegistryUser: env("ADMIN_REGISTRY_USER", ""),
 		Prometheus:   env("ADMIN_PROMETHEUS", "http://127.0.0.1:9090"),
+		Loki:         os.Getenv("ADMIN_LOKI"),
+		LogsWindow:   retention(env("ADMIN_LOGS_RETENTION", "30d")),
+		SSHUnit:      env("ADMIN_SSH_UNIT", "sshd.service"),
 		DeployStatus: env("ADMIN_DEPLOY_STATUS", "/var/lib/apps-deploy/status.json"),
 		StateDir:     env("STATE_DIRECTORY", "/tmp/admin"),
 		Htmx:         env("ADMIN_HTMX", ""),

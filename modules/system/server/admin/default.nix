@@ -252,6 +252,10 @@ in
         ADMIN_REGISTRY = images.registry;
         ADMIN_REGISTRY_USER = images.login.username;
         ADMIN_PROMETHEUS = "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.prometheus}";
+        # Journal de sshd (page SSH : connexions par clé, tentatives refusées), vide sans monitoring.
+        ADMIN_LOKI = lib.optionalString config.systemSettings.monitoring.enable "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.loki}";
+        ADMIN_LOGS_RETENTION = config.systemSettings.monitoring.logs.retention;
+        ADMIN_SSH_UNIT = "sshd.service";
         ADMIN_DEPLOY_STATUS = "/var/lib/apps-deploy/status.json";
         ADMIN_HTMX = htmx;
         ADMIN_FONTS = "${pkgs-stable.geist-font}/share/fonts/truetype";

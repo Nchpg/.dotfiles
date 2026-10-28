@@ -610,6 +610,12 @@ type SSHKeyRow struct {
 	Key                              string // la ligne entière, publique
 	// Dans ssh-keys.json sur main (retirable d'ici) ; ajoutée ou retirée sur main, rebuild à faire.
 	InFile, Adding, Removing bool
+	// Activité (journal de sshd) : session ouverte, dernière connexion, d'où, combien sur la fenêtre.
+	Connected      bool
+	ConnectedSince string
+	LastSeen, From string
+	Count          int
+	Unknown        bool // connectée sur la fenêtre, mais plus (ou pas) autorisée
 }
 
 func sshKeyRow(user, key string) SSHKeyRow {
@@ -650,7 +656,53 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r)})
+	act := s.sshActivityOf(r.Context())
+	devices := s.vpnDevices(r.Context())
+	from := func(ip string) string {
+		if d := devices[ip]; d != "" {
+			return d + " (" + ip + ")"
+		}
+		return ip
+	}
+	// Clés connectées sur la fenêtre sans être dans la liste (retirées depuis, par exemple).
+	for fp := range act.Uses {
+		if !slices.ContainsFunc(rows, func(x SSHKeyRow) bool { return x.Fingerprint == fp }) {
+			rows = append(rows, SSHKeyRow{Fingerprint: fp, Unknown: true})
+		}
+	}
+	open := 0
+	for i := range rows {
+		row := &rows[i]
+		if u := act.Uses[row.Fingerprint]; u != nil {
+			row.Count, row.LastSeen, row.From = u.Count, ago(time.Since(u.Last)), from(u.LastIP)
+		}
+		for _, se := range act.Sessions {
+			if se.Fingerprint == row.Fingerprint && row.Fingerprint != "" {
+				open++
+				row.Connected, row.From = true, from(se.IP)
+				if !se.Since.IsZero() {
+					row.ConnectedSince = se.Since.Local().Format("15:04")
+				}
+			}
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
+	refused := 0
+	for _, x := range act.Refusals {
+		x.Device, x.Last = devices[x.IP], ago(time.Since(x.last))
+		refused += x.Count
+	}
+	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r),
+		"Sessions": len(act.Sessions), "Open": open, "Refusals": act.Refusals, "Refused": refused, "LogsOK": act.LogsOK,
+		"Truncated": act.Truncated, "Window": windowLabel(s.cfg.LogsWindow)})
+}
+
+// windowLabel : la fenêtre des journaux, lisible (« 30 j »).
+func windowLabel(d time.Duration) string {
+	if d >= 48*time.Hour {
+		return fmt.Sprintf("%d j", int(d.Hours()/24))
+	}
+	return fmt.Sprintf("%d h", int(d.Hours()))
 }
 
 const sshKeysPath = "profiles/server/ssh-keys.json"
