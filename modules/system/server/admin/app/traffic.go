@@ -434,6 +434,7 @@ type TrafficRow struct {
 	Branch, Repo            string // la branche suivie, le dépôt du code (comme la page Sites)
 	Access                  string // internet ou VPN : par où le site est servi
 	SSO                     bool   // derrière Authelia
+	Up, Probed              bool   // la sonde répond (voyant, comme la page Sites)
 	First                   bool   // première ligne de son site (tableau groupé, comme la page Sites)
 	Span                    int
 	Visits                  int
@@ -444,12 +445,17 @@ type TrafficRow struct {
 // trafficTargets : les sites et services servis, par domaine (services de think, puis apps.json).
 func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 	var rows []TrafficRow
+	up := s.probes(ctx)
 	for _, sv := range s.cfg.Services {
 		access := "VPN"
 		if sv.Public {
 			access = "internet"
 		}
-		rows = append(rows, TrafficRow{Name: sv.Name, Domain: sv.Domain, Access: access, SSO: sv.Authelia})
+		r := TrafficRow{Name: sv.Name, Domain: sv.Domain, Access: access, SSO: sv.Authelia}
+		if sv.Probed {
+			r.Up, r.Probed = up[sv.Domain]
+		}
+		rows = append(rows, r)
 	}
 	if snap, err := s.snapshot(ctx); err == nil {
 		for _, site := range snap.Apps.Names() {
@@ -460,8 +466,10 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 				if d.VPN() {
 					access = "VPN"
 				}
-				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Label: d.Label, Branch: d.Branch, Repo: repo,
-					Domain: d.Domain(s.cfg.Domain), Access: access, SSO: d.Access.SSO})
+				r := TrafficRow{Name: d.Site, Env: d.ID, Label: d.Label, Branch: d.Branch, Repo: repo,
+					Domain: d.Domain(s.cfg.Domain), Access: access, SSO: d.Access.SSO}
+				r.Up, r.Probed = up[r.Domain]
+				rows = append(rows, r)
 			}
 		}
 	}

@@ -290,7 +290,7 @@ document.addEventListener("click", (ev) => {
 // Le zoom glisse vers sa cible (animation) ; la carte tourne sans fin de gauche à droite (trois
 // copies, la vue ramenée sur celle du milieu), reste bornée en haut et en bas ; les points gardent à
 // peu près leur taille à l'écran, et leur survol montre les sites visités depuis là.
-// Au départ : cadrée sur les points, sinon le monde entier.
+// Au départ : le monde entier.
 const MAP_W = 360, MAP_MAX = 150;
 function mapInit() {
   document.querySelectorAll("[data-map]:not([data-ready])").forEach((frame) => {
@@ -303,16 +303,7 @@ function mapInit() {
       const y = h >= MAP_H ? (MAP_H - h) / 2 : Math.min(MAP_H - h, Math.max(0, v.y));
       return { x: v.x, y, w };
     };
-    // Cadrage de départ : les points, avec de la marge (au moins 30° de large).
-    const fit = () => {
-      const cs = [...svg.querySelectorAll("[data-main] circle.bubble")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
-      if (!cs.length) return world();
-      const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
-      const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-      const w = Math.max(30, (x1 - x0) * 1.4, ((y1 - y0) * 1.4) / MAP_RATIO);
-      return clamp({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * MAP_RATIO) / 2, w });
-    };
-    let view = fit(), target = view, frameReq = 0;
+    let view = world(), target = view, frameReq = 0;
     const draw = () => {
       svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.w * MAP_RATIO}`);
       const k = (view.w / MAP_W) ** 0.85;
