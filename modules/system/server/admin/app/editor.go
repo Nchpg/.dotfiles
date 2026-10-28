@@ -80,7 +80,8 @@ type CtrVM struct {
 	Secrets  []Opt
 	Info     string
 	DataHost string
-	Locked   bool // conteneurs hérités : montrés, pas modifiables ici
+	Locked   bool   // conteneurs hérités : montrés, pas modifiables ici
+	NewKey   string // environnement : nom proposé pour un secret à lui (`secrets edit …`)
 }
 
 type EnvTab struct {
@@ -115,7 +116,6 @@ type FormVM struct {
 	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis
 	// Environnement aux conteneurs hérités : ses secrets, chacun remplaçable pour lui seul.
 	SecretOverrides []SecretOverride
-	SecretHint      string // nom proposé pour un nouveau secret (`secrets edit …`)
 	SecretsFrom     string // l'environnement dont viennent les secrets hérités
 	Containers      []CtrVM
 	CtrList         string
@@ -343,8 +343,20 @@ var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "25
 
 // SecretOverride : un secret hérité et ce qui le remplace dans cet environnement.
 type SecretOverride struct {
-	Key string
-	D   DD
+	Key     string
+	D       DD
+	Choices bool   // d'autres secrets du site existent (sinon, seulement la commande pour en créer)
+	NewKey  string // nom proposé pour son remplaçant
+}
+
+// envSecretName : un secret propre à un environnement, tiré de celui qu'il remplace :
+// `stage/gemini_env` -> `stage/preview_gemini_env` (sans secret de départ : `stage/preview_env`).
+func envSecretName(site, env, from string) string {
+	base := "env"
+	if _, b, ok := strings.Cut(from, "/"); ok && b != "" {
+		base = b
+	}
+	return site + "/" + env + "_" + base
 }
 
 // formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
@@ -421,7 +433,6 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		}
 		f.AccessFrom = origin(Env.OwnAccess)
 		f.CtrsFrom = origin(Env.OwnContainers)
-		f.SecretHint = name + "/" + env + "_env"
 		f.SecretsFrom = e.labelOf(v.From)
 		if !v.OwnContainers() {
 			// Ce que le parent donne déjà (ses propres remplacements compris), puis le choix de celui-ci.
@@ -447,7 +458,8 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 					o.SubInk = colRed[1]
 					opts = append(opts, o)
 				}
-				f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+d.Label, opts, "", icCommit)})
+				f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+d.Label, opts, "", icCommit),
+					Choices: len(opts) > 1, NewKey: envSecretName(name, env, given)})
 			}
 		}
 		f.OptionsFrom = origin(Env.OwnOptions)
@@ -530,6 +542,13 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		img := untag(c.Image)
 		used[img] = true
 		vm := CtrVM{Name: n, Entry: n == d.EntryPoint(), DataHost: "/var/lib/apps/" + d.App + "/" + n, Locked: !f.OwnContainers}
+		if env != "" && f.OwnContainers {
+			first := ""
+			if len(c.Secrets) > 0 {
+				first = c.Secrets[0]
+			}
+			vm.NewKey = envSecretName(name, env, first)
+		}
 		choices := append([]string{}, images...)
 		if !slices.Contains(choices, img) {
 			choices = append(choices, img)
