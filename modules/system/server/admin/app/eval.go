@@ -24,19 +24,24 @@ func (ev *Evaluator) dir() string { return filepath.Join(ev.cfg.StateDir, "eval"
 
 func (ev *Evaluator) run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = ev.env()
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	err := cmd.Run()
+	return out.Bytes(), err
+}
+
+// env : l'environnement de git et nix (jeton du dépôt de secrets, et de GitHub, en config nix).
+func (ev *Evaluator) env() []string {
 	home := filepath.Join(ev.cfg.StateDir, "home")
 	_ = os.MkdirAll(home, 0o700)
 	nixConfig := "warn-dirty = false\n"
 	if ev.cfg.NixAccessFile != "" {
 		nixConfig += "!include " + ev.cfg.NixAccessFile + "\n"
 	}
-	cmd.Env = append(os.Environ(), "HOME="+home, "XDG_CACHE_HOME="+filepath.Join(ev.cfg.StateDir, "cache"), "NIX_CONFIG="+nixConfig,
+	return append(os.Environ(), "HOME="+home, "XDG_CACHE_HOME="+filepath.Join(ev.cfg.StateDir, "cache"), "NIX_CONFIG="+nixConfig,
 		"GIT_TERMINAL_PROMPT=0")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err := cmd.Run()
-	return out.Bytes(), err
 }
 
 // Check : nil si la config de think s'évalue avec ces deux fichiers posés sur `head`.
@@ -47,20 +52,8 @@ func (ev *Evaluator) Check(ctx context.Context, head string, apps, lock []byte) 
 	defer cancel()
 
 	dir := ev.dir()
-	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
-		_ = os.RemoveAll(dir)
-		if out, err := ev.run(ctx, "git", "clone", "--quiet", ev.cfg.GitURL, dir); err != nil {
-			return fmt.Errorf("clone impossible : %s", lastLines(out, 3))
-		}
-	}
-	for _, args := range [][]string{
-		{"-C", dir, "fetch", "--quiet", "origin", ev.cfg.Branch},
-		{"-C", dir, "checkout", "--quiet", "--force", "--detach", head},
-		{"-C", dir, "clean", "--quiet", "-fdx"},
-	} {
-		if out, err := ev.run(ctx, "git", args...); err != nil {
-			return fmt.Errorf("git %s : %s", args[2], lastLines(out, 3))
-		}
+	if err := ev.checkout(ctx, head); err != nil {
+		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "profiles/server/apps.json"), apps, 0o644); err != nil {
 		return err
@@ -78,6 +71,27 @@ func (ev *Evaluator) Check(ctx context.Context, head string, apps, lock []byte) 
 	}
 	if err != nil {
 		return errors.New(evalError(out))
+	}
+	return nil
+}
+
+// checkout : la copie d'évaluation sur `head`, propre (à appeler sous ev.mu).
+func (ev *Evaluator) checkout(ctx context.Context, head string) error {
+	dir := ev.dir()
+	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
+		_ = os.RemoveAll(dir)
+		if out, err := ev.run(ctx, "git", "clone", "--quiet", ev.cfg.GitURL, dir); err != nil {
+			return fmt.Errorf("clone impossible : %s", lastLines(out, 3))
+		}
+	}
+	for _, args := range [][]string{
+		{"-C", dir, "fetch", "--quiet", "origin", ev.cfg.Branch},
+		{"-C", dir, "checkout", "--quiet", "--force", "--detach", head},
+		{"-C", dir, "clean", "--quiet", "-fdx"},
+	} {
+		if out, err := ev.run(ctx, "git", args...); err != nil {
+			return fmt.Errorf("git %s : %s", args[2], lastLines(out, 3))
+		}
 	}
 	return nil
 }

@@ -86,6 +86,8 @@ func main() {
 	mux.HandleFunc("GET /traffic", s.traffic)
 	mux.HandleFunc("GET /traffic/{domain}", s.trafficSite)
 	mux.HandleFunc("GET /traffic/connexions/{service}", s.trafficLogins)
+	mux.HandleFunc("GET /updates", s.updates)
+	mux.HandleFunc("POST /updates/check", s.updatesCheck)
 	mux.HandleFunc("GET /accounts", s.accounts)
 	mux.HandleFunc("GET /accounts/new", s.accountNew)
 	mux.HandleFunc("POST /accounts/new", s.accountNew)
@@ -103,6 +105,8 @@ func main() {
 	if s.reg != nil {
 		go s.warm(context.Background())
 	}
+	// Ce que `update` changerait : chaque jour, avec un récapitulatif sur Discord.
+	go s.updatesLoop(context.Background())
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,

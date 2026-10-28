@@ -1,7 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -134,5 +139,59 @@ func TestVisitItem(t *testing.T) {
 	}
 	if one := visitItem(Visit{Start: start, End: start, Pages: 1}); one.When != "mer. 28/10 · 14:05" || one.Duration != "" {
 		t.Errorf("une page : %+v", one)
+	}
+}
+
+// Mises à jour : le genre de changement, l'ordre (le plus important d'abord), les entrées du flake.
+func TestUpdates(t *testing.T) {
+	for a, want := range map[[2]string]string{{"4.39.28", "4.40.0"}: "minor", {"31.0.8", "32.0.0"}: "major", {"7.3", "7.3.4"}: "patch",
+		{"10.5p1", "10.5p2"}: "patch", {"1.37.4", "1.37.4"}: "same", {"x", "y"}: "other"} {
+		if got := versionChange(a[0], a[1]); got != want {
+			t.Errorf("%s → %s : %s, attendu %s", a[0], a[1], got, want)
+		}
+	}
+	cur := []InvItem{{ID: "services.nginx", Kind: "service", Pname: "nginx", Version: "1.30.6"}, {ID: "services.authelia.main", Kind: "service", Pname: "authelia", Version: "4.39.28"},
+		{ID: "boot.kernel", Kind: "base", Pname: "linux", Version: "7.3"}, {ID: "services.old", Pname: "old", Version: "1"}}
+	next := []InvItem{{ID: "services.nginx", Pname: "nginx", Version: "1.30.6"}, {ID: "services.authelia.main", Pname: "authelia", Version: "5.0.0", Changelog: "https://x"},
+		{ID: "boot.kernel", Pname: "linux", Version: "7.3.4"}, {ID: "services.new", Pname: "new", Version: "2"}}
+	rows := updateRows(cur, next)
+	got := []string{}
+	for _, r := range rows {
+		got = append(got, r.Name+":"+r.Change)
+	}
+	if strings.Join(got, " ") != "authelia:major linux:patch new:new old:gone nginx:same" || rows[0].Changelog != "https://x" {
+		t.Errorf("lignes : %v", got)
+	}
+	old := []byte(`{"root":"root","nodes":{"root":{"inputs":{"nixpkgs":"nixpkgs","secrets":"secrets","hm":["nixpkgs"]}},
+		"nixpkgs":{"locked":{"type":"github","owner":"NixOS","repo":"nixpkgs","rev":"aaa","lastModified":1792800000}},"secrets":{"locked":{"rev":"s"}}}}`)
+	neu := []byte(`{"root":"root","nodes":{"root":{"inputs":{"nixpkgs":"nixpkgs","secrets":"secrets","hm":["nixpkgs"]}},
+		"nixpkgs":{"locked":{"type":"github","owner":"NixOS","repo":"nixpkgs","rev":"bbb","lastModified":1793232000}},"secrets":{"locked":{"rev":"s"}}}}`)
+	in := inputRows(old, neu)
+	if len(in) != 1 || in[0].Name != "nixpkgs" || !in[0].Changed || in[0].Days != 5 || in[0].Compare != "https://github.com/NixOS/nixpkgs/compare/aaa...bbb" {
+		t.Errorf("entrées : %+v", in)
+	}
+}
+
+// Récapitulatif Discord : ce qui change, du plus important au moins important, et le lien.
+func TestPostUpdates(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewDecoder(r.Body).Decode(&got) }))
+	defer srv.Close()
+	dir := t.TempDir()
+	inv := filepath.Join(dir, "inv.json")
+	_ = os.WriteFile(inv, []byte(`[{"id":"services.authelia.main","kind":"service","pname":"authelia","version":"4.39.28"},{"id":"boot.kernel","kind":"base","pname":"linux","version":"7.3"},{"id":"services.nginx","kind":"service","pname":"nginx","version":"1.30.6"}]`), 0o644)
+	s := &Server{cfg: &Config{DiscordHook: srv.URL, Inventory: inv, Host: "admin.vpn.x"}}
+	machineName = "think"
+	s.postUpdates(t.Context(), updatesResult{Next: []InvItem{{ID: "services.authelia.main", Pname: "authelia", Version: "4.40.1"}, {ID: "boot.kernel", Pname: "linux", Version: "7.3.6"},
+		{ID: "services.nginx", Pname: "nginx", Version: "1.30.6"}}, Inputs: []InputRow{{Name: "nixpkgs-stable", From: "25/10/2026", To: "28/10/2026", Changed: true}}})
+	msg, _ := got["content"].(string)
+	t.Log("\n" + msg)
+	for _, want := range []string{"**think** : 2 versions changeraient", "• **authelia** 4.39.28 → 4.40.1 (mineure)", "• **linux** 7.3 → 7.3.6 (correctif, redémarrage)", "entrée `nixpkgs-stable`", "https://admin.vpn.x/updates"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("manque %q", want)
+		}
+	}
+	if strings.Contains(msg, "nginx") {
+		t.Error("un paquet à jour ne doit pas figurer")
 	}
 }

@@ -1,0 +1,90 @@
+{{define "updates"}}{{template "top" .}}
+<header class="topbar">
+  {{template "crumbs" (args "Title" "Mises à jour")}}
+  <form method="post" action="/updates/check"><button class="btn btn-primary" {{if .Running}}disabled{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>{{if .Running}}Vérification…{{else}}Vérifier maintenant{{end}}</button></form>
+</header>
+<main class="page">
+  <h1>Mises à jour</h1>
+  {{template "updates-body" .}}
+</main>
+{{template "bottom" .}}{{end}}
+
+{{/* Relu toutes les 5 s pendant une vérification (htmx), puis une dernière fois. */}}
+{{define "updates-body"}}
+<div id="updates-body" class="overview" {{if .Running}}hx-get="/updates?frag" hx-trigger="every 5s" hx-select="#updates-body" hx-swap="outerHTML"{{end}}>
+  {{with .CurError}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  {{with .Error}}<div class="alert alert-amber"><p>Vérification impossible : {{.}}</p></div>{{end}}
+  <section class="strip" aria-label="Résumé">
+    <div class="strip-cell">
+      <span class="strip-label">Dernière vérification</span>
+      <span class="strip-value line">{{if .Running}}<span class="sq busy" style="background: var(--accent)"></span>en cours…{{else if .Checked}}{{.Checked}}{{else}}jamais{{end}}</span>
+      <span class="mono small muted">chaque jour à {{.Hour}} h{{if .Discord}}, récapitulatif sur Discord{{end}}{{with .Head}} · main {{.}}{{end}}</span>
+    </div>
+    <div class="strip-cell">
+      <span class="strip-label">Avec <code>update</code></span>
+      <span class="strip-value line">{{if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
+      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}</span>
+    </div>
+    <div class="strip-cell">
+      <span class="strip-label">Appliquer</span>
+      <span class="strip-value mono small">update, puis rebuild</span>
+      <span class="small muted">sur think ; cette page ne modifie rien</span>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="up-base-title">
+    <div class="block-head"><h2 id="up-base-title" class="line">Système{{template "info" (args "ID" "info-up-base" "Text" "Le noyau, systemd et nixpkgs. En service : la génération active de think. Après update : la config de main, avec un flake.lock mis à jour comme le ferait update (calculé à part, rien n'est modifié). Un nouveau noyau demande un redémarrage.")}}</h2></div>
+    {{template "updates-table" (args "Rows" .Base "Checked" .Checked)}}
+  </section>
+
+  <section class="block" aria-labelledby="up-svc-title">
+    <div class="block-head"><h2 id="up-svc-title" class="line">Services{{template "info" (args "ID" "info-up-svc" "Text" "Tout service activé sur think qui a un paquet, trouvé dans la config (aucune liste à tenir). Une version majeure de Nextcloud ou PostgreSQL ne vient jamais d'un simple update : elle se choisit dans la config, avec une migration.")}}</h2></div>
+    {{template "updates-table" (args "Rows" .Services "Checked" .Checked)}}
+  </section>
+
+  {{if .Inputs}}
+  <section class="block" aria-labelledby="up-inputs-title">
+    <div class="block-head"><h2 id="up-inputs-title" class="line">Entrées du flake{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock (secrets à part : son lock ne bouge que par commit). Comparer : les changements de l'entrée sur GitHub.")}}</h2></div>
+    <section class="card table-card" aria-label="Entrées du flake">
+      <table class="sites traffic detail">
+        <thead><tr><th scope="col">Entrée</th><th scope="col">Actuelle</th><th scope="col">Après update</th><th scope="col">Écart</th><th scope="col"><span class="sr-only">Lien</span></th></tr></thead>
+        {{range .Inputs}}
+        <tbody data-vpn><tr>
+          <td class="site-td"><span class="mono strong">{{.Name}}</span></td>
+          <td class="mono small muted">{{.From}}</td>
+          <td class="mono small">{{if .Changed}}{{.To}}{{else}}<span class="muted">inchangée</span>{{end}}</td>
+          <td class="muted">{{if .Changed}}{{.Days}} j{{else}}—{{end}}</td>
+          <td class="end">{{with .Compare}}<a class="small" href="{{.}}">Comparer</a>{{end}}</td>
+        </tr></tbody>
+        {{end}}
+      </table>
+    </section>
+  </section>
+  {{end}}
+</div>
+{{end}}
+
+{{/* Ce qui change d'abord ; ce qui est à jour, replié. */}}
+{{define "updates-table"}}
+<section class="card table-card" aria-label="Versions">
+  <table class="sites traffic detail updates">
+    <thead><tr><th scope="col">Paquet</th><th scope="col">En service</th><th scope="col">Après update</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
+    {{$checked := .Checked}}
+    {{range .Rows}}{{if or (not $checked) (ne .Change "same")}}{{template "update-row" .}}{{end}}{{end}}
+  </table>
+  {{if $checked}}{{$same := 0}}{{range .Rows}}{{if eq .Change "same"}}{{$same = add $same 1}}{{end}}{{end}}
+  {{if $same}}<details class="up-same"><summary class="muted small">{{$same}} à jour</summary>
+    <table class="sites traffic detail updates">{{range .Rows}}{{if eq .Change "same"}}{{template "update-row" .}}{{end}}{{end}}</table>
+  </details>{{end}}{{end}}
+</section>
+{{end}}
+
+{{define "update-row"}}
+<tbody data-vpn><tr>
+  <td class="site-td"><span class="stack tight"><span class="strong">{{.Name}}</span><small class="mono muted">{{.ID}}</small></span></td>
+  <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
+  <td class="mono small">{{if .Next}}{{.Next}}{{else}}<span class="muted">—</span>{{end}}</td>
+  <td>{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}} <small class="warn-ink">redémarrage</small>{{end}}</td>
+  <td class="end small">{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</td>
+</tr></tbody>
+{{end}}

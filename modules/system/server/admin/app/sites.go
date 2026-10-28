@@ -520,6 +520,7 @@ var funcs = template.FuncMap{
 	"add":       func(a, b int) int { return a + b },
 	"list":      func(v ...string) []string { return v },
 	"mapHeight": func() float64 { return mapHeight },
+	"firstOf":   firstOf,
 	// args : paramètres nommés d'un sous-template (`{{template "dd" (args "D" .Branch "URL" $.FormURL)}}`).
 	"args": func(kv ...any) map[string]any {
 		m := map[string]any{}
