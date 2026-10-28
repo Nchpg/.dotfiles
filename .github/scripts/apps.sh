@@ -152,7 +152,7 @@ validate_entry() {
             | ($envs | to_entries[] | .key as $id | "\($id) : " as $w | .value
                 | if ($id | test("^[a-z][a-z0-9-]{0,15}$") | not) then "environnement « \($id) » : identifiant invalide"
                   elif type != "object" then "\($w)objet attendu" else
-                  keys_in(["name", "branch", "from", "data", "pin", "subdomain", "expose", "devices", "sso", "accounts", "containers", "entrypoint", "internetAccess", "probe", "rateLimit", "secrets"]; $w),
+                  keys_in(["name", "branch", "from", "data", "pin", "subdomain", "expose", "devices", "sso", "accounts", "containers", "entrypoint", "internetAccess", "probe", "rateLimit"]; $w),
                   named($w), subdomain($w),
                   (if (.branch | type) != "string" or (.branch | test("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$") | not) then "\($w)branch manquante ou invalide" else empty end),
                   (if has("from") and ((.from | type) != "string" or .from == $id or (.from as $f | $envs | has($f) | not)) then "\($w)from : un autre environnement du site" else empty end),
@@ -161,16 +161,7 @@ validate_entry() {
                   (if has("pin") and ((.pin | type) != "string" or (.pin | test("^sha-[0-9a-f]{7,40}$") | not)) then "\($w)pin : un tag sha-<commit>" else empty end),
                   (if has("expose") then access($w) elif has("devices") or has("sso") or has("accounts") then "\($w)devices, sso et accounts vont avec expose" else empty end),
                   (if has("internetAccess") then options($w) elif has("probe") or has("rateLimit") then "\($w)probe et rateLimit vont avec internetAccess" else empty end),
-                  (if has("containers") then containers($w; true) elif has("entrypoint") then "\($w)entrypoint va avec containers" else empty end),
-                  # Secrets, avec des conteneurs hérités : `replace` (secret -> secret, "" : retiré) et
-                  # `add` (conteneur -> secrets en plus), tous rangés sous le site.
-                  (def key: type == "string" and test("^\($app)/[A-Za-z0-9._-]+$");
-                   if has("secrets") and has("containers") then "\($w)secrets agit sur des conteneurs hérités (conteneurs propres : à choisir dans containers)"
-                   elif has("secrets") and ((.secrets | type) != "object" or ((.secrets | keys) - ["replace", "add"]) != []
-                       or ((.secrets.replace // {}) | type) != "object" or ((.secrets.add // {}) | type) != "object"
-                       or any((.secrets.replace // {}) | to_entries[]; (.key | key | not) or ((.value == "" or (.value | key)) | not))
-                       or any((.secrets.add // {}) | to_entries[]; (.key | test("^[a-z][a-z0-9-]{0,15}$") | not) or (.value | type) != "array" or any(.value[]; key | not)))
-                   then "\($w)secrets : replace (\($app)/x -> \($app)/y, ou vide) et add (conteneur -> [\($app)/z])" else empty end)
+                  (if has("containers") then containers($w; true) elif has("entrypoint") then "\($w)entrypoint va avec containers" else empty end)
                   end)
             end
          else empty end)

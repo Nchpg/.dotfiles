@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -30,32 +29,6 @@ type Env struct {
 	InternetAccess *bool                `json:"internetAccess,omitempty"`
 	Probe          string               `json:"probe,omitempty"`
 	RateLimit      *[]string            `json:"rateLimit,omitempty"`
-	// Conteneurs hérités : secrets remplacés, retirés ou ajoutés pour cet environnement.
-	Secrets *EnvSecrets `json:"secrets,omitempty"`
-}
-
-// EnvSecrets : les secrets d'un environnement aux conteneurs hérités, par rapport à son parent.
-type EnvSecrets struct {
-	Replace map[string]string   `json:"replace,omitempty"` // secret -> remplaçant ("" : retiré)
-	Add     map[string][]string `json:"add,omitempty"`     // conteneur -> secrets en plus
-}
-
-func (s *EnvSecrets) empty() bool { return s == nil || (len(s.Replace) == 0 && len(s.Add) == 0) }
-
-// apply : les secrets d'un conteneur, remplacés (un remplaçant vide retire), puis ceux ajoutés.
-// Même calcul que apps-file.nix.
-func (s EnvSecrets) apply(container string, keys []string) []string {
-	out := []string{}
-	for _, k := range keys {
-		if r, ok := s.Replace[k]; ok {
-			if r != "" {
-				out = append(out, r)
-			}
-			continue
-		}
-		out = append(out, k)
-	}
-	return append(out, s.Add[container]...)
 }
 
 func (v Env) OwnAccess() bool     { return v.Expose != "" }
@@ -192,63 +165,11 @@ func (e Entry) Deploy(site, id string) (Deploy, error) {
 		d.Tag = tagOf(v.Branch)
 	}
 	d.Ctrs = Ctrs{Containers: map[string]Container{}, Entrypoint: c.Entrypoint}
-	ov := e.secretOverrides(id)
 	for n, ct := range c.Containers {
 		ct.Image = untag(ct.Image) + ":" + d.Tag
-		if !ov.empty() {
-			ct.Secrets = ov.apply(n, ct.Secrets)
-		}
 		d.Ctrs.Containers[n] = ct
 	}
 	return d, nil
-}
-
-// secretOverrides : secrets d'un environnement aux conteneurs hérités, les siens puis ceux de ses
-// parents jusqu'à celui qui a ses propres conteneurs. Remplacements : le plus proche l'emporte ;
-// ajouts : cumulés. Même règle que apps-file.nix (`overridesOf`).
-func (e Entry) secretOverrides(id string) *EnvSecrets {
-	out := &EnvSecrets{Replace: map[string]string{}, Add: map[string][]string{}}
-	for n := 0; id != "" && n < 17; n++ {
-		v := e.Environments[id]
-		if v.OwnContainers() {
-			break
-		}
-		if v.Secrets != nil {
-			for k, r := range v.Secrets.Replace {
-				if _, set := out.Replace[k]; !set {
-					out.Replace[k] = r
-				}
-			}
-			for c, ks := range v.Secrets.Add {
-				for _, k := range ks {
-					if !slices.Contains(out.Add[c], k) {
-						out.Add[c] = append(out.Add[c], k)
-					}
-				}
-			}
-		}
-		id = v.From
-	}
-	return out
-}
-
-// inheritedContainers : les conteneurs dont hérite un environnement, secrets d'origine.
-func (e Entry) inheritedContainers(id string) map[string]Container {
-	_, c, _, err := e.sections(e.Environments[id].From, 0)
-	if err != nil {
-		return nil
-	}
-	return c.Containers
-}
-
-// inheritedSecrets : les secrets des conteneurs dont hérite un environnement, avant son parent et lui.
-func (e Entry) inheritedSecrets(id string) []string {
-	var out []string
-	for _, ct := range e.inheritedContainers(id) {
-		out = append(out, ct.Secrets...)
-	}
-	sort.Strings(out)
-	return slices.Compact(out)
 }
 
 // Deploys : la racine puis les environnements ; ceux qui ne se résolvent pas sont omis.
@@ -350,36 +271,6 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 		}
 		if !v.OwnContainers() && v.Entrypoint != "" {
 			add("%sle point d'entrée va avec des conteneurs propres.", w)
-		}
-		if !v.Secrets.empty() {
-			if v.OwnContainers() {
-				add("%ssecrets de l'environnement : avec des conteneurs propres, ils se choisissent dans chaque conteneur.", w)
-			}
-			inherited := e.inheritedSecrets(id)
-			for k, r := range v.Secrets.Replace {
-				switch {
-				case !slices.Contains(inherited, k):
-					add("%s%s n'est pas un secret hérité : rien à remplacer.", w, k)
-				case r != "" && !strings.HasPrefix(r, site+"/"):
-					add("%sle secret %s n'est pas rangé sous %s/.", w, r, site)
-				}
-			}
-			ctrs := e.inheritedContainers(id)
-			for c, ks := range v.Secrets.Add {
-				ct, ok := ctrs[c]
-				if !ok {
-					add("%spas de conteneur %s hérité : rien où ajouter %s.", w, c, strings.Join(ks, ", "))
-					continue
-				}
-				for _, k := range ks {
-					switch {
-					case !strings.HasPrefix(k, site+"/"):
-						add("%sle secret %s n'est pas rangé sous %s/.", w, k, site)
-					case slices.Contains(ct.Secrets, k):
-						add("%s%s le reçoit déjà de son parent.", w, c)
-					}
-				}
-			}
 		}
 		if !v.OwnOptions() && (v.Probe != "" || v.RateLimit != nil) {
 			add("%spage de santé et limite de débit vont avec les options propres.", w)
