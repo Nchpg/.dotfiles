@@ -104,8 +104,8 @@ func TestGeo(t *testing.T) {
 
 // Trafic par site : les environnements d'un site ensemble, les sites les plus visités d'abord.
 func TestGroupTraffic(t *testing.T) {
-	g := groupTraffic([]TrafficRow{{Name: "nextcloud", Domain: "cloud.x", Visits: 1}, {Name: "myetf", Label: "production", Domain: "etf.x", Visits: 2},
-		{Name: "myetf", Label: "preview", Domain: "etf-prev.x", Visits: 3}, {Name: "grafana", Domain: "metrics.x"}})
+	g := groupTraffic([]TrafficRow{{Name: "nextcloud", Label: "production", Domain: "cloud.x", Visits: 1}, {Name: "myetf", Label: "production", Domain: "etf.x", Visits: 2},
+		{Name: "myetf", Label: "preview", Domain: "etf-prev.x", Visits: 3}, {Name: "grafana", Label: "production", Domain: "metrics.x"}})
 	if len(g) != 3 || g[0].Visits != 5 || len(g[0].Rows) != 2 || !g[0].Rows[0].First || g[0].Rows[0].Span != 2 || g[0].Rows[1].First {
 		t.Errorf("groupes : %+v", g)
 	}

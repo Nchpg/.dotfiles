@@ -62,7 +62,7 @@
             {{range .Rows}}
             <tr class="{{if .First}}first{{end}}">
               {{if .First}}<td rowspan="{{.Span}}" class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>{{end}}
-              <td class="env-td">{{if .Label}}<span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.Link}}">{{.Label}}</a><small class="mono muted ellipsis">{{.Domain}}</small></span></span>{{else}}<a class="mono small ellipsis" href="{{.Link}}">{{.Domain}}</a>{{end}}</td>
+              <td class="env-td"><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.Link}}">{{.Label}}</a><small class="mono muted ellipsis">{{.Domain}}</small></span></span></td>
               <td class="acc-td">{{template "acc" .}}</td>
               <td class="num-td">{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
               <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
@@ -73,6 +73,28 @@
         </table>
       </section>
     </section>
+
+    {{if .Services}}
+    <section class="block" aria-labelledby="services-title">
+      <div class="block-head"><h2 id="services-title">Services de think</h2></div>
+      <section class="card table-card" aria-label="Visites par service">
+        <table class="sites services traffic svc">
+          <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
+          {{range .Services}}
+          <tbody data-vpn>
+            <tr>
+              <td class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>
+              <td class="addr-td"><a class="mono small ellipsis" href="{{.Link}}" title="{{.Domain}}">{{.Domain}}</a></td>
+              <td class="acc-td">{{template "acc" .}}</td>
+              <td class="num-td">{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
+            </tr>
+          </tbody>
+          {{end}}
+        </table>
+      </section>
+    </section>
+    {{end}}
 
     {{if .Logins}}
     <section class="block" aria-labelledby="logins-title">

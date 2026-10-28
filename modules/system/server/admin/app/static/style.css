@@ -613,6 +613,7 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
   table.sites.traffic tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site site" "env acc" "num last"; gap: 4px 14px; }
   table.sites.traffic td.num-td { grid-area: num; }
   table.sites.traffic td.last-td { grid-area: last; text-align: right; }
+  table.sites.traffic.svc tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site acc" "addr addr" "num last"; }
   table.sites.traffic td.acc-td { flex-direction: row; align-items: center; gap: 6px; }
   table.sites.traffic .acc-sso { margin-top: 0; }
   /* Détails et connexions : le nom sur sa ligne, le reste à la suite. */

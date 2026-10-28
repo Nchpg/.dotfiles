@@ -564,17 +564,27 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 			visited++
 		}
 	}
-	groups := groupTraffic(rows)
+	// Les sites d'apps.json (par site, avec leurs environnements), puis les services de think.
+	var siteRows, services []TrafficRow
+	for _, r := range rows {
+		if r.Label == "" {
+			services = append(services, r)
+		} else {
+			siteRows = append(siteRows, r)
+		}
+	}
+	groups := groupTraffic(siteRows)
+	sort.SliceStable(services, func(i, j int) bool { return services[i].Visits > services[j].Visits })
 	logins := s.loginServices(ctx, s.readTrafficSummary(), period, key)
 	ok, failed := 0, 0
 	for _, ls := range logins {
 		ok, failed = ok+ls.OK, failed+ls.Failed
 	}
-	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Groups": groups, "Sites": len(rows), "Logins": logins, "Period": key, "Periods": periods,
+	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Groups": groups, "Services": services, "Sites": len(rows), "Logins": logins, "Period": key, "Periods": periods,
 		"Total": len(known), "Visited": visited, "OK": ok, "Failed": failed, "Dots": s.places(ctx).visitDots(known), "LogsOK": err == nil, "Complete": complete})
 }
 
-// TrafficGroup : un site et ses environnements (un service seul), ses visites en tout.
+// TrafficGroup : un site et ses environnements, ses visites en tout.
 type TrafficGroup struct {
 	Rows   []TrafficRow
 	Visits int
@@ -585,14 +595,10 @@ func groupTraffic(rows []TrafficRow) []TrafficGroup {
 	var groups []TrafficGroup
 	at := map[string]int{}
 	for _, r := range rows {
-		k := r.Name
-		if r.Label == "" {
-			k = "service:" + r.Domain
-		}
-		i, ok := at[k]
+		i, ok := at[r.Name]
 		if !ok {
 			i = len(groups)
-			at[k] = i
+			at[r.Name] = i
 			groups = append(groups, TrafficGroup{})
 		}
 		groups[i].Rows = append(groups[i].Rows, r)
