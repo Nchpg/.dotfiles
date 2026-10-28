@@ -180,33 +180,32 @@
     </section>
     {{if not .LogsOK}}<div class="alert alert-amber"><p>Journal de sshd illisible (Loki absent ou injoignable) : dernières connexions et tentatives refusées indisponibles.</p></div>{{end}}
     <section class="block" aria-labelledby="keys-title">
-      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think : celles de ssh-keys.json, ajoutées ou retirées d'ici par un commit sur main, et celles du code Nix (systemSettings.users). Rien ne s'active seul : git pull, puis rebuild, qui montre chaque clé et demande confirmation. Empreinte : le résumé court de la clé (SHA256), celui que ssh-keygen -l affiche et que le journal de think note à chaque connexion (« Accepted publickey … SHA256:… ») : il dit quelle clé s'est connectée.")}}</h2></div>
+      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think : celles de ssh-keys.json, ajoutées ou retirées d'ici par un commit sur main, et celles du code Nix (systemSettings.users). Rien ne s'active seul : git pull, puis rebuild, qui montre chaque clé et demande confirmation. Activité : tirée du journal de sshd, qui note à chaque connexion l'empreinte de la clé (affichée au survol de la clé, comme ssh-keygen -l la donne).")}}</h2></div>
       <section class="card table-card" aria-label="Liste des clés">
         <table class="list">
-          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">État</th><th scope="col">Depuis</th><th scope="col">Connexions {{.Window}}</th><th scope="col">Empreinte</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">État</th><th scope="col">Depuis</th><th scope="col">Connexions {{.Window}}</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
               {{if .Unknown}}
               <td class="muted">—</td>
-              <td><span class="stack tight"><span class="line"><span class="chip amber">hors liste</span></span><small class="muted">s'est connectée, n'est plus autorisée</small></span></td>
+              <td title="{{.Fingerprint}}"><span class="stack tight"><span class="line"><span class="chip amber">hors liste</span></span><small class="muted">s'est connectée, n'est plus autorisée</small></span></td>
               {{else}}
               <td>{{.User}}</td>
-              <td><span class="stack tight"><span class="line">{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}{{if .Adding}}<span class="chip amber">ajout : rebuild à faire</span>{{else if .Removing}}<span class="chip amber">retrait : rebuild à faire</span>{{end}}</span><small class="mono muted">{{.Type}}{{if not .InFile}}{{if not .Removing}}, code Nix{{end}}{{end}}</small></span></td>
+              <td title="{{.Fingerprint}}"><span class="stack tight"><span class="line">{{if .Comment}}{{.Comment}}{{else}}<span class="muted">sans commentaire</span>{{end}}{{if .Adding}}<span class="chip amber">ajout : rebuild à faire</span>{{else if .Removing}}<span class="chip amber">retrait : rebuild à faire</span>{{end}}</span><small class="mono muted">{{.Type}}{{if not .InFile}}{{if not .Removing}}, code Nix{{end}}{{end}}</small></span></td>
               {{end}}
               <td class="nowrap">{{if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connectée{{with .ConnectedSince}} depuis {{.}}{{end}}</span>
                 {{else if .LastSeen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vue {{.LastSeen}}</span></span>
                 {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">pas vue sur {{$.Window}}</span></span>{{end}}</td>
               <td class="mono small muted nowrap">{{if .From}}{{.From}}{{else}}—{{end}}</td>
               <td class="muted">{{if .Count}}{{.Count}}{{else}}0{{end}}</td>
-              <td class="mono small muted ellipsis-cell" title="{{.Fingerprint}}">{{.Fingerprint}}</td>
               <td class="end"><span class="line end-line">
                 {{if .Key}}<button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier</button>{{end}}
                 {{if and .InFile (not .Adding)}}<form method="post" action="/ssh/remove" class="row-remove"><input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="key" value="{{.Key}}">
                   <details><summary class="btn btn-sm btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary><button class="btn btn-sm btn-danger">Retirer</button></details></form>{{end}}
               </span></td>
             </tr>
-            {{else}}<tr><td colspan="7" class="muted">Aucune clé.</td></tr>{{end}}
+            {{else}}<tr><td colspan="6" class="muted">Aucune clé.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
