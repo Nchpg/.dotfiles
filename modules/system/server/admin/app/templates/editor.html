@@ -158,7 +158,17 @@
         {{if .Deps}}<div class="line small"><span class="muted">Démarre après</span>{{range .Deps}}<label class="pill"><input type="checkbox" name="dep_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
         <div class="stack tight">
           <span class="small strong">Données</span>
-          {{range .Data}}<label class="data-row"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted">{{.Host}}</span></label>{{else}}<small class="muted">Aucune</small>{{end}}
+          {{range $d := .Data}}
+          <div class="data-row">
+            <label class="line"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted data-host" title="{{.Host}}">{{.Host}}</span></label>
+            {{/* Environnement : le mode de ce dossier ; structurant, le chemin suit. */}}
+            {{with .ModeField}}<select name="{{.}}" class="input-sm data-mode" aria-label="Données de {{$d.Path}}" title="Séparées : vides au départ. Copie : celles de {{$f.DataFrom}} au premier démarrage, puis indépendantes. Partagées : les mêmes que {{$f.DataFrom}}." data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
+              <option value="separate" {{if eq $d.Mode "separate"}}selected{{end}}>séparées</option>
+              <option value="copy" {{if eq $d.Mode "copy"}}selected{{end}}>copie</option>
+              <option value="shared" {{if eq $d.Mode "shared"}}selected{{end}}>partagées</option>
+            </select>{{end}}
+          </div>
+          {{else}}<small class="muted">Aucune</small>{{end}}
           {{if not .Locked}}<details class="data-adder" data-structural>
             <summary class="link-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un dossier</summary>
             <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Dossier du conteneur à garder (plusieurs : séparés par des espaces)" data-enter-click><button type="button" class="btn btn-sm" hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML">Ajouter</button></span>
@@ -195,18 +205,14 @@
     </div>
   </section>
 
-  {{if .Child}}
+  {{/* Le mode des données se choisit dossier par dossier (section Conteneurs) ; ici, la recopie
+       des dossiers en copie, quand il y en a sur main. */}}
+  {{if and .Child .Recopy}}
   <section class="sec">
     <div class="sec-head">
       <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Données</h2>
     </div>
-    <div class="sec-body">
-      {{/* Structurant : le formulaire est refait, les chemins des données suivent le mode choisi. */}}
-      <div class="radio-list" role="radiogroup" aria-label="Données de l'environnement" data-structural hx-post="{{.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
-        {{range .DataModes}}<label><input type="radio" name="data" value="{{.Value}}" {{if .Selected}}checked{{end}}><span class="stack tight"><strong>{{.Label}}</strong><small class="muted">{{.Sub}}</small></span></label>{{end}}
-      </div>
-      {{with .Recopy}}{{template "recopy" (args "URL" $f.RecopyURL "R" .)}}{{end}}
-    </div>
+    <div class="sec-body">{{template "recopy" (args "URL" .RecopyURL "R" .Recopy)}}</div>
   </section>
   {{end}}
 

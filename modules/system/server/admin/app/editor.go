@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -68,6 +69,8 @@ func newDD(name, aria string, opts []DDOpt, placeholder, icon string) DD {
 type DataVM struct {
 	Value, Path, Host string
 	Auto              bool
+	// Environnement : le mode de ce dossier (champ `dmode_<conteneur>:<chemin>`).
+	ModeField, Mode string
 }
 
 type CtrVM struct {
@@ -150,7 +153,7 @@ type FormVM struct {
 	OptionsFrom              string
 	AccessSummary            []string
 	OptionsSummary           []string
-	DataModes                []DDOpt
+	DataFrom                 string // environnement : le parent dont un dossier se copie ou se partage
 	Recopy                   *RecopyVM
 	RecopyURL, RemoveEnvURL  string
 	Noindex                  bool
@@ -460,12 +463,8 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.From = newDD("from", "Hérite de", froms, "", icEnv)
 		f.From.Structural = true
 		parent := e.labelOf(v.From)
-		f.DataModes = []DDOpt{
-			{Value: "separate", Label: "Séparées", Sub: "Vides au départ.", Selected: v.DataMode() == "separate"},
-			{Value: "copy", Label: "Copie de " + parent, Sub: "Copiées au premier démarrage.", Selected: v.DataMode() == "copy"},
-			{Value: "shared", Label: "Partagées avec " + parent, Sub: "Les mêmes dossiers.", Selected: v.DataMode() == "shared"},
-		}
-		if onMain && mv.DataMode() == "copy" && v.DataMode() == "copy" {
+		f.DataFrom = parent
+		if onMain && mv.Data.AnyCopy() && v.Data.AnyCopy() {
 			f.Recopy = s.recopyState(d.App, parent)
 			f.RecopyURL = "/sites/" + name + "/env/" + env + "/recopy"
 		}
@@ -531,7 +530,11 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 			if host == "" {
 				host = e.DataHost(name, env, n, dt.Path)
 			}
-			vm.Data = append(vm.Data, DataVM{Value: dt.Path + "\t" + dt.On, Path: dt.Path, Host: host, Auto: dt.On == ""})
+			dv := DataVM{Value: dt.Path + "\t" + dt.On, Path: dt.Path, Host: host, Auto: dt.On == ""}
+			if env != "" {
+				dv.ModeField, dv.Mode = "dmode_"+n+":"+dt.Path, e.Environments[env].Data.Mode(n, dt.Path)
+			}
+			vm.Data = append(vm.Data, dv)
 		}
 		for i, k := range c.Secrets {
 			sv := SecretVM{Value: k, First: i == 0, Last: i == len(c.Secrets)-1}
@@ -714,6 +717,47 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 	return out, entry, errs
 }
 
+// dataModesFromForm : le mode de chaque dossier montré dans la page (`dmode_<conteneur>:<chemin>`) ;
+// nil si la page n'en montre aucun.
+func dataModesFromForm(r *http.Request) map[string]string {
+	var out map[string]string
+	for k, vals := range r.Form {
+		if key, ok := strings.CutPrefix(k, "dmode_"); ok && len(vals) > 0 && slices.Contains(dataModes, vals[0]) {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[key] = vals[0]
+		}
+	}
+	return out
+}
+
+// compactData : un seul mot quand tous les dossiers ont le même mode (nil : tous séparés), sinon par
+// dossier (les séparés sont sous-entendus).
+func compactData(modes map[string]string) *EnvData {
+	vals := slices.Collect(maps.Values(modes))
+	if slices.Min(vals) == slices.Max(vals) {
+		if vals[0] == "separate" {
+			return nil
+		}
+		return &EnvData{All: vals[0]}
+	}
+	d := &EnvData{Per: map[string]string{}}
+	for k, m := range modes {
+		if m != "separate" {
+			d.Per[k] = m
+		}
+	}
+	return d
+}
+
+// sameJSON : deux valeurs s'écrivent pareil en JSON.
+func sameJSON(a, b any) bool {
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
+}
+
 // reorderSecrets : « monter », « descendre » (secmove = `conteneur|secret|up` ou `down`) ou
 // retirer (secrm = `conteneur|secret`) un secret du conteneur `ctr`.
 func reorderSecrets(keys []string, ctr, move, rm string) []string {
@@ -820,9 +864,8 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	}
 	v.Branch = r.FormValue("branch")
 	v.From = r.FormValue("from")
-	v.Data = r.FormValue("data")
-	if v.Data == "separate" {
-		v.Data = ""
+	if modes := dataModesFromForm(r); modes != nil {
+		v.Data = compactData(modes)
 	}
 	v.Pin = version
 	v.Subdomain = ""
@@ -1035,8 +1078,12 @@ func (s *Server) deployChanges(name string, old, cur Entry, id string) []string 
 		if ov.Name != nv.Name {
 			parts = append(parts, "rename to "+b.Label)
 		}
-		if ov.DataMode() != nv.DataMode() {
-			parts = append(parts, map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.DataMode()])
+		if !sameJSON(ov.Data, nv.Data) {
+			msg, ok := map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.Data.Summary()]
+			if !ok {
+				msg = "set data per folder"
+			}
+			parts = append(parts, msg)
 		}
 		for _, x := range []struct {
 			was, is bool
@@ -1382,7 +1429,7 @@ func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
 	}
 	e := snap.Apps.Entries[name]
 	v, ok := e.Environments[id]
-	if !ok || v.DataMode() != "copy" {
+	if !ok || !v.Data.AnyCopy() {
 		http.Error(w, "environnement inconnu ou sans données « copie »", http.StatusBadRequest)
 		return
 	}

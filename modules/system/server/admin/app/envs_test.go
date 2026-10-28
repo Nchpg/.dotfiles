@@ -17,9 +17,9 @@ func withEnvs(t *testing.T) (*Server, *Snapshot, Entry) {
 	s, snap := testServer(t)
 	e := cloneEntry(snap.Apps.Entries["myetf"])
 	e.Environments = map[string]Env{
-		"preview": {Branch: "preview", Data: "copy", Expose: "public",
+		"preview": {Branch: "preview", Data: &EnvData{All: "copy"}, Expose: "public",
 			Containers: map[string]Container{"web": {Image: "myetf", Memory: "256m", Data: []Data{{Path: "/app/data"}}}}},
-		"staging": {Name: "Staging", Branch: "preview", From: "preview", Data: "shared", Subdomain: "etf-staging", Pin: "sha-3a91c2e0"},
+		"staging": {Name: "Staging", Branch: "preview", From: "preview", Data: &EnvData{All: "shared"}, Subdomain: "etf-staging", Pin: "sha-3a91c2e0"},
 	}
 	raw, err := snap.Apps.WithEntry("myetf", &e)
 	if err != nil {
@@ -349,5 +349,62 @@ func TestEnvOwnSectionsReadFromPage(t *testing.T) {
 	}
 	if g.InternetAccess == nil || *g.InternetAccess {
 		t.Errorf("internet fermé perdu : %v", g.InternetAccess)
+	}
+}
+
+// Données par dossier : un mot pour tous, ou un mode par dossier ; même JSON en entrée et en sortie,
+// chemins et recopie qui suivent, formulaire qui revient au mot unique quand c'est possible.
+func TestEnvDataPerFolder(t *testing.T) {
+	for _, raw := range []string{`"copy"`, `{"web:/app/cache":"shared","web:/app/data":"copy"}`} {
+		var d EnvData
+		if err := json.Unmarshal([]byte(raw), &d); err != nil {
+			t.Fatal(err)
+		}
+		if out, _ := json.Marshal(&d); string(out) != raw {
+			t.Errorf("JSON %s relu en %s", raw, out)
+		}
+	}
+
+	s, snap, e := withEnvs(t)
+	web := e.Containers["web"]
+	web.Data = []Data{{Path: "/app/data"}, {Path: "/app/cache"}}
+	e.Containers["web"] = web
+	pv := e.Environments["preview"]
+	pv.Containers, pv.Entrypoint = nil, ""
+	pv.Data = &EnvData{Per: map[string]string{"web:/app/data": "copy", "web:/app/cache": "shared"}}
+	e.Environments["preview"] = pv
+	if got := e.DataHost("myetf", "preview", "web", "/app/data"); got != "/var/lib/apps/myetf-preview/web/app/data" {
+		t.Errorf("/app/data en copie : %s", got)
+	}
+	if got := e.DataHost("myetf", "preview", "web", "/app/cache"); got != "/var/lib/apps/myetf/web/app/cache" {
+		t.Errorf("/app/cache partagé : %s", got)
+	}
+	if !pv.Data.AnyCopy() {
+		t.Errorf("un dossier en copie : l'environnement se recopie")
+	}
+	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) > 0 {
+		t.Errorf("modes valides refusés : %v", errs)
+	}
+
+	// Formulaire : rendu puis soumis tel quel, rien ne change ; tous en copie, un seul mot.
+	if got := submit(t, s, snap, e, "preview", nil).Environments["preview"].Data; !sameJSON(got, pv.Data) {
+		t.Errorf("modes perdus au formulaire : %+v", got)
+	}
+	got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["dmode_web:/app/cache"] = []string{"copy"} }).Environments["preview"].Data
+	if got == nil || got.Per != nil || got.All != "copy" {
+		t.Errorf("tous en copie : un seul mot attendu, %+v", got)
+	}
+	got = submit(t, s, snap, e, "preview", func(v map[string][]string) {
+		v["dmode_web:/app/cache"], v["dmode_web:/app/data"] = []string{"separate"}, []string{"separate"}
+	}).Environments["preview"].Data
+	if got != nil {
+		t.Errorf("tous séparés : rien à écrire, %+v", got)
+	}
+
+	// Un dossier qui n'existe pas : refusé.
+	pv.Data = &EnvData{Per: map[string]string{"web:/inconnu": "copy"}}
+	e.Environments["preview"] = pv
+	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) == 0 {
+		t.Errorf("dossier inconnu accepté")
 	}
 }
