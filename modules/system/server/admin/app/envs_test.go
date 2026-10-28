@@ -274,3 +274,64 @@ func TestEnvFormAccounts(t *testing.T) {
 		t.Errorf("aucun compte coché accepté")
 	}
 }
+
+// Secrets remplacés : appliqués aux conteneurs hérités, en chaîne (le plus proche l'emporte), gardés
+// par le formulaire, et figés dans les conteneurs quand l'environnement prend les siens.
+func TestEnvSecretOverrides(t *testing.T) {
+	s, snap, e := withEnvs(t)
+	s.cfg.SecretKeys = []string{"myetf/db", "myetf/api", "myetf/preview_db", "myetf/staging_db"}
+	web := e.Containers["web"]
+	web.Secrets = []string{"myetf/api", "myetf/db"}
+	e.Containers["web"] = web
+	pv := e.Environments["preview"]
+	pv.Containers, pv.Entrypoint, pv.Secrets = nil, "", map[string]string{"myetf/db": "myetf/preview_db"}
+	e.Environments["preview"] = pv
+	st := e.Environments["staging"]
+	st.From, st.Containers, st.Entrypoint = "preview", nil, ""
+	e.Environments["staging"] = st
+
+	secretsOf := func(id string) []string {
+		d, err := e.Deploy("myetf", id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d.Ctrs.Containers["web"].Secrets
+	}
+	if got := secretsOf(""); !slices.Equal(got, []string{"myetf/api", "myetf/db"}) {
+		t.Errorf("production touchée : %v", got)
+	}
+	if got := secretsOf("preview"); !slices.Equal(got, []string{"myetf/api", "myetf/preview_db"}) {
+		t.Errorf("preview : %v", got)
+	}
+	if got := secretsOf("staging"); !slices.Equal(got, []string{"myetf/api", "myetf/preview_db"}) {
+		t.Errorf("staging hérite du remplacement de preview : %v", got)
+	}
+	st.Secrets = map[string]string{"myetf/db": "myetf/staging_db"}
+	e.Environments["staging"] = st
+	if got := secretsOf("staging"); !slices.Equal(got, []string{"myetf/api", "myetf/staging_db"}) {
+		t.Errorf("staging : le sien l'emporte : %v", got)
+	}
+	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) > 0 {
+		t.Errorf("remplacements valides refusés : %v", errs)
+	}
+
+	// Formulaire : rendu puis soumis tel quel, le remplacement reste ; « comme le parent » l'efface.
+	if got := submit(t, s, snap, e, "preview", nil).Environments["preview"].Secrets; got["myetf/db"] != "myetf/preview_db" || len(got) != 1 {
+		t.Errorf("remplacement perdu au formulaire : %v", got)
+	}
+	if got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["secov_myetf/db"] = []string{""} }).Environments["preview"].Secrets; got != nil {
+		t.Errorf("« comme production » : %v", got)
+	}
+	// Conteneurs propres : les secrets remplacés passent dans les conteneurs copiés.
+	own := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["own_containers"] = []string{"1"} }).Environments["preview"]
+	if own.Secrets != nil || !slices.Equal(own.Containers["web"].Secrets, []string{"myetf/api", "myetf/preview_db"}) {
+		t.Errorf("conteneurs propres : %v, %v", own.Secrets, own.Containers["web"].Secrets)
+	}
+
+	// Un secret que les conteneurs hérités n'utilisent pas : refusé.
+	pv.Secrets = map[string]string{"myetf/autre": "myetf/preview_db"}
+	e.Environments["preview"] = pv
+	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) == 0 {
+		t.Errorf("remplacement d'un secret non hérité accepté")
+	}
+}

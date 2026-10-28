@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -29,6 +30,8 @@ type Env struct {
 	InternetAccess *bool                `json:"internetAccess,omitempty"`
 	Probe          string               `json:"probe,omitempty"`
 	RateLimit      *[]string            `json:"rateLimit,omitempty"`
+	// Secrets remplacés (conteneurs hérités seulement) : `<site>/db` -> `<site>/preview_db`.
+	Secrets map[string]string `json:"secrets,omitempty"`
 }
 
 func (v Env) OwnAccess() bool     { return v.Expose != "" }
@@ -165,11 +168,56 @@ func (e Entry) Deploy(site, id string) (Deploy, error) {
 		d.Tag = tagOf(v.Branch)
 	}
 	d.Ctrs = Ctrs{Containers: map[string]Container{}, Entrypoint: c.Entrypoint}
+	ov := e.secretOverrides(id)
 	for n, ct := range c.Containers {
 		ct.Image = untag(ct.Image) + ":" + d.Tag
+		if len(ov) > 0 {
+			secrets := make([]string, len(ct.Secrets))
+			for i, k := range ct.Secrets {
+				secrets[i] = k
+				if r, ok := ov[k]; ok {
+					secrets[i] = r
+				}
+			}
+			ct.Secrets = secrets
+		}
 		d.Ctrs.Containers[n] = ct
 	}
 	return d, nil
+}
+
+// secretOverrides : secrets remplacés d'un environnement aux conteneurs hérités, les siens puis ceux
+// de ses parents jusqu'à celui qui a ses propres conteneurs ; le plus proche l'emporte. Même règle
+// que apps-file.nix (`overridesOf`).
+func (e Entry) secretOverrides(id string) map[string]string {
+	out := map[string]string{}
+	for n := 0; id != "" && n < 17; n++ {
+		v := e.Environments[id]
+		if v.OwnContainers() {
+			break
+		}
+		for k, r := range v.Secrets {
+			if _, set := out[k]; !set {
+				out[k] = r
+			}
+		}
+		id = v.From
+	}
+	return out
+}
+
+// inheritedSecrets : les secrets des conteneurs dont hérite un environnement, avant tout remplacement.
+func (e Entry) inheritedSecrets(id string) []string {
+	_, c, _, err := e.sections(e.Environments[id].From, 0)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, ct := range c.Containers {
+		out = append(out, ct.Secrets...)
+	}
+	sort.Strings(out)
+	return slices.Compact(out)
 }
 
 // Deploys : la racine puis les environnements ; ceux qui ne se résolvent pas sont omis.
@@ -271,6 +319,20 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 		}
 		if !v.OwnContainers() && v.Entrypoint != "" {
 			add("%sle point d'entrée va avec des conteneurs propres.", w)
+		}
+		if len(v.Secrets) > 0 {
+			if v.OwnContainers() {
+				add("%ssecrets remplacés : avec des conteneurs propres, ils se choisissent dans chaque conteneur.", w)
+			}
+			inherited := e.inheritedSecrets(id)
+			for k, r := range v.Secrets {
+				switch {
+				case !slices.Contains(inherited, k):
+					add("%s%s n'est pas un secret hérité : rien à remplacer.", w, k)
+				case !strings.HasPrefix(r, site+"/"):
+					add("%sle secret %s n'est pas rangé sous %s/.", w, r, site)
+				}
+			}
 		}
 		if !v.OwnOptions() && (v.Probe != "" || v.RateLimit != nil) {
 			add("%spage de santé et limite de débit vont avec les options propres.", w)

@@ -165,8 +165,18 @@
         <div class="stack tight">
           <span class="small strong">Secrets</span>
           {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
-          {{else}}<small class="muted">Aucun. <code>secrets edit {{$f.Name}}/env</code></small>{{end}}
+          {{else}}<small class="muted">Aucun. <code>secrets edit {{if $f.SecretHint}}{{$f.SecretHint}}{{else}}{{$f.Name}}/env{{end}}</code></small>{{end}}
         </div>
+      </div>
+      {{end}}
+      {{if .SecretOverrides}}
+      {{/* Conteneurs hérités : chaque secret peut être remplacé pour cet environnement seul. */}}
+      <div class="stack tight secret-overrides">
+        <input type="hidden" name="secov_shown" value="1">
+        <span class="small strong">Secrets de {{.EnvLabel}}</span>
+        <small class="muted">Les mêmes que {{.SecretsFrom}}, sauf ceux remplacés ici : pour ce qui ne doit jamais toucher la production (base, envoi d'e-mails, paiements).</small>
+        {{range .SecretOverrides}}<div class="secret-row"><span class="mono small">{{.Key}}</span>{{template "dd" (args "D" .D)}}</div>{{end}}
+        <small class="muted">Un autre secret : <code>secrets edit {{.SecretHint}}</code>, puis le choisir ici.</small>
       </div>
       {{end}}
       {{range .NewImages}}

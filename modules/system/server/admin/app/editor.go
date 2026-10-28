@@ -113,18 +113,22 @@ type FormVM struct {
 	Probe        string
 	Peers        []Opt
 	Accounts     []Opt // comptes Authelia, cochés s'ils sont admis
-	Containers   []CtrVM
-	CtrList      string
-	Multi        bool
-	NewImages    []Opt // images du dépôt sans conteneur : à ajouter
-	Version      DD
-	VersionNote  string
-	Branch       DD
-	Frozen       bool
-	Up, Probed   bool
-	Initial      string
-	Tint, Ink    string
-	Preview      PreviewVM
+	// Environnement aux conteneurs hérités : ses secrets, chacun remplaçable pour lui seul.
+	SecretOverrides []SecretOverride
+	SecretHint      string // nom proposé pour un nouveau secret (`secrets edit …`)
+	SecretsFrom     string // l'environnement dont viennent les secrets hérités
+	Containers      []CtrVM
+	CtrList         string
+	Multi           bool
+	NewImages       []Opt // images du dépôt sans conteneur : à ajouter
+	Version         DD
+	VersionNote     string
+	Branch          DD
+	Frozen          bool
+	Up, Probed      bool
+	Initial         string
+	Tint, Ink       string
+	Preview         PreviewVM
 	// Demande en cours (étapes à la place de l'aperçu, formulaire grisé) ou échec récent.
 	Running *JobView
 	Failed  *JobBadge
@@ -337,6 +341,12 @@ func (s *Server) secretsFor(name string) []string {
 
 var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "256 Mo"}, {"512m", "512 Mo"}, {"1g", "1 Go"}, {"2g", "2 Go"}}
 
+// SecretOverride : un secret hérité et ce qui le remplace dans cet environnement.
+type SecretOverride struct {
+	Key string
+	D   DD
+}
+
 // formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
 func (s *Server) formVM(ctx context.Context, name string, e Entry, isNew bool, repo string, images []string, snap *Snapshot) FormVM {
 	return s.formVMFor(ctx, name, e, "", isNew, repo, images, snap)
@@ -411,6 +421,35 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		}
 		f.AccessFrom = origin(Env.OwnAccess)
 		f.CtrsFrom = origin(Env.OwnContainers)
+		f.SecretHint = name + "/" + env + "_env"
+		f.SecretsFrom = e.labelOf(v.From)
+		if !v.OwnContainers() {
+			// Ce que le parent donne déjà (ses propres remplacements compris), puis le choix de celui-ci.
+			parentOv := e.secretOverrides(v.From)
+			known := s.secretsFor(name)
+			for _, k := range e.inheritedSecrets(env) {
+				given := k
+				if r, ok := parentOv[k]; ok {
+					given = r
+				}
+				chosen := v.Secrets[k]
+				opts := []DDOpt{ddOpt("", "comme "+e.labelOf(v.From), given, icEnv, colGray, chosen == "")}
+				listed := false
+				for _, sk := range known {
+					if sk == given {
+						continue
+					}
+					listed = listed || sk == chosen
+					opts = append(opts, ddOpt(sk, sk, "pour "+d.Label+" seulement", icCommit, colAmber, sk == chosen))
+				}
+				if chosen != "" && !listed {
+					o := ddOpt(chosen, chosen, "absent des secrets : secrets edit "+chosen, icCommit, colRed, true)
+					o.SubInk = colRed[1]
+					opts = append(opts, o)
+				}
+				f.SecretOverrides = append(f.SecretOverrides, SecretOverride{Key: k, D: newDD("secov_"+k, "Secret "+k+" pour "+d.Label, opts, "", icCommit)})
+			}
+		}
 		f.OptionsFrom = origin(Env.OwnOptions)
 		f.AccessSummary = []string{"public"}
 		if d.VPN() {
@@ -805,12 +844,21 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	}
 	if r.FormValue("own_containers") == "1" {
 		if !v.OwnContainers() {
+			// Conteneurs copiés du parent, secrets remplacés compris : rien ne change en route.
+			ov := tmp.secretOverrides(env)
 			v.Containers = map[string]Container{}
 			for n, c := range pc.Containers {
 				c.Image = untag(c.Image)
+				c.Secrets = append([]string(nil), c.Secrets...)
+				for i, k := range c.Secrets {
+					if r, ok := ov[k]; ok {
+						c.Secrets[i] = r
+					}
+				}
 				v.Containers[n] = c
 			}
 			v.Entrypoint = pc.Entrypoint
+			v.Secrets = nil
 		} else if _, shown := r.Form["containers"]; shown {
 			var cerrs []string
 			v.Containers, v.Entrypoint, cerrs = s.containersFromForm(r, v.Containers, allowed, repo, "")
@@ -818,6 +866,18 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 		}
 	} else {
 		v.Containers, v.Entrypoint = nil, ""
+		// Secrets remplacés : ceux choisis dans la page (vide : comme le parent).
+		if _, shown := r.Form["secov_shown"]; shown {
+			v.Secrets = nil
+			for k, vals := range r.Form {
+				if key, ok := strings.CutPrefix(k, "secov_"); ok && key != "shown" && len(vals) > 0 && vals[0] != "" && vals[0] != key {
+					if v.Secrets == nil {
+						v.Secrets = map[string]string{}
+					}
+					v.Secrets[key] = vals[0]
+				}
+			}
+		}
 	}
 	if r.FormValue("own_options") == "1" {
 		if _, shown := r.Form["options_shown"]; shown && v.OwnOptions() {
@@ -985,6 +1045,9 @@ func (s *Server) deployChanges(name string, old, cur Entry, id string) []string 
 		}
 		if ov.Name != nv.Name {
 			parts = append(parts, "rename to "+b.Label)
+		}
+		if fmt.Sprint(ov.Secrets) != fmt.Sprint(nv.Secrets) {
+			parts = append(parts, "override secrets")
 		}
 		if ov.DataMode() != nv.DataMode() {
 			parts = append(parts, map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.DataMode()])
