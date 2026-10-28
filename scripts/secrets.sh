@@ -240,6 +240,15 @@ stalePullHint() {
 }
 
 # Sans le lock, les machines déploient l'ancienne valeur.
+# Le lock diffère de celui commité par l'entrée `secrets` seulement (et n'est pas stagé à part).
+lockOnlySecrets() {
+  # shellcheck disable=SC2016 # variables jq
+  local without='(.nodes.root.inputs.secrets // "") as $s | del(.nodes[$s])'
+  [ -z "$(git -C "$flake" diff --cached --name-only -- flake.lock)" ] \
+    && cmp -s <(git -C "$flake" show HEAD:flake.lock 2> /dev/null | jq -S "$without") \
+      <(jq -S "$without" "$flake/flake.lock")
+}
+
 sync() {
   local did="" head locked up stray n
 
@@ -323,7 +332,13 @@ sync() {
   echo
   echo "── lock à jour sur $head ──"
   git -C "$flake" --no-pager diff --stat flake.lock
-  echo "   git -C $flake commit -m 'chore: bump secrets' -- flake.lock && git -C $flake push"
+  # Commité seul s'il ne change que l'entrée des secrets (rien d'autre en cours dans le lock) ; le
+  # reste de la config n'est pas touché, et le push reste à toi.
+  if lockOnlySecrets && git -C "$flake" commit -q -m 'chore: bump secrets' -- flake.lock; then
+    echo "   commité dans la config (chore: bump secrets) : git -C $flake push"
+  else
+    echo "   git -C $flake commit -m 'chore: bump secrets' -- flake.lock && git -C $flake push"
+  fi
   n="$(git -C "$flake" status --porcelain --untracked-files=no | grep -vc ' flake.lock$' || true)"
   if [ "$n" != 0 ]; then
     echo "   ($n autre(s) fichier(s) modifié(s) dans la config : si l'un déclare ce secret,"
