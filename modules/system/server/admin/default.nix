@@ -161,6 +161,50 @@ let
     '';
   };
 
+  # Onglet Trafic : les sessions et applis connectées de Nextcloud et Vaultwarden, et les essais
+  # ratés de Nextcloud, lus dans leurs bases (root) ; résumé sans aucun jeton.
+  nextcloud = config.systemSettings.nextcloud;
+  vaultwarden = config.systemSettings.vaultwarden;
+  trafficSummary = pkgs-stable.writeShellApplication {
+    name = "admin-traffic";
+    runtimeInputs = [
+      pkgs-stable.sqlite
+      pkgs-stable.jq
+      pkgs-stable.coreutils
+      pkgs-stable.util-linux
+      config.services.postgresql.package
+    ];
+    text = ''
+      out="$STATE_DIRECTORY/traffic.json"
+      result='{}'
+    ''
+    + lib.optionalString nextcloud.enable ''
+      # type 0 : session d'un navigateur ; 1 : appli (mot de passe d'appli, client de synchro).
+      nc() {
+        runuser -u ${config.services.nextcloud.config.dbuser} -- psql -h ${config.services.nextcloud.config.dbhost} \
+          -d ${config.services.nextcloud.config.dbname} -tAq -c "SELECT coalesce(json_agg(t), '[]') FROM ($1) t" 2> /dev/null | grep . || echo '[]'
+      }
+      tokens=$(nc "SELECT uid AS \"user\", name, type, last_activity AS last FROM oc_authtoken ORDER BY last_activity DESC")
+      failures=$(nc "SELECT ip, action, occurred AS at, metadata FROM oc_bruteforce_attempts WHERE occurred > extract(epoch FROM now()) - 31 * 86400 ORDER BY occurred DESC LIMIT 500")
+      result=$(jq -n --argjson r "$result" --argjson t "$tokens" --argjson f "$failures" \
+        --argjson d '${builtins.toJSON ([ nextcloud.hostName ] ++ nextcloud.extraHostNames)}' \
+        '$r + {nextcloud: {domains: $d, tokens: $t, failures: ($f | map(.metadata |= (try fromjson catch {})))}}')
+    ''
+    + lib.optionalString vaultwarden.enable ''
+      db=/var/lib/${config.systemd.services.vaultwarden.serviceConfig.StateDirectory}/db.sqlite3
+      devices=$(sqlite3 -readonly -json "$db" "SELECT u.name AS user, u.email AS email, d.name AS name, d.atype AS type, d.created_at AS created, d.updated_at AS updated FROM devices d JOIN users u ON u.uuid = d.user_uuid ORDER BY d.updated_at DESC" 2> /dev/null | grep . || echo '[]')
+      result=$(jq -n --argjson r "$result" --argjson v "$devices" --argjson d '${
+        builtins.toJSON [ vaultwarden.hostName ]
+      }' \
+        '$r + {vaultwarden: {domains: $d, devices: $v}}')
+    ''
+    + ''
+      jq -n --argjson r "$result" '$r + {updated: now | floor}' > "$out.new"
+      chmod 644 "$out.new"
+      mv -f "$out.new" "$out"
+    '';
+  };
+
   # Noms des secrets disponibles (jamais leur valeur) : la page propose ceux rangés sous un site.
   secretKeys =
     let
@@ -268,6 +312,7 @@ in
         ADMIN_VPN_FILE = pkgs-stable.writeText "admin-vpn.json" (builtins.toJSON vpnInfo);
         ADMIN_SSH_FILE = pkgs-stable.writeText "admin-ssh.json" (builtins.toJSON sshInfo);
         ADMIN_ACCOUNTS_FILE = "/var/lib/admin-accounts/accounts.json";
+        ADMIN_TRAFFIC_FILE = "/var/lib/admin-traffic/traffic.json";
         ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
@@ -321,6 +366,24 @@ in
       };
     };
     systemd.timers.admin-accounts = lib.mkIf config.systemSettings.authelia.enable {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "2min";
+        OnUnitActiveSec = "5min";
+      };
+    };
+
+    systemd.services.admin-traffic = lib.mkIf (nextcloud.enable || vaultwarden.enable) {
+      description = "Applis et sessions de Nextcloud et Vaultwarden pour le dashboard (sans jeton)";
+      after = [ "postgresql.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe trafficSummary;
+        StateDirectory = "admin-traffic";
+        StateDirectoryMode = "0755";
+      };
+    };
+    systemd.timers.admin-traffic = lib.mkIf (nextcloud.enable || vaultwarden.enable) {
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "2min";
