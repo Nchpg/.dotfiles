@@ -64,7 +64,9 @@ _access_summary() {
                 | ($o | keys)[] as $k | select(($n | has($k)) and $o[$k] != $n[$k])
                 | "  ~ site \($k) :",
                   (($o[$k] | leaves) + ($n[$k] | leaves) | to_entries[]
-                   | .value as $p | ($o[$k] | getpath($p)) as $a | ($n[$k] | getpath($p)) as $b
+                   | .value as $p
+                   # Chemin présent pour un seul côté (sous un simple texte en face) : « (absent) ».
+                   | ($o[$k] | try getpath($p) catch null) as $a | ($n[$k] | try getpath($p) catch null) as $b
                    | select($a != $b) | "      \(.key) : \($a | show) → \($b | show)")'
             ;;
     esac
@@ -83,7 +85,9 @@ access_review() {
         fi
         changed=1
         echo "${B}$path${R}"
-        _access_summary "$kind" "$active" "$path"
+        # Un résumé qui échoue n'arrête pas le rebuild en silence : la confirmation reste demandée.
+        _access_summary "$kind" "$active" "$path" \
+            || echo "  ${WARN}(résumé illisible : git diff -- $path)${R}"
     done < <(jq -r '.[] | [.kind, .path, .active] | @tsv' "$access_manifest")
     [ "$changed" = 1 ] || return 0
     echo
