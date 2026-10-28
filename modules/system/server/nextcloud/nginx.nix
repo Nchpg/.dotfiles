@@ -13,7 +13,18 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    # Journal des visites (onglet Trafic) : le compte tapé dans le formulaire de connexion, seul (le
+    # mot de passe n'est jamais extrait) ; Vector ne le garde que pour l'envoi de ce formulaire.
+    systemSettings.proxy.visits.fields.form_user = "$nextcloud_form_user";
+
     services.nginx.commonHttpConfig = lib.mkMerge [
+      ''
+        map $request_body $nextcloud_form_user {
+          default                     "";
+          "~(?:^|&)user=(?<u>[^&]*)"  $u;
+        }
+      ''
+
       # `$request_uri` et non `$uri` : le `try_files` de la location PHP réécrit `$uri` avant FastCGI.
       (lib.mkIf (cfg.publicSharing.enable && cfg.publicSharing.canonicalLinkHost) ''
         map $request_uri $nextcloud_link_host {

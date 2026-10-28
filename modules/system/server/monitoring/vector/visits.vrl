@@ -71,18 +71,26 @@ if .via == "machine" {
 # pas gardée (elle peut porter une adresse de retour).
 loc = to_string(.loc) ?? ""
 del(.loc)
+# Le compte tapé dans un formulaire (champ `user=`, encodé) : gardé pour la connexion à Nextcloud seule.
+form_user = to_string(.form_user) ?? ""
+del(.form_user)
 path = to_string(.path) ?? ""
 if includes(array(parse_json!(s'@NEXTCLOUD@')) ?? [], .site) && .method == "POST" {
   if match(path, r'^/(index\.php/)?login$') || match(path, r'^/(index\.php/)?login/challenge/[^/]+$') {
     .kind = "login"
     .client = "navigateur"
+    if form_user != "" {
+      .login_user = decode_percent(replace(form_user, "+", " "))
+    }
     if match(loc, r'/login/(challenge|selectchallenge)') && !match(path, r'/challenge/') {
       .login = "2fa"
     } else if match(loc, r'/login(/challenge[^?]*)?(\?|$)') {
       .login = "failed"
-      parts = split(loc, "?")
-      q = parse_query_string(string(parts[1]) ?? "")
-      .login_user = to_string(q.user) ?? ""
+      if (to_string(.login_user) ?? "") == "" {
+        parts = split(loc, "?")
+        q = parse_query_string(string(parts[1]) ?? "")
+        .login_user = to_string(q.user) ?? ""
+      }
     } else {
       .login = "ok"
     }
