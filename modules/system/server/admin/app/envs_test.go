@@ -310,3 +310,44 @@ func TestSecretOrder(t *testing.T) {
 		t.Errorf("ordre perdu au déploiement : %v", d.Ctrs.Containers["web"].Secrets)
 	}
 }
+
+// Une section que la page vient de passer en « propre » (encore héritée sur main) se lit dans la page :
+// une case cochée juste après n'est pas perdue (avant : le parent était recopié à chaque fois).
+func TestEnvOwnSectionsReadFromPage(t *testing.T) {
+	s, snap, e := withEnvs(t)
+	s.cfg.SecretKeys = []string{"myetf/a", "myetf/b"}
+	pv := e.Environments["preview"]
+	pv.Containers, pv.Entrypoint = nil, ""
+	pv.InternetAccess, pv.Probe, pv.RateLimit = nil, "", nil
+	e.Environments["preview"] = pv
+
+	// 1. La page passe les conteneurs et les options en propres : copies du parent.
+	draft := submit(t, s, snap, e, "preview", func(v map[string][]string) {
+		v["own_containers"], v["own_options"] = []string{"1"}, []string{"1"}
+	})
+	// 2. Puis, page refaite sur ce brouillon (main inchangé), un secret coché et internet fermé.
+	f := s.formVMFor(context.Background(), "myetf", draft, "preview", false, "", []string{"myetf"}, snap)
+	var buf bytes.Buffer
+	if err := s.tmpl.ExecuteTemplate(&buf, "form", f); err != nil {
+		t.Fatal(err)
+	}
+	vals := formValues(buf.String())
+	vals["sec_web"] = append(vals["sec_web"], "myetf/b")
+	delete(vals, "internet")
+	req := httptest.NewRequest("POST", "/sites/myetf/form", strings.NewReader(vals.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := req.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+	got, errs := s.entryFromForm(req, "myetf", e, "preview", []string{"myetf"}, "")
+	if len(errs) > 0 {
+		t.Fatalf("erreurs : %v", errs)
+	}
+	g := got.Environments["preview"]
+	if !slices.Contains(g.Containers["web"].Secrets, "myetf/b") {
+		t.Errorf("secret coché perdu : %v", g.Containers["web"].Secrets)
+	}
+	if g.InternetAccess == nil || *g.InternetAccess {
+		t.Errorf("internet fermé perdu : %v", g.InternetAccess)
+	}
+}

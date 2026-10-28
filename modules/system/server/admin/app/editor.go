@@ -836,8 +836,10 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	if err != nil {
 		errs = append(errs, err.Error())
 	}
+	// Une section « propre » se lit dans la page dès qu'elle y est affichée comme telle (même si main
+	// l'a encore héritée : elle vient d'y passer) ; sinon, elle part des valeurs du parent.
 	if r.FormValue("own_access") == "1" {
-		if _, shown := r.Form["expose"]; shown && v.OwnAccess() {
+		if _, shown := r.Form["expose"]; shown {
 			v.Expose, v.Devices, v.SSO, v.Accounts = s.accessFromForm(r, v.Accounts)
 		} else if !v.OwnAccess() {
 			v.Expose, v.Devices, v.SSO, v.Accounts = pa.Expose, pa.Devices, pa.SSO, pa.Accounts
@@ -846,23 +848,28 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 		v.Expose, v.Devices, v.SSO, v.Accounts = "", nil, false, nil
 	}
 	if r.FormValue("own_containers") == "1" {
-		if !v.OwnContainers() {
-			v.Containers = map[string]Container{}
-			for n, c := range pc.Containers {
-				c.Image = untag(c.Image)
-				v.Containers[n] = c
+		// Les conteneurs du parent, sans tag : point de départ, et images de repli du formulaire.
+		parentCtrs := map[string]Container{}
+		for n, c := range pc.Containers {
+			c.Image = untag(c.Image)
+			parentCtrs[n] = c
+		}
+		if _, shown := r.Form["containers"]; shown {
+			prev := v.Containers
+			if !v.OwnContainers() {
+				prev = parentCtrs
 			}
-			v.Entrypoint = pc.Entrypoint
-		} else if _, shown := r.Form["containers"]; shown {
 			var cerrs []string
-			v.Containers, v.Entrypoint, cerrs = s.containersFromForm(r, v.Containers, allowed, repo, "")
+			v.Containers, v.Entrypoint, cerrs = s.containersFromForm(r, prev, allowed, repo, "")
 			errs = append(errs, cerrs...)
+		} else if !v.OwnContainers() {
+			v.Containers, v.Entrypoint = parentCtrs, pc.Entrypoint
 		}
 	} else {
 		v.Containers, v.Entrypoint = nil, ""
 	}
 	if r.FormValue("own_options") == "1" {
-		if _, shown := r.Form["options_shown"]; shown && v.OwnOptions() {
+		if _, shown := r.Form["options_shown"]; shown {
 			internet, probe, rl := optionsFromForm(r)
 			v.InternetAccess, v.Probe, v.RateLimit = &internet, probe, rl
 		} else if !v.OwnOptions() {
