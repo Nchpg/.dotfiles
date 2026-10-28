@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -42,12 +43,24 @@ type Job struct {
 	Domain   string
 	New      bool     // site ajouté : absent d'apps.json tant que le commit n'est pas fait
 	Apps     []string // déploiements touchés (myetf, myetf-preview…)
+
+	// De quoi reprendre après un redémarrage du dashboard : la demande, la tête de main lue avant
+	// l'envoi à apps.yml, l'heure de l'envoi, et s'il a eu lieu (sinon tout est refait).
+	Req        Request
+	Head       string
+	T0         time.Time
+	Dispatched bool
+
+	store *Jobs
 }
 
+// Jobs : les demandes, gardées dans `path` (dossier d'état) : un redémarrage du dashboard (rebuild
+// qui le touche) ne perd ni leurs étapes ni le verrou du formulaire, et celles en cours reprennent.
 type Jobs struct {
 	mu       sync.Mutex
 	m        map[string]*Job
 	verified map[string]time.Time // domaine → dernière réponse vue par une demande (étape 4)
+	path     string
 }
 
 // markVerified : la demande vient de voir ce domaine répondre.
@@ -81,15 +94,78 @@ func (js *Jobs) get(id string) *Job {
 	return js.m[id]
 }
 
+// add : une nouvelle demande. Les demandes terminées depuis plus de 2 h sont oubliées ; jamais une
+// en cours, qui peut attendre un rebuild à la main bien plus longtemps.
 func (js *Jobs) add(j *Job) {
+	j.store = js
 	js.mu.Lock()
-	defer js.mu.Unlock()
 	for id, old := range js.m {
-		if time.Since(old.Created) > 2*time.Hour {
+		if v := old.Snapshot(); v.Done && time.Since(v.Finished) > 2*time.Hour {
 			delete(js.m, id)
 		}
 	}
 	js.m[j.ID] = j
+	js.mu.Unlock()
+	js.save()
+}
+
+// save : toutes les demandes, écrites d'un coup (fichier temporaire puis renommage).
+func (js *Jobs) save() {
+	if js.path == "" {
+		return
+	}
+	js.mu.Lock()
+	list := make([]*Job, 0, len(js.m))
+	for _, j := range js.m {
+		list = append(list, j)
+	}
+	js.mu.Unlock()
+	copies := make([]*Job, 0, len(list))
+	for _, j := range list {
+		j.mu.Lock()
+		c := &Job{ID: j.ID, App: j.App, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...),
+			Done: j.Done, Failed: j.Failed, Created: j.Created, Finished: j.Finished, Domain: j.Domain, New: j.New,
+			Apps: j.Apps, Req: j.Req, Head: j.Head, T0: j.T0, Dispatched: j.Dispatched}
+		j.mu.Unlock()
+		copies = append(copies, c)
+	}
+	b, err := json.Marshal(copies)
+	if err != nil {
+		log.Printf("demandes : %v", err)
+		return
+	}
+	tmp := js.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		log.Printf("demandes : %v", err)
+		return
+	}
+	if err := os.Rename(tmp, js.path); err != nil {
+		log.Printf("demandes : %v", err)
+	}
+}
+
+// load : les demandes gardées ; celles qui n'étaient pas finies sont rendues pour reprise.
+func (js *Jobs) load() []*Job {
+	b, err := os.ReadFile(js.path)
+	if err != nil {
+		return nil
+	}
+	var list []*Job
+	if err := json.Unmarshal(b, &list); err != nil {
+		log.Printf("demandes : %s illisible : %v", js.path, err)
+		return nil
+	}
+	var running []*Job
+	js.mu.Lock()
+	for _, j := range list {
+		j.store = js
+		js.m[j.ID] = j
+		if !j.Done {
+			running = append(running, j)
+		}
+	}
+	js.mu.Unlock()
+	return running
 }
 
 // JobView : copie d'une demande, lisible sans verrou (templates, badges).
@@ -110,7 +186,6 @@ func (j *Job) Snapshot() JobView {
 
 func (j *Job) set(i int, state, detail, link string) {
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	j.Steps[i].State, j.Steps[i].Detail = state, detail
 	if link != "" {
 		j.Steps[i].Link = link
@@ -119,12 +194,22 @@ func (j *Job) set(i int, state, detail, link string) {
 		j.Failed, j.Done = true, true
 		j.Finished = time.Now()
 	}
+	j.mu.Unlock()
+	j.persist()
+}
+
+// persist : la demande a changé, le fichier suit (hors verrou de la demande : save les relit toutes).
+func (j *Job) persist() {
+	if j.store != nil {
+		j.store.save()
+	}
 }
 
 // abort : une demande interrompue (délai du contexte, arrêt) sans étape en échec est close ici,
 // sinon elle resterait « en cours » pour toujours.
 func (j *Job) abort(detail string) {
 	j.mu.Lock()
+	defer j.persist()
 	defer j.mu.Unlock()
 	if j.Done {
 		return
@@ -144,6 +229,7 @@ func (j *Job) finish() {
 	j.Done = true
 	j.Finished = time.Now()
 	j.mu.Unlock()
+	j.persist()
 }
 
 func newID() string {
@@ -308,7 +394,7 @@ func (s *Server) startJob(req Request) *Job {
 	} else if len(doms) > 0 {
 		domain = doms[0]
 	}
-	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new", Apps: apps}
+	j := &Job{ID: newID(), App: req.App, Delete: req.Entry == nil, Message: req.Message, Created: time.Now(), Domain: domain, New: req.Base == "new", Apps: apps, Req: req}
 	last := Step{Label: "Le site répond", Sub: strings.Join(doms, ", "), State: "todo"}
 	switch {
 	case j.Delete:
@@ -325,27 +411,83 @@ func (s *Server) startJob(req Request) *Job {
 		last,
 	}
 	s.jobs.add(j)
+	s.goJob(j, 0)
+	return j
+}
+
+// resumeJobs : au démarrage, les demandes qui n'étaient pas finies reprennent à leur étape.
+func (s *Server) resumeJobs() {
+	for _, j := range s.jobs.load() {
+		from := resumeStep(j)
+		log.Printf("%s : demande reprise à l'étape %d", j.App, from+1)
+		s.goJob(j, from)
+	}
+}
+
+// resumeStep : l'étape où reprendre une demande interrompue (celle qui était en cours).
+func resumeStep(j *Job) int {
+	from := 0
+	for i, st := range j.Snapshot().Steps {
+		if st.State == "active" {
+			from = i
+		}
+	}
+	// Envoi à apps.yml pas encore fait (ou pas noté) : tout est refait, rien n'est parti.
+	if from == 1 && !j.Dispatched {
+		from = 0
+	}
+	return from
+}
+
+func (s *Server) goJob(j *Job, from int) {
 	go func() {
 		// Plus long que la plus longue attente (2 h d'un `rebuild` à la main, puis les étapes d'après).
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour)
 		defer cancel()
 		defer func() {
 			if p := recover(); p != nil {
-				log.Printf("%s : panique : %v", req.App, p)
+				log.Printf("%s : panique : %v", j.App, p)
 				j.abort("erreur interne, voir les journaux")
 			}
 		}()
-		if err := s.runJob(ctx, j, req); err != nil {
-			log.Printf("%s : %v", req.App, err)
+		if err := s.runJob(ctx, j, j.Req, from); err != nil {
+			log.Printf("%s : %v", j.App, err)
 			j.abort("interrompu : " + err.Error())
 		}
 	}()
-	return j
 }
 
-func (s *Server) runJob(ctx context.Context, j *Job, req Request) error {
+// runJob : les étapes à partir de `from` (0 pour une demande neuve ; plus loin pour une reprise).
+func (s *Server) runJob(ctx context.Context, j *Job, req Request, from int) error {
 	want := fingerprintOf(req.Entry)
+	if from <= 0 {
+		if err := s.evalAndDispatch(ctx, j, req); err != nil {
+			return err
+		}
+	}
+	if from <= 1 {
+		j.mu.Lock()
+		head, t0 := j.Head, j.T0
+		j.mu.Unlock()
+		commit, err := s.waitCommit(ctx, j, req.App, want, head, t0)
+		if err != nil {
+			return err
+		}
+		j.set(1, "done", "commit "+commit[:7], "https://github.com/"+s.cfg.Repo+"/commit/"+commit)
+	}
+	if from <= 2 {
+		// 3. think applique (apps-deploy, chaque minute).
+		j.set(2, "active", "", "")
+		if err := s.waitDeployed(ctx, j, req.App, want); err != nil {
+			return err
+		}
+		j.set(2, "done", "", "")
+	}
+	return s.checkTargets(ctx, j, req)
+}
 
+// evalAndDispatch : étapes 1 et le début de 2 (vérification, puis envoi à apps.yml).
+func (s *Server) evalAndDispatch(ctx context.Context, j *Job, req Request) error {
 	// 1. Évaluation, sur la tête actuelle de main.
 	head, err := s.gh.Head(ctx)
 	if err != nil {
@@ -397,20 +539,15 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request) error {
 		j.set(1, "failed", err.Error(), "")
 		return err
 	}
-	commit, err := s.waitCommit(ctx, j, req.App, want, head, t0)
-	if err != nil {
-		return err
-	}
-	j.set(1, "done", "commit "+commit[:7], "https://github.com/"+s.cfg.Repo+"/commit/"+commit)
+	j.mu.Lock()
+	j.Head, j.T0, j.Dispatched = head, t0, true
+	j.mu.Unlock()
+	j.persist()
+	return nil
+}
 
-	// 3. think applique (apps-deploy, chaque minute).
-	j.set(2, "active", "", "")
-	if err := s.waitDeployed(ctx, j, req.App, want); err != nil {
-		return err
-	}
-	j.set(2, "done", "", "")
-
-	// 4. Les déploiements touchés répondent (ou ne répondent plus, s'ils sont retirés).
+// checkTargets : 4. les déploiements touchés répondent (ou ne répondent plus, s'ils sont retirés).
+func (s *Server) checkTargets(ctx context.Context, j *Job, req Request) error {
 	j.set(3, "active", "", "")
 	deadline := time.Now().Add(3 * time.Minute)
 	pending := append([]Target(nil), req.targets(s.cfg.Domain)...)

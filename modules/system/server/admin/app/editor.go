@@ -1197,10 +1197,24 @@ func (s *Server) requestEntry(r *http.Request) (string, string, *Entry, *Snapsho
 	return name, env, &e, snap, p, isNew, nil
 }
 
+// busy : une demande court pour ce site (lancée d'un autre onglet, d'un autre appareil) alors que la
+// page était ouverte : elle est rechargée, et s'affiche verrouillée avec les étapes de la demande.
+func (s *Server) busy(w http.ResponseWriter, name string) bool {
+	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
+		w.Header().Set("HX-Refresh", "true")
+		w.WriteHeader(http.StatusNoContent)
+		return true
+	}
+	return false
+}
+
 func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
-	_, _, _, _, p, _, err := s.requestEntry(r)
+	name, _, _, _, p, isNew, err := s.requestEntry(r)
 	if err != nil {
 		s.renderError(w, err)
+		return
+	}
+	if !isNew && s.busy(w, name) {
 		return
 	}
 	s.render(w, "preview", p)
@@ -1213,6 +1227,9 @@ func (s *Server) reform(w http.ResponseWriter, r *http.Request) {
 	name, env, e, snap, p, isNew, err := s.requestEntry(r)
 	if err != nil {
 		s.renderError(w, err)
+		return
+	}
+	if !isNew && s.busy(w, name) {
 		return
 	}
 	repo := r.FormValue("repo")
@@ -1318,6 +1335,11 @@ func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
 	v, ok := e.Environments[id]
 	if !ok || v.DataMode() != "copy" {
 		http.Error(w, "environnement inconnu ou sans données « copie »", http.StatusBadRequest)
+		return
+	}
+	// Pas pendant une modification du site : la recopie arrête ses conteneurs et remplace ses données.
+	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
+		http.Error(w, "une modification de "+name+" est en cours : recopie après", http.StatusConflict)
 		return
 	}
 	dir := filepath.Join(s.cfg.StateDir, "recopy")

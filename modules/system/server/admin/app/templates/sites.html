@@ -82,7 +82,7 @@
     <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
     {{range .Adding}}
     <tbody class="adding"><tr>
-      <td class="site-td"><span class="stack tight"><strong>{{.App}}</strong><small class="muted">nouveau site</small></span></td>
+      <td class="site-td"><span class="stack tight"><a class="go strong" href="/sites/{{.App}}">{{.App}}</a><small class="muted">nouveau site</small></span></td>
       <td colspan="3">{{template "job-badge" .}} {{if .Detail}}<small class="muted">{{.Detail}}</small>{{end}}</td>
     </tr></tbody>
     {{end}}

@@ -159,7 +159,9 @@ table.sites th:first-child, table.sites td.site-td { padding-left: 18px; }
 table.sites td { padding: 11px 12px; vertical-align: middle; border-top: 1px solid var(--line-soft); }
 table.sites tbody + tbody tr.first td, table.sites tbody + tbody td.site-td { border-top: 1px solid var(--line); }
 table.sites td.site-td { vertical-align: top; }
-table.sites tbody.adding td { border-style: dashed; }
+/* Site en cours d'ajout : seul le trait du haut en pointillés (un `border-style` sur toute la cellule
+   donnait aux côtés sans largeur l'épaisseur par défaut du navigateur, 3 px). */
+table.sites tbody.adding td { border-top: 1px dashed #C9CED6; }
 table.sites tbody[data-vpn]:hover td { background: #F8F9FB; }
 .site-td a.go { font-weight: 600; }
 .site-td .chip.job { margin-top: 6px; align-self: flex-start; }

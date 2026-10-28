@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -331,5 +332,56 @@ func TestStateCardOf(t *testing.T) {
 	}
 	if got := stateCardOf("A", "B", "main", nil, os.ErrNotExist).Chip; got != "inconnu" {
 		t.Errorf("sans status.json : %q", got)
+	}
+}
+
+// Demandes gardées sur disque : relues au démarrage, celles en cours reprennent à leur étape.
+func TestJobsPersist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jobs.json")
+	js := &Jobs{m: map[string]*Job{}, path: path}
+	steps := func(states ...string) []Step {
+		var out []Step
+		for _, st := range states {
+			out = append(out, Step{Label: "x", State: st})
+		}
+		return out
+	}
+	entry := Entry{Containers: map[string]Container{"web": {Image: "x:main"}}}
+	js.add(&Job{ID: "fini", App: "a", Steps: steps("done", "done", "done", "done"), Done: true, Finished: time.Now()})
+	js.add(&Job{ID: "deploie", App: "b", Steps: steps("done", "done", "active", "todo"), Dispatched: true, Head: "h", Req: Request{App: "b", Entry: &entry, Base: "new"}})
+	js.add(&Job{ID: "commit-envoye", App: "c", Steps: steps("done", "active", "todo", "todo"), Dispatched: true})
+	js.add(&Job{ID: "commit-pas-envoye", App: "d", Steps: steps("done", "active", "todo", "todo")})
+
+	again := &Jobs{m: map[string]*Job{}, path: path}
+	running := again.load()
+	want := map[string]int{"deploie": 2, "commit-envoye": 1, "commit-pas-envoye": 0}
+	if len(running) != len(want) {
+		t.Fatalf("%d demandes à reprendre, attendu %d", len(running), len(want))
+	}
+	for _, j := range running {
+		if got := resumeStep(j); got != want[j.ID] {
+			t.Errorf("%s : reprise à l'étape %d, attendu %d", j.ID, got, want[j.ID])
+		}
+	}
+	if b := again.latest("b"); b == nil || b.Req.Entry == nil || b.Req.Entry.Containers["web"].Image != "x:main" || b.Head != "h" {
+		t.Errorf("demande relue incomplète : %+v", b)
+	}
+	if again.latest("a") == nil || !again.latest("a").Snapshot().Done {
+		t.Errorf("demande finie perdue")
+	}
+}
+
+// Une demande en cours n'est jamais oubliée, même vieille ; une finie depuis plus de 2 h, si.
+func TestJobsPruneKeepsRunning(t *testing.T) {
+	js := &Jobs{m: map[string]*Job{}}
+	old := time.Now().Add(-5 * time.Hour)
+	js.add(&Job{ID: "longue", App: "a", Created: old, Steps: []Step{{State: "active"}}})
+	js.add(&Job{ID: "finie", App: "b", Created: old, Done: true, Finished: old})
+	js.add(&Job{ID: "neuve", App: "c", Created: time.Now()})
+	if js.get("longue") == nil {
+		t.Errorf("demande en cours oubliée")
+	}
+	if js.get("finie") != nil {
+		t.Errorf("demande finie depuis 5 h gardée")
 	}
 }

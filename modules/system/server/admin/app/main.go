@@ -47,8 +47,9 @@ func main() {
 	}
 	s := &Server{
 		cfg: cfg, gh: newGitHub(cfg), reg: newRegistry(cfg), eval: &Evaluator{cfg: cfg},
-		jobs: &Jobs{m: map[string]*Job{}}, tmpl: tmpl,
+		jobs: &Jobs{m: map[string]*Job{}, path: filepath.Join(cfg.StateDir, "jobs.json")}, tmpl: tmpl,
 	}
+	s.resumeJobs()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/sites", http.StatusFound) })
