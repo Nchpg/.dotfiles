@@ -21,3 +21,22 @@ require_flake() {
         exit 1
     fi
 }
+
+# sudo : une fois le mot de passe donné, le ticket est rafraîchi chaque minute (`sudo -n -v`) tant que
+# le script tourne. Les sudo suivants (après un long passage dans l'éditeur, par exemple) ne le
+# redemandent pas ; le ticket reste celui du terminal, et expire normalement après la fin du script.
+sudo() {
+    local rc=0 lock="${XDG_RUNTIME_DIR:-/tmp}/dots-sudo.$$"
+    command sudo "$@" || rc=$?
+    # Une seule boucle par script, même lancée depuis un $(…) : le verrou est un dossier.
+    if [ "$rc" = 0 ] && mkdir "$lock" 2> /dev/null; then
+        # Descripteurs fermés : un sudo dans un $(…) n'attend pas la fin de la boucle.
+        (
+            trap 'rmdir "$lock"' EXIT
+            while sleep 60 && kill -0 "$$" 2> /dev/null; do
+                command sudo -n -v 2> /dev/null || exit 0
+            done
+        ) < /dev/null > /dev/null 2>&1 &
+    fi
+    return "$rc"
+}
