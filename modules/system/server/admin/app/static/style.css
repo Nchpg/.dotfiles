@@ -610,7 +610,7 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
   table.traffic td.num-td { font-variant-numeric: tabular-nums; }
 }
 @media (max-width: 720px) {
-  table.sites.traffic tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site site" "env acc" "num last"; gap: 4px 14px; }
+  table.sites.traffic tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site site" "env acc" "addr addr" "num last"; gap: 4px 14px; }
   table.sites.traffic td.num-td { grid-area: num; }
   table.sites.traffic td.last-td { grid-area: last; text-align: right; }
   table.sites.traffic.svc tr { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "site acc" "addr addr" "num last"; }

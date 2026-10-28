@@ -56,20 +56,21 @@
       <div class="block-head"><h2 id="sites-title" class="line">Sites{{template "info" (args "ID" "info-sites" "Text" "Visite : des pages ouvertes d'affilée par un même navigateur (même IP), sans pause de plus de 30 minutes. Robots, sondes de think et applis de synchro n'en sont pas. Internet : par le tunnel Cloudflare ; VPN : un appareil du tunnel ; local : le réseau de la maison. Pour un service à compte, une visite est une arrivée sur ses pages (la connexion se compte en dessous).")}}</h2></div>
       <section class="card table-card" aria-label="Visites par site">
         <table class="sites traffic">
-          <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
+          <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Adresse</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
           {{range .Groups}}
           <tbody data-vpn>
             {{range .Rows}}
             <tr class="{{if .First}}first{{end}}">
-              {{if .First}}<td rowspan="{{.Span}}" class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>{{end}}
-              <td class="env-td"><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.Link}}">{{.Label}}</a><small class="mono muted ellipsis">{{.Domain}}</small></span></span></td>
+              {{if .First}}<td rowspan="{{.Span}}" class="site-td"><span class="stack tight"><a class="go strong" href="{{.Link}}">{{.Name}}</a>{{with .Repo}}<a class="repo-link small" href="https://github.com/{{.}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.}}</a>{{end}}</span></td>{{end}}
+              <td class="env-td"><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.Link}}">{{.Label}}</a><small class="mono muted">{{.Branch}}</small></span></span></td>
+              <td class="addr-td"><a class="mono small ellipsis" href="https://{{.Domain}}" title="{{.Domain}}">{{.Domain}}</a></td>
               <td class="acc-td">{{template "acc" .}}</td>
               <td class="num-td">{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
               <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
             </tr>
             {{end}}
           </tbody>
-          {{else}}<tbody><tr><td colspan="5" class="muted">Aucun site.</td></tr></tbody>{{end}}
+          {{else}}<tbody><tr><td colspan="6" class="muted">Aucun site.</td></tr></tbody>{{end}}
         </table>
       </section>
     </section>
@@ -84,7 +85,7 @@
           <tbody data-vpn>
             <tr>
               <td class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>
-              <td class="addr-td"><a class="mono small ellipsis" href="{{.Link}}" title="{{.Domain}}">{{.Domain}}</a></td>
+              <td class="addr-td"><a class="mono small ellipsis" href="https://{{.Domain}}" title="{{.Domain}}">{{.Domain}}</a></td>
               <td class="acc-td">{{template "acc" .}}</td>
               <td class="num-td">{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
               <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>

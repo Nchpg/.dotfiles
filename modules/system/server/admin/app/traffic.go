@@ -396,6 +396,7 @@ func parseVWTime(v string) time.Time {
 type TrafficRow struct {
 	Name, Env, Domain, Link string
 	Label                   string // l'environnement (production, preview…) ; vide pour un service
+	Branch, Repo            string // la branche suivie, le dépôt du code (comme la page Sites)
 	Access                  string // internet ou VPN : par où le site est servi
 	SSO                     bool   // derrière Authelia
 	First                   bool   // première ligne de son site (tableau groupé, comme la page Sites)
@@ -417,12 +418,15 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 	}
 	if snap, err := s.snapshot(ctx); err == nil {
 		for _, site := range snap.Apps.Names() {
-			for _, d := range snap.Apps.Entries[site].Deploys(site) {
+			e := snap.Apps.Entries[site]
+			repo := s.sourceRepo(ctx, e)
+			for _, d := range e.Deploys(site) {
 				access := "internet"
 				if d.VPN() {
 					access = "VPN"
 				}
-				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Label: d.Label, Domain: d.Domain(s.cfg.Domain), Access: access, SSO: d.Access.SSO})
+				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Label: d.Label, Branch: d.Branch, Repo: repo,
+					Domain: d.Domain(s.cfg.Domain), Access: access, SSO: d.Access.SSO})
 			}
 		}
 	}
