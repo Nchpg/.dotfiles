@@ -312,6 +312,8 @@ in
           ua = "$http_user_agent";
           dest = "$http_sec_fetch_dest";
           user = "$remote_user";
+          # Lue par Vector pour savoir si une connexion a réussi, puis retirée.
+          loc = "$sent_http_location";
         };
 
         services.nginx = {

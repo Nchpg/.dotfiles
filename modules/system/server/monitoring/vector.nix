@@ -10,6 +10,7 @@
 let
   cfg = config.systemSettings.monitoring;
   inherit (cfg.internal) ports;
+  nextcloud = config.systemSettings.nextcloud;
 in
 {
   config = lib.mkIf (cfg.enable && cfg.logs.enable) {
@@ -66,10 +67,13 @@ in
           inputs = [ "visits" ];
           source =
             builtins.replaceStrings
-              [ "@VPN@" "@SITES@" ]
+              [ "@VPN@" "@SITES@" "@NEXTCLOUD@" ]
               [
                 config.systemSettings.vpn.wireguard.subnet
                 (builtins.toJSON (lib.attrNames config.systemSettings.proxy.sites))
+                (builtins.toJSON (
+                  lib.optionals nextcloud.enable ([ nextcloud.hostName ] ++ nextcloud.extraHostNames)
+                ))
               ]
               (builtins.readFile ./vector/visits.vrl);
         };
@@ -80,7 +84,7 @@ in
           endpoint = "http://127.0.0.1:${toString ports.loki}";
           encoding.codec = "json";
           out_of_order_action = "accept";
-          # Cardinalité bornée : domaines servis (« autre » sinon), cinq genres, quatre provenances.
+          # Cardinalité bornée : domaines servis (« autre » sinon), six genres, quatre provenances.
           labels = {
             identifier = "nginx-visits";
             host = "{{ host }}";

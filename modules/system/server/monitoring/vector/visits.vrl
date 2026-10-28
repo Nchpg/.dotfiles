@@ -1,6 +1,6 @@
 # Journal des visites de nginx (format `visits`, une ligne JSON) : d'où vient la requête (`via`), de
 # quel genre elle est (`kind`), et où se trouve une IP publique. Lu par l'onglet Trafic du dashboard.
-# Remplacés au build : @VPN@ (réseau du tunnel), @SITES@ (domaines servis, liste JSON).
+# Remplacés au build : @VPN@ (réseau du tunnel), @SITES@ et @NEXTCLOUD@ (domaines, listes JSON).
 
 v = object(parse_json(to_string(.message) ?? "") ?? null) ?? {}
 if v == {} {
@@ -66,12 +66,41 @@ if .via == "machine" {
   .kind = "other"
 }
 
+# Connexion à Nextcloud : l'envoi du formulaire redirige vers la page de connexion s'il échoue (avec
+# le nom tapé), vers la seconde étape s'il en faut une, ailleurs s'il réussit. La redirection n'est
+# pas gardée (elle peut porter une adresse de retour).
+loc = to_string(.loc) ?? ""
+del(.loc)
+path = to_string(.path) ?? ""
+if includes(array(parse_json!(s'@NEXTCLOUD@')) ?? [], .site) && .method == "POST" {
+  if match(path, r'^/(index\.php/)?login$') || match(path, r'^/(index\.php/)?login/challenge/[^/]+$') {
+    .kind = "login"
+    .client = "navigateur"
+    if match(loc, r'/login/(challenge|selectchallenge)') && !match(path, r'/challenge/') {
+      .login = "2fa"
+    } else if match(loc, r'/login(/challenge[^?]*)?(\?|$)') {
+      .login = "failed"
+      parts = split(loc, "?")
+      q = parse_query_string(string(parts[1]) ?? "")
+      .login_user = to_string(q.user) ?? ""
+    } else {
+      .login = "ok"
+    }
+  } else if match(path, r'^/(index\.php/)?login/v2/grant$') {
+    .kind = "login"
+    .client = "appli"
+    .login = if .status == "303" || .status == "200" { "ok" } else { "failed" }
+  }
+}
+
 # Localisation d'une IP publique (DB-IP Lite, locale) ; le pays de Cloudflare garde la priorité.
 if .via == "public" && ip != "" {
   r, err = get_enrichment_table_record("dbip", {"ip": ip})
   if err == null {
     .city = string(r.city.names.fr) ?? string(r.city.names.en) ?? ""
     .country_name = string(r.country.names.fr) ?? string(r.country.names.en) ?? ""
+    .lat = float(r.location.latitude) ?? null
+    .lon = float(r.location.longitude) ?? null
     if (to_string(.country) ?? "") == "" {
       .country = string(r.country.iso_code) ?? ""
     }
