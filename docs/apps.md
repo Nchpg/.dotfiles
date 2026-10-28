@@ -125,7 +125,7 @@ le tunnel WireGuard.
 | `containers.<c>.memory` | | plafond, `256m`, `1g`… |
 | `containers.<c>.dependsOn` | | conteneurs du même site à démarrer avant |
 | `containers.<c>.data` | | `[{"path": "/data"}]` : dossier gardé entre deux versions, dans `/var/lib/apps/<site>/<conteneur>/data`, donné à l'utilisateur de l'image. `"on"` choisit l'emplacement : `/var/lib/<site>…` ou un volume podman `<site>-…` |
-| `containers.<c>.secrets` | | secrets sops rangés sous `<site>/` (lignes `NOM=valeur`), donnés en variables d'environnement |
+| `containers.<c>.secrets` | | secrets sops rangés sous `<site>/` (lignes `NOM=valeur`, une par ligne, sans guillemets), donnés en variables d'environnement dans l'ordre de la liste : une variable en double, le dernier l'emporte |
 
 Une clé inconnue fait échouer l'évaluation. Ce que le format ne couvre pas
 (healthcheck, commande, capacités) se complète en Nix dans `apps.nix`, sur la
