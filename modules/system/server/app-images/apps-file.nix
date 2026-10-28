@@ -103,6 +103,23 @@ let
     let
       e = only rootKeys site e0;
 
+      dataModes = [
+        "separate"
+        "copy"
+        "shared"
+      ];
+      # `data` d'un environnement : un mode pour tous ses dossiers, ou un par dossier
+      # (`<conteneur>:<chemin>`, les autres en « separate »).
+      dataOk =
+        d:
+        lib.elem d dataModes
+        || (
+          lib.isAttrs d
+          && lib.all (
+            k: builtins.match "[a-z][a-z0-9-]{0,15}:/[A-Za-z0-9._/-]+" k != null && lib.elem d.${k} dataModes
+          ) (lib.attrNames d)
+        );
+
       envs = lib.mapAttrs (
         id: v0:
         let
@@ -115,14 +132,8 @@ let
           fail where "`branch` manquante ou invalide"
         else if v ? pin && builtins.match "sha-[0-9a-f]{7,40}" v.pin == null then
           fail where "`pin` : un tag sha-<commit>"
-        else if
-          !(lib.elem (v.data or "separate") [
-            "separate"
-            "copy"
-            "shared"
-          ])
-        then
-          fail where "`data` : separate, copy ou shared"
+        else if !(dataOk (v.data or "separate")) then
+          fail where "`data` : separate, copy ou shared, pour tous les dossiers ou par dossier ({ \"<conteneur>:<chemin>\" = \"copy\"; })"
         else if !(v ? expose) && (v ? devices || v ? sso || v ? accounts) then
           fail where "`devices`, `sso` et `accounts` vont avec `expose` (la section accès est à lui dès que `expose` est là)"
         else if !(v ? containers) && v ? entrypoint then
@@ -159,6 +170,14 @@ let
             options = if v ? internetAccess then pick optionKeys v else p.options;
           };
 
+      # Mode d'un dossier d'un environnement.
+      dataModeOf =
+        id: container: path:
+        let
+          d = envs.${id}.data or "separate";
+        in
+        if lib.isString d then d else d."${container}:${path}" or "separate";
+
       rootData =
         container: path:
         lib.findFirst (d: d.path == path) null ((e.containers.${container} or { }).data or [ ]);
@@ -182,7 +201,7 @@ let
             }
         else if depth > 16 then
           fail site "boucle d'héritage entre environnements (`from`)"
-        else if (envs.${id}.data or "separate") == "shared" then
+        else if dataModeOf id container path == "shared" then
           sourceOf (depth + 1) (envs.${id}.from or null) container path
         else
           {
@@ -198,7 +217,6 @@ let
           app = appOf id;
           ownContainers = id == null || v ? containers;
           tag = v.pin or (tagOf v.branch);
-          mode = if id == null then "separate" else v.data or "separate";
 
           containerOf =
             name: c0:
@@ -229,22 +247,32 @@ let
                       inherit (d) path;
                       inherit (own) source auto;
                       # Copie : le dossier du parent, recopié au premier démarrage s'il manque.
-                      copyFrom = if mode == "copy" then (sourceOf 0 (v.from or null) name d.path).source else null;
+                      copyFrom =
+                        if id != null && dataModeOf id name d.path == "copy" then
+                          (sourceOf 0 (v.from or null) name d.path).source
+                        else
+                          null;
                     }
                 ) (c.data or [ ]);
               };
-        in
-        {
-          inherit site id app;
-          child = id != null;
-          name = v.name or (if id == null then "production" else id);
-          copy = mode == "copy";
-          inherit (s) access options;
-          subdomain = if id == null then e.subdomain or null else v.subdomain or app;
-          entrypoint = s.containers.entrypoint or null;
           containers = lib.mapAttrsToList containerOf (
             s.containers.containers or (fail app "aucun conteneur (`containers`)")
           );
+        in
+        {
+          inherit
+            site
+            id
+            app
+            containers
+            ;
+          child = id != null;
+          name = v.name or (if id == null then "production" else id);
+          # Au moins un dossier en « copie » : l'environnement se recopie (admin-recopy).
+          copy = lib.any (c: lib.any (x: x.copyFrom != null) c.data) containers;
+          inherit (s) access options;
+          subdomain = if id == null then e.subdomain or null else v.subdomain or app;
+          entrypoint = s.containers.entrypoint or null;
         };
     in
     map deployment ([ null ] ++ lib.attrNames envs);
