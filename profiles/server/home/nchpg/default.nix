@@ -8,6 +8,8 @@
         enable = true;
         userName = "nathan.champagne";
         userEmailSops = "git/email";
+
+        gh.enable = true;
       };
 
       agents = {
