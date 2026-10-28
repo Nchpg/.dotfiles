@@ -572,7 +572,8 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .period-tabs a { text-decoration: none; }
 .period-tabs a[aria-current] span { background: var(--card); color: var(--text); font-weight: 500; }
 /* Carte : terres en aplat clair, frontières en traits fins, une bulle par lieu dans la couleur
-   d'accent (pleine : internet ; anneau : appareil du VPN). Zoom, déplacement, info-bulle : app.js. */
+   d'accent pour internet, à l'encre pour un appareil du VPN (comme son étiquette) ; pleines et liserées
+   de blanc, pour rester lisibles empilées. Zoom, déplacement, info-bulle : app.js. */
 .world-card { grid-column: 1 / -1; padding: 0; display: flex; flex-direction: column; }
 .world-frame { position: relative; overflow: hidden; background: #F7F8FA; touch-action: none; cursor: grab; }
 .world-frame.dragging { cursor: grabbing; }
@@ -583,11 +584,11 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .spot { cursor: pointer; }
 .world .bubble { stroke: #FFFFFF; stroke-width: 1.2; vector-effect: non-scaling-stroke; transition: fill-opacity .12s; }
 .spot-internet .bubble { fill: var(--accent); fill-opacity: .72; }
-.spot-vpn .bubble { fill: #FFFFFF; fill-opacity: .55; stroke: var(--accent-ink); stroke-width: 2.2; }
+.spot-vpn .bubble { fill: #10141B; fill-opacity: .72; }
 .spot-internet:hover .bubble { fill-opacity: .95; } .spot-vpn:hover .bubble { fill-opacity: .9; }
 .map-tip { position: absolute; z-index: 2; min-width: 180px; max-width: 280px; padding: 9px 12px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(15, 23, 42, .12); pointer-events: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .map-tip strong { font-weight: 600; } .map-tip small { color: var(--muted); }
-.map-tip.tip-internet, .map-tip.tip-vpn { border-top: 2px solid var(--accent); }
+.map-tip.tip-internet { border-top: 2px solid var(--accent); } .map-tip.tip-vpn { border-top: 2px solid #10141B; }
 .map-tip ul { list-style: none; margin: 6px 0 0; padding: 6px 0 0; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 3px; }
 .map-tip li { display: flex; justify-content: space-between; gap: 12px; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
 .map-tip li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -596,7 +597,7 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .world-tools .icon-btn { background: var(--card); border: 1px solid var(--line); }
 .world-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-top: 1px solid var(--line-soft); }
 .key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; box-sizing: border-box; }
-.key-internet { background: var(--accent); opacity: .8; } .key-vpn { border: 2px solid var(--accent-ink); background: #FFFFFF; }
+.key-internet { background: var(--accent); opacity: .8; } .key-vpn { background: #10141B; opacity: .8; }
 /* Graphe des visites : une colonne par heure ou par jour. */
 .bars-card { grid-column: 1 / -1; padding: 16px 18px 28px; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
