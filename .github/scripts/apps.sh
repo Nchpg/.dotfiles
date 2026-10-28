@@ -157,10 +157,10 @@ validate_entry() {
                   (if (.branch | type) != "string" or (.branch | test("^[A-Za-z0-9][A-Za-z0-9._/-]{0,99}$") | not) then "\($w)branch manquante ou invalide" else empty end),
                   (if has("from") and ((.from | type) != "string" or .from == $id or (.from as $f | $envs | has($f) | not)) then "\($w)from : un autre environnement du site" else empty end),
                   (if rooted($envs; $id; 0) | not then "\($w)boucle d'\''héritage (from)" else empty end),
-                  # Un mode pour tous les dossiers, ou un par dossier (`<conteneur>:<chemin>`).
-                  (if has("data") and ((.data | IN("separate", "copy", "shared")) or ((.data | type) == "object"
+                  # Le mode de chaque dossier (`<conteneur>:<chemin>`), les absents en separate.
+                  (if has("data") and (((.data | type) == "object"
                        and all(.data | to_entries[]; (.key | test("^[a-z][a-z0-9-]{0,15}:/[A-Za-z0-9._/-]+$")) and (.value | IN("separate", "copy", "shared"))))) | not
-                   then "\($w)data : separate, copy ou shared, pour tous les dossiers ou par dossier ({\"<conteneur>:<chemin>\": …})" else empty end),
+                   then "\($w)data : un mode par dossier ({\"<conteneur>:<chemin>\": \"copy\" ou \"shared\"}), les autres separate" else empty end),
                   (if has("pin") and ((.pin | type) != "string" or (.pin | test("^sha-[0-9a-f]{7,40}$") | not)) then "\($w)pin : un tag sha-<commit>" else empty end),
                   (if has("expose") then access($w) elif has("devices") or has("sso") or has("accounts") then "\($w)devices, sso et accounts vont avec expose" else empty end),
                   (if has("internetAccess") then options($w) elif has("probe") or has("rateLimit") then "\($w)probe et rateLimit vont avec internetAccess" else empty end),

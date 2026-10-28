@@ -324,9 +324,10 @@ in
       };
     };
 
-    # « Recopier depuis le parent » : le dashboard (sans droits) dépose `<app>.want` ; root ne
-    # traite qu'un environnement en données « copie » connu de la config, et écrit son résultat
-    # dans son propre dossier (jamais dans celui du dashboard : pas de lien piégé à suivre).
+    # « Recopier » : le dashboard (sans droits) dépose `<app>.want`, avec les dossiers à recopier (un
+    # par ligne ; vide : tous). Root ne traite qu'un environnement en données « copie » connu de la
+    # config, ne garde de la demande que les dossiers que la config lui donne (elle ne fait que
+    # filtrer), et écrit son résultat dans son propre dossier (pas de lien piégé à suivre).
     systemd.paths.admin-recopy = {
       wantedBy = [ "multi-user.target" ];
       pathConfig.PathExistsGlob = "/var/lib/private/admin/recopy/*.want";
@@ -350,13 +351,25 @@ in
         shopt -s nullglob dotglob
         for want in /var/lib/private/admin/recopy/*.want; do
           app=$(basename "$want" .want)
+          # Un fichier ordinaire seulement : un lien ne serait pas suivi.
+          wanted=""
+          if [ -f "$want" ] && [ ! -L "$want" ]; then
+            wanted=$(head -c 8192 -- "$want")
+          fi
           rm -f -- "$want"
           if ! [[ "$app" =~ ^[a-z0-9][a-z0-9-]{0,40}$ ]] || ! jq -e --arg a "$app" 'has($a)' "$map" > /dev/null; then
             echo "demande ignorée : $app n'est pas un environnement en données « copie »" >&2
             continue
           fi
+          # Les paires de la config, réduites aux dossiers demandés (aucun : toutes).
+          pairs=$(jq -c --arg a "$app" --arg w "$wanted" '($w | split("\n") | map(select(. != ""))) as $want
+            | [.[$a].pairs[] | select(($want | length) == 0 or (.to | IN($want[])))]' "$map")
+          if [ "$(jq length <<< "$pairs")" = 0 ]; then
+            echo "demande ignorée : aucun dossier en copie de $app ne correspond" >&2
+            continue
+          fi
           write() {
-            jq -n --arg s "$1" --arg d "$2" '{state: $s, detail: $d, at: (now | floor)}' > "$status_dir/$app.json.tmp"
+            jq -n --arg s "$1" --arg d "$2" --argjson p "$pairs" '{state: $s, detail: $d, at: (now | floor), paths: [$p[].to]}' > "$status_dir/$app.json.tmp"
             mv "$status_dir/$app.json.tmp" "$status_dir/$app.json"
           }
           write "running" ""
@@ -372,7 +385,7 @@ in
             else
               mkdir -p "$to"
             fi
-          done < <(jq -r --arg a "$app" '.[$a].pairs[] | [.from, .to] | @tsv' "$map")
+          done < <(jq -r '.[] | [.from, .to] | @tsv' <<< "$pairs")
           systemctl start "''${units[@]}" || ok=0
           if [ "$ok" = 1 ]; then
             write "done" ""

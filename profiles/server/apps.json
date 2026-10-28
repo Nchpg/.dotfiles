@@ -40,7 +40,9 @@
           "nathan"
         ],
         "branch": "preview",
-        "data": "shared",
+        "data": {
+          "web:/app/data": "shared"
+        },
         "expose": "public",
         "sso": true,
         "subdomain": "etf-prev"

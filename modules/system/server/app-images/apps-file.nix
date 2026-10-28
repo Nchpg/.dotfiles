@@ -108,17 +108,14 @@ let
         "copy"
         "shared"
       ];
-      # `data` d'un environnement : un mode pour tous ses dossiers, ou un par dossier
-      # (`<conteneur>:<chemin>`, les autres en « separate »).
+      # `data` d'un environnement : le mode de chaque dossier (`<conteneur>:<chemin>`), les dossiers
+      # absents en « separate ».
       dataOk =
         d:
-        lib.elem d dataModes
-        || (
-          lib.isAttrs d
-          && lib.all (
-            k: builtins.match "[a-z][a-z0-9-]{0,15}:/[A-Za-z0-9._/-]+" k != null && lib.elem d.${k} dataModes
-          ) (lib.attrNames d)
-        );
+        lib.isAttrs d
+        && lib.all (
+          k: builtins.match "[a-z][a-z0-9-]{0,15}:/[A-Za-z0-9._/-]+" k != null && lib.elem d.${k} dataModes
+        ) (lib.attrNames d);
 
       envs = lib.mapAttrs (
         id: v0:
@@ -132,8 +129,8 @@ let
           fail where "`branch` manquante ou invalide"
         else if v ? pin && builtins.match "sha-[0-9a-f]{7,40}" v.pin == null then
           fail where "`pin` : un tag sha-<commit>"
-        else if !(dataOk (v.data or "separate")) then
-          fail where "`data` : separate, copy ou shared, pour tous les dossiers ou par dossier ({ \"<conteneur>:<chemin>\" = \"copy\"; })"
+        else if !(dataOk (v.data or { })) then
+          fail where "`data` : un mode par dossier, { \"<conteneur>:<chemin>\" = \"copy\" ou \"shared\"; } (les autres : separate)"
         else if !(v ? expose) && (v ? devices || v ? sso || v ? accounts) then
           fail where "`devices`, `sso` et `accounts` vont avec `expose` (la section accès est à lui dès que `expose` est là)"
         else if !(v ? containers) && v ? entrypoint then
@@ -173,10 +170,7 @@ let
       # Mode d'un dossier d'un environnement.
       dataModeOf =
         id: container: path:
-        let
-          d = envs.${id}.data or "separate";
-        in
-        if lib.isString d then d else d."${container}:${path}" or "separate";
+        (envs.${id}.data or { })."${container}:${path}" or "separate";
 
       rootData =
         container: path:

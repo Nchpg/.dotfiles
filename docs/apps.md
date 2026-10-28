@@ -178,14 +178,14 @@ autre nom).
   | conteneurs | `containers` | `containers` (images, mémoire, données, secrets, `dependsOn`), `entrypoint` |
   | options | `internetAccess` | `internetAccess`, `probe`, `rateLimit` |
 
-- **Données** (`data`), un mode pour tous les dossiers (`"data": "copy"`) ou un
-  par dossier (`"data": { "web:/data": "copy", "web:/cache": "shared" }`, les
-  dossiers absents en `separate`) :
+- **Données** (`data`), un mode par dossier :
+  `"data": { "web:/data": "copy", "web:/cache": "shared" }`, les dossiers
+  absents en `separate` :
   - `separate` (défaut) : `/var/lib/apps/<site>-<id>/…`, vides au départ ;
   - `copy` : le même dossier, rempli au premier démarrage par une copie de
     celui du parent (propriétaire compris), puis indépendant. Le dashboard
-    peut **recopier** les dossiers en copie à la demande (`admin-recopy`, root,
-    arrête l'environnement le temps de la copie) ;
+    peut le **recopier**, dossier par dossier (`admin-recopy`, root, arrête
+    l'environnement le temps de la copie) ;
   - `shared` : le dossier du parent lui-même (attention aux migrations de
     schéma lancées par la branche).
 - **Secrets** : ceux du site (`<site>/…`), pour chaque environnement.
