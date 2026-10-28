@@ -285,81 +285,123 @@ document.addEventListener("click", (ev) => {
   location.reload();
 });
 
-// Carte du Trafic : zoom (molette, boutons, double clic, pincement) et déplacement en glissant ; la
-// vue reste dans la carte, et les points gardent à peu près leur taille à l'écran.
-const MAP_W = 360, MAP_H = 142, MAP_MAX = 24;
+// Carte du Trafic, en 16:9 : zoom à la molette, au pincement (pavé tactile : molette + Ctrl ; écran :
+// deux doigts), aux boutons ou au double clic ; déplacement en glissant ou à deux doigts sur le pavé.
+// Le zoom glisse vers sa cible (animation) ; la vue reste dans la carte, les points gardent à peu
+// près leur taille à l'écran. Au départ : cadrée sur les points, sinon le monde entier.
+const MAP_W = 360, MAP_H = 142, MAP_MAX = 150, MAP_RATIO = 9 / 16;
 function mapInit() {
   document.querySelectorAll("[data-map]:not([data-ready])").forEach((frame) => {
     frame.dataset.ready = "1";
     const svg = frame.querySelector("svg");
-    let v = { x: 0, y: 0, w: MAP_W };
-    const h = () => (v.w * MAP_H) / MAP_W;
-    const apply = () => {
-      svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${h()}`);
-      const k = (v.w / MAP_W) ** 0.85;
+    const world = () => ({ x: 0, y: (MAP_H - MAP_W * MAP_RATIO) / 2, w: MAP_W });
+    const clamp = (v) => {
+      const w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, v.w)), h = w * MAP_RATIO;
+      const x = Math.min(MAP_W - w, Math.max(0, v.x));
+      const y = h >= MAP_H ? (MAP_H - h) / 2 : Math.min(MAP_H - h, Math.max(0, v.y));
+      return { x, y, w };
+    };
+    // Cadrage de départ : les points, avec de la marge (au moins 30° de large).
+    const fit = () => {
+      const cs = [...svg.querySelectorAll("circle.core")].map((c) => [+c.getAttribute("cx"), +c.getAttribute("cy")]);
+      if (!cs.length) return world();
+      const xs = cs.map((c) => c[0]), ys = cs.map((c) => c[1]);
+      const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+      const w = Math.max(30, (x1 - x0) * 1.4, ((y1 - y0) * 1.4) / MAP_RATIO);
+      return clamp({ x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * MAP_RATIO) / 2, w });
+    };
+    let view = fit(), target = view, frameReq = 0;
+    const draw = () => {
+      svg.setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.w * MAP_RATIO}`);
+      const k = (view.w / MAP_W) ** 0.85;
       svg.querySelectorAll("circle[data-r]").forEach((c) => c.setAttribute("r", c.dataset.r * k));
     };
-    const clamp = () => {
-      v.w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, v.w));
-      v.x = Math.min(MAP_W - v.w, Math.max(0, v.x));
-      v.y = Math.min(MAP_H - h(), Math.max(0, v.y));
+    // Vers la cible, à chaque image (zoom en douceur) ; `now` : sans animation (glisser, pincer).
+    const go = (v, now) => {
+      target = clamp(v);
+      if (now) {
+        view = target;
+        draw();
+        return;
+      }
+      if (frameReq) return;
+      const step = () => {
+        const d = (a, b) => a + (b - a) * 0.3;
+        view = { x: d(view.x, target.x), y: d(view.y, target.y), w: d(view.w, target.w) };
+        if (Math.abs(view.w - target.w) < target.w * 0.002 && Math.abs(view.x - target.x) < target.w * 0.002) view = target;
+        draw();
+        frameReq = view === target ? 0 : requestAnimationFrame(step);
+      };
+      frameReq = requestAnimationFrame(step);
     };
-    // `f` > 1 rapproche ; (cx, cy) : le point de la carte qui ne bouge pas.
-    const zoom = (f, cx, cy) => {
-      v.x = cx - (cx - v.x) / f;
-      v.y = cy - (cy - v.y) / f;
-      v.w /= f;
-      clamp();
-      apply();
+    // Rapproche de `f` (> 1) autour du point (cx, cy) de la carte, à partir de la cible en cours.
+    const zoom = (f, cx, cy, now) => {
+      const t = target, w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, t.w / f)), r = w / t.w;
+      go({ x: cx - (cx - t.x) * r, y: cy - (cy - t.y) * r, w }, now);
     };
-    const toMap = (clientX, clientY) => {
-      const r = svg.getBoundingClientRect();
-      return [v.x + ((clientX - r.left) / r.width) * v.w, v.y + ((clientY - r.top) / r.height) * h()];
+    const toMap = (clientX, clientY, v = view) => {
+      const b = svg.getBoundingClientRect();
+      return [v.x + ((clientX - b.left) / b.width) * v.w, v.y + ((clientY - b.top) / b.height) * v.w * MAP_RATIO];
     };
+    const perPixel = () => view.w / svg.getBoundingClientRect().width;
     frame.addEventListener("wheel", (ev) => {
       ev.preventDefault();
-      zoom(ev.deltaY < 0 ? 1.25 : 0.8, ...toMap(ev.clientX, ev.clientY));
-    }, { passive: false });
-    frame.addEventListener("dblclick", (ev) => zoom(2, ...toMap(ev.clientX, ev.clientY)));
-    frame.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => {
-      if (b.dataset.zoom === "reset") {
-        v = { x: 0, y: 0, w: MAP_W };
-        apply();
+      const px = ev.deltaMode === 1 ? 33 : ev.deltaMode === 2 ? 400 : 1;
+      const dy = ev.deltaY * px, dx = ev.deltaX * px;
+      // Molette de souris : par crans (lignes, ou pixels ronds sans mouvement de côté).
+      const mouse = ev.deltaMode !== 0 || (dx === 0 && Math.abs(dy) >= 50 && Number.isInteger(dy));
+      if (ev.ctrlKey || mouse) {
+        zoom(Math.exp(-dy * (ev.ctrlKey ? 0.012 : 0.0022)), ...toMap(ev.clientX, ev.clientY, target), ev.ctrlKey);
       } else {
-        zoom(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, v.x + v.w / 2, v.y + h() / 2);
+        const s = perPixel();
+        go({ x: target.x + dx * s, y: target.y + dy * s, w: target.w }, true);
       }
+    }, { passive: false });
+    frame.addEventListener("dblclick", (ev) => zoom(2.5, ...toMap(ev.clientX, ev.clientY, target)));
+    frame.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.zoom === "reset") go(world());
+      else zoom(b.dataset.zoom === "in" ? 2 : 0.5, target.x + target.w / 2, target.y + (target.w * MAP_RATIO) / 2);
     }));
+    // Glisser (un doigt, la souris) et pincer (deux doigts : zoom et déplacement ensemble).
     const pointers = new Map();
+    let pinch = null;
+    const pair = () => {
+      const [a, b] = [...pointers.values()];
+      return { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
+    };
     frame.addEventListener("pointerdown", (ev) => {
       if (ev.target.closest("button")) return;
       frame.setPointerCapture(ev.pointerId);
       pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      pinch = pointers.size === 2 ? pair() : null;
       frame.classList.add("dragging");
     });
     frame.addEventListener("pointermove", (ev) => {
       const prev = pointers.get(ev.pointerId);
       if (!prev) return;
-      if (pointers.size === 1) {
-        const r = svg.getBoundingClientRect();
-        v.x -= ((ev.clientX - prev[0]) / r.width) * v.w;
-        v.y -= ((ev.clientY - prev[1]) / r.height) * h();
-        clamp();
-        apply();
-      } else if (pointers.size === 2) {
-        const other = [...pointers].find(([id]) => id !== ev.pointerId)[1];
-        const before = Math.hypot(prev[0] - other[0], prev[1] - other[1]);
-        const after = Math.hypot(ev.clientX - other[0], ev.clientY - other[1]);
-        if (before > 0) zoom(after / before, ...toMap((ev.clientX + other[0]) / 2, (ev.clientY + other[1]) / 2));
-      }
       pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      if (pointers.size === 1) {
+        const s = perPixel();
+        go({ x: view.x - (ev.clientX - prev[0]) * s, y: view.y - (ev.clientY - prev[1]) * s, w: view.w }, true);
+      } else if (pointers.size === 2 && pinch) {
+        const now = pair();
+        // Le point de la carte sous l'ancien centre des doigts passe sous le nouveau.
+        const [mx, my] = toMap(pinch.cx, pinch.cy);
+        const w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, view.w * (pinch.d / Math.max(now.d, 1))));
+        const b = svg.getBoundingClientRect();
+        const fx = (now.cx - b.left) / b.width, fy = (now.cy - b.top) / b.height;
+        go({ x: mx - fx * w, y: my - fy * w * MAP_RATIO, w }, true);
+        pinch = now;
+      }
     });
     const release = (ev) => {
       pointers.delete(ev.pointerId);
+      pinch = pointers.size === 2 ? pair() : null;
       if (!pointers.size) frame.classList.remove("dragging");
     };
     frame.addEventListener("pointerup", release);
     frame.addEventListener("pointercancel", release);
-    apply();
+    draw();
   });
 }
 document.addEventListener("DOMContentLoaded", mapInit);

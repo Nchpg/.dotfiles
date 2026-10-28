@@ -395,7 +395,11 @@ func parseVWTime(v string) time.Time {
 // TrafficRow : un site ou un service, et ses visites.
 type TrafficRow struct {
 	Name, Env, Domain, Link string
+	Label                   string // l'environnement (production, preview…) ; vide pour un service
 	Access                  string // internet ou VPN : par où le site est servi
+	SSO                     bool   // derrière Authelia
+	First                   bool   // première ligne de son site (tableau groupé, comme la page Sites)
+	Span                    int
 	Visits                  int
 	Last                    string
 	last                    time.Time
@@ -409,7 +413,7 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 		if sv.Public {
 			access = "internet"
 		}
-		rows = append(rows, TrafficRow{Name: sv.Name, Domain: sv.Domain, Access: access})
+		rows = append(rows, TrafficRow{Name: sv.Name, Domain: sv.Domain, Access: access, SSO: sv.Authelia})
 	}
 	if snap, err := s.snapshot(ctx); err == nil {
 		for _, site := range snap.Apps.Names() {
@@ -418,7 +422,7 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 				if d.VPN() {
 					access = "VPN"
 				}
-				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Domain: d.Domain(s.cfg.Domain), Access: access})
+				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Label: d.Label, Domain: d.Domain(s.cfg.Domain), Access: access, SSO: d.Access.SSO})
 			}
 		}
 	}
@@ -560,14 +564,45 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 			visited++
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Visits > rows[j].Visits })
+	groups := groupTraffic(rows)
 	logins := s.loginServices(ctx, s.readTrafficSummary(), period, key)
 	ok, failed := 0, 0
 	for _, ls := range logins {
 		ok, failed = ok+ls.OK, failed+ls.Failed
 	}
-	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Rows": rows, "Logins": logins, "Period": key, "Periods": periods,
+	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Groups": groups, "Sites": len(rows), "Logins": logins, "Period": key, "Periods": periods,
 		"Total": len(known), "Visited": visited, "OK": ok, "Failed": failed, "Dots": s.places(ctx).visitDots(known), "LogsOK": err == nil, "Complete": complete})
+}
+
+// TrafficGroup : un site et ses environnements (un service seul), ses visites en tout.
+type TrafficGroup struct {
+	Rows   []TrafficRow
+	Visits int
+}
+
+// groupTraffic : les lignes par site, dans l'ordre de la config ; les sites les plus visités d'abord.
+func groupTraffic(rows []TrafficRow) []TrafficGroup {
+	var groups []TrafficGroup
+	at := map[string]int{}
+	for _, r := range rows {
+		k := r.Name
+		if r.Label == "" {
+			k = "service:" + r.Domain
+		}
+		i, ok := at[k]
+		if !ok {
+			i = len(groups)
+			at[k] = i
+			groups = append(groups, TrafficGroup{})
+		}
+		groups[i].Rows = append(groups[i].Rows, r)
+		groups[i].Visits += r.Visits
+	}
+	for i := range groups {
+		groups[i].Rows[0].First, groups[i].Rows[0].Span = true, len(groups[i].Rows)
+	}
+	sort.SliceStable(groups, func(i, j int) bool { return groups[i].Visits > groups[j].Visits })
+	return groups
 }
 
 // firstOf : la première valeur non vide.

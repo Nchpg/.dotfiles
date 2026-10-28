@@ -1,3 +1,9 @@
+{{/* Accès d'un site, comme sur la page Sites : VPN ou public, et Authelia. */}}
+{{define "acc"}}{{if eq .Access "VPN"}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{else}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}{{if .SSO}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}{{end}}
+
+{{/* Provenance d'une visite : les mêmes étiquettes (internet : public ; local : le réseau de la maison). */}}
+{{define "via"}}{{if eq . "VPN"}}<span class="acc acc-vpn">VPN</span>{{else if eq . "internet"}}<span class="acc acc-public">Public</span>{{else}}<span class="acc">{{.}}</span>{{end}}{{end}}
+
 {{define "period-tabs"}}<nav class="seg-own period-tabs" aria-label="Période">{{range .Periods}}<a href="?p={{.Value}}" {{if .Selected}}aria-current="page"{{end}}><span>{{.Label}}</span></a>{{end}}</nav>{{end}}
 
 {{/* Carte : terres et frontières (static/world.svg, en cache), un point par lieu ; zoom à la molette,
@@ -5,7 +11,7 @@
 {{define "world-map"}}
 <section class="card world-card" aria-label="Carte">
   <div class="world-frame" data-map>
-    <svg viewBox="0 0 360 142" class="world" role="img" aria-label="Carte : {{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
+    <svg viewBox="0 -30.25 360 202.5" class="world" role="img" aria-label="Carte : {{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
       <use href="/static/world.svg#land" class="land"/>
       <use href="/static/world.svg#borders" class="borders"/>
       {{range .Dots}}<g class="spot spot-{{.Kind}}"><title>{{.Title}}</title><circle class="halo" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" data-r="{{.R}}"/><circle class="core" cx="{{.X}}" cy="{{.Y}}" r="1.3" data-r="1.3"/></g>{{end}}
@@ -40,7 +46,7 @@
   <div class="overview">
     <section class="strip" aria-label="Résumé">
       <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Total}}</span><span class="mono small muted">sur {{.Period}}</span></div>
-      <div class="strip-cell"><span class="strip-label">Sites visités</span><span class="strip-value">{{.Visited}}</span><span class="mono small muted">sur {{len .Rows}}</span></div>
+      <div class="strip-cell"><span class="strip-label">Sites visités</span><span class="strip-value">{{.Visited}}</span><span class="mono small muted">sur {{.Sites}}</span></div>
       <div class="strip-cell"><span class="strip-label">Connexions</span><span class="strip-value line"><span class="ok">{{.OK}} réussie{{if gt .OK 1}}s{{end}}</span>{{if .Failed}}<span class="bad">{{.Failed}} ratée{{if gt .Failed 1}}s{{end}}</span>{{end}}</span><span class="mono small muted">aux services à compte</span></div>
     </section>
 
@@ -49,17 +55,21 @@
     <section class="block" aria-labelledby="sites-title">
       <div class="block-head"><h2 id="sites-title" class="line">Sites{{template "info" (args "ID" "info-sites" "Text" "Visite : des pages ouvertes d'affilée par un même navigateur (même IP), sans pause de plus de 30 minutes. Robots, sondes de think et applis de synchro n'en sont pas. Internet : par le tunnel Cloudflare ; VPN : un appareil du tunnel ; local : le réseau de la maison. Pour un service à compte, une visite est une arrivée sur ses pages (la connexion se compte en dessous).")}}</h2></div>
       <section class="card table-card" aria-label="Visites par site">
-        <table class="list">
-          <thead><tr><th scope="col">Site</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
-          <tbody>
+        <table class="sites traffic">
+          <thead><tr><th scope="col">Site</th><th scope="col">Environnement</th><th scope="col">Accès</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
+          {{range .Groups}}
+          <tbody data-vpn>
             {{range .Rows}}
-            <tr>
-              <td><a href="{{.Link}}" class="stack tight"><span class="line"><strong>{{.Name}}</strong>{{with .Env}}<span class="chip">{{.}}</span>{{end}}<span class="via via-{{.Access}}">{{.Access}}</span></span><small class="mono muted">{{.Domain}}</small></a></td>
-              <td>{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
-              <td class="muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
+            <tr class="{{if .First}}first{{end}}">
+              {{if .First}}<td rowspan="{{.Span}}" class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>{{end}}
+              <td class="env-td">{{if .Label}}<span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.Link}}">{{.Label}}</a><small class="mono muted ellipsis">{{.Domain}}</small></span></span>{{else}}<a class="mono small ellipsis" href="{{.Link}}">{{.Domain}}</a>{{end}}</td>
+              <td class="acc-td">{{template "acc" .}}</td>
+              <td class="num-td">{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
             </tr>
-            {{else}}<tr><td colspan="3" class="muted">Aucun site.</td></tr>{{end}}
+            {{end}}
           </tbody>
+          {{else}}<tbody><tr><td colspan="5" class="muted">Aucun site.</td></tr></tbody>{{end}}
         </table>
       </section>
     </section>
@@ -68,19 +78,20 @@
     <section class="block" aria-labelledby="logins-title">
       <div class="block-head"><h2 id="logins-title" class="line">Connexions{{template "info" (args "ID" "info-logins" "Text" "Les services où l'on se connecte avec un compte. Authelia : la connexion réussit au second facteur. Nextcloud : l'envoi du formulaire de connexion (ou l'autorisation d'une appli), réussi ou non. Vaultwarden : les connexions par mot de passe. Une appli déjà connectée se synchronise sans se reconnecter : elle se voit dans le détail.")}}</h2></div>
       <section class="card table-card" aria-label="Connexions par service">
-        <table class="list">
-          <thead><tr><th scope="col">Service</th><th scope="col">Réussies</th><th scope="col">Ratées</th><th scope="col">Comptes</th><th scope="col">Dernière</th></tr></thead>
-          <tbody>
-            {{range .Logins}}
+        <table class="sites traffic detail">
+          <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Réussies</th><th scope="col">Ratées</th><th scope="col">Comptes</th><th scope="col">Dernière</th></tr></thead>
+          {{range .Logins}}
+          <tbody data-vpn>
             <tr>
-              <td><a href="{{.Link}}" class="stack tight"><strong>{{.Name}}</strong><small class="mono muted">{{join .Domains ", "}}</small></a></td>
-              <td>{{if .OK}}<span class="ok">{{.OK}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
-              <td>{{if .Failed}}<span class="bad">{{.Failed}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td class="site-td"><a class="go strong" href="{{.Link}}">{{.Name}}</a></td>
+              <td class="addr-td"><span class="stack tight">{{range .Domains}}<span class="mono small muted ellipsis">{{.}}</span>{{end}}</span></td>
+              <td class="num-td">{{if .OK}}<strong class="ok">{{.OK}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
+              <td class="num-td">{{if .Failed}}<strong class="bad">{{.Failed}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
               <td class="small">{{if .Accounts}}{{join .Accounts ", "}}{{else}}<span class="muted">—</span>{{end}}</td>
-              <td class="muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
+              <td class="last-td muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
             </tr>
-            {{end}}
           </tbody>
+          {{end}}
         </table>
       </section>
     </section>
@@ -91,13 +102,13 @@
 
 {{define "count-table"}}
 <section class="card table-card" aria-label="{{.Title}}">
-  <table class="list">
+  <table class="sites traffic detail">
     <thead><tr>{{range .Heads}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
-    <tbody>
+    <tbody data-vpn>
       {{$mode := .Mode}}
       {{range .Rows}}
       <tr>
-        <td><span class="stack tight"><span>{{.Name}}</span>{{if ne $mode "logins"}}{{with .Sub}}<small class="mono muted">{{.}}</small>{{end}}{{end}}</span></td>
+        <td class="site-td"><span class="stack tight"><span class="strong">{{.Name}}</span>{{if ne $mode "logins"}}{{with .Sub}}<small class="mono muted">{{.}}</small>{{end}}{{end}}</span></td>
         {{if eq $mode "logins"}}
         <td><span class="stack tight"><span>{{.Detail}}</span><small class="mono muted">{{.Sub}}</small></span></td>
         <td>{{if .OK}}<span class="ok">{{.OK}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
@@ -131,7 +142,7 @@
   <div class="overview">
     <section class="strip" aria-label="Résumé">
       <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Visits}}</span><span class="mono small muted">{{.Pages}} page{{if gt .Pages 1}}s{{end}} vue{{if gt .Pages 1}}s{{end}} sur {{.Period}}</span></div>
-      <div class="strip-cell"><span class="strip-label">Accès</span><span class="strip-value"><span class="via via-{{.Target.Access}}">{{.Target.Access}}</span></span><span class="mono small muted">par où le site est servi</span></div>
+      <div class="strip-cell"><span class="strip-label">Accès</span><span class="strip-value line">{{template "acc" .Target}}</span><span class="mono small muted">par où le site est servi</span></div>
       <div class="strip-cell"><span class="strip-label">Origines</span><span class="strip-value">{{len .Origins}}</span><span class="mono small muted">appareils, lieux ou réseaux</span></div>
     </section>
 
@@ -146,13 +157,13 @@
     <section class="block" aria-labelledby="origins-title">
       <div class="block-head"><h2 id="origins-title" class="line">D'où{{template "info" (args "ID" "info-origins" "Text" "Un appareil du VPN par son nom, le réseau de la maison, ou pour internet la ville et le pays de l'IP (base DB-IP Lite, sur think ; approximatif).")}}</h2></div>
       <section class="card table-card" aria-label="Origines des visites">
-        <table class="list">
+        <table class="sites traffic detail">
           <thead><tr><th scope="col">Origine</th><th scope="col">Par</th><th scope="col">Visites</th><th scope="col">Pages</th><th scope="col">Dernière</th></tr></thead>
-          <tbody>
+          <tbody data-vpn>
             {{range .Origins}}
             <tr>
-              <td><span class="stack tight"><span>{{.Label}}</span><small class="mono muted">{{.Detail}}</small></span></td>
-              <td><span class="via via-{{.Via}}">{{.Via}}</span></td>
+              <td class="site-td"><span class="stack tight"><span class="strong">{{.Label}}</span><small class="mono muted">{{.Detail}}</small></span></td>
+              <td>{{template "via" .Via}}</td>
               <td>{{.Visits}}</td>
               <td class="muted">{{.Pages}}</td>
               <td class="muted nowrap">{{.Last}}</td>
@@ -197,7 +208,7 @@
     {{template "world-map" .}}
 
     <section class="block" aria-labelledby="by-title">
-      <div class="block-head"><h2 id="by-title" class="line">Par compte et origine{{if eq .Service.ID "nextcloud"}}{{template "info" (args "ID" "info-nc" "Text" "Nextcloud ne dit pas quel compte a réussi à se connecter (« — ») ; pour un essai raté, c'est le nom tapé.")}}{{end}}</h2></div>
+      <div class="block-head"><h2 id="by-title" class="line">Par compte et origine{{if eq .Service.ID "nextcloud"}}{{template "info" (args "ID" "info-nc" "Text" "Le compte : celui tapé dans le formulaire de connexion (« — » pour l'autorisation d'une appli, ou une connexion d'avant ce relevé).")}}{{end}}</h2></div>
       {{template "count-table" (args "Title" "Connexions" "Heads" (list "Compte" "D'où" "Réussies" "Ratées" "Dernière") "Rows" .Rows "Mode" "logins" "Empty" (printf "Aucune connexion sur %s." .Period))}}
     </section>
 
