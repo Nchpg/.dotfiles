@@ -161,8 +161,8 @@ let
     '';
   };
 
-  # Onglet Trafic : les sessions et applis connectées de Nextcloud et Vaultwarden, et les essais
-  # ratés de Nextcloud, lus dans leurs bases (root) ; résumé sans aucun jeton.
+  # Onglet Trafic : les sessions et applis connectées de Nextcloud et Vaultwarden, les essais ratés
+  # de Nextcloud et les connexions au portail Authelia, lus dans leurs bases (root) ; sans aucun jeton.
   nextcloud = config.systemSettings.nextcloud;
   vaultwarden = config.systemSettings.vaultwarden;
   trafficSummary = pkgs-stable.writeShellApplication {
@@ -197,6 +197,14 @@ let
         builtins.toJSON [ vaultwarden.hostName ]
       }' \
         '$r + {vaultwarden: {domains: $d, unit: "vaultwarden.service", devices: $v}}')
+    ''
+    + lib.optionalString authelia.enable ''
+      # Connexions au portail : chaque essai (premier facteur, second facteur), réussi ou non.
+      events=$(sqlite3 -readonly -json /var/lib/authelia-main/db.sqlite3 "SELECT time, successful AS ok, username AS user, CAST(remote_ip AS TEXT) AS ip, auth_type AS type FROM authentication_logs WHERE time > datetime('now', '-31 days') ORDER BY time DESC LIMIT 5000" 2> /dev/null | grep . || echo '[]')
+      result=$(jq -n --argjson r "$result" --argjson e "$events" --argjson d '${
+        builtins.toJSON [ authelia.portalHost ]
+      }' \
+        '$r + {authelia: {domains: $d, events: $e}}')
     ''
     + ''
       jq -n --argjson r "$result" '$r + {updated: now | floor}' > "$out.new"
@@ -373,23 +381,30 @@ in
       };
     };
 
-    systemd.services.admin-traffic = lib.mkIf (nextcloud.enable || vaultwarden.enable) {
-      description = "Applis et sessions de Nextcloud et Vaultwarden pour le dashboard (sans jeton)";
-      after = [ "postgresql.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = lib.getExe trafficSummary;
-        StateDirectory = "admin-traffic";
-        StateDirectoryMode = "0755";
-      };
-    };
-    systemd.timers.admin-traffic = lib.mkIf (nextcloud.enable || vaultwarden.enable) {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "2min";
-        OnUnitActiveSec = "5min";
-      };
-    };
+    systemd.services.admin-traffic =
+      lib.mkIf (nextcloud.enable || vaultwarden.enable || authelia.enable)
+        {
+          description = "Applis et sessions de Nextcloud et Vaultwarden pour le dashboard (sans jeton)";
+          after = [
+            "postgresql.service"
+            "authelia-main.service"
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = lib.getExe trafficSummary;
+            StateDirectory = "admin-traffic";
+            StateDirectoryMode = "0755";
+          };
+        };
+    systemd.timers.admin-traffic =
+      lib.mkIf (nextcloud.enable || vaultwarden.enable || authelia.enable)
+        {
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnBootSec = "2min";
+            OnUnitActiveSec = "5min";
+          };
+        };
 
     # « Recopier » : le dashboard (sans droits) dépose `<app>.want`, avec les dossiers à recopier (un
     # par ligne ; vide : tous). Root ne traite qu'un environnement en données « copie » connu de la
