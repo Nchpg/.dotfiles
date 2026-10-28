@@ -1,16 +1,26 @@
 {{define "period-tabs"}}<nav class="seg-own period-tabs" aria-label="Période">{{range .Periods}}<a href="?p={{.Value}}" {{if .Selected}}aria-current="page"{{end}}><span>{{.Label}}</span></a>{{end}}</nav>{{end}}
 
-{{/* Provenance des visites : barre empilée internet · VPN · local, et ses nombres. */}}
-{{define "mix"}}{{if .Total}}<span class="mix-cell"><span class="mix" aria-hidden="true">{{range .Parts}}<i class="mix-{{.Class}}" style="width: {{.Pct}}%"></i>{{end}}</span><small class="muted">{{range $i, $p := .Parts}}{{if $i}} · {{end}}{{$p.N}} {{$p.Label}}{{end}}</small></span>{{else}}<span class="muted">—</span>{{end}}{{end}}
-
-{{/* Carte minimaliste : les terres en aplat, un point par lieu (visites depuis internet). */}}
+{{/* Carte : terres et frontières (static/world.svg, en cache), un point par lieu ; zoom à la molette,
+   aux boutons ou en pinçant, déplacement en glissant (app.js). */}}
 {{define "world-map"}}
-<section class="card world-card" aria-label="Carte des visites depuis internet">
-  <svg viewBox="0 0 360 142" class="world" role="img" aria-label="{{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
-    <path class="land" d="{{worldPath}}"/>
-    {{range .Dots}}<circle cx="{{.X}}" cy="{{.Y}}" r="{{.R}}"><title>{{.Title}}</title></circle>{{end}}
-  </svg>
-  <small class="muted world-note">{{if .Dots}}Visites depuis internet, par ville (approximatif). Le VPN et le réseau local n'y figurent pas.{{else}}Aucune visite depuis internet sur la période.{{end}}</small>
+<section class="card world-card" aria-label="Carte">
+  <div class="world-frame" data-map>
+    <svg viewBox="0 0 360 142" class="world" role="img" aria-label="Carte : {{len .Dots}} lieu{{if gt (len .Dots) 1}}x{{end}}">
+      <use href="/static/world.svg#land" class="land"/>
+      <use href="/static/world.svg#borders" class="borders"/>
+      {{range .Dots}}<g class="spot spot-{{.Kind}}"><title>{{.Title}}</title><circle class="halo" cx="{{.X}}" cy="{{.Y}}" r="{{.R}}" data-r="{{.R}}"/><circle class="core" cx="{{.X}}" cy="{{.Y}}" r="1.3" data-r="1.3"/></g>{{end}}
+    </svg>
+    <div class="world-tools">
+      <button type="button" class="icon-btn" data-zoom="in" aria-label="Zoomer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button type="button" class="icon-btn" data-zoom="out" aria-label="Dézoomer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button type="button" class="icon-btn" data-zoom="reset" aria-label="Vue entière"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    </div>
+  </div>
+  <div class="world-legend small muted">
+    <span class="line"><i class="key key-internet"></i>internet : la ville de l'IP</span>
+    <span class="line"><i class="key key-vpn"></i>VPN : là d'où l'appareil joint le tunnel aujourd'hui</span>
+    {{if not .Dots}}<span>Rien à placer sur la période (le réseau local n'a pas de position).</span>{{end}}
+  </div>
 </section>
 {{end}}
 
@@ -29,8 +39,8 @@
   {{template "traffic-alerts" .}}
   <div class="overview">
     <section class="strip" aria-label="Résumé">
-      <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Mix.Total}}</span><span class="mono small muted">sur {{.Period}}</span></div>
-      <div class="strip-cell"><span class="strip-label">Provenance</span>{{template "mix" .Mix}}</div>
+      <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Total}}</span><span class="mono small muted">sur {{.Period}}</span></div>
+      <div class="strip-cell"><span class="strip-label">Sites visités</span><span class="strip-value">{{.Visited}}</span><span class="mono small muted">sur {{len .Rows}}</span></div>
       <div class="strip-cell"><span class="strip-label">Connexions</span><span class="strip-value line"><span class="ok">{{.OK}} réussie{{if gt .OK 1}}s{{end}}</span>{{if .Failed}}<span class="bad">{{.Failed}} ratée{{if gt .Failed 1}}s{{end}}</span>{{end}}</span><span class="mono small muted">aux services à compte</span></div>
     </section>
 
@@ -40,16 +50,15 @@
       <div class="block-head"><h2 id="sites-title" class="line">Sites{{template "info" (args "ID" "info-sites" "Text" "Visite : des pages ouvertes d'affilée par un même navigateur (même IP), sans pause de plus de 30 minutes. Robots, sondes de think et applis de synchro n'en sont pas. Internet : par le tunnel Cloudflare ; VPN : un appareil du tunnel ; local : le réseau de la maison. Pour un service à compte, une visite est une arrivée sur ses pages (la connexion se compte en dessous).")}}</h2></div>
       <section class="card table-card" aria-label="Visites par site">
         <table class="list">
-          <thead><tr><th scope="col">Site</th><th scope="col">Visites</th><th scope="col">Provenance</th><th scope="col">Dernière visite</th></tr></thead>
+          <thead><tr><th scope="col">Site</th><th scope="col">Visites</th><th scope="col">Dernière visite</th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
-              <td><a href="{{.Link}}" class="stack tight"><span class="line"><strong>{{.Name}}</strong>{{with .Env}}<span class="chip">{{.}}</span>{{end}}</span><small class="mono muted">{{.Domain}}</small></a></td>
+              <td><a href="{{.Link}}" class="stack tight"><span class="line"><strong>{{.Name}}</strong>{{with .Env}}<span class="chip">{{.}}</span>{{end}}<span class="via via-{{.Access}}">{{.Access}}</span></span><small class="mono muted">{{.Domain}}</small></a></td>
               <td>{{if .Visits}}<strong>{{.Visits}}</strong>{{else}}<span class="muted">0</span>{{end}}</td>
-              <td class="mix-col">{{template "mix" .Mix}}</td>
               <td class="muted nowrap">{{if .Last}}{{.Last}}{{else}}—{{end}}</td>
             </tr>
-            {{else}}<tr><td colspan="4" class="muted">Aucun site.</td></tr>{{end}}
+            {{else}}<tr><td colspan="3" class="muted">Aucun site.</td></tr>{{end}}
           </tbody>
         </table>
       </section>
@@ -122,7 +131,7 @@
   <div class="overview">
     <section class="strip" aria-label="Résumé">
       <div class="strip-cell"><span class="strip-label">Visites</span><span class="strip-value">{{.Visits}}</span><span class="mono small muted">{{.Pages}} page{{if gt .Pages 1}}s{{end}} vue{{if gt .Pages 1}}s{{end}} sur {{.Period}}</span></div>
-      <div class="strip-cell"><span class="strip-label">Provenance</span>{{template "mix" .Mix}}</div>
+      <div class="strip-cell"><span class="strip-label">Accès</span><span class="strip-value"><span class="via via-{{.Target.Access}}">{{.Target.Access}}</span></span><span class="mono small muted">par où le site est servi</span></div>
       <div class="strip-cell"><span class="strip-label">Origines</span><span class="strip-value">{{len .Origins}}</span><span class="mono small muted">appareils, lieux ou réseaux</span></div>
     </section>
 
@@ -184,6 +193,8 @@
       <div class="strip-cell"><span class="strip-label">Ratées</span><span class="strip-value {{if .Service.Failed}}bad{{end}}">{{.Service.Failed}}</span><span class="mono small muted">mot de passe ou code refusé</span></div>
       <div class="strip-cell"><span class="strip-label">Comptes</span><span class="strip-value">{{len .Service.Accounts}}</span><span class="mono small muted">{{if .Service.Accounts}}{{join .Service.Accounts ", "}}{{else}}aucun{{end}}</span></div>
     </section>
+
+    {{template "world-map" .}}
 
     <section class="block" aria-labelledby="by-title">
       <div class="block-head"><h2 id="by-title" class="line">Par compte et origine{{if eq .Service.ID "nextcloud"}}{{template "info" (args "ID" "info-nc" "Text" "Nextcloud ne dit pas quel compte a réussi à se connecter (« — ») ; pour un essai raté, c'est le nom tapé.")}}{{end}}</h2></div>

@@ -170,6 +170,12 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	case ".png":
 		w.Header().Set("Content-Type", "image/png")
+	case ".svg":
+		// La carte du Trafic : lourde, et ne change qu'avec une nouvelle version.
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(b)
+		return
 	}
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(b)

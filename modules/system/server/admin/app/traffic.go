@@ -14,7 +14,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -232,79 +231,85 @@ func origin(via, ip, city, country string, devices map[string]string) (label, de
 
 var viaLabels = map[string]string{"public": "internet", "vpn": "VPN", "lan": "local", "machine": "think"}
 
-// Mix : la répartition des visites par provenance (barre empilée).
-type Mix struct{ Public, VPN, LAN, Total int }
-
-func (m *Mix) add(via string) {
-	switch via {
-	case "public":
-		m.Public++
-	case "vpn":
-		m.VPN++
-	case "lan":
-		m.LAN++
-	}
-	m.Total++
+// mapPoint : un lieu à placer, pour une visite ou une connexion : la ville de l'IP (internet), ou
+// pour un appareil du VPN celle de l'IP publique d'où il joint le tunnel.
+type mapPoint struct {
+	Lat, Lon    float64
+	Label, Kind string
 }
 
-type MixPart struct {
-	Class, Label string
-	N, Pct       int
-}
-
-// Parts : les morceaux non vides de la barre, en % du total.
-func (m Mix) Parts() []MixPart {
-	var out []MixPart
-	for _, p := range []MixPart{{"public", "internet", m.Public, 0}, {"vpn", "VPN", m.VPN, 0}, {"lan", "local", m.LAN, 0}} {
-		if p.N > 0 && m.Total > 0 {
-			p.Pct = max(1, p.N*100/m.Total)
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// MapDot : un lieu sur la carte (projection équirectangulaire de static/world.path : x = lon + 180,
-// y = 84 - lat), de taille selon le nombre de visites.
+// MapDot : un lieu sur la carte (projection de static/world.svg : x = lon + 180, y = 84 - lat) ; R
+// grandit avec le nombre de visites (la page le garde constant à l'écran quand on zoome).
 type MapDot struct {
-	X, Y, R float64
-	Title   string
+	X, Y, R     float64
+	Title, Kind string
 }
 
-func mapDots(visits []Visit) []MapDot {
+func mapDots(points []mapPoint, one, many string) []MapDot {
 	type spot struct {
-		lat, lon float64
-		label    string
-		n        int
+		mapPoint
+		n int
 	}
 	spots := map[string]*spot{}
-	for _, v := range visits {
-		if v.Lat == nil || v.Lon == nil {
-			continue
+	for _, p := range points {
+		k := fmt.Sprintf("%s|%s|%.1f,%.1f", p.Kind, p.Label, p.Lat, p.Lon)
+		if spots[k] == nil {
+			spots[k] = &spot{mapPoint: p}
 		}
-		k := fmt.Sprintf("%.1f,%.1f", *v.Lat, *v.Lon)
-		sp := spots[k]
-		if sp == nil {
-			label, _ := origin("public", v.IP, v.City, v.Country, nil)
-			sp = &spot{lat: *v.Lat, lon: *v.Lon, label: label}
-			spots[k] = sp
-		}
-		sp.n++
+		spots[k].n++
 	}
 	var out []MapDot
 	for _, sp := range spots {
-		out = append(out, MapDot{X: math.Round((sp.lon+180)*10) / 10, Y: math.Round((84-sp.lat)*10) / 10,
-			R: math.Min(1.6+math.Sqrt(float64(sp.n))*0.9, 7), Title: sp.label + " : " + plural(sp.n, "visite", "visites")})
+		out = append(out, MapDot{X: math.Round((sp.Lon+180)*10) / 10, Y: math.Round((84-sp.Lat)*10) / 10,
+			R: math.Min(2.2+math.Sqrt(float64(sp.n))*1.1, 9), Kind: sp.Kind, Title: sp.Label + " : " + plural(sp.n, one, many)})
 	}
 	// Les plus gros d'abord : un petit point reste visible par-dessus.
 	sort.Slice(out, func(i, j int) bool { return out[i].R > out[j].R })
 	return out
 }
 
-var worldPath = sync.OnceValue(func() string {
-	b, _ := assets.ReadFile("static/world.path")
-	return string(b)
-})
+// geoPlaces : de quoi placer les IP d'une page sur la carte (appareils du VPN par leur IP publique).
+type geoPlaces struct {
+	s         *Server
+	devices   map[string]string // adresse dans le tunnel → nom
+	endpoints map[string]string // adresse dans le tunnel → IP publique
+}
+
+func (s *Server) places(ctx context.Context) geoPlaces {
+	return geoPlaces{s, s.vpnDevices(ctx), s.vpnEndpoints(ctx)}
+}
+
+// point : où placer une IP vue par `via` ; faux si elle ne se place pas (réseau local, inconnue).
+// `lat` et `lon` : la position déjà connue (journal des visites), sinon cherchée ici.
+func (g geoPlaces) point(via, ip string, lat, lon *float64, city, country string) (mapPoint, bool) {
+	switch via {
+	case "public":
+		if lat != nil && lon != nil {
+			label, _ := origin("public", ip, city, country, nil)
+			return mapPoint{*lat, *lon, label, "internet"}, true
+		}
+		if geo := g.s.geo(ip); geo.OK {
+			label, _ := origin("public", ip, geo.City, geo.Country, nil)
+			return mapPoint{geo.Lat, geo.Lon, label, "internet"}, true
+		}
+	case "vpn":
+		if geo := g.s.geo(g.endpoints[ip]); geo.OK {
+			name := firstOf(g.devices[ip], ip)
+			return mapPoint{geo.Lat, geo.Lon, name + " (VPN, " + firstOf(geo.City, geo.Country) + ")", "vpn"}, true
+		}
+	}
+	return mapPoint{}, false
+}
+
+func (g geoPlaces) visitDots(visits []Visit) []MapDot {
+	var pts []mapPoint
+	for _, v := range visits {
+		if p, ok := g.point(v.Via, v.IP, v.Lat, v.Lon, v.City, v.Country); ok {
+			pts = append(pts, p)
+		}
+	}
+	return mapDots(pts, "visite", "visites")
+}
 
 // trafficPeriod : la période choisie (?p=24h, 7j, 30j), bornée par la conservation des journaux.
 func (s *Server) trafficPeriod(r *http.Request) (string, time.Duration, []Opt) {
@@ -390,8 +395,8 @@ func parseVWTime(v string) time.Time {
 // TrafficRow : un site ou un service, et ses visites.
 type TrafficRow struct {
 	Name, Env, Domain, Link string
+	Access                  string // internet ou VPN : par où le site est servi
 	Visits                  int
-	Mix                     Mix
 	Last                    string
 	last                    time.Time
 }
@@ -400,12 +405,20 @@ type TrafficRow struct {
 func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 	var rows []TrafficRow
 	for _, sv := range s.cfg.Services {
-		rows = append(rows, TrafficRow{Name: sv.Name, Domain: sv.Domain})
+		access := "VPN"
+		if sv.Public {
+			access = "internet"
+		}
+		rows = append(rows, TrafficRow{Name: sv.Name, Domain: sv.Domain, Access: access})
 	}
 	if snap, err := s.snapshot(ctx); err == nil {
 		for _, site := range snap.Apps.Names() {
 			for _, d := range snap.Apps.Entries[site].Deploys(site) {
-				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Domain: d.Domain(s.cfg.Domain)})
+				access := "internet"
+				if d.VPN() {
+					access = "VPN"
+				}
+				rows = append(rows, TrafficRow{Name: d.Site, Env: d.ID, Domain: d.Domain(s.cfg.Domain), Access: access})
 			}
 		}
 	}
@@ -416,6 +429,7 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 type loginEvent struct {
 	At                         time.Time
 	User, IP, Via, City, Place string
+	Lat, Lon                   *float64
 	Client                     string
 	OK                         bool
 }
@@ -455,12 +469,26 @@ func (s *Server) loginServices(ctx context.Context, sum trafficSummary, period t
 	if nc := sum.Nextcloud; nc != nil {
 		ls := &LoginService{ID: "nextcloud", Name: "Nextcloud", Domains: nc.Domains}
 		lines, _, _ := s.visitLines(ctx, "login", "", period)
+		sort.Slice(lines, func(i, j int) bool { return lines[i].At.Before(lines[j].At) })
+		// Avec un second facteur, le compte est tapé à la première étape : il passe à la suivante (même
+		// IP, dans les 10 minutes).
+		pending := map[string]visitLine{}
 		for _, l := range lines {
-			if !slices.Contains(nc.Domains, l.Site) || (l.Login != "ok" && l.Login != "failed") {
+			if !slices.Contains(nc.Domains, l.Site) {
 				continue
 			}
+			if l.Login == "2fa" {
+				pending[l.IP] = l
+				continue
+			}
+			if l.Login != "ok" && l.Login != "failed" {
+				continue
+			}
+			if p, ok := pending[l.IP]; ok && l.LoginUser == "" && l.At.Sub(p.At) < 10*time.Minute {
+				l.LoginUser = p.LoginUser
+			}
 			ls.events = append(ls.events, loginEvent{At: l.At, User: l.LoginUser, IP: l.IP, Via: l.Via, City: l.City, Place: l.place(),
-				Client: l.Client, OK: l.Login == "ok"})
+				Lat: l.Lat, Lon: l.Lon, Client: l.Client, OK: l.Login == "ok"})
 		}
 		out = append(out, ls)
 	}
@@ -510,8 +538,8 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 	rows := s.trafficTargets(ctx)
 	lines, complete, err := s.visitLines(ctx, "page", "", period)
 	visits := visitsOf(lines)
-	var mix Mix
 	var known []Visit
+	visited := 0
 	for i := range rows {
 		row := &rows[i]
 		row.Link = "/traffic/" + row.Domain + "?p=" + key
@@ -520,8 +548,6 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			row.Visits++
-			row.Mix.add(v.Via)
-			mix.add(v.Via)
 			known = append(known, v)
 			if v.End.After(row.last) {
 				row.last = v.End
@@ -529,6 +555,9 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 		}
 		if !row.last.IsZero() {
 			row.Last = ago(time.Since(row.last))
+		}
+		if row.Visits > 0 {
+			visited++
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Visits > rows[j].Visits })
@@ -538,7 +567,7 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 		ok, failed = ok+ls.OK, failed+ls.Failed
 	}
 	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Rows": rows, "Logins": logins, "Period": key, "Periods": periods,
-		"Mix": mix, "OK": ok, "Failed": failed, "Dots": mapDots(known), "LogsOK": err == nil, "Complete": complete})
+		"Total": len(known), "Visited": visited, "OK": ok, "Failed": failed, "Dots": s.places(ctx).visitDots(known), "LogsOK": err == nil, "Complete": complete})
 }
 
 // firstOf : la première valeur non vide.
@@ -634,9 +663,7 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 	visits := visitsOf(lines)
 	origins := map[string]*OriginRow{}
 	accounts := map[string]*CountRow{}
-	var mix Mix
 	for _, v := range visits {
-		mix.add(v.Via)
 		label, detail := origin(v.Via, v.IP, v.City, v.Country, devices)
 		o := origins[label+"|"+detail]
 		if o == nil {
@@ -677,7 +704,7 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "traffic-site", map[string]any{"Nav": "traffic", "Target": target, "Period": key, "Periods": periods,
-		"Visits": len(visits), "Pages": len(lines), "Mix": mix, "Bars": bars(visits, period), "Dots": mapDots(visits),
+		"Visits": len(visits), "Pages": len(lines), "Bars": bars(visits, period), "Dots": s.places(ctx).visitDots(visits),
 		"Origins": sortedOrigins(origins), "Accounts": sortedRows(values(accounts), 0), "Paths": sortedRows(values(paths), 10),
 		"Login": login, "LogsOK": err == nil, "Complete": complete})
 }
@@ -778,7 +805,18 @@ func (s *Server) trafficLogins(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, "traffic-logins", map[string]any{"Nav": "traffic", "Service": ls, "Period": key, "Periods": periods,
 		"Rows": sortedRows(values(byKey), 0), "Connected": sortedRows(connected, 0), "Sessions": sortedRows(sessions, 0),
-		"Syncs": sortedRows(syncs, 0)})
+		"Syncs": sortedRows(syncs, 0), "Dots": loginDots(s.places(ctx), ls.events)})
+}
+
+// loginDots : les connexions sur la carte, réussies ou non, par lieu.
+func loginDots(g geoPlaces, events []loginEvent) []MapDot {
+	var pts []mapPoint
+	for _, e := range events {
+		if p, ok := g.point(e.Via, e.IP, e.Lat, e.Lon, e.City, e.Place); ok {
+			pts = append(pts, p)
+		}
+	}
+	return mapDots(pts, "connexion", "connexions")
 }
 
 // viaOf : la provenance d'une IP vue par un service (VPN, réseau local ou internet).

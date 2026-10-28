@@ -29,7 +29,7 @@ let
     pname = "admin";
     version = "0.1.0";
     src = ./app;
-    vendorHash = null;
+    vendorHash = "sha256-nk1+SgYKYFm2b9NzB/D6SBJSPdaquDKLz5t4qnxOmQw=";
     env.CGO_ENABLED = "0";
     meta.mainProgram = "admin";
   };
@@ -308,6 +308,7 @@ in
         ADMIN_LOKI = lib.optionalString config.systemSettings.monitoring.enable "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.loki}";
         ADMIN_LOGS_RETENTION = config.systemSettings.monitoring.logs.retention;
         ADMIN_SSH_UNIT = "sshd.service";
+        ADMIN_GEOIP = lib.optionalString config.systemSettings.monitoring.enable "${pkgs-stable.dbip-city-lite}/share/dbip/dbip-city-lite.mmdb";
         ADMIN_DEPLOY_STATUS = "/var/lib/apps-deploy/status.json";
         ADMIN_HTMX = htmx;
         ADMIN_FONTS = "${pkgs-stable.geist-font}/share/fonts/truetype";

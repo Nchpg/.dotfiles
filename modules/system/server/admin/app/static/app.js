@@ -284,3 +284,83 @@ document.addEventListener("click", (ev) => {
   draftStore(null);
   location.reload();
 });
+
+// Carte du Trafic : zoom (molette, boutons, double clic, pincement) et déplacement en glissant ; la
+// vue reste dans la carte, et les points gardent à peu près leur taille à l'écran.
+const MAP_W = 360, MAP_H = 142, MAP_MAX = 24;
+function mapInit() {
+  document.querySelectorAll("[data-map]:not([data-ready])").forEach((frame) => {
+    frame.dataset.ready = "1";
+    const svg = frame.querySelector("svg");
+    let v = { x: 0, y: 0, w: MAP_W };
+    const h = () => (v.w * MAP_H) / MAP_W;
+    const apply = () => {
+      svg.setAttribute("viewBox", `${v.x} ${v.y} ${v.w} ${h()}`);
+      const k = (v.w / MAP_W) ** 0.85;
+      svg.querySelectorAll("circle[data-r]").forEach((c) => c.setAttribute("r", c.dataset.r * k));
+    };
+    const clamp = () => {
+      v.w = Math.min(MAP_W, Math.max(MAP_W / MAP_MAX, v.w));
+      v.x = Math.min(MAP_W - v.w, Math.max(0, v.x));
+      v.y = Math.min(MAP_H - h(), Math.max(0, v.y));
+    };
+    // `f` > 1 rapproche ; (cx, cy) : le point de la carte qui ne bouge pas.
+    const zoom = (f, cx, cy) => {
+      v.x = cx - (cx - v.x) / f;
+      v.y = cy - (cy - v.y) / f;
+      v.w /= f;
+      clamp();
+      apply();
+    };
+    const toMap = (clientX, clientY) => {
+      const r = svg.getBoundingClientRect();
+      return [v.x + ((clientX - r.left) / r.width) * v.w, v.y + ((clientY - r.top) / r.height) * h()];
+    };
+    frame.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      zoom(ev.deltaY < 0 ? 1.25 : 0.8, ...toMap(ev.clientX, ev.clientY));
+    }, { passive: false });
+    frame.addEventListener("dblclick", (ev) => zoom(2, ...toMap(ev.clientX, ev.clientY)));
+    frame.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.zoom === "reset") {
+        v = { x: 0, y: 0, w: MAP_W };
+        apply();
+      } else {
+        zoom(b.dataset.zoom === "in" ? 1.6 : 1 / 1.6, v.x + v.w / 2, v.y + h() / 2);
+      }
+    }));
+    const pointers = new Map();
+    frame.addEventListener("pointerdown", (ev) => {
+      if (ev.target.closest("button")) return;
+      frame.setPointerCapture(ev.pointerId);
+      pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      frame.classList.add("dragging");
+    });
+    frame.addEventListener("pointermove", (ev) => {
+      const prev = pointers.get(ev.pointerId);
+      if (!prev) return;
+      if (pointers.size === 1) {
+        const r = svg.getBoundingClientRect();
+        v.x -= ((ev.clientX - prev[0]) / r.width) * v.w;
+        v.y -= ((ev.clientY - prev[1]) / r.height) * h();
+        clamp();
+        apply();
+      } else if (pointers.size === 2) {
+        const other = [...pointers].find(([id]) => id !== ev.pointerId)[1];
+        const before = Math.hypot(prev[0] - other[0], prev[1] - other[1]);
+        const after = Math.hypot(ev.clientX - other[0], ev.clientY - other[1]);
+        if (before > 0) zoom(after / before, ...toMap((ev.clientX + other[0]) / 2, (ev.clientY + other[1]) / 2));
+      }
+      pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+    });
+    const release = (ev) => {
+      pointers.delete(ev.pointerId);
+      if (!pointers.size) frame.classList.remove("dragging");
+    };
+    frame.addEventListener("pointerup", release);
+    frame.addEventListener("pointercancel", release);
+    apply();
+  });
+}
+document.addEventListener("DOMContentLoaded", mapInit);
+document.addEventListener("htmx:afterSettle", mapInit);

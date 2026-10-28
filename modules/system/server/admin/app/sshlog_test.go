@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -68,21 +69,35 @@ func TestVisitsOf(t *testing.T) {
 	}
 }
 
-// Carte et provenance : un point par lieu ; la barre ne garde que les parts non vides.
-func TestTrafficMapMix(t *testing.T) {
+// Carte : un point par lieu et par sorte ; un appareil du VPN se place par son IP publique.
+func TestTrafficMap(t *testing.T) {
 	lat, lon := 45.76, 4.83
-	d := mapDots([]Visit{{IP: "1.2.3.4", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {IP: "1.2.3.5", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {IP: "10.8.0.3"}})
-	if len(d) != 1 || d[0].X != 184.8 || d[0].Y != 38.2 || d[0].Title != "Lyon, France : 2 visites" {
+	g := geoPlaces{s: &Server{cfg: &Config{}}, devices: map[string]string{"10.8.0.3": "gram"}, endpoints: map[string]string{}}
+	d := g.visitDots([]Visit{{Via: "public", IP: "1.2.3.4", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon},
+		{Via: "public", IP: "1.2.3.5", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {Via: "vpn", IP: "10.8.0.3"}, {Via: "lan", IP: "192.168.1.2"}})
+	if len(d) != 1 || d[0].X != 184.8 || d[0].Y != 38.2 || d[0].Kind != "internet" || d[0].Title != "Lyon, France : 2 visites" {
 		t.Errorf("carte : %+v", d)
 	}
-	var m Mix
-	for _, v := range []string{"vpn", "vpn", "public"} {
-		m.add(v)
-	}
-	if p := m.Parts(); len(p) != 2 || p[0].Class != "public" || p[0].Pct != 33 || p[1].Pct != 66 {
-		t.Errorf("provenance : %+v", p)
+	vpn := mapDots([]mapPoint{{Lat: lat, Lon: lon, Label: "gram (VPN, Lyon)", Kind: "vpn"}}, "visite", "visites")
+	if len(vpn) != 1 || vpn[0].Kind != "vpn" || vpn[0].Title != "gram (VPN, Lyon) : 1 visite" {
+		t.Errorf("VPN : %+v", vpn)
 	}
 	if viaOf("172.16.3.4", "10.8.0.0/24") != "lan" || viaOf("::1", "10.8.0.0/24") != "machine" {
 		t.Error("viaOf")
+	}
+}
+
+// Localisation avec la vraie base, si on la donne (ADMIN_GEOIP=…/dbip-city-lite.mmdb go test).
+func TestGeo(t *testing.T) {
+	path := os.Getenv("ADMIN_GEOIP")
+	if path == "" {
+		t.Skip("ADMIN_GEOIP absent")
+	}
+	s := &Server{cfg: &Config{GeoIP: path}}
+	if g := s.geo("8.8.8.8"); !g.OK || g.Country == "" {
+		t.Errorf("8.8.8.8 : %+v", g)
+	}
+	if g := s.geo("10.8.0.3"); g.OK {
+		t.Errorf("adresse privée localisée : %+v", g)
 	}
 }

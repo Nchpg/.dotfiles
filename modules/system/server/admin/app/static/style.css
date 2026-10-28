@@ -571,20 +571,27 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 /* Trafic. La période : le contrôle segmenté (comme hérité / propre), en liens. */
 .period-tabs a { text-decoration: none; }
 .period-tabs a[aria-current] span { background: var(--card); color: var(--text); font-weight: 500; }
-/* Provenance : barre empilée internet (accent), VPN (vert), local (ambre). */
-.mix-cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.mix { display: flex; height: 6px; width: 100%; max-width: 220px; background: var(--line-soft); overflow: hidden; }
-.mix i { display: block; height: 100%; }
-.mix-public { background: var(--accent); } .mix-vpn { background: #22C55E; } .mix-lan { background: #F5A524; }
-td.mix-col { min-width: 160px; }
 .via { font-size: 12.5px; padding: 1px 7px; background: var(--line-soft); color: var(--muted); }
 .via-internet { background: var(--accent-soft); color: var(--accent-ink); } .via-VPN { background: var(--ok-soft); color: var(--ok); } .via-local { background: var(--warn-soft); color: var(--warn); }
-/* Carte : les terres en aplat clair, un point par lieu. */
-.world-card { grid-column: 1 / -1; padding: 18px 18px 12px; display: flex; flex-direction: column; gap: 8px; }
-.world { width: 100%; height: auto; display: block; }
-.world .land { fill: #E6E9EF; stroke: #FFFFFF; stroke-width: .25; }
-.world circle { fill: var(--accent); fill-opacity: .55; stroke: var(--accent-ink); stroke-width: .3; }
-.world-note { font-size: 12.5px; }
+/* Carte : terres en aplat clair, frontières en traits fins, un halo par lieu autour d'un point plein ;
+   internet en bleu, VPN en vert. Zoom et déplacement : app.js (les points gardent leur taille). */
+.world-card { grid-column: 1 / -1; padding: 0; display: flex; flex-direction: column; }
+.world-frame { position: relative; overflow: hidden; background: #F8F9FB; touch-action: none; cursor: grab; }
+.world-frame.dragging { cursor: grabbing; }
+.world { width: 100%; height: auto; display: block; user-select: none; }
+.world { stroke: none; }
+.world .land { fill: #E3E7EE; stroke: none; }
+.world .borders { fill: none; stroke: #FFFFFF; stroke-width: .8; }
+.world .halo { fill-opacity: .22; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.world .core { stroke: #FFFFFF; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.spot-internet .halo { fill: var(--accent); stroke: var(--accent); } .spot-internet .core { fill: var(--accent-ink); }
+.spot-vpn .halo { fill: #22C55E; stroke: #16A34A; } .spot-vpn .core { fill: #15803D; }
+.spot:hover .halo { fill-opacity: .4; }
+.world-tools { position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column; gap: 4px; }
+.world-tools .icon-btn { background: var(--card); border: 1px solid var(--line); }
+.world-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px; border-top: 1px solid var(--line-soft); }
+.key { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.key-internet { background: var(--accent); } .key-vpn { background: #22C55E; }
 /* Graphe des visites : une colonne par heure ou par jour. */
 .bars-card { grid-column: 1 / -1; padding: 16px 18px 28px; }
 .bars { display: flex; align-items: flex-end; gap: 3px; height: 120px; }

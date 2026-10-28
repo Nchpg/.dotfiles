@@ -37,6 +37,7 @@ type Config struct {
 	Loki         string // journaux (vide : pas de monitoring, la page SSH s'en passe)
 	LogsWindow   time.Duration
 	SSHUnit      string
+	GeoIP        string // base de localisation des IP (celle de Vector), vide sans monitoring
 	DeployStatus string // status.json d'apps-deploy
 	StateDir     string
 	Htmx         string
@@ -74,6 +75,7 @@ func loadConfig() (*Config, error) {
 		Loki:         os.Getenv("ADMIN_LOKI"),
 		LogsWindow:   retention(env("ADMIN_LOGS_RETENTION", "30d")),
 		SSHUnit:      env("ADMIN_SSH_UNIT", "sshd.service"),
+		GeoIP:        os.Getenv("ADMIN_GEOIP"),
 		DeployStatus: env("ADMIN_DEPLOY_STATUS", "/var/lib/apps-deploy/status.json"),
 		StateDir:     env("STATE_DIRECTORY", "/tmp/admin"),
 		Htmx:         env("ADMIN_HTMX", ""),

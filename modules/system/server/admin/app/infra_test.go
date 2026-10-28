@@ -66,16 +66,16 @@ func TestInfraTemplates(t *testing.T) {
 		"account-removed": {"Nav": "accounts", "Name": "olivier", "Secret": "authelia/users", "Track": &Track{ID: "x", Label: "Accès", State: "done", SHA: "abc1234"}},
 		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
 			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true}}, "Self": true},
-		"traffic": {"Nav": "traffic", "Rows": []TrafficRow{{Name: "nextcloud", Domain: "cloud.x", Link: "/traffic/cloud.x?p=7j", Visits: 3, Mix: Mix{VPN: 2, Public: 1, Total: 3}, Last: "il y a 2 min"}, {Name: "myetf", Env: "preview", Domain: "etf-prev.x"}},
+		"traffic": {"Nav": "traffic", "Rows": []TrafficRow{{Name: "nextcloud", Domain: "cloud.x", Link: "/traffic/cloud.x?p=7j", Access: "VPN", Visits: 3, Last: "il y a 2 min"}, {Name: "myetf", Env: "preview", Domain: "etf-prev.x", Access: "internet"}},
 			"Logins": []*LoginService{{ID: "nextcloud", Name: "Nextcloud", Domains: []string{"cloud.x"}, OK: 2, Failed: 1, Accounts: []string{"bob"}, Last: "hier", Link: "/traffic/connexions/nextcloud?p=7j"}},
-			"Period": "7j", "Periods": []Opt{{Value: "7j", Label: "7j", Selected: true}}, "Mix": Mix{VPN: 2, Public: 1, Total: 3}, "OK": 2, "Failed": 1,
-			"Dots": []MapDot{{X: 184.8, Y: 38.2, R: 2.5, Title: "Lyon, France : 1 visite"}}, "LogsOK": true, "Complete": true},
-		"traffic-site": {"Nav": "traffic", "Target": &TrafficRow{Name: "nextcloud", Domain: "cloud.x"}, "Period": "24h", "Periods": []Opt{{Value: "24h", Label: "24h", Selected: true}}, "Visits": 2, "Pages": 5, "Mix": Mix{VPN: 2, Total: 2}, "Bars": []Bar{{Label: "10h", Visits: 2, Height: 100}},
+			"Period": "7j", "Periods": []Opt{{Value: "7j", Label: "7j", Selected: true}}, "Total": 3, "Visited": 1, "OK": 2, "Failed": 1,
+			"Dots": []MapDot{{X: 184.8, Y: 38.2, R: 2.5, Title: "Lyon, France : 1 visite", Kind: "internet"}, {X: 182, Y: 36, R: 3, Title: "gram (VPN, Lyon) : 2 visites", Kind: "vpn"}}, "LogsOK": true, "Complete": true},
+		"traffic-site": {"Nav": "traffic", "Target": &TrafficRow{Name: "nextcloud", Domain: "cloud.x", Access: "VPN"}, "Period": "24h", "Periods": []Opt{{Value: "24h", Label: "24h", Selected: true}}, "Visits": 2, "Pages": 5, "Bars": []Bar{{Label: "10h", Visits: 2, Height: 100}},
 			"Dots": []MapDot{}, "Origins": []*OriginRow{{Label: "gram", Detail: "VPN · 10.8.0.3", Via: "VPN", Visits: 2, Pages: 5, Last: "il y a 1 h"}}, "Accounts": []*CountRow{{Name: "nathan", Count: 2}}, "Paths": []*CountRow{{Name: "/apps/files/", Count: 4}},
 			"Login": &LoginService{ID: "nextcloud", Name: "Nextcloud", OK: 1, Link: "/traffic/connexions/nextcloud?p=24h"}, "LogsOK": true, "Complete": false},
 		"traffic-logins": {"Nav": "traffic", "Service": &LoginService{ID: "nextcloud", Name: "Nextcloud", Domains: []string{"cloud.x"}, OK: 1, Failed: 1, Accounts: []string{"bob"}}, "Period": "7j", "Periods": []Opt{{Value: "7j", Label: "7j", Selected: true}},
 			"Rows": []*CountRow{{Name: "bob", Detail: "Lyon, France", Sub: "1.2.3.4", Failed: 1, Last: "hier"}}, "Connected": []*CountRow{{Name: "nathan", Detail: "gram (Desktop Client - Linux)"}},
-			"Sessions": []*CountRow{}, "Syncs": []*CountRow{{Name: "nathan", Detail: "Nextcloud bureau", Sub: "gram · VPN · 10.8.0.3", Count: 300}}},
+			"Sessions": []*CountRow{}, "Syncs": []*CountRow{{Name: "nathan", Detail: "Nextcloud bureau", Sub: "gram · VPN · 10.8.0.3", Count: 300}}, "Dots": []MapDot{}},
 	}
 	for name, data := range pages {
 		var buf bytes.Buffer
