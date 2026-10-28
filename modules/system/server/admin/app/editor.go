@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -69,8 +68,11 @@ func newDD(name, aria string, opts []DDOpt, placeholder, icon string) DD {
 type DataVM struct {
 	Value, Path, Host string
 	Auto              bool
-	// Environnement : le mode de ce dossier (champ `dmode_<conteneur>:<chemin>`).
-	ModeField, Mode string
+	// Environnement : le mode de ce dossier (champ `dmode_<conteneur>:<chemin>`), et sa recopie
+	// quand il est en copie sur main.
+	Key, ModeField, Mode string
+	Recopy               *RecopyVM
+	RecopyURL, RecopyID  string
 }
 
 type CtrVM struct {
@@ -102,7 +104,7 @@ type EnvTab struct {
 }
 
 type RecopyVM struct {
-	State, Text string
+	State, Text string // State : running, busy (un autre dossier se recopie), done, failed
 }
 
 type FormVM struct {
@@ -154,8 +156,7 @@ type FormVM struct {
 	AccessSummary            []string
 	OptionsSummary           []string
 	DataFrom                 string // environnement : le parent dont un dossier se copie ou se partage
-	Recopy                   *RecopyVM
-	RecopyURL, RemoveEnvURL  string
+	RemoveEnvURL             string
 	Noindex                  bool
 	Children                 []string // environnements qui en héritent
 	AddBranch, AddFrom       DD
@@ -408,7 +409,7 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 	if d.Child {
 		v := e.Environments[env]
 		f.OwnAccess, f.OwnContainers, f.OwnOptions = v.OwnAccess(), v.OwnContainers(), v.OwnOptions()
-		mv, onMain := onMainEnvs[env]
+		_, onMain := onMainEnvs[env]
 		f.EnvNew = !onMain
 		// « Comme preview », et d'où vient vraiment la valeur quand le parent hérite lui-même.
 		origin := func(own func(Env) bool) string {
@@ -464,10 +465,6 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 		f.From.Structural = true
 		parent := e.labelOf(v.From)
 		f.DataFrom = parent
-		if onMain && mv.Data.AnyCopy() && v.Data.AnyCopy() {
-			f.Recopy = s.recopyState(d.App, parent)
-			f.RecopyURL = "/sites/" + name + "/env/" + env + "/recopy"
-		}
 		if onMain {
 			f.RemoveEnvURL = "/sites/" + name + "/env/" + env + "/delete"
 		}
@@ -532,7 +529,13 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 			}
 			dv := DataVM{Value: dt.Path + "\t" + dt.On, Path: dt.Path, Host: host, Auto: dt.On == ""}
 			if env != "" {
-				dv.ModeField, dv.Mode = "dmode_"+n+":"+dt.Path, e.Environments[env].Data.Mode(n, dt.Path)
+				dv.Key = n + ":" + dt.Path
+				dv.ModeField, dv.Mode = "dmode_"+dv.Key, e.Environments[env].Data.Mode(n, dt.Path)
+				// Recopie : seulement un dossier déjà en copie sur main (celui qui tourne).
+				if mv, ok := onMainEnvs[env]; ok && dv.Mode == "copy" && mv.Data.Mode(n, dt.Path) == "copy" {
+					dv.Recopy = s.recopyState(d.App, host)
+					dv.RecopyURL, dv.RecopyID = "/sites/"+name+"/env/"+env+"/recopy", recopyID(dv.Key)
+				}
 			}
 			vm.Data = append(vm.Data, dv)
 		}
@@ -621,26 +624,44 @@ func (e Entry) labelOf(id string) string {
 }
 
 // recopyState : dernier résultat d'admin-recopy pour cette app, ou demande en attente.
-func (s *Server) recopyState(app, parent string) *RecopyVM {
-	vm := &RecopyVM{Text: "Remplace ses données par celles de " + parent + " ; l'environnement est arrêté pendant la copie."}
+var reNotAlnum = regexp.MustCompile(`[^A-Za-z0-9]+`)
+
+// recopyID : l'identifiant de la ligne de recopie d'un dossier (`web:/app/data` -> `recopy-web-app-data`).
+func recopyID(key string) string {
+	return "recopy-" + strings.Trim(reNotAlnum.ReplaceAllString(key, "-"), "-")
+}
+
+// recopyState : la recopie d'un dossier (`target`, son emplacement) d'un environnement en copie, d'après
+// la demande déposée et le dernier résultat d'admin-recopy (root), qui note les dossiers recopiés.
+func (s *Server) recopyState(app, target string) *RecopyVM {
+	vm := &RecopyVM{Text: "Remplace ce dossier par celui du parent ; l'environnement est arrêté pendant la copie."}
+	if b, err := os.ReadFile(filepath.Join(s.cfg.StateDir, "recopy", app+".want")); err == nil {
+		if slices.Contains(strings.Fields(string(b)), target) {
+			vm.State, vm.Text = "running", "Recopie demandée…"
+		} else {
+			vm.State, vm.Text = "busy", "Un autre dossier se recopie."
+		}
+		return vm
+	}
 	var st struct {
-		State  string `json:"state"`
-		Detail string `json:"detail"`
-		At     int64  `json:"at"`
+		State  string   `json:"state"`
+		Detail string   `json:"detail"`
+		At     int64    `json:"at"`
+		Paths  []string `json:"paths"`
 	}
 	if b, err := os.ReadFile(filepath.Join(s.cfg.RecopyStatus, app+".json")); err == nil && json.Unmarshal(b, &st) == nil {
+		mine := len(st.Paths) == 0 || slices.Contains(st.Paths, target)
 		when := time.Unix(st.At, 0).Local().Format("02/01 15:04")
-		switch st.State {
-		case "running":
+		switch {
+		case st.State == "running" && mine:
 			vm.State, vm.Text = "running", "Recopie en cours (depuis "+when+")…"
-		case "done":
-			vm.State, vm.Text = "done", "Dernière recopie : "+when+"."
-		case "failed":
+		case st.State == "running":
+			vm.State, vm.Text = "busy", "Un autre dossier se recopie."
+		case st.State == "done" && mine:
+			vm.State, vm.Text = "done", "Recopié le "+when+"."
+		case st.State == "failed" && mine:
 			vm.State, vm.Text = "failed", "La recopie du "+when+" a échoué : "+st.Detail
 		}
-	}
-	if _, err := os.Stat(filepath.Join(s.cfg.StateDir, "recopy", app+".want")); err == nil {
-		vm.State, vm.Text = "running", "Recopie demandée…"
 	}
 	return vm
 }
@@ -730,25 +751,6 @@ func dataModesFromForm(r *http.Request) map[string]string {
 		}
 	}
 	return out
-}
-
-// compactData : un seul mot quand tous les dossiers ont le même mode (nil : tous séparés), sinon par
-// dossier (les séparés sont sous-entendus).
-func compactData(modes map[string]string) *EnvData {
-	vals := slices.Collect(maps.Values(modes))
-	if slices.Min(vals) == slices.Max(vals) {
-		if vals[0] == "separate" {
-			return nil
-		}
-		return &EnvData{All: vals[0]}
-	}
-	d := &EnvData{Per: map[string]string{}}
-	for k, m := range modes {
-		if m != "separate" {
-			d.Per[k] = m
-		}
-	}
-	return d
 }
 
 // sameJSON : deux valeurs s'écrivent pareil en JSON.
@@ -865,7 +867,15 @@ func (s *Server) entryFromForm(r *http.Request, name string, current Entry, env 
 	v.Branch = r.FormValue("branch")
 	v.From = r.FormValue("from")
 	if modes := dataModesFromForm(r); modes != nil {
-		v.Data = compactData(modes)
+		v.Data = nil
+		for k, m := range modes {
+			if m != "separate" {
+				if v.Data == nil {
+					v.Data = DataModes{}
+				}
+				v.Data[k] = m
+			}
+		}
 	}
 	v.Pin = version
 	v.Subdomain = ""
@@ -1079,11 +1089,7 @@ func (s *Server) deployChanges(name string, old, cur Entry, id string) []string 
 			parts = append(parts, "rename to "+b.Label)
 		}
 		if !sameJSON(ov.Data, nv.Data) {
-			msg, ok := map[string]string{"separate": "separate data", "copy": "copy data", "shared": "share data"}[nv.Data.Summary()]
-			if !ok {
-				msg = "set data per folder"
-			}
-			parts = append(parts, msg)
+			parts = append(parts, "set data folders")
 		}
 		for _, x := range []struct {
 			was, is bool
@@ -1419,34 +1425,51 @@ func (s *Server) removeEnv(w http.ResponseWriter, r *http.Request) {
 }
 
 // recopy : demande à admin-recopy (root) de recopier les données du parent.
-func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	name, id := r.PathValue("app"), r.PathValue("env")
-	snap, err := s.snapshot(ctx)
+// recopyTarget : le dossier (`<conteneur>:<chemin>`, champ `path`) d'un environnement, s'il est en copie
+// sur main ; son emplacement sur think.
+func (s *Server) recopyTarget(r *http.Request) (app, key, target string, ok bool) {
+	snap, err := s.snapshot(r.Context())
 	if err != nil {
-		s.renderError(w, err)
-		return
+		return "", "", "", false
 	}
+	name, id := r.PathValue("app"), r.PathValue("env")
 	e := snap.Apps.Entries[name]
-	v, ok := e.Environments[id]
-	if !ok || !v.Data.AnyCopy() {
-		http.Error(w, "environnement inconnu ou sans données « copie »", http.StatusBadRequest)
+	v, found := e.Environments[id]
+	key = r.FormValue("path")
+	ctr, path, _ := strings.Cut(key, ":")
+	if !found || v.Data.Mode(ctr, path) != "copy" {
+		return "", "", "", false
+	}
+	return name + "-" + id, key, e.DataHost(name, id, ctr, path), true
+}
+
+// recopy : demande la recopie d'un dossier en copie (admin-recopy, root, le fait).
+func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	app, key, target, ok := s.recopyTarget(r)
+	if !ok {
+		http.Error(w, "dossier inconnu ou pas en copie", http.StatusBadRequest)
 		return
 	}
 	// Pas pendant une modification du site : la recopie arrête ses conteneurs et remplace ses données.
-	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
-		http.Error(w, "une modification de "+name+" est en cours : recopie après", http.StatusConflict)
+	if j := s.jobs.latest(r.PathValue("app")); j != nil && !j.Snapshot().Done {
+		http.Error(w, "une modification du site est en cours : recopie après", http.StatusConflict)
+		return
+	}
+	if st := s.recopyState(app, target); st.State == "running" || st.State == "busy" {
+		http.Error(w, "une recopie est déjà en cours", http.StatusConflict)
 		return
 	}
 	dir := filepath.Join(s.cfg.StateDir, "recopy")
-	if err = os.MkdirAll(dir, 0o755); err == nil {
-		err = os.WriteFile(filepath.Join(dir, name+"-"+id+".want"), nil, 0o644)
+	err := os.MkdirAll(dir, 0o755)
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, app+".want"), []byte(target+"\n"), 0o644)
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "From": e.labelOf(v.From), "R": s.recopyState(name+"-"+id, e.labelOf(v.From))})
+	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "Path": key, "ID": recopyID(key), "R": s.recopyState(app, target)})
 }
 
 func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
@@ -1500,17 +1523,10 @@ func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 
 // recopyStatus : l'état de la recopie, redemandé par la page tant qu'elle tourne.
 func (s *Server) recopyStatus(w http.ResponseWriter, r *http.Request) {
-	snap, err := s.snapshot(r.Context())
-	if err != nil {
+	app, key, target, ok := s.recopyTarget(r)
+	if !ok {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	name, id := r.PathValue("app"), r.PathValue("env")
-	e := snap.Apps.Entries[name]
-	v, ok := e.Environments[id]
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "R": s.recopyState(name+"-"+id, e.labelOf(v.From))})
+	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "Path": key, "ID": recopyID(key), "R": s.recopyState(app, target)})
 }

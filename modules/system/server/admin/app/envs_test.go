@@ -17,9 +17,9 @@ func withEnvs(t *testing.T) (*Server, *Snapshot, Entry) {
 	s, snap := testServer(t)
 	e := cloneEntry(snap.Apps.Entries["myetf"])
 	e.Environments = map[string]Env{
-		"preview": {Branch: "preview", Data: &EnvData{All: "copy"}, Expose: "public",
+		"preview": {Branch: "preview", Data: DataModes{"web:/app/data": "copy"}, Expose: "public",
 			Containers: map[string]Container{"web": {Image: "myetf", Memory: "256m", Data: []Data{{Path: "/app/data"}}}}},
-		"staging": {Name: "Staging", Branch: "preview", From: "preview", Data: &EnvData{All: "shared"}, Subdomain: "etf-staging", Pin: "sha-3a91c2e0"},
+		"staging": {Name: "Staging", Branch: "preview", From: "preview", Data: DataModes{"web:/app/data": "shared"}, Subdomain: "etf-staging", Pin: "sha-3a91c2e0"},
 	}
 	raw, err := snap.Apps.WithEntry("myetf", &e)
 	if err != nil {
@@ -352,26 +352,16 @@ func TestEnvOwnSectionsReadFromPage(t *testing.T) {
 	}
 }
 
-// Données par dossier : un mot pour tous, ou un mode par dossier ; même JSON en entrée et en sortie,
-// chemins et recopie qui suivent, formulaire qui revient au mot unique quand c'est possible.
+// Données : un mode par dossier ; chemins et recopie qui suivent ; formulaire qui n'écrit que les
+// dossiers non séparés.
 func TestEnvDataPerFolder(t *testing.T) {
-	for _, raw := range []string{`"copy"`, `{"web:/app/cache":"shared","web:/app/data":"copy"}`} {
-		var d EnvData
-		if err := json.Unmarshal([]byte(raw), &d); err != nil {
-			t.Fatal(err)
-		}
-		if out, _ := json.Marshal(&d); string(out) != raw {
-			t.Errorf("JSON %s relu en %s", raw, out)
-		}
-	}
-
 	s, snap, e := withEnvs(t)
 	web := e.Containers["web"]
 	web.Data = []Data{{Path: "/app/data"}, {Path: "/app/cache"}}
 	e.Containers["web"] = web
 	pv := e.Environments["preview"]
 	pv.Containers, pv.Entrypoint = nil, ""
-	pv.Data = &EnvData{Per: map[string]string{"web:/app/data": "copy", "web:/app/cache": "shared"}}
+	pv.Data = DataModes{"web:/app/data": "copy", "web:/app/cache": "shared"}
 	e.Environments["preview"] = pv
 	if got := e.DataHost("myetf", "preview", "web", "/app/data"); got != "/var/lib/apps/myetf-preview/web/app/data" {
 		t.Errorf("/app/data en copie : %s", got)
@@ -379,20 +369,23 @@ func TestEnvDataPerFolder(t *testing.T) {
 	if got := e.DataHost("myetf", "preview", "web", "/app/cache"); got != "/var/lib/apps/myetf/web/app/cache" {
 		t.Errorf("/app/cache partagé : %s", got)
 	}
-	if !pv.Data.AnyCopy() {
-		t.Errorf("un dossier en copie : l'environnement se recopie")
+	if !pv.Data.AnyCopy() || (DataModes{"web:/app/cache": "shared"}).AnyCopy() {
+		t.Errorf("AnyCopy : seulement avec un dossier en copie")
 	}
 	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) > 0 {
 		t.Errorf("modes valides refusés : %v", errs)
 	}
+	if got := recopyID("web:/app/data"); got != "recopy-web-app-data" {
+		t.Errorf("identifiant de recopie : %s", got)
+	}
 
-	// Formulaire : rendu puis soumis tel quel, rien ne change ; tous en copie, un seul mot.
+	// Formulaire : rendu puis soumis tel quel, rien ne change ; un dossier repassé en séparé disparaît.
 	if got := submit(t, s, snap, e, "preview", nil).Environments["preview"].Data; !sameJSON(got, pv.Data) {
 		t.Errorf("modes perdus au formulaire : %+v", got)
 	}
-	got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["dmode_web:/app/cache"] = []string{"copy"} }).Environments["preview"].Data
-	if got == nil || got.Per != nil || got.All != "copy" {
-		t.Errorf("tous en copie : un seul mot attendu, %+v", got)
+	got := submit(t, s, snap, e, "preview", func(v map[string][]string) { v["dmode_web:/app/cache"] = []string{"separate"} }).Environments["preview"].Data
+	if !sameJSON(got, DataModes{"web:/app/data": "copy"}) {
+		t.Errorf("cache séparé : %+v", got)
 	}
 	got = submit(t, s, snap, e, "preview", func(v map[string][]string) {
 		v["dmode_web:/app/cache"], v["dmode_web:/app/data"] = []string{"separate"}, []string{"separate"}
@@ -401,10 +394,12 @@ func TestEnvDataPerFolder(t *testing.T) {
 		t.Errorf("tous séparés : rien à écrire, %+v", got)
 	}
 
-	// Un dossier qui n'existe pas : refusé.
-	pv.Data = &EnvData{Per: map[string]string{"web:/inconnu": "copy"}}
-	e.Environments["preview"] = pv
-	if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) == 0 {
-		t.Errorf("dossier inconnu accepté")
+	// Un dossier qui n'existe pas, ou un mode inconnu : refusés.
+	for _, bad := range []DataModes{{"web:/inconnu": "copy"}, {"web:/app/data": "clone"}} {
+		pv.Data = bad
+		e.Environments["preview"] = pv
+		if errs := validate(s.cfg, "myetf", e, map[string]Entry{}); len(errs) == 0 {
+			t.Errorf("accepté à tort : %v", bad)
+		}
 	}
 }

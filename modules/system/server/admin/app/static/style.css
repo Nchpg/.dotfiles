@@ -562,3 +562,8 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
 .draft-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; } .draft-bar p { margin: 0; }
 .data-row > label.line { flex: 1 1 0; min-width: 0; } .data-mode { width: auto; max-width: 260px; height: 34px; }
 .data-row > label.line { flex-wrap: nowrap; } .data-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Dossier d'un environnement : le mode (trois choix) et la recopie, sous le chemin. */
+.data-opts { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.seg-data span { height: 28px; line-height: 28px; padding: 0 10px; font-size: 12.5px; }
+.seg-data input:checked + span { background: var(--card); color: var(--text); font-weight: 500; }
+.recopy { display: inline-flex; align-items: center; gap: 8px; }

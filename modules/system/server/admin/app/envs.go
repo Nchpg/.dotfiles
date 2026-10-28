@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"maps"
 	"regexp"
@@ -20,7 +19,7 @@ type Env struct {
 	Name           string               `json:"name,omitempty"`
 	Branch         string               `json:"branch"`
 	From           string               `json:"from,omitempty"`
-	Data           *EnvData             `json:"data,omitempty"` // mode des dossiers (nil : séparées)
+	Data           DataModes            `json:"data,omitempty"` // mode de chaque dossier (absents : séparés)
 	Pin            string               `json:"pin,omitempty"`  // sha-<commit> : figé
 	Subdomain      string               `json:"subdomain,omitempty"`
 	Expose         string               `json:"expose,omitempty"`
@@ -38,65 +37,22 @@ func (v Env) OwnAccess() bool     { return v.Expose != "" }
 func (v Env) OwnContainers() bool { return len(v.Containers) > 0 }
 func (v Env) OwnOptions() bool    { return v.InternetAccess != nil }
 
-// EnvData : le mode des dossiers d'un environnement (separate, copy, shared) : un pour tous
-// (`"copy"`), ou un par dossier (`{"web:/data": "copy"}`, les autres en separate). Même règle que
-// apps-file.nix (`dataModeOf`).
-type EnvData struct {
-	All string            // pour tous les dossiers
-	Per map[string]string // `<conteneur>:<chemin>` -> mode
-}
+// DataModes : le mode de chaque dossier d'un environnement, `<conteneur>:<chemin>` -> copy ou shared ;
+// un dossier absent est séparé (vide au départ). Même règle que apps-file.nix (`dataModeOf`).
+type DataModes map[string]string
 
 var dataModes = []string{"separate", "copy", "shared"}
 
 // Mode : le mode d'un dossier.
-func (d *EnvData) Mode(container, path string) string {
-	switch {
-	case d == nil:
-		return "separate"
-	case d.Per != nil:
-		if m := d.Per[container+":"+path]; m != "" {
-			return m
-		}
-		return "separate"
-	case d.All == "":
-		return "separate"
+func (d DataModes) Mode(container, path string) string {
+	if m := d[container+":"+path]; m != "" {
+		return m
 	}
-	return d.All
+	return "separate"
 }
 
 // AnyCopy : au moins un dossier en copie (l'environnement se recopie).
-func (d *EnvData) AnyCopy() bool {
-	if d == nil {
-		return false
-	}
-	return d.All == "copy" || slices.Contains(slices.Collect(maps.Values(d.Per)), "copy")
-}
-
-// Summary : le mode commun, ou « par dossier ».
-func (d *EnvData) Summary() string {
-	switch {
-	case d == nil || (d.Per == nil && d.All == ""):
-		return "separate"
-	case d.Per != nil:
-		return "par dossier"
-	}
-	return d.All
-}
-
-func (d *EnvData) MarshalJSON() ([]byte, error) {
-	if d.Per != nil {
-		return json.Marshal(d.Per)
-	}
-	return json.Marshal(d.All)
-}
-
-func (d *EnvData) UnmarshalJSON(b []byte) error {
-	*d = EnvData{}
-	if len(b) > 0 && b[0] == '"' {
-		return json.Unmarshal(b, &d.All)
-	}
-	return json.Unmarshal(b, &d.Per)
-}
+func (d DataModes) AnyCopy() bool { return slices.Contains(slices.Collect(maps.Values(d)), "copy") }
 
 // Sections effectives d'un déploiement.
 type Access struct {
@@ -121,7 +77,7 @@ type Ctrs struct {
 type Deploy struct {
 	Site, ID, App, Label string
 	Branch, Tag          string // branche suivie ; tag effectif (la branche, ou sha-… si figé)
-	From, Data           string
+	From                 string
 	Subdomain            string
 	Child                bool
 	Access               Access
@@ -215,7 +171,7 @@ func (e Entry) Deploy(site, id string) (Deploy, error) {
 	if d.Label == "" {
 		d.Label = id
 	}
-	d.Branch, d.From, d.Data, d.Subdomain = v.Branch, v.From, v.Data.Summary(), v.Subdomain
+	d.Branch, d.From, d.Subdomain = v.Branch, v.From, v.Subdomain
 	d.Tag = v.Pin
 	if d.Tag == "" {
 		d.Tag = tagOf(v.Branch)
@@ -309,11 +265,8 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 		if _, _, _, err := e.sections(id, 0); err != nil {
 			add("%s%s.", w, err)
 		}
-		if v.Data != nil {
-			if v.Data.Per == nil && v.Data.All != "" && !slices.Contains(dataModes, v.Data.All) {
-				add("%sdonnées : séparées, copie ou partagées.", w)
-			}
-			if v.Data.Per != nil {
+		if len(v.Data) > 0 {
+			{
 				// Les dossiers des conteneurs qu'il fait tourner (les siens ou ceux qu'il hérite).
 				known := map[string]bool{}
 				if _, c, _, err := e.sections(id, 0); err == nil {
@@ -323,7 +276,7 @@ func validateEnvs(cfg *Config, site string, e Entry, others map[string]Entry) []
 						}
 					}
 				}
-				for k, m := range v.Data.Per {
+				for k, m := range v.Data {
 					switch {
 					case !slices.Contains(dataModes, m):
 						add("%sdonnées de %s : séparées, copie ou partagées.", w, k)

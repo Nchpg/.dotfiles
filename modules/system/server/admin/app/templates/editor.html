@@ -161,12 +161,17 @@
           {{range $d := .Data}}
           <div class="data-row">
             <label class="line"><input type="checkbox" name="data_{{$c}}" value="{{.Value}}" checked {{if $locked}}disabled{{end}}><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted data-host" title="{{.Host}}">{{.Host}}</span></label>
-            {{/* Environnement : le mode de ce dossier ; structurant, le chemin suit. */}}
-            {{with .ModeField}}<select name="{{.}}" class="input-sm data-mode" aria-label="Données de {{$d.Path}}" title="Séparées : vides au départ. Copie : celles de {{$f.DataFrom}} au premier démarrage, puis indépendantes. Partagées : les mêmes que {{$f.DataFrom}}." data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
-              <option value="separate" {{if eq $d.Mode "separate"}}selected{{end}}>séparées</option>
-              <option value="copy" {{if eq $d.Mode "copy"}}selected{{end}}>copie</option>
-              <option value="shared" {{if eq $d.Mode "shared"}}selected{{end}}>partagées</option>
-            </select>{{end}}
+            {{/* Environnement : le mode de ce dossier (structurant : le chemin suit), et sa recopie. */}}
+            {{with .ModeField}}
+            <div class="data-opts">
+              <div class="seg-own seg-data" role="radiogroup" aria-label="Données de {{$d.Path}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
+                <label title="Vides au départ."><input type="radio" name="{{.}}" value="separate" {{if eq $d.Mode "separate"}}checked{{end}}><span>séparées</span></label>
+                <label title="Celles de {{$f.DataFrom}} au premier démarrage, puis indépendantes ; « Recopier » les remet à jour."><input type="radio" name="{{.}}" value="copy" {{if eq $d.Mode "copy"}}checked{{end}}><span>copie de {{$f.DataFrom}}</span></label>
+                <label title="Le même dossier que {{$f.DataFrom}}."><input type="radio" name="{{.}}" value="shared" {{if eq $d.Mode "shared"}}checked{{end}}><span>partagées</span></label>
+              </div>
+              {{with $d.Recopy}}{{template "recopy" (args "URL" $d.RecopyURL "Path" $d.Key "ID" $d.RecopyID "R" .)}}{{end}}
+            </div>
+            {{end}}
           </div>
           {{else}}<small class="muted">Aucune</small>{{end}}
           {{if not .Locked}}<details class="data-adder" data-structural>
@@ -205,16 +210,6 @@
     </div>
   </section>
 
-  {{/* Le mode des données se choisit dossier par dossier (section Conteneurs) ; ici, la recopie
-       des dossiers en copie, quand il y en a sur main. */}}
-  {{if and .Child .Recopy}}
-  <section class="sec">
-    <div class="sec-head">
-      <h2 class="line"><svg viewBox="0 0 24 24" aria-hidden="true" class="accent"><path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Données</h2>
-    </div>
-    <div class="sec-body">{{template "recopy" (args "URL" .RecopyURL "R" .Recopy)}}</div>
-  </section>
-  {{end}}
 
   <section class="sec">
     <div class="sec-head">
@@ -275,8 +270,9 @@
 {{end}}
 
 {{define "recopy"}}
-<div id="recopy" class="recopy" {{if eq .R.State "running"}}hx-get="{{.URL}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
-  <button type="button" class="btn btn-sm" hx-post="{{.URL}}" hx-target="#recopy" hx-swap="outerHTML" {{if eq .R.State "running"}}disabled{{end}}>Recopier depuis le parent</button>
-  <small class="{{if eq .R.State "failed"}}bad{{else}}muted{{end}}">{{.R.Text}}</small>
-</div>
+{{/* Recopie d'un dossier en copie : demandée ici, faite par admin-recopy (root), suivie toutes les 3 s. */}}
+<span id="{{.ID}}" class="recopy" {{if eq .R.State "running"}}hx-get="{{.URL}}?path={{.Path}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
+  <button type="button" class="btn btn-sm" hx-post="{{.URL}}" hx-vals='{"path": "{{.Path}}"}' hx-target="#{{.ID}}" hx-swap="outerHTML" title="{{.R.Text}}" {{if or (eq .R.State "running") (eq .R.State "busy")}}disabled{{end}}>{{if eq .R.State "running"}}Recopie…{{else}}Recopier{{end}}</button>
+  {{if or (eq .R.State "done") (eq .R.State "failed")}}<small class="{{if eq .R.State "failed"}}bad{{else}}muted{{end}}">{{.R.Text}}</small>{{end}}
+</span>
 {{end}}
