@@ -67,3 +67,22 @@ func TestVisitsOf(t *testing.T) {
 		t.Errorf("échec Vaultwarden : %q", m)
 	}
 }
+
+// Carte et provenance : un point par lieu ; la barre ne garde que les parts non vides.
+func TestTrafficMapMix(t *testing.T) {
+	lat, lon := 45.76, 4.83
+	d := mapDots([]Visit{{IP: "1.2.3.4", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {IP: "1.2.3.5", City: "Lyon", Country: "France", Lat: &lat, Lon: &lon}, {IP: "10.8.0.3"}})
+	if len(d) != 1 || d[0].X != 184.8 || d[0].Y != 38.2 || d[0].Title != "Lyon, France : 2 visites" {
+		t.Errorf("carte : %+v", d)
+	}
+	var m Mix
+	for _, v := range []string{"vpn", "vpn", "public"} {
+		m.add(v)
+	}
+	if p := m.Parts(); len(p) != 2 || p[0].Class != "public" || p[0].Pct != 33 || p[1].Pct != 66 {
+		t.Errorf("provenance : %+v", p)
+	}
+	if viaOf("172.16.3.4", "10.8.0.0/24") != "lan" || viaOf("::1", "10.8.0.0/24") != "machine" {
+		t.Error("viaOf")
+	}
+}

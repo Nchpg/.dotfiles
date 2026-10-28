@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -13,12 +14,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
-// Onglet Trafic, en lecture seule : les visites de chaque site et service (journal `visits` de
-// nginx, enrichi par Vector, gardé par Loki), et pour Nextcloud et Vaultwarden les connexions et les
-// applis connectées (résumé d'admin-traffic, journal de Vaultwarden).
+// Onglet Trafic, en lecture seule. Deux vues :
+//   - les visites de chaque site et service (journal `visits` de nginx, enrichi par Vector, gardé
+//     par Loki) : qui arrive sur ses pages, d'où ;
+//   - les connexions aux services à compte (Authelia, Nextcloud, Vaultwarden) : réussies ou non, par
+//     compte et par origine, et les applis connectées (résumé d'admin-traffic, journaux).
 
 // Une visite : les pages vues par une même IP et un même navigateur sur un site, sans pause de plus
 // de visitGap.
@@ -127,20 +131,29 @@ func sampleValue(p promSample) float64 {
 // visitLine : une ligne du journal des visites (cf. monitoring/vector/visits.vrl).
 type visitLine struct {
 	At          time.Time
-	Site        string `json:"site"`
-	IP          string `json:"ip"`
-	Via         string `json:"via"`
-	UA          string `json:"ua"`
-	SSO         string `json:"sso"`
-	City        string `json:"city"`
-	Country     string `json:"country"`
-	CountryName string `json:"country_name"`
-	Path        string `json:"path"`
+	Site        string   `json:"site"`
+	IP          string   `json:"ip"`
+	Via         string   `json:"via"`
+	UA          string   `json:"ua"`
+	SSO         string   `json:"sso"`
+	City        string   `json:"city"`
+	Country     string   `json:"country"`
+	CountryName string   `json:"country_name"`
+	Lat         *float64 `json:"lat"`
+	Lon         *float64 `json:"lon"`
+	Path        string   `json:"path"`
+	Login       string   `json:"login"`
+	LoginUser   string   `json:"login_user"`
+	Client      string   `json:"client"`
 }
 
-// pageLines : les pages vues sur la période (un site, ou tous si `site` est vide).
-func (s *Server) pageLines(ctx context.Context, site string, since time.Duration) ([]visitLine, bool, error) {
-	sel := `identifier="nginx-visits", kind="page"`
+func (l visitLine) place() string {
+	return firstOf(l.CountryName, l.Country)
+}
+
+// visitLines : les lignes d'un genre sur la période (un site, ou tous si `site` est vide).
+func (s *Server) visitLines(ctx context.Context, kind, site string, since time.Duration) ([]visitLine, bool, error) {
+	sel := fmt.Sprintf(`identifier="nginx-visits", kind=%q`, kind)
 	if site != "" {
 		sel += fmt.Sprintf(", site=%q", site)
 	}
@@ -160,6 +173,7 @@ func (s *Server) pageLines(ctx context.Context, site string, since time.Duration
 // Visit : des pages vues d'affilée, par une même IP et un même navigateur sur un site.
 type Visit struct {
 	Site, IP, Via, UA, SSO, City, Country string
+	Lat, Lon                              *float64
 	Start, End                            time.Time
 	Pages                                 int
 }
@@ -190,11 +204,8 @@ func visitsOf(lines []visitLine) []Visit {
 				continue
 			}
 		}
-		country := l.CountryName
-		if country == "" {
-			country = l.Country
-		}
-		out = append(out, Visit{Site: l.Site, IP: l.IP, Via: l.Via, UA: l.UA, SSO: l.SSO, City: l.City, Country: country, Start: l.At, End: l.At, Pages: 1})
+		out = append(out, Visit{Site: l.Site, IP: l.IP, Via: l.Via, UA: l.UA, SSO: l.SSO, City: l.City, Country: l.place(),
+			Lat: l.Lat, Lon: l.Lon, Start: l.At, End: l.At, Pages: 1})
 	}
 	return out
 }
@@ -219,7 +230,81 @@ func origin(via, ip, city, country string, devices map[string]string) (label, de
 	return place, ip
 }
 
-var viaLabels = map[string]string{"public": "public", "vpn": "VPN", "lan": "local", "machine": "think"}
+var viaLabels = map[string]string{"public": "internet", "vpn": "VPN", "lan": "local", "machine": "think"}
+
+// Mix : la répartition des visites par provenance (barre empilée).
+type Mix struct{ Public, VPN, LAN, Total int }
+
+func (m *Mix) add(via string) {
+	switch via {
+	case "public":
+		m.Public++
+	case "vpn":
+		m.VPN++
+	case "lan":
+		m.LAN++
+	}
+	m.Total++
+}
+
+type MixPart struct {
+	Class, Label string
+	N, Pct       int
+}
+
+// Parts : les morceaux non vides de la barre, en % du total.
+func (m Mix) Parts() []MixPart {
+	var out []MixPart
+	for _, p := range []MixPart{{"public", "internet", m.Public, 0}, {"vpn", "VPN", m.VPN, 0}, {"lan", "local", m.LAN, 0}} {
+		if p.N > 0 && m.Total > 0 {
+			p.Pct = max(1, p.N*100/m.Total)
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// MapDot : un lieu sur la carte (projection équirectangulaire de static/world.path : x = lon + 180,
+// y = 84 - lat), de taille selon le nombre de visites.
+type MapDot struct {
+	X, Y, R float64
+	Title   string
+}
+
+func mapDots(visits []Visit) []MapDot {
+	type spot struct {
+		lat, lon float64
+		label    string
+		n        int
+	}
+	spots := map[string]*spot{}
+	for _, v := range visits {
+		if v.Lat == nil || v.Lon == nil {
+			continue
+		}
+		k := fmt.Sprintf("%.1f,%.1f", *v.Lat, *v.Lon)
+		sp := spots[k]
+		if sp == nil {
+			label, _ := origin("public", v.IP, v.City, v.Country, nil)
+			sp = &spot{lat: *v.Lat, lon: *v.Lon, label: label}
+			spots[k] = sp
+		}
+		sp.n++
+	}
+	var out []MapDot
+	for _, sp := range spots {
+		out = append(out, MapDot{X: math.Round((sp.lon+180)*10) / 10, Y: math.Round((84-sp.lat)*10) / 10,
+			R: math.Min(1.6+math.Sqrt(float64(sp.n))*0.9, 7), Title: sp.label + " : " + plural(sp.n, "visite", "visites")})
+	}
+	// Les plus gros d'abord : un petit point reste visible par-dessus.
+	sort.Slice(out, func(i, j int) bool { return out[i].R > out[j].R })
+	return out
+}
+
+var worldPath = sync.OnceValue(func() string {
+	b, _ := assets.ReadFile("static/world.path")
+	return string(b)
+})
 
 // trafficPeriod : la période choisie (?p=24h, 7j, 30j), bornée par la conservation des journaux.
 func (s *Server) trafficPeriod(r *http.Request) (string, time.Duration, []Opt) {
@@ -244,7 +329,7 @@ func (s *Server) trafficPeriod(r *http.Request) (string, time.Duration, []Opt) {
 	return key, d, opts
 }
 
-// lokiRangeLit : une durée de LogQL (`[168h]`).
+// lokiRangeLit : une durée de LogQL (`168h`).
 func lokiRangeLit(d time.Duration) string { return fmt.Sprintf("%dh", int(d.Hours())) }
 
 // trafficSummary : le résumé d'admin-traffic (root), sans jeton.
@@ -258,12 +343,6 @@ type trafficSummary struct {
 			Type int    `json:"type"`
 			Last int64  `json:"last"`
 		} `json:"tokens"`
-		Failures []struct {
-			IP       string         `json:"ip"`
-			Action   string         `json:"action"`
-			At       int64          `json:"at"`
-			Metadata map[string]any `json:"metadata"`
-		} `json:"failures"`
 	} `json:"nextcloud"`
 	Vaultwarden *struct {
 		Domains []string `json:"domains"`
@@ -277,6 +356,16 @@ type trafficSummary struct {
 			Updated string `json:"updated"`
 		} `json:"devices"`
 	} `json:"vaultwarden"`
+	Authelia *struct {
+		Domains []string `json:"domains"`
+		Events  []struct {
+			Time string `json:"time"`
+			OK   int    `json:"ok"`
+			User string `json:"user"`
+			IP   string `json:"ip"`
+			Type string `json:"type"`
+		} `json:"events"`
+	} `json:"authelia"`
 }
 
 func (s *Server) readTrafficSummary() trafficSummary {
@@ -298,13 +387,11 @@ func parseVWTime(v string) time.Time {
 	return t
 }
 
-// TrafficRow : un site ou un service de la liste.
+// TrafficRow : un site ou un service, et ses visites.
 type TrafficRow struct {
 	Name, Env, Domain, Link string
 	Visits                  int
-	Via                     map[string]int
-	Accounts                []string
-	Apps                    int
+	Mix                     Mix
 	Last                    string
 	last                    time.Time
 }
@@ -325,73 +412,133 @@ func (s *Server) trafficTargets(ctx context.Context) []TrafficRow {
 	return rows
 }
 
+// loginEvent : un essai de connexion à un service à compte.
+type loginEvent struct {
+	At                         time.Time
+	User, IP, Via, City, Place string
+	Client                     string
+	OK                         bool
+}
+
+// LoginService : un service à compte, ses connexions sur la période.
+type LoginService struct {
+	ID, Name, Link string
+	Domains        []string
+	OK, Failed     int
+	Accounts       []string
+	Last           string
+	events         []loginEvent
+}
+
+var (
+	reVWOK   = regexp.MustCompile(`User (\S+) logged in successfully\. IP: ([0-9A-Fa-f.:]+)`)
+	reVWFail = regexp.MustCompile(`Username or password is incorrect\. Try again\. IP: ([0-9A-Fa-f.:]+)\. Username: (\S+?)\.?$`)
+)
+
+// loginServices : Authelia (sa base), Nextcloud (l'issue de l'envoi du formulaire, notée par nginx),
+// Vaultwarden (son journal), ceux qui tournent sur think.
+func (s *Server) loginServices(ctx context.Context, sum trafficSummary, period time.Duration, key string) []*LoginService {
+	since := time.Now().Add(-period)
+	var out []*LoginService
+	if a := sum.Authelia; a != nil {
+		ls := &LoginService{ID: "authelia", Name: "Authelia", Domains: a.Domains}
+		for _, e := range a.Events {
+			t, ok := parseSQLiteTime(e.Time)
+			// Un premier facteur réussi n'est qu'une étape : la connexion réussit au second.
+			if !ok || t.Before(since) || (e.OK == 1 && e.Type == "1FA") {
+				continue
+			}
+			ls.events = append(ls.events, loginEvent{At: t, User: e.User, IP: e.IP, Via: viaOf(e.IP, s.cfg.VPN.Subnet), OK: e.OK == 1})
+		}
+		out = append(out, ls)
+	}
+	if nc := sum.Nextcloud; nc != nil {
+		ls := &LoginService{ID: "nextcloud", Name: "Nextcloud", Domains: nc.Domains}
+		lines, _, _ := s.visitLines(ctx, "login", "", period)
+		for _, l := range lines {
+			if !slices.Contains(nc.Domains, l.Site) || (l.Login != "ok" && l.Login != "failed") {
+				continue
+			}
+			ls.events = append(ls.events, loginEvent{At: l.At, User: l.LoginUser, IP: l.IP, Via: l.Via, City: l.City, Place: l.place(),
+				Client: l.Client, OK: l.Login == "ok"})
+		}
+		out = append(out, ls)
+	}
+	if vw := sum.Vaultwarden; vw != nil && vw.Unit != "" {
+		ls := &LoginService{ID: "vaultwarden", Name: "Vaultwarden", Domains: vw.Domains}
+		entries, _, _ := s.lokiRange(ctx, fmt.Sprintf(`{unit=%q} |~ "logged in successfully|Username or password is incorrect"`, vw.Unit), since, time.Now())
+		for _, e := range entries {
+			if m := reVWOK.FindStringSubmatch(e.Line); m != nil {
+				ls.events = append(ls.events, loginEvent{At: e.At, User: m[1], IP: m[2], Via: viaOf(m[2], s.cfg.VPN.Subnet), OK: true})
+			} else if m := reVWFail.FindStringSubmatch(e.Line); m != nil {
+				ls.events = append(ls.events, loginEvent{At: e.At, User: m[2], IP: m[1], Via: viaOf(m[1], s.cfg.VPN.Subnet)})
+			}
+		}
+		out = append(out, ls)
+	}
+	for _, ls := range out {
+		ls.Link = "/traffic/connexions/" + ls.ID + "?p=" + key
+		accounts := map[string]bool{}
+		var last time.Time
+		for _, e := range ls.events {
+			if e.OK {
+				ls.OK++
+			} else {
+				ls.Failed++
+			}
+			if e.User != "" {
+				accounts[e.User] = true
+			}
+			if e.At.After(last) {
+				last = e.At
+			}
+		}
+		for a := range accounts {
+			ls.Accounts = append(ls.Accounts, a)
+		}
+		sort.Strings(ls.Accounts)
+		if !last.IsZero() {
+			ls.Last = ago(time.Since(last))
+		}
+	}
+	return out
+}
+
 func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	key, period, periods := s.trafficPeriod(r)
 	rows := s.trafficTargets(ctx)
-	lines, complete, err := s.pageLines(ctx, "", period)
+	lines, complete, err := s.visitLines(ctx, "page", "", period)
 	visits := visitsOf(lines)
-	apps := map[string]int{}
-	if res, err := s.lokiMetric(ctx, fmt.Sprintf(`sum by (site) (count_over_time({identifier="nginx-visits", kind="app"}[%s]))`, lokiRangeLit(period))); err == nil {
-		for _, p := range res {
-			apps[p.Metric["site"]] = int(sampleValue(p))
-		}
-	}
-	sum := s.readTrafficSummary()
-	since := time.Now().Add(-period)
+	var mix Mix
+	var known []Visit
 	for i := range rows {
 		row := &rows[i]
-		row.Via, row.Apps, row.Link = map[string]int{}, apps[row.Domain], "/traffic/"+row.Domain+"?p="+key
-		accounts := map[string]bool{}
+		row.Link = "/traffic/" + row.Domain + "?p=" + key
 		for _, v := range visits {
 			if v.Site != row.Domain {
 				continue
 			}
 			row.Visits++
-			row.Via[v.Via]++
+			row.Mix.add(v.Via)
+			mix.add(v.Via)
+			known = append(known, v)
 			if v.End.After(row.last) {
 				row.last = v.End
 			}
-			if v.SSO != "" {
-				accounts[v.SSO] = true
-			}
 		}
-		if nc := sum.Nextcloud; nc != nil && slices.Contains(nc.Domains, row.Domain) {
-			for _, t := range nc.Tokens {
-				if time.Unix(t.Last, 0).After(since) {
-					accounts[t.User] = true
-				}
-			}
-		}
-		if vw := sum.Vaultwarden; vw != nil && slices.Contains(vw.Domains, row.Domain) {
-			for _, d := range vw.Devices {
-				if parseVWTime(d.Updated).After(since) {
-					accounts[firstOf(d.User, d.Email)] = true
-				}
-			}
-		}
-		for a := range accounts {
-			row.Accounts = append(row.Accounts, a)
-		}
-		sort.Strings(row.Accounts)
 		if !row.last.IsZero() {
 			row.Last = ago(time.Since(row.last))
 		}
 	}
-	sort.SliceStable(rows, func(i, j int) bool {
-		if rows[i].Visits != rows[j].Visits {
-			return rows[i].Visits > rows[j].Visits
-		}
-		return rows[i].Apps > rows[j].Apps
-	})
-	total := 0
-	for _, v := range visits {
-		if slices.ContainsFunc(rows, func(x TrafficRow) bool { return x.Domain == v.Site }) {
-			total++
-		}
+	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Visits > rows[j].Visits })
+	logins := s.loginServices(ctx, s.readTrafficSummary(), period, key)
+	ok, failed := 0, 0
+	for _, ls := range logins {
+		ok, failed = ok+ls.OK, failed+ls.Failed
 	}
-	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Rows": rows, "Period": key, "Periods": periods, "Total": total,
-		"LogsOK": err == nil, "Complete": complete})
+	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Rows": rows, "Logins": logins, "Period": key, "Periods": periods,
+		"Mix": mix, "OK": ok, "Failed": failed, "Dots": mapDots(known), "LogsOK": err == nil, "Complete": complete})
 }
 
 // firstOf : la première valeur non vide.
@@ -426,10 +573,46 @@ type CountRow struct {
 	last              time.Time
 }
 
-var (
-	reVWOK   = regexp.MustCompile(`User (\S+) logged in successfully\. IP: ([0-9A-Fa-f.:]+)`)
-	reVWFail = regexp.MustCompile(`Username or password is incorrect\. Try again\. IP: ([0-9A-Fa-f.:]+)\. Username: (\S+?)\.?$`)
-)
+// bars : le graphe des visites, une colonne par heure (24 h) ou par jour du calendrier (pas des
+// tranches de 24 h : le changement d'heure les décalerait).
+func bars(visits []Visit, period time.Duration) []Bar {
+	daily := period > 24*time.Hour
+	var n int
+	var slot func(i int) time.Time
+	layout := "15h"
+	if daily {
+		n, layout = int(period/(24*time.Hour)), "02/01"
+		y, m, d := time.Now().Date()
+		start := time.Date(y, m, d, 0, 0, 0, 0, time.Local).AddDate(0, 0, -(n - 1))
+		slot = func(i int) time.Time { return start.AddDate(0, 0, i) }
+	} else {
+		n = int(period / time.Hour)
+		start := time.Now().Truncate(time.Hour).Add(-time.Duration(n-1) * time.Hour)
+		slot = func(i int) time.Time { return start.Add(time.Duration(i) * time.Hour) }
+	}
+	out := make([]Bar, n)
+	for i := range out {
+		out[i].Label = slot(i).Format(layout)
+	}
+	for _, v := range visits {
+		for i := n - 1; i >= 0; i-- {
+			if !v.Start.Before(slot(i)) {
+				out[i].Visits++
+				break
+			}
+		}
+	}
+	top := 0
+	for _, b := range out {
+		top = max(top, b.Visits)
+	}
+	for i := range out {
+		if top > 0 {
+			out[i].Height = out[i].Visits * 100 / top
+		}
+	}
+	return out
+}
 
 func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -446,49 +629,14 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key, period, periods := s.trafficPeriod(r)
-	since := time.Now().Add(-period)
 	devices := s.vpnDevices(ctx)
-	lines, complete, err := s.pageLines(ctx, domain, period)
+	lines, complete, err := s.visitLines(ctx, "page", domain, period)
 	visits := visitsOf(lines)
-
-	// Graphe : une colonne par heure (24 h) ou par jour.
-	step, layout := 24*time.Hour, "02/01"
-	if period <= 24*time.Hour {
-		step, layout = time.Hour, "15h"
-	}
-	n := int(period / step)
-	start := time.Now().Truncate(step).Add(-time.Duration(n-1) * step)
-	if step == 24*time.Hour {
-		y, m, d := time.Now().Date()
-		start = time.Date(y, m, d, 0, 0, 0, 0, time.Local).AddDate(0, 0, -(n - 1))
-	}
-	// Par jour : des jours du calendrier (AddDate), pas des tranches de 24 h (changement d'heure).
-	slot := func(i int) time.Time {
-		if step == 24*time.Hour {
-			return start.AddDate(0, 0, i)
-		}
-		return start.Add(time.Duration(i) * step)
-	}
-	bars := make([]Bar, n)
-	for i := range bars {
-		bars[i].Label = slot(i).Format(layout)
-	}
-	slotOf := func(t time.Time) int {
-		for i := n - 1; i >= 0; i-- {
-			if !t.Before(slot(i)) {
-				return i
-			}
-		}
-		return -1
-	}
 	origins := map[string]*OriginRow{}
 	accounts := map[string]*CountRow{}
-	byVia := map[string]int{}
+	var mix Mix
 	for _, v := range visits {
-		if i := slotOf(v.Start); i >= 0 {
-			bars[i].Visits++
-		}
-		byVia[v.Via]++
+		mix.add(v.Via)
 		label, detail := origin(v.Via, v.IP, v.City, v.Country, devices)
 		o := origins[label+"|"+detail]
 		if o == nil {
@@ -512,15 +660,6 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	top := 0
-	for _, b := range bars {
-		top = max(top, b.Visits)
-	}
-	for i := range bars {
-		if top > 0 {
-			bars[i].Height = bars[i].Visits * 100 / top
-		}
-	}
 	paths := map[string]*CountRow{}
 	for _, l := range lines {
 		p := paths[l.Path]
@@ -530,132 +669,142 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 		}
 		p.Count++
 	}
-
-	// Applis : requêtes de synchro par compte, client et IP, et leur dernière (journal des visites).
-	syncs := map[string]*CountRow{}
-	sel := fmt.Sprintf(`{identifier="nginx-visits", kind="app", site=%q} | json`, domain)
-	if res, err := s.lokiMetric(ctx, fmt.Sprintf(`sum by (user, client, ip, via) (count_over_time(%s [%s]))`, sel, lokiRangeLit(period))); err == nil {
-		for _, p := range res {
-			m := p.Metric
-			label, detail := origin(m["via"], m["ip"], "", "", devices)
-			k := m["user"] + "|" + m["client"] + "|" + m["ip"]
-			syncs[k] = &CountRow{Name: firstOf(m["user"], "—"), Detail: m["client"], Sub: label + " · " + detail, Count: int(sampleValue(p))}
+	// Le service à compte servi à cette adresse : lien vers ses connexions.
+	var login *LoginService
+	for _, ls := range s.loginServices(ctx, s.readTrafficSummary(), period, key) {
+		if slices.Contains(ls.Domains, domain) {
+			login = ls
 		}
 	}
-	if res, err := s.lokiMetric(ctx, fmt.Sprintf(`max by (user, client, ip) (max_over_time(%s | unwrap epoch [%s]))`, sel, lokiRangeLit(period))); err == nil {
-		for _, p := range res {
-			m := p.Metric
-			if c := syncs[m["user"]+"|"+m["client"]+"|"+m["ip"]]; c != nil {
-				c.last = time.Unix(int64(sampleValue(p)), 0)
-			}
-		}
-	}
+	s.render(w, "traffic-site", map[string]any{"Nav": "traffic", "Target": target, "Period": key, "Periods": periods,
+		"Visits": len(visits), "Pages": len(lines), "Mix": mix, "Bars": bars(visits, period), "Dots": mapDots(visits),
+		"Origins": sortedOrigins(origins), "Accounts": sortedRows(values(accounts), 0), "Paths": sortedRows(values(paths), 10),
+		"Login": login, "LogsOK": err == nil, "Complete": complete})
+}
 
-	// Connexions et applis connectées : Nextcloud (résumé), Vaultwarden (résumé et journal).
+func (s *Server) trafficLogins(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	key, period, periods := s.trafficPeriod(r)
 	sum := s.readTrafficSummary()
-	var logins, sessions, connected []*CountRow
-	var service string
-	if nc := sum.Nextcloud; nc != nil && slices.Contains(nc.Domains, domain) {
-		service = "nextcloud"
-		failed := map[string]*CountRow{}
-		for _, f := range nc.Failures {
-			at := time.Unix(f.At, 0)
-			if at.Before(since) {
-				continue
-			}
-			user, _ := f.Metadata["user"].(string)
-			label, detail := origin(viaOf(f.IP, s.cfg.VPN.Subnet), f.IP, "", "", devices)
-			k := user + "|" + f.IP
-			c := failed[k]
-			if c == nil {
-				c = &CountRow{Name: firstOf(user, "—"), Sub: label + " · " + detail}
-				failed[k] = c
-			}
-			c.Failed++
-			if at.After(c.last) {
-				c.last = at
-			}
-		}
-		logins = values(failed)
-		for _, t := range nc.Tokens {
-			c := &CountRow{Name: t.User, Detail: t.Name, last: time.Unix(t.Last, 0)}
-			if t.Type == 0 {
-				if c.last.After(since) {
-					sessions = append(sessions, c)
-				}
-			} else {
-				connected = append(connected, c)
-			}
+	var ls *LoginService
+	for _, x := range s.loginServices(ctx, sum, period, key) {
+		if x.ID == r.PathValue("service") {
+			ls = x
 		}
 	}
-	if vw := sum.Vaultwarden; vw != nil && slices.Contains(vw.Domains, domain) {
-		service = "vaultwarden"
-		for _, d := range vw.Devices {
+	if ls == nil {
+		http.NotFound(w, r)
+		return
+	}
+	since := time.Now().Add(-period)
+	devices := s.vpnDevices(ctx)
+
+	// Par compte et par origine : réussies, ratées, la dernière.
+	byKey := map[string]*CountRow{}
+	for _, e := range ls.events {
+		label, detail := origin(e.Via, e.IP, e.City, e.Place, devices)
+		k := e.User + "|" + label + "|" + detail
+		c := byKey[k]
+		if c == nil {
+			c = &CountRow{Name: firstOf(e.User, "—"), Detail: label, Sub: detail}
+			byKey[k] = c
+		}
+		if e.OK {
+			c.OK++
+		} else {
+			c.Failed++
+		}
+		if e.At.After(c.last) {
+			c.last = e.At
+		}
+	}
+
+	// Applis connectées (jeton gardé) et sessions web, lues dans la base du service.
+	var connected, sessions []*CountRow
+	switch ls.ID {
+	case "nextcloud":
+		for _, t := range sum.Nextcloud.Tokens {
+			c := &CountRow{Name: t.User, Detail: t.Name, last: time.Unix(t.Last, 0)}
+			if t.Type != 0 {
+				connected = append(connected, c)
+			} else if c.last.After(since) {
+				sessions = append(sessions, c)
+			}
+		}
+	case "vaultwarden":
+		for _, d := range sum.Vaultwarden.Devices {
 			typ := ""
 			if d.Type >= 0 && d.Type < len(bitwardenTypes) {
 				typ = bitwardenTypes[d.Type]
 			}
 			c := &CountRow{Name: firstOf(d.User, d.Email), Detail: firstOf(d.Name, typ), last: parseVWTime(d.Updated)}
+			var sub []string
 			if typ != "" && typ != c.Detail {
-				c.Sub = typ
+				sub = append(sub, typ)
 			}
 			if t := parseVWTime(d.Created); !t.IsZero() {
-				c.Sub = strings.Trim(c.Sub+" · ajouté le "+t.Local().Format("02/01/2006"), " ·")
+				sub = append(sub, "ajoutée le "+t.Local().Format("02/01/2006"))
 			}
+			c.Sub = strings.Join(sub, " · ")
 			connected = append(connected, c)
-		}
-		if vw.Unit != "" {
-			now := time.Now()
-			entries, _, _ := s.lokiRange(ctx, fmt.Sprintf(`{unit=%q} |~ "logged in successfully|Username or password is incorrect"`, vw.Unit), since, now)
-			byKey := map[string]*CountRow{}
-			for _, e := range entries {
-				var user, ip string
-				ok := false
-				if m := reVWOK.FindStringSubmatch(e.Line); m != nil {
-					user, ip, ok = m[1], m[2], true
-				} else if m := reVWFail.FindStringSubmatch(e.Line); m != nil {
-					user, ip = m[2], m[1]
-				} else {
-					continue
-				}
-				label, detail := origin(viaOf(ip, s.cfg.VPN.Subnet), ip, "", "", devices)
-				k := user + "|" + ip
-				c := byKey[k]
-				if c == nil {
-					c = &CountRow{Name: user, Sub: label + " · " + detail}
-					byKey[k] = c
-				}
-				if ok {
-					c.OK++
-				} else {
-					c.Failed++
-				}
-				if e.At.After(c.last) {
-					c.last = e.At
-				}
-			}
-			logins = values(byKey)
 		}
 	}
 
-	s.render(w, "traffic-site", map[string]any{"Nav": "traffic", "Target": target, "Period": key, "Periods": periods,
-		"Visits": len(visits), "Pages": len(lines), "ByVia": byVia, "Bars": bars,
-		"Origins": sortedOrigins(origins), "Accounts": sortedRows(values(accounts), 0), "Paths": sortedRows(values(paths), 10),
-		"Syncs": sortedRows(values(syncs), 0), "Logins": sortedRows(logins, 0), "Sessions": sortedRows(sessions, 0),
-		"Connected": sortedRows(connected, 0), "Service": service, "LogsOK": err == nil, "Complete": complete})
+	// Synchros des applis (journal des visites) : par compte, appli et provenance.
+	var syncs []*CountRow
+	if ls.ID != "authelia" && len(ls.Domains) > 0 {
+		quoted := make([]string, len(ls.Domains))
+		for i, d := range ls.Domains {
+			quoted[i] = regexp.QuoteMeta(d)
+		}
+		sel := fmt.Sprintf(`{identifier="nginx-visits", kind="app", site=~%q} | json`, strings.Join(quoted, "|"))
+		byApp := map[string]*CountRow{}
+		if res, err := s.lokiMetric(ctx, fmt.Sprintf(`sum by (user, client, ip, via) (count_over_time(%s [%s]))`, sel, lokiRangeLit(period))); err == nil {
+			for _, p := range res {
+				m := p.Metric
+				label, detail := origin(m["via"], m["ip"], "", "", devices)
+				byApp[m["user"]+"|"+m["client"]+"|"+m["ip"]] = &CountRow{Name: firstOf(m["user"], "—"), Detail: m["client"], Sub: label + " · " + detail, Count: int(sampleValue(p))}
+			}
+		}
+		if res, err := s.lokiMetric(ctx, fmt.Sprintf(`max by (user, client, ip) (max_over_time(%s | unwrap epoch [%s]))`, sel, lokiRangeLit(period))); err == nil {
+			for _, p := range res {
+				m := p.Metric
+				if c := byApp[m["user"]+"|"+m["client"]+"|"+m["ip"]]; c != nil {
+					c.last = time.Unix(int64(sampleValue(p)), 0)
+				}
+			}
+		}
+		syncs = values(byApp)
+	}
+	s.render(w, "traffic-logins", map[string]any{"Nav": "traffic", "Service": ls, "Period": key, "Periods": periods,
+		"Rows": sortedRows(values(byKey), 0), "Connected": sortedRows(connected, 0), "Sessions": sortedRows(sessions, 0),
+		"Syncs": sortedRows(syncs, 0)})
 }
 
-// viaOf : la provenance d'une IP vue par un service (VPN, réseau local ou public).
+// viaOf : la provenance d'une IP vue par un service (VPN, réseau local ou internet).
 func viaOf(ip, vpnSubnet string) string {
+	a, err := netip.ParseAddr(ip)
 	switch {
-	case ip == "127.0.0.1" || ip == "::1":
+	case err != nil:
+		return "public"
+	case a.IsLoopback():
 		return "machine"
 	case inSubnet(ip, vpnSubnet):
 		return "vpn"
-	case strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "fe80:") || strings.HasPrefix(ip, "fd"):
+	case a.IsPrivate() || a.IsLinkLocalUnicast():
 		return "lan"
 	}
 	return "public"
+}
+
+// inSubnet : l'IP est dans le réseau (`10.8.0.0/24`).
+func inSubnet(ip, subnet string) bool {
+	p, err := netip.ParsePrefix(subnet)
+	if err != nil {
+		return false
+	}
+	a, err := netip.ParseAddr(ip)
+	return err == nil && p.Contains(a)
 }
 
 func values[T any](m map[string]*T) []*T {
@@ -666,7 +815,8 @@ func values[T any](m map[string]*T) []*T {
 	return out
 }
 
-// sortedRows : par dernière fois (la plus récente d'abord), sinon par nombre ; `limit` > 0 coupe.
+// sortedRows : par dernière fois (la plus récente d'abord), sinon par nombre ; `limit` > 0 trie par
+// nombre et coupe.
 func sortedRows(rows []*CountRow, limit int) []*CountRow {
 	sort.SliceStable(rows, func(i, j int) bool {
 		if !rows[i].last.Equal(rows[j].last) {
@@ -700,14 +850,4 @@ func sortedOrigins(m map[string]*OriginRow) []*OriginRow {
 		r.Last = ago(time.Since(r.last))
 	}
 	return rows
-}
-
-// inSubnet : l'IP est dans le réseau (`10.8.0.0/24`).
-func inSubnet(ip, subnet string) bool {
-	p, err := netip.ParsePrefix(subnet)
-	if err != nil {
-		return false
-	}
-	a, err := netip.ParseAddr(ip)
-	return err == nil && p.Contains(a)
 }
