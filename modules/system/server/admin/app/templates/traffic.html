@@ -186,21 +186,26 @@
     {{template "world-map" .}}
 
     <section class="block" aria-labelledby="origins-title">
-      <div class="block-head"><h2 id="origins-title" class="line">D'où{{template "info" (args "ID" "info-origins" "Text" "Un appareil du VPN par son nom, le réseau de la maison, ou pour internet la ville et le pays de l'IP (base DB-IP Lite, sur think ; approximatif).")}}</h2></div>
+      <div class="block-head"><h2 id="origins-title" class="line">D'où{{template "info" (args "ID" "info-origins" "Text" "Un appareil du VPN par son nom, le réseau de la maison, ou pour internet la ville et le pays de l'IP (base DB-IP Lite, sur think ; approximatif). Sous chaque origine, ses visites : une visite, ce sont des pages vues par une même IP avec un même navigateur (même version, même système), sans pause de plus de 30 minutes. Deux ordinateurs derrière la même box sont séparés s'ils n'ont pas exactement le même navigateur.")}}</h2></div>
       <section class="card table-card" aria-label="Origines des visites">
         <table class="sites traffic detail">
           <thead><tr><th scope="col">Origine</th><th scope="col">Par</th><th scope="col">Visites</th><th scope="col">Pages</th><th scope="col">Dernière</th></tr></thead>
+          {{range .Origins}}
           <tbody data-vpn>
-            {{range .Origins}}
             <tr>
               <td class="site-td"><span class="stack tight"><span class="strong">{{.Label}}</span><small class="mono muted">{{.Detail}}</small></span></td>
               <td>{{template "via" .Via}}</td>
-              <td>{{.Visits}}</td>
+              <td><strong>{{.Visits}}</strong></td>
               <td class="muted">{{.Pages}}</td>
               <td class="muted nowrap">{{.Last}}</td>
             </tr>
-            {{else}}<tr><td colspan="5" class="muted">Aucune visite sur {{.Period}}.</td></tr>{{end}}
+            {{/* Chaque visite : quand, combien de temps, combien de pages, avec quel navigateur. */}}
+            {{range .Items}}
+            <tr class="visit-item"><td colspan="5"><span class="visit-line"><span class="mono">{{.When}}</span>{{with .Duration}}<span class="muted">{{.}}</span>{{end}}<span class="muted">{{.Pages}} page{{if gt .Pages 1}}s{{end}}</span>{{with .Browser}}<span class="muted">{{.}}</span>{{end}}{{with .SSO}}<span class="muted">compte {{.}}</span>{{end}}</span></td></tr>
+            {{end}}
+            {{with .More}}<tr class="visit-item"><td colspan="5"><span class="muted">et {{.}} visite{{if gt . 1}}s{{end}} plus ancienne{{if gt . 1}}s{{end}}</span></td></tr>{{end}}
           </tbody>
+          {{else}}<tbody><tr><td colspan="5" class="muted">Aucune visite sur {{.Period}}.</td></tr></tbody>{{end}}
         </table>
       </section>
     </section>

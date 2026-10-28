@@ -121,3 +121,18 @@ func TestMapDotSites(t *testing.T) {
 		t.Errorf("point : %+v", d)
 	}
 }
+
+// Une visite listée : quand, combien de temps, avec quel navigateur.
+func TestVisitItem(t *testing.T) {
+	start := time.Date(2026, 10, 28, 14, 5, 0, 0, time.Local)
+	it := visitItem(Visit{Start: start, End: start.Add(27 * time.Minute), Pages: 4, UA: "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0"})
+	if it.When != "mer. 28/10 · 14:05 → 14:32" || it.Duration != "27 min" || it.Browser != "Firefox, Linux" {
+		t.Errorf("visite : %+v", it)
+	}
+	if b := browserOf("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36"); b != "Chrome, Android" {
+		t.Errorf("navigateur : %s", b)
+	}
+	if one := visitItem(Visit{Start: start, End: start, Pages: 1}); one.When != "mer. 28/10 · 14:05" || one.Duration != "" {
+		t.Errorf("une page : %+v", one)
+	}
+}

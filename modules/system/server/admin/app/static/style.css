@@ -639,3 +639,13 @@ textarea { padding: 10px 12px; border: 1px solid #D5D9E0; background: var(--card
   table.sites.detail td { grid-area: auto !important; }
   table.sites.detail td.site-td { grid-column: 1 / -1; padding-bottom: 4px !important; }
 }
+
+/* Trafic, « D'où » : les visites d'une origine sous sa ligne, en retrait. */
+table.sites tr.visit-item td { padding-top: 3px; padding-bottom: 3px; border-top: 0; padding-left: 34px; font-size: 13px; }
+table.sites tr.visit-item:last-child td { padding-bottom: 12px; }
+.visit-line { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.visit-line .mono { font-size: 12.5px; min-width: 190px; }
+@media (max-width: 720px) {
+  table.sites.detail tr.visit-item { display: block; padding: 2px 0 2px 12px; }
+  table.sites.detail tr.visit-item td { padding: 0 !important; }
+}

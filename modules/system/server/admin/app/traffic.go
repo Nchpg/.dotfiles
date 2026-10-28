@@ -679,6 +679,59 @@ type OriginRow struct {
 	Visits, Pages      int
 	Last               string
 	last               time.Time
+	Items              []VisitItem // ses visites, les plus récentes d'abord (originItems)
+	More               int         // les plus anciennes, non listées
+	visits             []Visit
+}
+
+// VisitItem : une visite d'une origine, lisiblement.
+type VisitItem struct {
+	When, Duration, Browser string
+	Pages                   int
+	SSO                     string
+}
+
+// originMax : visites listées sous une origine (les plus récentes).
+const originMax = 12
+
+var weekdays = []string{"dim.", "lun.", "mar.", "mer.", "jeu.", "ven.", "sam."}
+
+func visitItem(v Visit) VisitItem {
+	start, end := v.Start.Local(), v.End.Local()
+	when := fmt.Sprintf("%s %s · %s", weekdays[start.Weekday()], start.Format("02/01"), start.Format("15:04"))
+	if end.Sub(start) >= time.Minute {
+		when += " → " + end.Format("15:04")
+	}
+	d := end.Sub(start)
+	// Une seule page : pas de durée.
+	dur := ""
+	switch {
+	case v.Pages > 1 && d < time.Minute:
+		dur = "moins d'une minute"
+	case d >= time.Hour:
+		dur = fmt.Sprintf("%d h %02d", int(d.Hours()), int(d.Minutes())%60)
+	case d >= time.Minute:
+		dur = fmt.Sprintf("%d min", int(d.Minutes()))
+	}
+	return VisitItem{When: when, Duration: dur, Browser: browserOf(v.UA), Pages: v.Pages, SSO: v.SSO}
+}
+
+// browserOf : le navigateur et le système d'un User-Agent (« Firefox, Linux »), ou rien.
+func browserOf(ua string) string {
+	var b, os string
+	for _, c := range []struct{ key, name string }{{"Edg/", "Edge"}, {"OPR/", "Opera"}, {"Firefox/", "Firefox"}, {"Chrome/", "Chrome"}, {"Safari/", "Safari"}} {
+		if strings.Contains(ua, c.key) {
+			b = c.name
+			break
+		}
+	}
+	for _, c := range []struct{ key, name string }{{"Android", "Android"}, {"iPhone", "iPhone"}, {"iPad", "iPad"}, {"Windows", "Windows"}, {"Mac OS X", "macOS"}, {"CrOS", "ChromeOS"}, {"Linux", "Linux"}} {
+		if strings.Contains(ua, c.key) {
+			os = c.name
+			break
+		}
+	}
+	return strings.Trim(b+", "+os, ", ")
 }
 
 // Bar : une colonne du graphe des visites (par heure sur 24 h, par jour sinon).
@@ -767,6 +820,7 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 		}
 		o.Visits++
 		o.Pages += v.Pages
+		o.visits = append(o.visits, v)
 		if v.End.After(o.last) {
 			o.last = v.End
 		}
@@ -982,6 +1036,14 @@ func sortedOrigins(m map[string]*OriginRow) []*OriginRow {
 	})
 	for _, r := range rows {
 		r.Last = ago(time.Since(r.last))
+		sort.Slice(r.visits, func(i, j int) bool { return r.visits[i].Start.After(r.visits[j].Start) })
+		for i, v := range r.visits {
+			if i == originMax {
+				r.More = len(r.visits) - originMax
+				break
+			}
+			r.Items = append(r.Items, visitItem(v))
+		}
 	}
 	return rows
 }
