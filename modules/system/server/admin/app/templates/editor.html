@@ -164,8 +164,22 @@
         </div>
         <div class="stack tight">
           <span class="small strong">Secrets</span>
-          {{if .Secrets}}<div class="pills">{{range .Secrets}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}" {{if .Selected}}checked{{end}} {{if $locked}}disabled{{end}}><span class="mono">{{.Label}}</span>{{if .Note}}<small class="bad">{{.Note}}</small>{{end}}</label>{{end}}</div>
-          {{else}}<small class="muted">Aucun. <code>secrets edit {{$f.Name}}/env</code></small>{{end}}
+          {{if .Secrets}}
+          <ol class="secret-list">{{range .Secrets}}
+            <li><input type="hidden" name="sec_{{$c}}" value="{{.Value}}" {{if $locked}}disabled{{end}}><span class="mono small grow">{{.Value}}</span>{{with .Note}}<small class="bad">{{.}}</small>{{end}}
+              {{if not $locked}}<span class="secret-actions">
+                <button type="button" class="icon-btn" aria-label="Monter {{.Value}}" {{if .First}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|up"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+                <button type="button" class="icon-btn" aria-label="Descendre {{.Value}}" {{if .Last}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|down"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+                <button type="button" class="icon-btn" aria-label="Retirer {{.Value}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secrm": "{{$c}}|{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+              </span>{{end}}
+            </li>{{end}}
+          </ol>
+          {{if gt (len .Secrets) 1}}<small class="muted">Une variable dans deux secrets : celui du dessous l'emporte.</small>{{end}}
+          {{else}}<small class="muted">Aucun.</small>{{end}}
+          {{if not $locked}}
+          {{if .SecretsFree}}<div class="pills" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">{{range .SecretsFree}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}"><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
+          <small class="muted">Nouveau : <code>secrets edit {{.NewSecret}}</code>, proposé ici au prochain rebuild. Le conteneur reçoit les lignes NOM=valeur du fichier.</small>
+          {{end}}
         </div>
       </div>
       {{end}}

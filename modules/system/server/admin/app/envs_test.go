@@ -274,3 +274,39 @@ func TestEnvFormAccounts(t *testing.T) {
 		t.Errorf("aucun compte coché accepté")
 	}
 }
+
+// Secrets d'un conteneur : l'ordre choisi est gardé (le dernier l'emporte pour une variable en double).
+func TestSecretOrder(t *testing.T) {
+	keys := []string{"s/a", "s/b", "s/c"}
+	if got := reorderSecrets(slices.Clone(keys), "web", "web|s/c|up", ""); !slices.Equal(got, []string{"s/a", "s/c", "s/b"}) {
+		t.Errorf("monter : %v", got)
+	}
+	if got := reorderSecrets(slices.Clone(keys), "web", "web|s/a|up", ""); !slices.Equal(got, keys) {
+		t.Errorf("monter le premier : %v", got)
+	}
+	if got := reorderSecrets(slices.Clone(keys), "web", "web|s/a|down", ""); !slices.Equal(got, []string{"s/b", "s/a", "s/c"}) {
+		t.Errorf("descendre : %v", got)
+	}
+	if got := reorderSecrets(slices.Clone(keys), "web", "", "web|s/b"); !slices.Equal(got, []string{"s/a", "s/c"}) {
+		t.Errorf("retirer : %v", got)
+	}
+	if got := reorderSecrets(slices.Clone(keys), "web", "api|s/c|up", "api|s/a"); !slices.Equal(got, keys) {
+		t.Errorf("autre conteneur touché : %v", got)
+	}
+
+	s, snap, e := withEnvs(t)
+	s.cfg.SecretKeys = []string{"myetf/a", "myetf/b", "myetf/c"}
+	web := e.Containers["web"]
+	web.Secrets = []string{"myetf/c", "myetf/a"} // pas dans l'ordre alphabétique
+	e.Containers["web"] = web
+	if got := submit(t, s, snap, e, "", nil).Containers["web"].Secrets; !slices.Equal(got, []string{"myetf/c", "myetf/a"}) {
+		t.Errorf("ordre perdu au formulaire : %v", got)
+	}
+	got := submit(t, s, snap, e, "", func(v map[string][]string) { v["sec_web"] = append(v["sec_web"], "myetf/b") }).Containers["web"].Secrets
+	if !slices.Equal(got, []string{"myetf/c", "myetf/a", "myetf/b"}) {
+		t.Errorf("secret coché : à la fin, %v", got)
+	}
+	if d, _ := e.Deploy("myetf", ""); !slices.Equal(d.Ctrs.Containers["web"].Secrets, []string{"myetf/c", "myetf/a"}) {
+		t.Errorf("ordre perdu au déploiement : %v", d.Ctrs.Containers["web"].Secrets)
+	}
+}

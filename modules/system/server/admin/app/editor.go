@@ -71,16 +71,26 @@ type DataVM struct {
 }
 
 type CtrVM struct {
-	Name     string
-	Entry    bool
-	Image    DD
-	Memory   DD
-	Deps     []Opt
-	Data     []DataVM
-	Secrets  []Opt
-	Info     string
-	DataHost string
-	Locked   bool // conteneurs hérités : montrés, pas modifiables ici
+	Name   string
+	Entry  bool
+	Image  DD
+	Memory DD
+	Deps   []Opt
+	Data   []DataVM
+	// Secrets donnés au conteneur, dans l'ordre (une variable en double : le dernier l'emporte), puis
+	// ceux du site qu'on peut ajouter, et le nom proposé pour en créer un.
+	Secrets     []SecretVM
+	SecretsFree []Opt
+	NewSecret   string
+	Info        string
+	DataHost    string
+	Locked      bool // conteneurs hérités : montrés, pas modifiables ici
+}
+
+// SecretVM : un secret coché d'un conteneur, à sa place dans la liste.
+type SecretVM struct {
+	Value, Note string
+	First, Last bool
 }
 
 type EnvTab struct {
@@ -523,15 +533,21 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 			}
 			vm.Data = append(vm.Data, DataVM{Value: dt.Path + "\t" + dt.On, Path: dt.Path, Host: host, Auto: dt.On == ""})
 		}
-		opts := map[string]bool{}
-		for _, k := range secrets {
-			opts[k] = true
-			vm.Secrets = append(vm.Secrets, Opt{Value: k, Label: k, Selected: slices.Contains(c.Secrets, k)})
-		}
-		for _, k := range c.Secrets {
-			if !opts[k] {
-				vm.Secrets = append(vm.Secrets, Opt{Value: k, Label: k, Selected: true, Note: "absent du dépôt de secrets"})
+		for i, k := range c.Secrets {
+			sv := SecretVM{Value: k, First: i == 0, Last: i == len(c.Secrets)-1}
+			if !slices.Contains(secrets, k) {
+				sv.Note = "absent du dépôt de secrets"
 			}
+			vm.Secrets = append(vm.Secrets, sv)
+		}
+		for _, k := range secrets {
+			if !slices.Contains(c.Secrets, k) {
+				vm.SecretsFree = append(vm.SecretsFree, Opt{Value: k, Label: k})
+			}
+		}
+		vm.NewSecret = name + "/<nom>"
+		if env != "" {
+			vm.NewSecret = name + "/" + env + "_<nom>"
 		}
 		if snap != nil {
 			if le, ok := snap.Lock[s.cfg.ref(c.Image)]; ok {
@@ -679,8 +695,13 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		for _, p := range strings.Fields(r.FormValue("newdata_" + n)) {
 			c.Data = append(c.Data, Data{Path: p})
 		}
-		c.Secrets = r.Form["sec_"+n]
-		sort.Strings(c.Secrets)
+		// Dans l'ordre de la page (les cochés à la suite des déjà présents), puis ↑ ↓ ✕.
+		for _, k := range r.Form["sec_"+n] {
+			if !slices.Contains(c.Secrets, k) {
+				c.Secrets = append(c.Secrets, k)
+			}
+		}
+		c.Secrets = reorderSecrets(c.Secrets, n, r.FormValue("secmove"), r.FormValue("secrm"))
 		out[n] = c
 	}
 	entry := ""
@@ -691,6 +712,27 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		}
 	}
 	return out, entry, errs
+}
+
+// reorderSecrets : « monter », « descendre » (secmove = `conteneur|secret|up` ou `down`) ou
+// retirer (secrm = `conteneur|secret`) un secret du conteneur `ctr`.
+func reorderSecrets(keys []string, ctr, move, rm string) []string {
+	if c, k, ok := strings.Cut(rm, "|"); ok && c == ctr {
+		keys = slices.DeleteFunc(keys, func(x string) bool { return x == k })
+	}
+	if c, rest, ok := strings.Cut(move, "|"); ok && c == ctr {
+		k, dir, _ := strings.Cut(rest, "|")
+		if i := slices.Index(keys, k); i >= 0 {
+			j := i - 1
+			if dir == "down" {
+				j = i + 1
+			}
+			if j >= 0 && j < len(keys) {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	return keys
 }
 
 // accessFromForm : la section accès du formulaire. `current` : les comptes avant, gardés si leurs
