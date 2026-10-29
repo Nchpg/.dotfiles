@@ -40,6 +40,7 @@ type Analysis struct {
 type AICVE struct {
 	ID       string `json:"id"`
 	Severity string `json:"severity"`
+	Pkg      string `json:"pkg,omitempty"` // le paquet qu'elle touche (relevé dans un titre de commit)
 }
 
 // UrgencyLabel : le niveau, lisiblement.
@@ -449,7 +450,7 @@ Paquets de ce serveur qui viennent de cette entrée : %s. Les autres paquets du 
 - "conseille" : une faille mineure, ou des bugs gênants, corrigés dans ce que ce serveur utilise depuis cette entrée ;
 - "sans" : rien d'important pour ce serveur.
 "breaking" : true seulement si un commit annonce un changement cassant pour la config de ce serveur (option renommée ou retirée, comportement par défaut changé, migration à faire à la main) dans un module ou un paquet qu'il utilise.
-"summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : toutes les CVE (ou GHSA) citées dans ces titres (ils sont déjà triés : chacune touche le serveur), avec leur gravité si elle est dite ; et le résumé les mentionne toutes, par paquet. N'invente rien. Réponds avec un seul élément, d'"id" %q.
+"summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : les CVE (ou GHSA) citées dans ces titres, avec leur gravité si elle est dite ; le résumé cite chaque paquet corrigé d'une faille. Un paquet du serveur pris dans une autre entrée est « pris dans une autre entrée », pas « inutilisé ». N'invente rien. Réponds avec un seul élément, d'"id" %q.
 
 Commits :
 `
@@ -597,7 +598,7 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 			continue
 		}
 		a := answers[0]
-		s.saveAnalyses(map[string]Analysis{key: {Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs, Breaking: a.Breaking,
+		s.saveAnalyses(map[string]Analysis{key: {Urgency: a.Urgency, Summary: a.Summary, CVEs: mergeCVEs(titleCVEs(titles), a.CVEs), Breaking: a.Breaking,
 			Basis: fmt.Sprintf("%s sur %d", plural(len(titles), "titre de commit", "titres de commits"), len(all)), Model: s.cfg.AIModel, At: time.Now()}})
 	}
 	if len(errs) > 0 {
@@ -606,8 +607,45 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 	return nil
 }
 
+var reCVE = regexp.MustCompile(`\b(CVE-\d{4}-\d{4,}|GHSA(?:-[0-9a-z]{4}){3})\b`)
+
+// titleCVEs : les CVE citées dans les titres, avec le paquet en tête du titre : relevées par le code,
+// un petit modèle en oublie.
+func titleCVEs(titles []string) []AICVE {
+	var out []AICVE
+	for _, t := range titles {
+		pre, _, found := strings.Cut(t, ": ")
+		if !found || strings.Contains(strings.ReplaceAll(pre, ", ", ","), " ") {
+			pre = ""
+		}
+		for _, id := range reCVE.FindAllString(t, -1) {
+			out = append(out, AICVE{ID: id, Pkg: pre})
+		}
+	}
+	return out
+}
+
+// mergeCVEs : celles des titres, complétées par le modèle (sa gravité ; celles qu'il a vues ailleurs).
+func mergeCVEs(found, model []AICVE) []AICVE {
+	sev := map[string]string{}
+	for _, c := range model {
+		sev[c.ID] = c.Severity
+	}
+	seen := map[string]bool{}
+	var out []AICVE
+	for _, c := range append(found, model...) {
+		if seen[c.ID] {
+			continue
+		}
+		seen[c.ID] = true
+		c.Severity = firstOf(c.Severity, sev[c.ID])
+		out = append(out, c)
+	}
+	return out
+}
+
 // aiInputVersion : la façon de lire une entrée du flake ; la changer refait ces analyses une fois.
-const aiInputVersion = 4
+const aiInputVersion = 5
 
 // inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
 func inputKey(name string) string { return fmt.Sprintf("input.%s@%d", name, aiInputVersion) }

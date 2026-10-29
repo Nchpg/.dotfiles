@@ -131,7 +131,7 @@
 {{define "ai-row"}}<tr class="ai-row" hidden><td colspan="7">
   <div class="ai-box urg-box-{{.Urgency}}">
     <p>{{.Summary}}</p>
-    {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Severity}}<small class="muted">{{.}}</small>{{end}}{{end}}</p>{{end}}
+    {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<span class="ai-cve"><a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Pkg}} <small class="mono">{{.}}</small>{{end}}{{with .Severity}} <small class="muted">{{.}}</small>{{end}}</span>{{end}}</p>{{end}}
     <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version et les commits font foi.</small>
   </div>
 </td></tr>{{end}}

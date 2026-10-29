@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -356,5 +357,15 @@ func TestAnalyzeInputs(t *testing.T) {
 	_ = s.analyzeInputs(t.Context(), inputs, rows)
 	if len(prompts) != 1 {
 		t.Error("une entrée déjà analysée a été redemandée")
+	}
+}
+
+func TestTitleCVEs(t *testing.T) {
+	got := mergeCVEs(titleCVEs([]string{"glibc: 2.42-100 -> 2.42-103; fixes CVE-2026-89092, CVE-2026-97399", "zlib: backport fix for CVE-2026-85091", "sqlite, sqlite-analyzer: 3.53.3 (CVE-2026-11822)", "make it CVE-2026-1111 safe"}),
+		[]AICVE{{ID: "CVE-2026-89092", Severity: "high"}, {ID: "GHSA-99cj-7hg9-mp4m"}})
+	want := []AICVE{{ID: "CVE-2026-89092", Severity: "high", Pkg: "glibc"}, {ID: "CVE-2026-97399", Pkg: "glibc"}, {ID: "CVE-2026-85091", Pkg: "zlib"}, {ID: "CVE-2026-11822", Pkg: "sqlite, sqlite-analyzer"},
+		{ID: "CVE-2026-1111"}, {ID: "GHSA-99cj-7hg9-mp4m"}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("CVE : %v", got)
 	}
 }
