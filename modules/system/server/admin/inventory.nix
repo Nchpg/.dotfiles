@@ -35,6 +35,15 @@ let
         lib.attrNames inputs
       );
 
+  # D'où vient le code (dépôt GitHub d'un fetchFromGitHub, adresse d'une archive) : le dashboard y
+  # cherche les releases quand ni les notes ni le site ne sont sur GitHub.
+  srcOf =
+    p:
+    let
+      u = safe (p.src.meta.homepage or (lib.head (p.src.urls or [ null ])));
+    in
+    if builtins.isString u then u else null;
+
   info =
     id: kind: p:
     let
@@ -46,6 +55,7 @@ let
       version = safe (p.version or parsed.version);
       changelog = safe (p.meta.changelog or null);
       homepage = safe (p.meta.homepage or null);
+      src = srcOf p;
       source = safe (sourceOf p);
     };
 

@@ -294,3 +294,15 @@ func TestAnalyzeErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseOf(t *testing.T) {
+	rels := []Release{{Tag: "v5.8.9", URL: "u589"}, {Tag: "release-4.39.28", URL: "u43928"}, {Tag: "5.8", URL: "u58"}}
+	for v, want := range map[string]string{"5.8.9": "u589", "4.39.28": "u43928", "5.8": "u58", "5.8.10": "", "5": ""} {
+		if got := releaseOf(rels, v); got != want {
+			t.Errorf("releaseOf(%q) = %q, want %q", v, got, want)
+		}
+	}
+	if o, r := repoOf("https://www.openssh.com/releasenotes.html", "", "https://github.com/containers/podman/archive/v5.8.9.tar.gz"); o != "containers" || r != "podman" {
+		t.Errorf("repoOf src = %s/%s", o, r)
+	}
+}

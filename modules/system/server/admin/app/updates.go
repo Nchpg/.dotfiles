@@ -35,6 +35,7 @@ type InvItem struct {
 	Version      string `json:"version"`
 	Changelog    string `json:"changelog"`
 	Homepage     string `json:"homepage"`
+	Src          string `json:"src"`    // d'où vient le code (dépôt, archive)
 	Source       string `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
 }
 
@@ -80,7 +81,11 @@ type updatesResult struct {
 	Inputs  []InputRow `json:"inputs"`
 	Error   string     `json:"error"`
 	AIError string     `json:"aiError"` // l'analyse par l'IA a échoué (le reste de la vérification tient)
+	// Releases : la page GitHub de chaque version vue (clé releaseKey), trouvée à la vérification.
+	Releases map[string]string `json:"releases"`
 }
+
+func releaseKey(name, version string) string { return name + "|" + version }
 
 var updatesState struct {
 	sync.Mutex
@@ -276,7 +281,9 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 		cur, _ := s.currentInventory()
 		res.Inputs = inputRows(cur, res.Main, res.Next, oldLock)
 		if err == nil {
-			if e := s.analyze(ctx, updateRows(cur, res.Main, res.Next)); e != nil {
+			rows := updateRows(cur, res.Main, res.Next)
+			res.Releases = s.releaseLinks(ctx, rows)
+			if e := s.analyze(ctx, rows); e != nil {
 				res.AIError = e.Error()
 			}
 		}
@@ -325,6 +332,8 @@ type UpdateRow struct {
 	Current, Main, Next string // en service, sur main, après update
 	Change, ChangeLabel string // major, minor, patch, same, new, gone, other
 	Changelog, Homepage string
+	Src                 string // d'où vient le code
+	Release             string // la release GitHub de la version qui compte (après update, sinon en service)
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
 	AI                  *Analysis
@@ -408,6 +417,7 @@ func updateRows(cur, main, next []InvItem) []UpdateRow {
 			}
 		}
 		r := UpdateRow{ID: id, Name: it.Pname, Kind: it.Kind, Changelog: firstOf(it.Changelog, ci.Changelog), Homepage: firstOf(it.Homepage, ci.Homepage),
+			Src:    firstOf(it.Src, ci.Src),
 			Source: sourceLabel(firstOf(it.Source, firstOf(mi.Source, ci.Source)))}
 		if inCur {
 			r.Current = ci.Version
@@ -469,6 +479,7 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 			row.AI = &a
 			counts[a.Urgency]++
 		}
+		row.Release = res.Releases[releaseKey(row.Name, firstOf(row.Next, row.Current))]
 		if row.ID == "boot.kernel" {
 			if k := runningKernel(); k != "" && !strings.HasPrefix(k, row.Current) {
 				row.Running = k

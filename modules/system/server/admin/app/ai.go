@@ -131,18 +131,75 @@ func clip(s string, n int) string {
 	return s[:n] + "\n[…coupé]"
 }
 
+// Release : une release GitHub d'un projet.
+type Release struct {
+	Tag  string `json:"tag_name"`
+	Body string `json:"body"`
+	URL  string `json:"html_url"`
+}
+
+// releases : les dernières releases d'un dépôt GitHub (gardées quelques heures : la vérification et
+// l'analyse les lisent toutes deux).
+func (s *Server) releases(ctx context.Context, owner, repo string) ([]Release, error) {
+	v, err := s.gh.cached("releases/"+owner+"/"+repo, 6*time.Hour, func() (any, error) {
+		var rels []Release
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=40", owner, repo)
+		_, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &rels)
+		return rels, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]Release), nil
+}
+
+// releaseOf : la page de la release d'une version : son tag exact (« 1.2.3 », « v1.2.3 »), sinon le
+// premier tag aux mêmes nombres (« release-1.2.3 »).
+func releaseOf(rels []Release, version string) string {
+	for _, r := range rels {
+		if r.Tag == version || r.Tag == "v"+version {
+			return r.URL
+		}
+	}
+	if len(versionParts(version)) < 2 {
+		return ""
+	}
+	for _, r := range rels {
+		if len(versionParts(r.Tag)) >= 2 && cmpVersions(r.Tag, version) == 0 {
+			return r.URL
+		}
+	}
+	return ""
+}
+
+// releaseLinks : la page de release GitHub de chaque version affichée (en service, après update).
+func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]string {
+	links := map[string]string{}
+	for _, r := range rows {
+		owner, repo := repoOf(r.Changelog, r.Homepage, r.Src)
+		if owner == "" {
+			continue
+		}
+		rels, err := s.releases(ctx, owner, repo)
+		if err != nil {
+			continue
+		}
+		for _, v := range []string{r.Current, r.Next} {
+			if u := releaseOf(rels, v); v != "" && u != "" {
+				links[releaseKey(r.Name, v)] = u
+			}
+		}
+	}
+	return links
+}
+
 // releaseNotes : les notes des versions sautées (releases GitHub entre `from` exclue et `to`
 // incluse), sinon la page de notes de version autour de `to` ; et les avis de sécurité du projet.
 func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, basis []string) {
-	owner, repo := repoOf(row.Changelog, row.Homepage)
+	owner, repo := repoOf(row.Changelog, row.Homepage, row.Src)
 	var b strings.Builder
 	if owner != "" {
-		var rels []struct {
-			Tag  string `json:"tag_name"`
-			Body string `json:"body"`
-		}
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=40", owner, repo)
-		if _, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &rels); err == nil {
+		if rels, err := s.releases(ctx, owner, repo); err == nil {
 			n := 0
 			for _, r := range rels {
 				if cmpVersions(r.Tag, row.Current) > 0 && cmpVersions(r.Tag, row.Next) <= 0 {

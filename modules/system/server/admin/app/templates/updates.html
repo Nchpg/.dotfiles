@@ -24,7 +24,7 @@
     <div class="strip-cell">
       <span class="strip-label">Avec <code>update</code></span>
       <span class="strip-value line">{{if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
-      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}</span>
+      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{template "urg-icon"}}{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}</span>
     </div>
     <div class="strip-cell">
       <span class="strip-label">Appliquer</span>
@@ -80,6 +80,10 @@
 </section>
 {{end}}
 
+{{/* L'urgence selon l'IA : pleine quand elle compte, en simple texte sinon. */}}
+{{define "urg"}}<span class="urg urg-{{.Urgency}}">{{if eq .Urgency "urgent"}}{{template "urg-icon"}}{{end}}{{.UrgencyLabel}}</span>{{end}}
+{{define "urg-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20zM12 10v4M12 17.5h.01"/></svg>{{end}}
+
 {{define "updates-cols"}}<colgroup><col class="c-pkg"><col class="c-src"><col class="c-ver"><col class="c-ver"><col class="c-ver"><col class="c-chg"><col></colgroup>{{end}}
 
 {{define "update-row"}}
@@ -89,8 +93,13 @@
   <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
   <td class="mono small">{{if not .Main}}<span class="muted">—</span>{{else if ne .Main .Current}}<strong>{{.Main}}</strong>{{else}}{{.Main}}{{end}}</td>
   <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next (firstOf .Main .Current)}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
-  <td><span class="stack tight">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}<span class="urg urg-{{.Urgency}}">{{.UrgencyLabel}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
-  <td class="end small"><span class="stack tight end-stack">{{if .AI}}<button type="button" class="link-btn" data-toggle-next aria-expanded="false">Analyse</button>{{end}}{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</span></td>
+  <td><span class="badges">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}{{template "urg" .}}{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
+  <td class="end"><span class="row-actions">
+    {{- if .AI}}<button type="button" class="mini-btn" data-toggle-next aria-expanded="false">Analyse<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>{{end}}
+    {{- with .Release}}<a class="mini-btn" href="{{.}}" title="La release sur GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V3h9l9 9-9 9zM7.5 7.5h.01"/></svg>Release</a>{{end}}
+    {{- if .Changelog}}<a class="mini-btn" href="{{.Changelog}}" title="Notes de version"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h4"/></svg>Notes</a>
+    {{- else if .Homepage}}<a class="mini-btn quiet" href="{{.Homepage}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>Site</a>{{end -}}
+  </span></td>
 </tr>
 {{/* L'analyse par l'IA, dépliée par le bouton. */}}
 {{with .AI}}<tr class="ai-row" hidden><td colspan="7">
