@@ -7,8 +7,8 @@
 }:
 
 # Onglet Mises à jour : les versions de ce qui tourne, découvertes dans la config et jamais listées à
-# la main. Tout service activé qui a un paquet (`services.<x>`, ses `instances` comprises, et
-# `virtualisation.<x>`), puis le noyau et systemd ; chacun avec l'entrée du flake qui le fournit.
+# la main. Tout module activé qui a un paquet (`services.<x>`, ses `instances` comprises,
+# `virtualisation.<x>`, `security.<x>` comme sudo, `programs.<x>`), puis le noyau, systemd et nix ; chacun avec l'entrée du flake qui le fournit.
 # Et la révision de chaque entrée du flake (sauf ce dépôt et les secrets). La génération active le garde dans
 # /etc/dotfiles/inventory.json (colonne « En service ») ; le dashboard évalue le même attribut avec
 # un flake.lock à jour (colonne « Après update »).
@@ -97,8 +97,11 @@ let
   inventory =
     fromSet "services" options.services config.services
     ++ fromSet "virtualisation" options.virtualisation config.virtualisation
+    ++ fromSet "security" options.security config.security
+    ++ fromSet "programs" options.programs config.programs
     ++ info "boot.kernel" "base" config.boot.kernelPackages.kernel
     ++ info "systemd" "base" config.systemd.package
+    ++ info "nix" "base" config.nix.package
     ++
       lib.mapAttrsToList
         (name: i: {
