@@ -364,6 +364,8 @@ function mapInit() {
     // Glisser (un doigt, la souris) et pincer (deux doigts : zoom et déplacement ensemble).
     const pointers = new Map();
     let pinch = null;
+    let tap = null; // l'appui d'un doigt, tant qu'il n'a pas glissé
+
     const pair = () => {
       const [a, b] = [...pointers.values()];
       return { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, d: Math.hypot(a[0] - b[0], a[1] - b[1]) };
@@ -373,6 +375,7 @@ function mapInit() {
       frame.setPointerCapture(ev.pointerId);
       pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
       pinch = pointers.size === 2 ? pair() : null;
+      tap = pointers.size === 1 ? [ev.clientX, ev.clientY] : null;
       frame.classList.add("dragging");
       frame.querySelector(".map-tip").hidden = true;
     });
@@ -380,6 +383,7 @@ function mapInit() {
       const prev = pointers.get(ev.pointerId);
       if (!prev) return;
       pointers.set(ev.pointerId, [ev.clientX, ev.clientY]);
+      if (tap && Math.hypot(ev.clientX - tap[0], ev.clientY - tap[1]) > 6) tap = null;
       if (pointers.size === 1) {
         const s = perPixel();
         go({ x: view.x - (ev.clientX - prev[0]) * s, y: view.y - (ev.clientY - prev[1]) * s, w: view.w }, true);
@@ -395,6 +399,12 @@ function mapInit() {
       }
     });
     const release = (ev) => {
+      // Un appui sans glisser (au doigt, pas de survol) : l'info-bulle du point le plus proche.
+      if (ev.type === "pointerup" && tap && pointers.size === 1) {
+        const spot = nearestSpot(ev.clientX, ev.clientY);
+        if (spot) show(spot, ev);
+      }
+      tap = null;
       pointers.delete(ev.pointerId);
       pinch = pointers.size === 2 ? pair() : null;
       if (!pointers.size) frame.classList.remove("dragging");
@@ -409,9 +419,17 @@ function mapInit() {
       tip.style.left = `${Math.min(x + 14, b.width - tip.offsetWidth - 8)}px`;
       tip.style.top = `${y + tip.offsetHeight + 24 > b.height ? y - tip.offsetHeight - 12 : y + 14}px`;
     };
-    svg.addEventListener("pointerover", (ev) => {
-      const spot = ev.target.closest(".spot");
-      if (!spot || pointers.size > 1) return;
+    // Le point à moins de 24 px du doigt (les petits points sont durs à viser).
+    const nearestSpot = (cx, cy) => {
+      let best = null, dist = 24;
+      for (const spot of svg.querySelectorAll(".spot")) {
+        const r = spot.getBoundingClientRect();
+        const d = Math.max(0, Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy) - r.width / 2);
+        if (d <= dist) [best, dist] = [spot, d];
+      }
+      return best;
+    };
+    const show = (spot, ev) => {
       const head = document.createElement("strong");
       head.textContent = spot.dataset.label;
       const count = document.createElement("small");
@@ -431,10 +449,14 @@ function mapInit() {
       tip.className = `map-tip tip-${spot.classList.contains("spot-vpn") ? "vpn" : "internet"}`;
       tip.hidden = false;
       place(ev);
+    };
+    svg.addEventListener("pointerover", (ev) => {
+      const spot = ev.target.closest(".spot");
+      if (spot && ev.pointerType === "mouse" && pointers.size === 0) show(spot, ev);
     });
-    svg.addEventListener("pointermove", (ev) => { if (!tip.hidden) place(ev); });
+    svg.addEventListener("pointermove", (ev) => { if (!tip.hidden && ev.pointerType === "mouse") place(ev); });
     svg.addEventListener("pointerout", (ev) => {
-      if (ev.target.closest(".spot") && !ev.relatedTarget?.closest?.(".spot")) tip.hidden = true;
+      if (ev.pointerType === "mouse" && ev.target.closest(".spot") && !ev.relatedTarget?.closest?.(".spot")) tip.hidden = true;
     });
     draw();
   });

@@ -720,6 +720,6 @@ button.link-btn { border: 0; background: none; padding: 0; font: inherit; font-s
   table.sites.detail td.end .row-actions { justify-content: flex-start; }
   table.sites.detail tr.ai-row { display: block; padding-top: 0; }
   table.sites.detail tr.ai-row td { display: block; }
-  .badges { flex-direction: row; flex-wrap: wrap; }
-  .badges .chg:not(.chg-same), .badges .urg:not(.urg-sans) { width: auto; }
+  /* Mises à jour : deux colonnes, la source (nixpkgs-unstable) tient entière. */
+  table.sites.updates tr:not(.ai-row) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
