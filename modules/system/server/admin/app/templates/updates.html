@@ -1,7 +1,7 @@
 {{define "updates"}}{{template "top" .}}
 <header class="topbar">
   {{template "crumbs" (args "Title" "Mises à jour")}}
-  <form method="post" action="/updates/check"><button class="btn btn-primary" {{if .Running}}disabled{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg>{{if .Running}}Vérification…{{else}}Vérifier maintenant{{end}}</button></form>
+  {{template "updates-check" .}}
 </header>
 <main class="page">
   <h1>Mises à jour</h1>
@@ -9,9 +9,14 @@
 </main>
 {{template "bottom" .}}{{end}}
 
+{{/* Le bouton de la barre du haut ; relu avec le reste pendant une vérification (hors de son bloc :
+   remplacé à part, par son id). */}}
+{{define "updates-check"}}<form id="updates-check" method="post" action="/updates/check"{{if .Frag}} hx-swap-oob="true"{{end}}><button class="btn btn-primary" {{if .Running}}disabled{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg>{{if .Running}}Vérification…{{else}}Vérifier maintenant{{end}}</button></form>{{end}}
+
 {{/* Relu toutes les 5 s pendant une vérification (htmx), puis une dernière fois. */}}
 {{define "updates-body"}}
 <div id="updates-body" class="overview" {{if .Running}}hx-get="/updates?frag" hx-trigger="every 5s" hx-select="#updates-body" hx-swap="outerHTML"{{end}}>
+  {{if .Frag}}{{template "updates-check" .}}{{end}}
   {{with .CurError}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   {{with .Error}}<div class="alert alert-amber"><p>Vérification impossible : {{.}}</p></div>{{end}}
   {{with .AIError}}<div class="alert alert-amber"><p>Analyse par l'IA incomplète : {{.}}</p></div>{{end}}

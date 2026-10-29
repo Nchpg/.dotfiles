@@ -515,6 +515,7 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 		data["CurError"] = "Versions en service illisibles (" + s.cfg.Inventory + ") : la génération active date d'avant cet onglet, un rebuild la crée."
 	}
 	if r.Header.Get("HX-Request") == "true" && r.URL.Query().Has("frag") {
+		data["Frag"] = true
 		s.render(w, "updates-body", data)
 		return
 	}
