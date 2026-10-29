@@ -446,7 +446,7 @@
         <span class="kind" style="color: var(--ok)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg></span>
         <span class="stack tight">
           <span><strong>{{if .Device}}{{.Device}}{{else}}{{.IP}}{{end}}</strong>{{if .Device}} <span class="what mono small">{{.IP}}</span>{{end}}</span>
-          <small class="muted">{{.User}} · {{if .Unknown}}<span class="warn-ink">clé hors liste</span>{{else}}{{.Key}}{{end}}</small>
+          <small class="muted">user : <span class="what">{{.User}}</span> · clé : <span class="what" title="{{.Fingerprint}}">{{if .Unknown}}<span class="warn-ink">hors liste</span>{{else}}{{.Key}}{{end}}</span></small>
         </span>
         <span>{{if .Open}}<span class="line small"><span class="dot up" aria-hidden="true"></span>ouverte</span>{{end}}</span>
       </li>

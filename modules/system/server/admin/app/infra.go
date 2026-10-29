@@ -700,6 +700,7 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 // SSHLogin : une connexion acceptée, lisiblement.
 type SSHLogin struct {
 	Time, Device, IP, User, Key string
+	Fingerprint                 string
 	Unknown                     bool // clé qui n'est plus autorisée
 	Open                        bool // sa session est encore ouverte
 }
@@ -739,7 +740,7 @@ func (s *Server) sshLogins(ctx context.Context, n int) SSHLogins {
 			out.Days = append(out.Days, SSHLoginDay{Label: label})
 		}
 		key, known := keys[e.Fingerprint]
-		it := SSHLogin{Time: at.Format("15:04"), Device: devices[e.IP], IP: e.IP, User: e.User, Key: key, Unknown: !known}
+		it := SSHLogin{Time: at.Format("15:04"), Device: devices[e.IP], IP: e.IP, User: e.User, Key: key, Fingerprint: e.Fingerprint, Unknown: !known}
 		for _, se := range act.Sessions {
 			if se.Fingerprint == e.Fingerprint && se.IP == e.IP && !se.Since.IsZero() && se.Since.Sub(e.At).Abs() < 5*time.Second {
 				it.Open = true
