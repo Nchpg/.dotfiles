@@ -55,10 +55,6 @@ in
       };
 
       notify.discord.enable = true;
-
-      # Précondition : compte région EUROPE, puis `secrets edit datadog/api_key` et commit du lock,
-      # sinon l'évaluation échoue.
-      datadog.enable = true;
     };
 
     # Sans --delete-older-than, les anciennes générations restent des racines du GC.
