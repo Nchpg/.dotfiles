@@ -108,8 +108,8 @@ func (s *Server) currentInventory() ([]InvItem, error) {
 // lockNode : ce qu'on lit d'un nœud de flake.lock.
 type lockNode struct {
 	Locked struct {
-		Type, Owner, Repo, Rev string
-		LastModified           int64 `json:"lastModified"`
+		Type, Owner, Repo, Rev, URL string
+		LastModified                int64 `json:"lastModified"`
 	} `json:"locked"`
 }
 
@@ -206,6 +206,20 @@ func (ev *Evaluator) runJSON(ctx context.Context, env []string, name string, arg
 	return out.Bytes(), errOut.Bytes(), err
 }
 
+// reGitHubURL : un dépôt GitHub pris par git (`git+https://github.com/<owner>/<repo>`).
+var reGitHubURL = regexp.MustCompile(`^https://github\.com/([^/]+)/([^/]+?)(?:\.git)?/?$`)
+
+// githubRepo : le dépôt GitHub d'une entrée (type github, ou git sur github.com), sinon rien.
+func githubRepo(typ, owner, repo, url string) (string, string) {
+	if typ == "github" {
+		return owner, repo
+	}
+	if m := reGitHubURL.FindStringSubmatch(url); typ == "git" && m != nil {
+		return m[1], m[2]
+	}
+	return "", ""
+}
+
 // inputRows : chaque entrée que update met à jour, en service, sur main et après update.
 func inputRows(cur, main, next []InvItem, oldLock []byte) []InputRow {
 	var lock flakeLock
@@ -222,9 +236,7 @@ func inputRows(cur, main, next []InvItem, oldLock []byte) []InputRow {
 	for name, node := range bumpable(lock) {
 		l := lock.Nodes[node].Locked
 		row := InputRow{Name: name, Commits: -1}
-		if l.Type == "github" {
-			row.Owner, row.Repo = l.Owner, l.Repo
-		}
+		row.Owner, row.Repo = githubRepo(l.Type, l.Owner, l.Repo, l.URL)
 		row.ServiceRev, row.ServiceAt = at(cur, name)
 		row.MainRev, row.MainAt = at(main, name)
 		row.NextRev, row.NextAt = at(next, name)

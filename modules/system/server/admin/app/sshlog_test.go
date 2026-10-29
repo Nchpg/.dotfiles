@@ -211,3 +211,18 @@ func TestUpdateRowsSource(t *testing.T) {
 		t.Errorf("%+v", rows)
 	}
 }
+
+// Un dépôt GitHub pris par git compte comme GitHub (commits, lien Comparer).
+func TestGithubRepo(t *testing.T) {
+	for _, c := range []struct{ typ, owner, repo, url, wo, wr string }{
+		{"github", "NixOS", "nixpkgs", "", "NixOS", "nixpkgs"},
+		{"git", "", "", "https://github.com/sadjow/claude-code-nix", "sadjow", "claude-code-nix"},
+		{"git", "", "", "https://github.com/a/b.git", "a", "b"},
+		{"git", "", "", "https://gitlab.com/a/b", "", ""},
+		{"path", "", "", "", "", ""},
+	} {
+		if o, r := githubRepo(c.typ, c.owner, c.repo, c.url); o != c.wo || r != c.wr {
+			t.Errorf("%s %s : %s/%s", c.typ, c.url, o, r)
+		}
+	}
+}
