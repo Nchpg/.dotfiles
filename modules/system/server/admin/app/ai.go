@@ -35,6 +35,9 @@ type Analysis struct {
 	Basis    string `json:"basis"` // ce qu'elle a lu
 	// ModelUrgency : le niveau donné par l'IA (Urgency, à l'affichage, vient des CVE).
 	ModelUrgency string `json:"-"`
+	// Fixed : les CVE déjà corrigées dans la branche en service (ses notes de version jusqu'à elle, les
+	// avis du dépôt), d'après le code, pas l'IA.
+	Fixed []string `json:"fixed,omitempty"`
 	// StuckSource, StuckIn : une faille n'est corrigée qu'au-delà du canal (lequel, en quelle version).
 	StuckSource, StuckIn string    `json:"-"`
 	Model                string    `json:"model"`
@@ -317,13 +320,27 @@ func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]
 
 // releaseNotes : les notes des versions sautées (releases GitHub entre `from` exclue et `to`
 // incluse), sinon la page de notes de version autour de `to` ; et les avis de sécurité du projet.
-func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, basis []string) {
+func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, basis []string, fixed []string) {
 	owner, repo := repoOf(row.Changelog, row.Homepage, row.Src)
 	var b strings.Builder
+	seen := map[string]bool{}
+	fix := func(id string) {
+		if id = cveID(id); id != "" && !seen[id] {
+			seen[id] = true
+			fixed = append(fixed, id)
+		}
+	}
 	if owner != "" {
 		if rels, err := s.releases(ctx, owner, repo); err == nil {
 			n := 0
 			for _, r := range rels {
+				// Les notes de la branche en service, jusqu'à sa version : leurs CVE y sont déjà
+				// corrigées (une 6.0 les recite, corrigées en parallèle en 5.8).
+				if major(r.Tag) == major(row.Current) && cmpVersions(r.Tag, row.Current) <= 0 {
+					for _, id := range reCVE.FindAllString(r.Body, -1) {
+						fix(id)
+					}
+				}
 				if cmpVersions(r.Tag, row.Current) > 0 && cmpVersions(r.Tag, row.Upper()) <= 0 {
 					fmt.Fprintf(&b, "## %s\n%s\n\n", r.Tag, strings.TrimSpace(r.Body))
 					n++
@@ -373,6 +390,10 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			var a strings.Builder
 			for _, v := range advs {
 				if !advisoryOpen(row.Current, v.Vulns) {
+					fix(v.GHSA)
+					if v.CVE != "" {
+						fix(v.CVE)
+					}
 					continue
 				}
 				var ranges []string
@@ -387,7 +408,7 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			}
 		}
 	}
-	return text, basis
+	return text, basis, fixed
 }
 
 var reVersion = regexp.MustCompile(`\d+(?:\.\d+)+[0-9A-Za-z.+~-]*`)
@@ -572,8 +593,10 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		var p strings.Builder
 		p.WriteString(aiPrompt)
 		bases := map[string]string{}
+		fixed := map[string][]string{}
 		for _, r := range batch {
-			text, basis := s.releaseNotes(ctx, r)
+			text, basis, already := s.releaseNotes(ctx, r)
+			fixed[r.ID] = already
 			bases[r.ID] = strings.Join(basis, ", ")
 			fmt.Fprintf(&p, "\n\n### id: %s — %s : A = %s, B = %s, C = %s\n", r.ID, r.Name, r.Current, firstOf(r.Next, r.Current), r.Upper())
 			if text == "" {
@@ -596,7 +619,7 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		for _, a := range answers {
 			for _, r := range batch {
 				if r.ID == a.ID {
-					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs,
+					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs, Fixed: fixed[r.ID],
 						Basis: firstOf(bases[r.ID], "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
 				}
 			}

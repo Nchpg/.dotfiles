@@ -525,3 +525,14 @@ func TestAdvisoryOpen(t *testing.T) {
 		t.Errorf("vieille CVE : %+v", got)
 	}
 }
+
+// Une CVE déjà corrigée dans la branche en service (relevée par le code) ne compte pas, même si
+// l'IA la dit corrigée dans la version suivante.
+func TestClassifyFixedInBranch(t *testing.T) {
+	row := UpdateRow{Current: "5.8.9", Next: "6.1.4"}
+	a := Analysis{ModelUrgency: "urgent", Fixed: []string{"CVE-2026-94603"}, CVEs: []AICVE{{ID: "cve-2026-94603", FixedIn: "6.1.3"}, {ID: "CVE-2026-5", FixedIn: "6.0.0"}}}
+	got := classifyRow(&row, a, nil, map[string]CVEInfo{"CVE-2026-94603": {Score: 10, Network: true}, "CVE-2026-5": {Score: 5}})
+	if got.CVEs[0].Status != "service" || got.CVEs[1].Status != "update" || got.Urgency != "conseille" {
+		t.Errorf("%+v", got)
+	}
+}
