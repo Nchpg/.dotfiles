@@ -272,7 +272,7 @@ func TestAnalyze(t *testing.T) {
 	if err := s.analyze(t.Context(), rows); err != nil {
 		t.Fatal(err)
 	}
-	a, ok := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]
+	a, ok := s.analyses()[rows[0].analysisKey()]
 	if !ok || a.ModelUrgency != "urgent" || a.Urgency != "conseille" || a.Model != "m" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
 		t.Errorf("analyse : %+v (appels %v)", a, calls)
 	}
@@ -497,5 +497,31 @@ func TestCVEID(t *testing.T) {
 		if got := cveID(in); got != want {
 			t.Errorf("cveID(%q) = %q", in, got)
 		}
+	}
+}
+
+// Un avis du dépôt touche encore la version en service : une version corrigée plus récente (ou
+// aucune annoncée). Une CVE corrigée avant la version en service ne compte pas.
+func TestAdvisoryOpen(t *testing.T) {
+	type vuln = struct {
+		Range   string `json:"vulnerable_version_range"`
+		Patched string `json:"patched_versions"`
+	}
+	for _, c := range []struct {
+		patched string
+		want    bool
+	}{{"4.0.3, 3.4.7", false}, {"5.8.10", true}, {">= 6.0.1", true}, {"", true}, {"5.8.9", false}} {
+		if got := advisoryOpen("5.8.9", []vuln{{Patched: c.patched}}); got != c.want {
+			t.Errorf("corrigée %q : %v", c.patched, got)
+		}
+	}
+	// Corrigée sur deux branches : celle de la version en service est déjà atteinte.
+	if advisoryOpen("5.8.9", []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) || !advisoryOpen("5.8.7", []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) {
+		t.Error("deux branches")
+	}
+	row := UpdateRow{Current: "5.8.9", Next: "6.1.4"}
+	got := classifyRow(&row, Analysis{ModelUrgency: "urgent", CVEs: []AICVE{{ID: "CVE-2022-27649", FixedIn: "4.0.3"}}}, nil, map[string]CVEInfo{"CVE-2022-27649": {Score: 7.5, Network: true}})
+	if got.CVEs[0].Status != "service" || got.Urgency != "sans" {
+		t.Errorf("vieille CVE : %+v", got)
 	}
 }

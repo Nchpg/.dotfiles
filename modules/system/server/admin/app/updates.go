@@ -415,8 +415,13 @@ func (r UpdateRow) Behind() bool {
 	return r.Latest != "" && cmpVersions(r.Latest, firstOf(r.Next, r.Current)) > 0
 }
 
+// aiPackageVersion : la façon de lire un paquet ; la changer refait ces analyses une fois.
+const aiPackageVersion = 2
+
 // analysisKey : la clé de l'analyse de ce paquet (de la version en service à la plus récente).
-func (r UpdateRow) analysisKey() string { return analysisKey(r.Name, r.Current, r.Upper()) }
+func (r UpdateRow) analysisKey() string {
+	return analysisKey(fmt.Sprintf("%s@%d", r.Name, aiPackageVersion), r.Current, r.Upper())
+}
 
 // LatestInfo : la version la plus récente d'un paquet dans sa série.
 type LatestInfo struct {

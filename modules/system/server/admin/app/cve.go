@@ -309,8 +309,8 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 	for i, c := range a.CVEs {
 		id := cveID(c.ID)
 		switch {
-		case slices.Contains(row.Patches, id):
-			c.Status = "service"
+		case slices.Contains(row.Patches, id), c.FixedIn != "" && row.Current != "" && cmpVersions(c.FixedIn, row.Current) <= 0:
+			c.Status = "service" // patchée par nixpkgs, ou corrigée dans une version déjà dépassée
 		case slices.Contains(row.NextPatches, id), backports[id],
 			c.FixedIn != "" && row.Next != "" && cmpVersions(c.FixedIn, row.Next) <= 0, c.FixedIn == "" && !row.Behind():
 			c.Status = "update"
@@ -342,7 +342,7 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 func (c AICVE) StatusLabel() string {
 	switch c.Status {
 	case "service":
-		return "déjà corrigée (patch nixpkgs)"
+		return "déjà corrigée en service"
 	case "update":
 		return "corrigée par update"
 	case "channel":

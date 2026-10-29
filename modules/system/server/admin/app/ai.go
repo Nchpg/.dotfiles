@@ -243,7 +243,7 @@ func major(v string) int {
 }
 
 // latestVersions : pour chaque paquet, la version la plus récente publiée dans sa série (celle de la
-// version en service : un projet y corrige ses failles, PostgreSQL 17 comme Nextcloud 33) parmi ses
+// version d'après update : un projet y corrige ses failles, PostgreSQL 17 comme Nextcloud 33) parmi ses
 // releases GitHub et nixpkgs-unstable ; et une version majeure plus récente, à part (une migration se
 // choisit dans la config).
 func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[string]LatestInfo {
@@ -256,7 +256,7 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src); owner != "" {
 			rels, _ = s.releases(ctx, owner, repo)
 		}
-		l := pickLatest(r.Current, r.Unstable, rels)
+		l := pickLatest(firstOf(r.Next, r.Current), r.Unstable, rels)
 		if l.Version != "" || l.NewMajor != "" {
 			out[r.Name] = l
 		}
@@ -265,7 +265,8 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 }
 
 // pickLatest : parmi la version de nixpkgs-unstable et les releases (hors préversions), la plus
-// récente de la série de `current`, et une version majeure plus récente.
+// récente de la série de `current` (la version d'après update : celle qu'on aura), et une version
+// majeure plus récente.
 func pickLatest(current, unstable string, rels []Release) LatestInfo {
 	type cand struct{ v, url string }
 	var cands []cand
@@ -371,17 +372,53 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			s.addCVEInfos(scored)
 			var a strings.Builder
 			for _, v := range advs {
+				if !advisoryOpen(row.Current, v.Vulns) {
+					continue
+				}
 				var ranges []string
 				for _, x := range v.Vulns {
 					ranges = append(ranges, fmt.Sprintf("touchées %s, corrigées %s", x.Range, x.Patched))
 				}
 				fmt.Fprintf(&a, "- %s %s (%s) : %s [%s]\n", firstOf(v.CVE, v.GHSA), v.GHSA, v.Severity, v.Summary, strings.Join(ranges, " ; "))
 			}
-			text += "\n\nAvis de sécurité du projet (GitHub) :\n" + clip(a.String(), 6000)
-			basis = append(basis, "avis de sécurité GitHub")
+			if a.Len() > 0 {
+				text += "\n\nAvis de sécurité du projet (GitHub), ceux qui touchent encore A :\n" + clip(a.String(), 6000)
+				basis = append(basis, "avis de sécurité GitHub")
+			}
 		}
 	}
 	return text, basis
+}
+
+var reVersion = regexp.MustCompile(`\d+(?:\.\d+)+[0-9A-Za-z.+~-]*`)
+
+// advisoryOpen : un avis touche encore la version `current`. Un projet corrige souvent sur plusieurs
+// branches (« corrigées v5.8.8 ; corrigées v6.1.3 ») : une version corrigée de la série de `current`,
+// déjà atteinte, le règle ; sinon une version corrigée plus récente le laisse ouvert ; un avis sans
+// version corrigée aussi. Les vieux avis d'un projet n'en sont pas : sans ce tri, l'IA les recopie et
+// l'urgence gonfle.
+func advisoryOpen(current string, vulns []struct {
+	Range   string `json:"vulnerable_version_range"`
+	Patched string `json:"patched_versions"`
+}) bool {
+	if current == "" {
+		return true
+	}
+	var patched []string
+	for _, v := range vulns {
+		patched = append(patched, reVersion.FindAllString(v.Patched, -1)...)
+	}
+	for _, p := range patched {
+		if major(p) == major(current) && cmpVersions(p, current) <= 0 {
+			return false
+		}
+	}
+	for _, p := range patched {
+		if cmpVersions(p, current) > 0 {
+			return true
+		}
+	}
+	return len(patched) == 0
 }
 
 var (
