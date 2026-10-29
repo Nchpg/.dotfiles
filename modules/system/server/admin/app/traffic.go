@@ -175,7 +175,8 @@ type Visit struct {
 	Lat, Lon                              *float64
 	Start, End                            time.Time
 	Pages                                 int
-	Paths                                 []string // les pages vues, dans l'ordre
+	Paths                                 []string    // les pages vues, dans l'ordre
+	PathsAt                               []time.Time // l'heure de chacune
 }
 
 func visitsOf(lines []visitLine) []Visit {
@@ -198,7 +199,7 @@ func visitsOf(lines []visitLine) []Visit {
 			v := &out[n-1]
 			if v.Site == l.Site && v.IP == l.IP && v.UA == l.UA && l.At.Sub(v.End) <= visitGap {
 				v.End, v.Pages = l.At, v.Pages+1
-				v.Paths = append(v.Paths, l.Path)
+				v.Paths, v.PathsAt = append(v.Paths, l.Path), append(v.PathsAt, l.At)
 				if l.SSO != "" {
 					v.SSO = l.SSO
 				}
@@ -206,7 +207,7 @@ func visitsOf(lines []visitLine) []Visit {
 			}
 		}
 		out = append(out, Visit{Site: l.Site, IP: l.IP, Via: l.Via, UA: l.UA, SSO: l.SSO, City: l.City, Country: l.place(),
-			Lat: l.Lat, Lon: l.Lon, Start: l.At, End: l.At, Pages: 1, Paths: []string{l.Path}})
+			Lat: l.Lat, Lon: l.Lon, Start: l.At, End: l.At, Pages: 1, Paths: []string{l.Path}, PathsAt: []time.Time{l.At}})
 	}
 	return out
 }
@@ -742,12 +743,20 @@ type VisitItem struct {
 	When, Duration, Browser string
 	Pages                   int
 	SSO                     string
-	Route                   []PathHit // le parcours : les pages dans l'ordre, une page rechargée d'affilée comptée une fois (N)
-	RouteMore               int       // étapes de plus, non listées (au-delà de routeMax)
+	Top                     []PathHit   // les pages les plus vues (visitTop au plus)
+	TopMore                 int         // pages différentes de plus
+	Route                   []RouteStep // le parcours, dans l'ordre (routeMax étapes au plus)
+	RouteMore               int         // étapes de plus, non listées
 }
 
-// routeMax : étapes du parcours listées sous une visite.
-const routeMax = 20
+// RouteStep : une étape du parcours : une page, vue N fois d'affilée à partir de Time.
+type RouteStep struct {
+	Time, Path string
+	N          int
+}
+
+// visitTop, routeMax : pages résumées sur la ligne d'une visite ; étapes du parcours déplié.
+const visitTop, routeMax = 3, 50
 
 // originMax : visites listées sous une origine (les plus récentes).
 const originMax = 12
@@ -771,16 +780,25 @@ func visitItem(v Visit) VisitItem {
 	case d >= time.Minute:
 		dur = fmt.Sprintf("%d min", int(d.Minutes()))
 	}
-	var route []PathHit
-	for _, p := range v.Paths {
-		if n := len(route); n > 0 && route[n-1].Path == p {
-			route[n-1].N++
+	it := VisitItem{When: when, Duration: dur, Browser: browserOf(v.UA), Pages: v.Pages, SSO: v.SSO}
+	counts := map[string]int{}
+	for i, p := range v.Paths {
+		counts[p]++
+		if n := len(it.Route); n > 0 && it.Route[n-1].Path == p {
+			it.Route[n-1].N++
 			continue
 		}
-		route = append(route, PathHit{p, 1})
+		at := ""
+		if i < len(v.PathsAt) {
+			at = v.PathsAt[i].Local().Format("15:04")
+		}
+		it.Route = append(it.Route, RouteStep{at, p, 1})
 	}
-	more := max(0, len(route)-routeMax)
-	return VisitItem{When: when, Duration: dur, Browser: browserOf(v.UA), Pages: v.Pages, SSO: v.SSO, Route: route[:len(route)-more], RouteMore: more}
+	top := pathHits(counts)
+	it.Top, it.TopMore = top[:min(len(top), visitTop)], max(0, len(top)-visitTop)
+	it.RouteMore = max(0, len(it.Route)-routeMax)
+	it.Route = it.Route[:len(it.Route)-it.RouteMore]
+	return it
 }
 
 // browserOf : le navigateur et le système d'un User-Agent (« Firefox, Linux »), ou rien.

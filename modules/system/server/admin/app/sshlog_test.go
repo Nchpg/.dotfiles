@@ -133,11 +133,17 @@ func TestMapDotSites(t *testing.T) {
 	}
 }
 
-// Le parcours d'une visite : dans l'ordre, une page rechargée d'affilée comptée une fois.
+// Une visite : ses pages les plus vues, et son parcours dans l'ordre (une page rechargée d'affilée
+// comptée une fois, avec l'heure de la première).
 func TestVisitRoute(t *testing.T) {
-	it := visitItem(Visit{Start: time.Now(), End: time.Now(), Pages: 4, Paths: []string{"/", "/cv", "/cv", "/"}})
-	if fmt.Sprint(it.Route) != "[{/ 1} {/cv 2} {/ 1}]" {
+	t0 := time.Date(2026, 10, 29, 12, 50, 0, 0, time.Local)
+	at := []time.Time{t0, t0.Add(time.Minute), t0.Add(2 * time.Minute), t0.Add(3 * time.Minute), t0.Add(4 * time.Minute)}
+	it := visitItem(Visit{Start: t0, End: at[4], Pages: 5, Paths: []string{"/", "/cv", "/cv", "/", "/a"}, PathsAt: at})
+	if fmt.Sprint(it.Route) != "[{12:50 / 1} {12:51 /cv 2} {12:53 / 1} {12:54 /a 1}]" {
 		t.Errorf("parcours : %v", it.Route)
+	}
+	if fmt.Sprint(it.Top) != "[{/ 2} {/cv 2} {/a 1}]" || it.TopMore != 0 {
+		t.Errorf("pages : %v +%d", it.Top, it.TopMore)
 	}
 }
 
