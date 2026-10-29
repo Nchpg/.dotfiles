@@ -8,7 +8,8 @@
 
 # Onglet Mises à jour : les versions de ce qui tourne, découvertes dans la config et jamais listées à
 # la main. Tout service activé qui a un paquet (`services.<x>`, ses `instances` comprises, et
-# `virtualisation.<x>`), puis le noyau et systemd ; chacun avec l'entrée du flake qui le fournit. La génération active le garde dans
+# `virtualisation.<x>`), puis le noyau et systemd ; chacun avec l'entrée du flake qui le fournit.
+# Et la révision de chaque entrée du flake (sauf ce dépôt et les secrets). La génération active le garde dans
 # /etc/dotfiles/inventory.json (colonne « En service ») ; le dashboard évalue le même attribut avec
 # un flake.lock à jour (colonne « Après update »).
 let
@@ -87,7 +88,22 @@ let
     fromSet "services" options.services config.services
     ++ fromSet "virtualisation" options.virtualisation config.virtualisation
     ++ info "boot.kernel" "base" config.boot.kernelPackages.kernel
-    ++ info "systemd" "base" config.systemd.package;
+    ++ info "systemd" "base" config.systemd.package
+    ++
+      lib.mapAttrsToList
+        (name: i: {
+          id = "input.${name}";
+          kind = "input";
+          pname = name;
+          version = safe (i.rev or null);
+          lastModified = safe (i.lastModified or null);
+        })
+        (
+          removeAttrs inputs [
+            "self"
+            "secrets"
+          ]
+        );
 in
 {
   options.systemSettings.admin.inventory = lib.mkOption {

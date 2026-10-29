@@ -26,27 +26,56 @@ import (
 // updatesHour : l'heure de la vérification quotidienne (et du récapitulatif).
 const updatesHour = 7
 
-// InvItem : un paquet de l'inventaire.
+// InvItem : un paquet de l'inventaire, ou une entrée du flake (kind input : version = révision).
 type InvItem struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"` // service ou base
-	Pname     string `json:"pname"`
-	Version   string `json:"version"`
-	Changelog string `json:"changelog"`
-	Homepage  string `json:"homepage"`
-	Source    string `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
+	ID           string `json:"id"`
+	Kind         string `json:"kind"` // service, base ou input
+	LastModified int64  `json:"lastModified"`
+	Pname        string `json:"pname"`
+	Version      string `json:"version"`
+	Changelog    string `json:"changelog"`
+	Homepage     string `json:"homepage"`
+	Source       string `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
 }
 
-// InputRow : une entrée du flake, avant et après la mise à jour.
+// InputRow : une entrée du flake : en service, sur main, après update ; les commits d'écart entre
+// la révision en service et celle d'après update (GitHub, au moment de la vérification).
 type InputRow struct {
-	Name, From, To, Compare string
-	Days                    int
-	Changed                 bool
+	Name, Owner, Repo            string
+	ServiceRev, MainRev, NextRev string
+	ServiceAt, MainAt, NextAt    int64
+	Commits                      int // -1 : inconnu
+	CommitsFrom                  string
+}
+
+// Day : une date de révision (« 25/10/2026 »), ou rien.
+func (InputRow) Day(t int64) string {
+	if t == 0 {
+		return ""
+	}
+	return time.Unix(t, 0).Local().Format("02/01/2006")
+}
+
+// Changed : update change cette entrée par rapport à ce qui tourne.
+func (r InputRow) Changed() bool {
+	return r.NextRev != "" && r.NextRev != firstOf(r.ServiceRev, r.MainRev)
+}
+
+// Pending : main a déjà une autre révision que ce qui tourne (git pull et rebuild suffisent).
+func (r InputRow) Pending() bool { return r.ServiceRev != "" && r.MainRev != r.ServiceRev }
+
+// Compare : les changements sur GitHub, de ce qui tourne à après update.
+func (r InputRow) Compare() string {
+	if r.Owner == "" || !r.Changed() {
+		return ""
+	}
+	return fmt.Sprintf("https://github.com/%s/%s/compare/%s...%s", r.Owner, r.Repo, firstOf(r.ServiceRev, r.MainRev), r.NextRev)
 }
 
 type updatesResult struct {
 	Checked time.Time  `json:"checked"`
 	Head    string     `json:"head"`
+	Main    []InvItem  `json:"main"`
 	Next    []InvItem  `json:"next"`
 	Inputs  []InputRow `json:"inputs"`
 	Error   string     `json:"error"`
@@ -106,21 +135,21 @@ func bumpable(lock flakeLock) map[string]string {
 }
 
 // Updates : le flake.lock à jour (dans un fichier à part) et l'inventaire de think évalué avec.
-func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock []byte, inv []InvItem, err error) {
+func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock []byte, main, next []InvItem, err error) {
 	ev.mu.Lock()
 	defer ev.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Minute)
 	defer cancel()
 	if err := ev.checkout(ctx, head); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	dir := ev.dir()
 	if oldLock, err = os.ReadFile(filepath.Join(dir, "flake.lock")); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	var lock flakeLock
 	if err := json.Unmarshal(oldLock, &lock); err != nil {
-		return nil, nil, nil, fmt.Errorf("flake.lock illisible : %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("flake.lock illisible : %w", err)
 	}
 	var names []string
 	for name := range bumpable(lock) {
@@ -132,7 +161,7 @@ func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock
 	// retire (et un `update` fait entre-temps les réutilise).
 	tmp, err := os.MkdirTemp(ev.cfg.StateDir, "updates-")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	defer os.RemoveAll(tmp)
 	env := append(ev.env(), "XDG_CACHE_HOME="+filepath.Join(tmp, "cache"))
@@ -141,23 +170,29 @@ func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock
 	args := append([]string{"flake", "update"}, names...)
 	args = append(args, "--flake", flake, "--output-lock-file", out)
 	if _, msgs, err := ev.runJSON(ctx, env, "nix", args...); err != nil {
-		return nil, nil, nil, fmt.Errorf("nix flake update : %s", lastLines(msgs, 3))
+		return nil, nil, nil, nil, fmt.Errorf("nix flake update : %s", lastLines(msgs, 3))
 	}
 	if newLock, err = os.ReadFile(out); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
+	// Sur main (son flake.lock tel quel), puis après update (le lock à jour).
 	attr := flake + "#nixosConfigurations." + ev.cfg.Target + ".config.systemSettings.admin.inventory"
-	o, msgs, err := ev.runJSON(ctx, env, "nix", "eval", "--json", "--reference-lock-file", out, attr)
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return nil, nil, nil, errors.New("évaluation trop longue (plus de 12 minutes)")
+	for _, step := range []struct {
+		inv  *[]InvItem
+		args []string
+	}{{&main, nil}, {&next, []string{"--reference-lock-file", out}}} {
+		o, msgs, err := ev.runJSON(ctx, env, "nix", append(append([]string{"eval", "--json"}, step.args...), attr)...)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, nil, nil, nil, errors.New("évaluation trop longue (plus de 12 minutes)")
+		}
+		if err != nil {
+			return nil, nil, nil, nil, errors.New(evalError(msgs))
+		}
+		if err := json.Unmarshal(o, step.inv); err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("inventaire illisible : %w", err)
+		}
 	}
-	if err != nil {
-		return nil, nil, nil, errors.New(evalError(msgs))
-	}
-	if err := json.Unmarshal(o, &inv); err != nil {
-		return nil, nil, nil, fmt.Errorf("inventaire illisible : %w", err)
-	}
-	return oldLock, newLock, inv, nil
+	return oldLock, newLock, main, next, nil
 }
 
 // runJSON : comme run, dans l'environnement donné, la sortie à part des messages (avertissements,
@@ -171,26 +206,33 @@ func (ev *Evaluator) runJSON(ctx context.Context, env []string, name string, arg
 	return out.Bytes(), errOut.Bytes(), err
 }
 
-// inputRows : l'écart de chaque entrée du flake entre les deux locks.
-func inputRows(oldLock, newLock []byte) []InputRow {
-	var a, b flakeLock
-	if json.Unmarshal(oldLock, &a) != nil || json.Unmarshal(newLock, &b) != nil {
-		return nil
-	}
-	day := func(t int64) string { return time.Unix(t, 0).Local().Format("02/01/2006") }
-	var rows []InputRow
-	for name, node := range bumpable(a) {
-		o, n := a.Nodes[node].Locked, b.Nodes[bumpable(b)[name]].Locked
-		row := InputRow{Name: name, From: day(o.LastModified), To: day(n.LastModified), Changed: o.Rev != n.Rev,
-			Days: int(time.Unix(n.LastModified, 0).Sub(time.Unix(o.LastModified, 0)).Hours() / 24)}
-		if row.Changed && o.Type == "github" {
-			row.Compare = fmt.Sprintf("https://github.com/%s/%s/compare/%s...%s", o.Owner, o.Repo, o.Rev, n.Rev)
+// inputRows : chaque entrée que update met à jour, en service, sur main et après update.
+func inputRows(cur, main, next []InvItem, oldLock []byte) []InputRow {
+	var lock flakeLock
+	_ = json.Unmarshal(oldLock, &lock)
+	at := func(inv []InvItem, name string) (string, int64) {
+		for _, it := range inv {
+			if it.Kind == "input" && it.Pname == name {
+				return it.Version, it.LastModified
+			}
 		}
+		return "", 0
+	}
+	var rows []InputRow
+	for name, node := range bumpable(lock) {
+		l := lock.Nodes[node].Locked
+		row := InputRow{Name: name, Commits: -1}
+		if l.Type == "github" {
+			row.Owner, row.Repo = l.Owner, l.Repo
+		}
+		row.ServiceRev, row.ServiceAt = at(cur, name)
+		row.MainRev, row.MainAt = at(main, name)
+		row.NextRev, row.NextAt = at(next, name)
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Changed != rows[j].Changed {
-			return rows[i].Changed
+		if rows[i].Changed() != rows[j].Changed() {
+			return rows[i].Changed()
 		}
 		return rows[i].Name < rows[j].Name
 	})
@@ -216,9 +258,19 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 	head, err := s.gh.Head(ctx)
 	if err == nil {
 		res.Head = head
-		var oldLock, newLock []byte
-		oldLock, newLock, res.Next, err = s.eval.Updates(ctx, head)
-		res.Inputs = inputRows(oldLock, newLock)
+		var oldLock []byte
+		oldLock, _, res.Main, res.Next, err = s.eval.Updates(ctx, head)
+		cur, _ := s.currentInventory()
+		res.Inputs = inputRows(cur, res.Main, res.Next, oldLock)
+		for i := range res.Inputs {
+			in := &res.Inputs[i]
+			if in.Changed() && in.Owner != "" {
+				from := firstOf(in.ServiceRev, in.MainRev)
+				if n, err := s.gh.CompareCount(ctx, in.Owner, in.Repo, from, in.NextRev); err == nil {
+					in.Commits, in.CommitsFrom = n, from
+				}
+			}
+		}
 	}
 	if err != nil {
 		res.Error = err.Error()
@@ -252,7 +304,7 @@ func (s *Server) updatesLoop(ctx context.Context) {
 // UpdateRow : un paquet, en service et après la mise à jour.
 type UpdateRow struct {
 	ID, Name, Kind      string
-	Current, Next       string
+	Current, Main, Next string // en service, sur main, après update
 	Change, ChangeLabel string // major, minor, patch, same, new, gone, other
 	Changelog, Homepage string
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
@@ -301,51 +353,62 @@ var changeLabels = map[string]string{"major": "majeure", "minor": "mineure", "pa
 // changeOrder : les plus importants d'abord.
 var changeOrder = map[string]int{"major": 0, "minor": 1, "patch": 2, "other": 3, "new": 4, "gone": 5, "same": 6}
 
-func updateRows(cur, next []InvItem) []UpdateRow {
-	byID := map[string]InvItem{}
-	for _, it := range next {
-		byID[it.ID] = it
+// updateRows : chaque paquet en service, sur main et après update (sans les entrées du flake,
+// listées à part) ; le changement compare ce qui tourne à après update. Sans vérification
+// (`next` vide), seule la colonne en service est remplie.
+func updateRows(cur, main, next []InvItem) []UpdateRow {
+	index := func(inv []InvItem) map[string]InvItem {
+		m := map[string]InvItem{}
+		for _, it := range inv {
+			if it.Kind != "input" && it.ID != "nixpkgs" {
+				m[it.ID] = it
+			}
+		}
+		return m
 	}
-	seen := map[string]bool{}
+	c, m, n := index(cur), index(main), index(next)
+	ids := map[string]bool{}
+	for _, set := range []map[string]InvItem{c, m, n} {
+		for id := range set {
+			ids[id] = true
+		}
+	}
 	var rows []UpdateRow
-	add := func(c, n *InvItem) {
-		it := c
-		if it == nil {
-			it = n
+	for id := range ids {
+		ci, inCur := c[id]
+		mi, inMain := m[id]
+		ni, inNext := n[id]
+		it := ni
+		for _, x := range []struct {
+			it InvItem
+			ok bool
+		}{{ni, inNext}, {mi, inMain}, {ci, inCur}} {
+			if x.ok {
+				it = x.it
+				break
+			}
 		}
-		r := UpdateRow{ID: it.ID, Name: it.Pname, Kind: it.Kind, Changelog: it.Changelog, Homepage: it.Homepage, Source: sourceLabel(it.Source)}
+		r := UpdateRow{ID: id, Name: it.Pname, Kind: it.Kind, Changelog: it.Changelog, Homepage: it.Homepage, Source: sourceLabel(it.Source)}
+		if inCur {
+			r.Current = ci.Version
+		}
+		if inMain {
+			r.Main = mi.Version
+		}
+		if inNext {
+			r.Next = ni.Version
+		}
 		switch {
-		case c == nil:
-			r.Next, r.Change = n.Version, "new"
-		case n == nil:
-			r.Current, r.Change = c.Version, "gone"
+		case next == nil:
+		case !inCur:
+			r.Change = "new"
+		case !inNext:
+			r.Change = "gone"
 		default:
-			r.Current, r.Next, r.Change = c.Version, n.Version, versionChange(c.Version, n.Version)
-			r.Changelog, r.Homepage = firstOf(n.Changelog, c.Changelog), firstOf(n.Homepage, c.Homepage)
-			r.Source = sourceLabel(firstOf(n.Source, c.Source))
-		}
-		if r.ID == "nixpkgs" && r.Change != "same" && r.Change != "new" && r.Change != "gone" {
-			r.Change = "other"
+			r.Change = versionChange(ci.Version, ni.Version)
 		}
 		r.ChangeLabel = changeLabels[r.Change]
 		rows = append(rows, r)
-	}
-	for i := range cur {
-		c := cur[i]
-		seen[c.ID] = true
-		if n, ok := byID[c.ID]; ok {
-			add(&c, &n)
-		} else if next != nil {
-			add(&c, nil)
-		} else {
-			add(&c, &c)
-		}
-	}
-	for i := range next {
-		if !seen[next[i].ID] {
-			n := next[i]
-			add(nil, &n)
-		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
 		if changeOrder[rows[i].Change] != changeOrder[rows[j].Change] {
@@ -365,19 +428,22 @@ func runningKernel() string {
 func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 	res := s.readUpdates()
 	cur, curErr := s.currentInventory()
-	rows := updateRows(cur, res.Next)
-	if res.Next == nil {
-		for i := range rows {
-			rows[i].Next, rows[i].Change, rows[i].ChangeLabel = "", "", ""
+	rows := updateRows(cur, res.Main, res.Next)
+	// En service : la génération active de maintenant (un rebuild depuis la vérification compte).
+	inputs := res.Inputs
+	for i := range inputs {
+		for _, it := range cur {
+			if it.Kind == "input" && it.Pname == inputs[i].Name {
+				inputs[i].ServiceRev, inputs[i].ServiceAt = it.Version, it.LastModified
+			}
+		}
+		if inputs[i].CommitsFrom != firstOf(inputs[i].ServiceRev, inputs[i].MainRev) {
+			inputs[i].Commits = -1
 		}
 	}
-	// Une seule liste, la plus importante d'abord ; nixpkgs (ancien inventaire) est dans les sources.
 	var list []UpdateRow
 	counts := map[string]int{}
 	for _, row := range rows {
-		if row.ID == "nixpkgs" {
-			continue
-		}
 		if row.ID == "boot.kernel" {
 			if k := runningKernel(); k != "" && !strings.HasPrefix(k, row.Current) {
 				row.Running = k
@@ -392,7 +458,7 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 	updatesState.Lock()
 	running := updatesState.running
 	updatesState.Unlock()
-	data := map[string]any{"Nav": "updates", "Rows": list, "Inputs": res.Inputs, "Counts": counts,
+	data := map[string]any{"Nav": "updates", "Rows": list, "Inputs": inputs, "Counts": counts,
 		"Running": running, "Error": res.Error, "Hour": updatesHour, "Discord": s.cfg.DiscordHook != ""}
 	if !res.Checked.IsZero() {
 		data["Checked"] = ago(time.Since(res.Checked))
@@ -430,8 +496,8 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 	default:
 		cur, _ := s.currentInventory()
 		var changed []UpdateRow
-		for _, row := range updateRows(cur, res.Next) {
-			if row.Change != "same" && row.ID != "nixpkgs" {
+		for _, row := range updateRows(cur, res.Main, res.Next) {
+			if row.Change != "same" {
 				changed = append(changed, row)
 			}
 		}
@@ -453,8 +519,12 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 			fmt.Fprintf(&b, "• **%s** %s → %s (%s%s)\n", row.Name, from, to, row.ChangeLabel, extra)
 		}
 		for _, in := range res.Inputs {
-			if in.Changed {
-				fmt.Fprintf(&b, "• entrée `%s` : %s → %s\n", in.Name, in.From, in.To)
+			if in.Changed() {
+				commits := ""
+				if in.Commits >= 0 {
+					commits = ", " + plural(in.Commits, "commit", "commits")
+				}
+				fmt.Fprintf(&b, "• source `%s` : %s → %s%s\n", in.Name, in.Day(firstOf64(in.ServiceAt, in.MainAt)), in.Day(in.NextAt), commits)
 			}
 		}
 		fmt.Fprintf(&b, "Rien n'est appliqué : sur think, `update` puis `rebuild`. %s", link)
@@ -479,4 +549,11 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	return lines[len(lines)-1]
+}
+
+func firstOf64(a, b int64) int64 {
+	if a != 0 {
+		return a
+	}
+	return b
 }

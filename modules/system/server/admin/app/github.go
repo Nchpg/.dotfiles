@@ -244,3 +244,24 @@ func (g *GitHub) Packages(ctx context.Context) ([]Package, error) {
 	}
 	return v.([]Package), nil
 }
+
+// CompareCount : les commits de `base` à `head` d'un dépôt GitHub (public). Le résultat ne change
+// jamais pour deux révisions données : gardé en cache longtemps.
+func (g *GitHub) CompareCount(ctx context.Context, owner, repo, base, head string) (int, error) {
+	v, err := g.cached("compare:"+owner+"/"+repo+":"+base+"..."+head, 30*24*time.Hour, func() (any, error) {
+		var out struct {
+			AheadBy int `json:"ahead_by"`
+		}
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s?per_page=1", owner, repo, base, head)
+		// Le jeton du dashboard d'abord (plus de requêtes permises) ; sans lui, en anonyme.
+		_, err := g.api(ctx, "GET", url, g.cfg.DispatchToken, nil, &out)
+		if err != nil && g.cfg.DispatchToken != "" {
+			_, err = g.api(ctx, "GET", url, "", nil, &out)
+		}
+		return out.AheadBy, err
+	})
+	if err != nil {
+		return 0, err
+	}
+	return v.(int), nil
+}

@@ -154,7 +154,7 @@ func TestUpdates(t *testing.T) {
 		{ID: "boot.kernel", Kind: "base", Pname: "linux", Version: "7.3"}, {ID: "services.old", Pname: "old", Version: "1"}}
 	next := []InvItem{{ID: "services.nginx", Pname: "nginx", Version: "1.30.6"}, {ID: "services.authelia.main", Pname: "authelia", Version: "5.0.0", Changelog: "https://x"},
 		{ID: "boot.kernel", Pname: "linux", Version: "7.3.4"}, {ID: "services.new", Pname: "new", Version: "2"}}
-	rows := updateRows(cur, next)
+	rows := updateRows(cur, nil, next)
 	got := []string{}
 	for _, r := range rows {
 		got = append(got, r.Name+":"+r.Change)
@@ -166,9 +166,16 @@ func TestUpdates(t *testing.T) {
 		"nixpkgs":{"locked":{"type":"github","owner":"NixOS","repo":"nixpkgs","rev":"aaa","lastModified":1792800000}},"secrets":{"locked":{"rev":"s"}}}}`)
 	neu := []byte(`{"root":"root","nodes":{"root":{"inputs":{"nixpkgs":"nixpkgs","secrets":"secrets","hm":["nixpkgs"]}},
 		"nixpkgs":{"locked":{"type":"github","owner":"NixOS","repo":"nixpkgs","rev":"bbb","lastModified":1793232000}},"secrets":{"locked":{"rev":"s"}}}}`)
-	in := inputRows(old, neu)
-	if len(in) != 1 || in[0].Name != "nixpkgs" || !in[0].Changed || in[0].Days != 5 || in[0].Compare != "https://github.com/NixOS/nixpkgs/compare/aaa...bbb" {
+	cur = append(cur, InvItem{ID: "input.nixpkgs", Kind: "input", Pname: "nixpkgs", Version: "aaa", LastModified: 1792800000})
+	main := []InvItem{{ID: "input.nixpkgs", Kind: "input", Pname: "nixpkgs", Version: "aaa", LastModified: 1792800000}}
+	next = append(next, InvItem{ID: "input.nixpkgs", Kind: "input", Pname: "nixpkgs", Version: "bbb", LastModified: 1793232000})
+	in := inputRows(cur, main, next, old)
+	if len(in) != 1 || in[0].Name != "nixpkgs" || !in[0].Changed() || in[0].Pending() || in[0].Compare() != "https://github.com/NixOS/nixpkgs/compare/aaa...bbb" {
 		t.Errorf("entrées : %+v", in)
+	}
+	_ = neu
+	if r := updateRows(cur, main, next); len(r) != 5 {
+		t.Errorf("les entrées du flake ne sont pas des paquets : %d lignes", len(r))
 	}
 }
 
@@ -183,10 +190,10 @@ func TestPostUpdates(t *testing.T) {
 	s := &Server{cfg: &Config{DiscordHook: srv.URL, Inventory: inv, Host: "admin.vpn.x"}}
 	machineName = "think"
 	s.postUpdates(t.Context(), updatesResult{Next: []InvItem{{ID: "services.authelia.main", Pname: "authelia", Version: "4.40.1"}, {ID: "boot.kernel", Pname: "linux", Version: "7.3.6"},
-		{ID: "services.nginx", Pname: "nginx", Version: "1.30.6"}}, Inputs: []InputRow{{Name: "nixpkgs-stable", From: "25/10/2026", To: "28/10/2026", Changed: true}}})
+		{ID: "services.nginx", Pname: "nginx", Version: "1.30.6"}}, Inputs: []InputRow{{Name: "nixpkgs-stable", MainRev: "a", NextRev: "b", MainAt: 1792843200, NextAt: 1793275200, Commits: 412}}})
 	msg, _ := got["content"].(string)
 	t.Log("\n" + msg)
-	for _, want := range []string{"**think** : 2 versions changeraient", "• **authelia** 4.39.28 → 4.40.1 (mineure)", "• **linux** 7.3 → 7.3.6 (correctif, redémarrage)", "entrée `nixpkgs-stable`", "https://admin.vpn.x/updates"} {
+	for _, want := range []string{"**think** : 2 versions changeraient", "• **authelia** 4.39.28 → 4.40.1 (mineure)", "• **linux** 7.3 → 7.3.6 (correctif, redémarrage)", "source `nixpkgs-stable` : 24/10/2026 → 29/10/2026, 412 commits", "https://admin.vpn.x/updates"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("manque %q", want)
 		}
