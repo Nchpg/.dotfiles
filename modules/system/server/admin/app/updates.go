@@ -188,6 +188,9 @@ func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock
 		inv  *[]InvItem
 		args []string
 	}{{&main, nil}, {&next, []string{"--reference-lock-file", out}}} {
+		if step.inv == &next {
+			ev.bumpPins(ctx, env, dir)
+		}
 		o, msgs, err := ev.runJSON(ctx, env, "nix", append(append([]string{"eval", "--json"}, step.args...), attr)...)
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, nil, nil, nil, errors.New("évaluation trop longue (plus de 12 minutes)")
@@ -200,6 +203,49 @@ func (ev *Evaluator) Updates(ctx context.Context, head string) (oldLock, newLock
 		}
 	}
 	return oldLock, newLock, main, next, nil
+}
+
+// bumpPins : la seconde moitié de `update` (scripts/update.sh), dans la copie d'évaluation : les
+// modules qui épinglent une version à côté de nixpkgs (un update.sh et son pinned.json, comme
+// cloudflared et ses releases GitHub). Chaque update.sh, en mode vérification (`--check` : la dernière
+// version en JSON, sans rien télécharger ni construire), puis cette version dans son pinned.json ;
+// l'évaluation d'après update la voit (le hash reste l'ancien : évaluer ne télécharge rien). Un
+// script qui échoue garde son épinglage. La copie est remise propre à la vérification suivante.
+func (ev *Evaluator) bumpPins(ctx context.Context, env []string, dir string) {
+	env = append(env, "MY_FLAKE="+dir, "GITHUB_TOKEN="+ev.cfg.DispatchToken)
+	_ = filepath.WalkDir(filepath.Join(dir, "modules"), func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || d.Name() != "update.sh" {
+			return nil
+		}
+		pinFile := filepath.Join(filepath.Dir(path), "pinned.json")
+		raw, err := os.ReadFile(pinFile)
+		if err != nil {
+			return nil
+		}
+		var pin map[string]any
+		if json.Unmarshal(raw, &pin) != nil {
+			return nil
+		}
+		cur, _ := pin["version"].(string)
+		if cur == "" {
+			return nil
+		}
+		cctx, cancel := context.WithTimeout(ctx, time.Minute)
+		defer cancel()
+		out, _, err := ev.runJSON(cctx, env, "bash", path, "--check")
+		var check struct {
+			Current string `json:"current"`
+			Latest  string `json:"latest"`
+		}
+		if err != nil || json.Unmarshal(out, &check) != nil || check.Current != cur || check.Latest == "" || check.Latest == cur {
+			return nil
+		}
+		pin["version"] = check.Latest
+		if b, err := json.Marshal(pin); err == nil {
+			_ = os.WriteFile(pinFile, b, 0o644)
+		}
+		return nil
+	})
 }
 
 // runJSON : comme run, dans l'environnement donné, la sortie à part des messages (avertissements,

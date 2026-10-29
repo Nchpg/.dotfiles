@@ -369,3 +369,29 @@ func TestTitleCVEs(t *testing.T) {
 		t.Errorf("CVE : %v", got)
 	}
 }
+
+// Un module épinglé (update.sh et pinned.json) : sa dernière version, sans toucher au reste ; un
+// script en échec, ou un pinned.json sans version, ne change rien.
+func TestBumpPins(t *testing.T) {
+	dir := t.TempDir()
+	write := func(path, content string) {
+		_ = os.MkdirAll(filepath.Dir(filepath.Join(dir, path)), 0o755)
+		if err := os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("modules/system/server/cloudflared/pinned.json", `{"version":"2026.10.4","hash":"h","vendorHash":"v"}`)
+	write("modules/system/server/cloudflared/update.sh", `[ "$1" = --check ] && [ -n "$MY_FLAKE" ] && echo '{"name":"cloudflared","current":"2026.10.4","latest":"2026.10.5","url":""}'`)
+	write("modules/user/broken/pinned.json", `{"version":"1.0"}`)
+	write("modules/user/broken/update.sh", `exit 1`)
+	write("modules/system/server/apps/update.sh", `echo '{"current":"x","latest":"y"}'`)
+	ev := &Evaluator{cfg: &Config{}}
+	ev.bumpPins(t.Context(), os.Environ(), dir)
+	b, _ := os.ReadFile(filepath.Join(dir, "modules/system/server/cloudflared/pinned.json"))
+	if string(b) != `{"hash":"h","vendorHash":"v","version":"2026.10.5"}` {
+		t.Errorf("cloudflared : %s", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "modules/user/broken/pinned.json")); string(b) != `{"version":"1.0"}` {
+		t.Errorf("en échec : %s", b)
+	}
+}

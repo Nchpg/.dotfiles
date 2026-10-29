@@ -323,11 +323,15 @@ in
       wantedBy = [ "multi-user.target" ];
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
-      # git (clone d'évaluation, ls-remote), nix (évaluation), systemctl (état d'apps-deploy).
+      # git (clone d'évaluation, ls-remote), nix (évaluation), systemctl (état d'apps-deploy) ;
+      # bash, curl et jq : les update.sh des modules épinglés, en mode vérification (onglet Mises à jour).
       path = [
         pkgs-stable.git
         config.nix.package
         config.systemd.package
+        pkgs-stable.bash
+        pkgs-stable.curl
+        pkgs-stable.jq
         # QR code de la config d'un nouvel appareil VPN.
         pkgs-stable.qrencode
       ];
