@@ -344,6 +344,9 @@ function mapInit() {
     };
     const perPixel = () => view.w / svg.getBoundingClientRect().width;
     frame.addEventListener("wheel", (ev) => {
+      // Dézoomée au maximum, la carte laisse défiler la page ; on zoome alors avec Ctrl + molette,
+      // le pincement, le double-clic ou le bouton +.
+      if (!ev.ctrlKey && target.w >= MAP_W - 1e-6) return;
       ev.preventDefault();
       const px = ev.deltaMode === 1 ? 33 : ev.deltaMode === 2 ? 400 : 1;
       const dy = ev.deltaY * px, dx = ev.deltaX * px;
