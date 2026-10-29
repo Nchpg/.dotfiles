@@ -32,6 +32,9 @@ type Analysis struct {
 	Basis   string    `json:"basis"` // ce qu'elle a lu
 	Model   string    `json:"model"`
 	At      time.Time `json:"at"`
+	// Faite par le modèle de secours : pourquoi (le refus du principal). Toute analyse d'un autre
+	// modèle que le principal est retentée avec lui à la vérification suivante.
+	Fallback string `json:"fallback,omitempty"`
 }
 
 type AICVE struct {
@@ -343,14 +346,31 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		return nil
 	}
 	done := s.analyses()
-	var todo []UpdateRow
+	var todo, retry []UpdateRow
 	for _, r := range rows {
 		if r.Change != "" && r.Change != "same" && r.Current != "" && r.Next != "" {
-			if _, ok := done[analysisKey(r.Name, r.Current, r.Next)]; !ok {
+			a, ok := done[analysisKey(r.Name, r.Current, r.Next)]
+			switch {
+			case !ok:
 				todo = append(todo, r)
+			case a.Model != s.cfg.AIModel:
+				// Faite par le secours (ou par un modèle qu'on a changé depuis) : retentée avec le principal.
+				retry = append(retry, r)
 			}
 		}
 	}
+	errs := s.analyzeBatches(ctx, todo, true)
+	// Faites par le secours : le principal seulement ; s'il refuse encore, on garde ce qu'on a.
+	s.analyzeBatches(ctx, retry, false)
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, " ; "))
+	}
+	return nil
+}
+
+// analyzeBatches : les analyses de ces montées de version, par lots ; `fallback` : le modèle de
+// secours si le principal refuse. Les erreurs, lot par lot.
+func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback bool) []string {
 	var errs []string
 	for start := 0; start < len(todo); start += aiBatch {
 		batch := todo[start:min(start+aiBatch, len(todo))]
@@ -367,11 +387,11 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 				p.WriteString(text)
 			}
 		}
-		model := s.cfg.AIModel
+		model, why := s.cfg.AIModel, ""
 		raw, err := s.gemini(ctx, model, p.String())
 		var q errQuota
-		if errors.As(err, &q) && s.cfg.AIFallback != "" {
-			model = s.cfg.AIFallback
+		if errors.As(err, &q) && fallback && s.cfg.AIFallback != "" {
+			model, why = s.cfg.AIFallback, q.msg
 			raw, err = s.gemini(ctx, model, p.String())
 		}
 		if err != nil {
@@ -393,14 +413,11 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 			for _, r := range batch {
 				if r.ID == a.ID {
 					add[analysisKey(r.Name, r.Current, r.Next)] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs,
-						Basis: firstOf(bases[r.ID], "rien à lire"), Model: model, At: time.Now()}
+						Basis: firstOf(bases[r.ID], "rien à lire"), Model: model, At: time.Now(), Fallback: why}
 				}
 			}
 		}
 		s.saveAnalyses(add)
 	}
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, " ; "))
-	}
-	return nil
+	return errs
 }

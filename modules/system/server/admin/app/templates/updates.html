@@ -98,6 +98,7 @@
     <p>{{.Summary}}</p>
     {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Severity}}<small class="muted">{{.}}</small>{{end}}{{end}}</p>{{end}}
     <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version font foi.</small>
+    {{with .Fallback}}<small class="warn-ink">Modèle de secours ; le principal a refusé : {{.}}. Il est retenté à la prochaine vérification.</small>{{end}}
   </div>
 </td></tr>{{end}}
 </tbody>

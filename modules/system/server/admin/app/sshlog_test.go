@@ -254,13 +254,25 @@ func TestAnalyze(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]
-	if !ok || a.Urgency != "urgent" || a.Model != "m2" || len(a.CVEs) != 1 || a.Basis != "rien à lire" {
+	if !ok || a.Urgency != "urgent" || a.Model != "m2" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || !strings.Contains(a.Fallback, "429") {
 		t.Errorf("analyse : %+v (appels %v)", a, calls)
 	}
+	// Faite par le secours : retentée avec le principal seul (qui refuse encore : on la garde).
 	n := len(calls)
 	_ = s.analyze(t.Context(), rows)
+	if len(calls) != n+1 || !strings.Contains(calls[n], "/models/m1:") || s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")].Model != "m2" {
+		t.Errorf("nouvel essai : %v", calls[n:])
+	}
+	// Le principal répond : son analyse remplace celle du secours, et plus rien n'est redemandé.
+	s.cfg.AIModel = "m3"
+	_ = s.analyze(t.Context(), rows)
+	if a := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]; a.Model != "m3" || a.Fallback != "" {
+		t.Errorf("après le principal : %+v", a)
+	}
+	n = len(calls)
+	_ = s.analyze(t.Context(), rows)
 	if len(calls) != n {
-		t.Error("une montée de version déjà analysée a été redemandée")
+		t.Error("une montée de version déjà analysée par le principal a été redemandée")
 	}
 	if o, r := repoOf("https://github.com/authelia/authelia/releases/tag/v4.39.28"); o != "authelia" || r != "authelia" {
 		t.Errorf("dépôt : %s/%s", o, r)
