@@ -270,7 +270,17 @@ in
       fallback = lib.mkOption {
         type = lib.types.str;
         default = "gemini-3.5-flash-lite";
-        description = "Modèle de secours, quand le premier a atteint son quota (ou n'existe pas).";
+        description = "Modèle de secours, quand le premier refuse (quota, surcharge, nom inconnu) ou ne répond pas à temps.";
+      };
+
+      thinking = lib.mkOption {
+        type = lib.types.str;
+        default = "low";
+        example = "high";
+        description = ''
+          Niveau de raisonnement des modèles Gemini 3 (`thinkingLevel`) ; vide : celui du modèle.
+          Court suffit pour lire des notes de version, et répond vite même sur un modèle très demandé.
+        '';
       };
     };
   };
@@ -362,6 +372,7 @@ in
         ADMIN_AI_KEY = cfg.ai.keySops;
         ADMIN_AI_MODEL = cfg.ai.model;
         ADMIN_AI_FALLBACK = cfg.ai.fallback;
+        ADMIN_AI_THINKING = cfg.ai.thinking;
         ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).

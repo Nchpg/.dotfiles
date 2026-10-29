@@ -256,6 +256,20 @@ var aiSchema = map[string]any{
 // geminiBase : l'API Gemini (remplacée dans les tests).
 var geminiBase = "https://generativelanguage.googleapis.com/v1beta"
 
+// aiTimeout : l'attente d'une réponse, au-delà le modèle de secours.
+var aiTimeout = 2 * time.Minute
+
+// generationConfig : réponse en JSON imposé, peu de fantaisie ; et un raisonnement court (`thinking`,
+// vide : celui du modèle) : lire des notes de version et classer n'en demande pas plus, et un long
+// raisonnement peut faire attendre des minutes sur un modèle gratuit très demandé.
+func generationConfig(thinking string) map[string]any {
+	c := map[string]any{"temperature": 0.2, "responseMimeType": "application/json", "responseSchema": aiSchema}
+	if thinking != "" {
+		c["thinkingConfig"] = map[string]any{"thinkingLevel": thinking}
+	}
+	return c
+}
+
 // errQuota : le modèle refuse (quota atteint, indisponible, ou inconnu) : on passe au secours.
 type errQuota struct{ msg string }
 
@@ -265,9 +279,9 @@ func (e errQuota) Error() string { return e.msg }
 func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, error) {
 	body, _ := json.Marshal(map[string]any{
 		"contents":         []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": prompt}}}},
-		"generationConfig": map[string]any{"temperature": 0.2, "responseMimeType": "application/json", "responseSchema": aiSchema},
+		"generationConfig": generationConfig(s.cfg.AIThinking),
 	})
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, aiTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		geminiBase+"/models/"+model+":generateContent", bytes.NewReader(body))
@@ -278,6 +292,10 @@ func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, erro
 	req.Header.Set("x-goog-api-key", s.cfg.GeminiKey)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		// Pas de réponse à temps (modèle surchargé, ou qui réfléchit trop longtemps) : le secours.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, errQuota{model + " : pas de réponse en " + aiTimeout.String()}
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

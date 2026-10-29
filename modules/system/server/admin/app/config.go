@@ -53,6 +53,7 @@ type Config struct {
 	AIKeyName    string    // secret sops de la clé Gemini (vide : analyse non prévue)
 	AIModel      string    // modèle d'analyse des mises à jour, et son secours
 	AIFallback   string
+	AIThinking   string       // raisonnement des modèles Gemini 3 (low, high ; vide : celui du modèle)
 	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
 	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage
 	RecopyStatus string       // résultats d'admin-recopy (root), lus seulement
@@ -94,6 +95,7 @@ func loadConfig() (*Config, error) {
 		AIKeyName:    os.Getenv("ADMIN_AI_KEY"),
 		AIModel:      os.Getenv("ADMIN_AI_MODEL"),
 		AIFallback:   os.Getenv("ADMIN_AI_FALLBACK"),
+		AIThinking:   os.Getenv("ADMIN_AI_THINKING"),
 		WGPubkeyFile: env("ADMIN_WG_PUBKEY", "/run/admin/wg-server.pub"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse

@@ -285,3 +285,34 @@ func TestAnalyze(t *testing.T) {
 		t.Error("cmpVersions")
 	}
 }
+
+// Un modèle qui ne répond pas à temps : le secours, en le disant ; et le raisonnement court demandé.
+func TestAnalyzeTimeout(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			GenerationConfig map[string]any `json:"generationConfig"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if tc, _ := body.GenerationConfig["thinkingConfig"].(map[string]any); tc["thinkingLevel"] != "low" {
+			t.Errorf("raisonnement : %v", body.GenerationConfig["thinkingConfig"])
+		}
+		if strings.Contains(r.URL.Path, "/models/slow:") {
+			time.Sleep(300 * time.Millisecond)
+			return
+		}
+		answer := `[{"id":"services.openssh","urgency":"conseille","summary":"Bugs."}]`
+		b, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": answer}}}}}})
+		_, _ = w.Write(b)
+	}))
+	defer srv.Close()
+	geminiBase, aiTimeout = srv.URL, 100*time.Millisecond
+	defer func() { aiTimeout = 2 * time.Minute }()
+	aiCache.m = nil
+	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "slow", AIFallback: "fast", AIThinking: "low", StateDir: t.TempDir()}}
+	if err := s.analyze(t.Context(), []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}}); err != nil {
+		t.Fatal(err)
+	}
+	if a := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]; a.Model != "fast" || !strings.Contains(a.Fallback, "slow : pas de réponse") {
+		t.Errorf("%+v", a)
+	}
+}
