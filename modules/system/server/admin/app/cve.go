@@ -353,3 +353,14 @@ func (c AICVE) StatusLabel() string {
 	}
 	return ""
 }
+
+// ShownCVEs : les CVE qui concernent encore ce serveur (pas celles déjà corrigées en service).
+func (a Analysis) ShownCVEs() []AICVE {
+	var out []AICVE
+	for _, c := range a.CVEs {
+		if c.Status != "service" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
