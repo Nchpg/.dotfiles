@@ -65,7 +65,7 @@
             {{- with .Compare}}<a class="mini-btn" href="{{.}}" title="Les commits sur GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg>Comparer</a>{{end -}}
           </span></td>
         </tr>
-        {{with .AI}}{{template "ai-row" .}}{{end}}
+        {{with .AI}}<tr class="ai-row" hidden><td colspan="7">{{template "ai-box" .}}</td></tr>{{end}}
         </tbody>
         {{end}}
       </table>
@@ -122,14 +122,16 @@
     {{- else if .Homepage}}<a class="mini-btn quiet" href="{{.Homepage}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>Site</a>{{end -}}
   </span></td>
 </tr>
-{{with .AI}}{{template "ai-row" .}}{{end}}
+{{with .AI}}<tr class="ai-row" hidden><td colspan="8">{{template "ai-box" .}}</td></tr>{{end}}
 </tbody>
 {{end}}
 
 {{define "ai-btn"}}<button type="button" class="mini-btn" data-toggle-next aria-expanded="false">Analyse<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>{{end}}
 
 {{/* L'analyse par l'IA, dépliée par le bouton Analyse. */}}
-{{define "ai-row"}}<tr class="ai-row" hidden><td colspan="99">
+{{/* Le colspan de la ligne est exact (7 pour Sources, 8 pour Versions) : plus large, un tableau à
+   disposition fixe crée les colonnes manquantes et redistribue toutes les largeurs. */}}
+{{define "ai-box"}}
   <div class="ai-box urg-box-{{.Urgency}}">
     <p>{{.Summary}}</p>
     {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<span class="ai-cve"><a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Pkg}} <small class="mono">{{.}}</small>{{end}}{{if .Score}} <small class="cve-score cve-{{.Level}}">{{printf "%.1f" .Score}} {{.Level}}</small> <small class="muted">{{if .Network}}réseau{{else}}local{{end}}</small>{{else}}{{with .Severity}} <small class="muted">{{.}}, pas encore notée</small>{{else}} <small class="muted">pas encore notée</small>{{end}}{{end}}{{if .KEV}} <small class="cve-kev">exploitée</small>{{end}}{{if .Status}} <small class="cve-status st-{{.Status}}">{{.StatusLabel}}</small>{{end}}</span>{{end}}</p>{{end}}
@@ -137,4 +139,4 @@
     <small class="muted">Niveau : {{if .CVEs}}d'après la note des CVE (NVD, avis GitHub) et le catalogue des failles exploitées (CISA KEV){{else}}aucune CVE, bugs corrigés au plus « conseillé »{{end}}{{if ne .ModelUrgency .Urgency}} ; l'IA disait « {{.ModelUrgencyLabel}} »{{end}}.</small>
     <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version et les commits font foi.</small>
   </div>
-</td></tr>{{end}}
+{{end}}
