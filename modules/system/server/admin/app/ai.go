@@ -449,7 +449,7 @@ Paquets de ce serveur qui viennent de cette entrée : %s. Les autres paquets du 
 - "conseille" : une faille mineure, ou des bugs gênants, corrigés dans ce que ce serveur utilise depuis cette entrée ;
 - "sans" : rien d'important pour ce serveur.
 "breaking" : true seulement si un commit annonce un changement cassant pour la config de ce serveur (option renommée ou retirée, comportement par défaut changé, migration à faire à la main) dans un module ou un paquet qu'il utilise.
-"summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : les CVE (ou GHSA) citées dans les titres, avec leur gravité si elle est dite. N'invente rien. Réponds avec un seul élément, d'"id" %q.
+"summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : toutes les CVE (ou GHSA) citées dans ces titres (ils sont déjà triés : chacune touche le serveur), avec leur gravité si elle est dite ; et le résumé les mentionne toutes, par paquet. N'invente rien. Réponds avec un seul élément, d'"id" %q.
 
 Commits :
 `
@@ -584,7 +584,7 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 				mine = append(mine, r.Name+" "+r.Current)
 			}
 		}
-		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), len(all), firstOf(strings.Join(mine, ", "), "aucun (module ou outil)"), in.Name) +
+		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), len(all), firstOf(strings.Join(mine, ", "), "aucun service suivi à part, mais ce qu'elle fournit (outil, module) est bien installé sur ce serveur"), in.Name) +
 			strings.Join(titles, "\n")
 		raw, err := s.gemini(ctx, prompt)
 		if err != nil {
@@ -607,7 +607,7 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 }
 
 // aiInputVersion : la façon de lire une entrée du flake ; la changer refait ces analyses une fois.
-const aiInputVersion = 3
+const aiInputVersion = 4
 
 // inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
 func inputKey(name string) string { return fmt.Sprintf("input.%s@%d", name, aiInputVersion) }
