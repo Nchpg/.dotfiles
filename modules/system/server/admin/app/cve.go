@@ -436,11 +436,14 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 		counted = append(counted, c)
 		info, ok := infos[id]
 		serious := urgencyRank[cveUrgency(c, info, ok)] >= urgencyRank["conseille"]
-		if c.Status == "channel" && serious {
-			row.Stuck = true
-		}
-		if c.Status == "other" && serious {
-			row.OtherBranch = true
+		if (c.Status == "channel" || c.Status == "other") && serious {
+			row.Stuck, row.OtherBranch = row.Stuck || c.Status == "channel", row.OtherBranch || c.Status == "other"
+			// La version qui la corrige, la plus proche au-delà du canal.
+			for _, v := range vs {
+				if cmpVersions(v, row.Next) > 0 && (row.FixIn == "" || cmpVersions(v, row.FixIn) < 0) {
+					row.FixIn = v
+				}
+			}
 		}
 	}
 	a.CVEs = cves

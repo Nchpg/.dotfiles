@@ -41,10 +41,11 @@ type Analysis struct {
 	Fixed []string `json:"fixed,omitempty"`
 	// Depth : les numéros qui nomment une branche du projet, à l'analyse (classifyRow).
 	Depth int `json:"depth,omitempty"`
-	// StuckSource, StuckIn : une faille n'est corrigée qu'au-delà du canal (lequel, en quelle version).
-	StuckSource, StuckIn string    `json:"-"`
-	Model                string    `json:"model"`
-	At                   time.Time `json:"at"`
+	// StuckSource, StuckIn, StuckUnstable : une faille n'est corrigée qu'au-delà du canal (lequel, en
+	// quelle version) ; la version de nixpkgs-unstable si elle la corrige.
+	StuckSource, StuckIn, StuckUnstable string    `json:"-"`
+	Model                               string    `json:"model"`
+	At                                  time.Time `json:"at"`
 }
 
 type AICVE struct {
@@ -318,10 +319,8 @@ func major(v string) int {
 	return -1
 }
 
-// latestVersions : pour chaque paquet, la version la plus récente publiée dans sa branche (celle de
-// la version d'après update : un projet y corrige ses failles, PostgreSQL 17 comme nginx 1.30) parmi
-// endoflife.date, ses releases GitHub et nixpkgs-unstable ; et une branche plus récente, à part
-// (en changer se choisit dans la config).
+// latestVersions : pour chaque paquet, la version la plus récente publiée, toutes branches
+// confondues (endoflife.date, releases GitHub, nixpkgs-unstable) : celle jusqu'où l'analyse lit.
 func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[string]LatestInfo {
 	out := map[string]LatestInfo{}
 	for _, r := range rows {
@@ -332,46 +331,28 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src, r.EOL.Repo); owner != "" {
 			rels, _ = s.projectReleases(ctx, owner, repo, r.Current, r.Next)
 		}
-		// La branche : celle d'endoflife.date, sinon d'après les dates des releases.
-		depth := r.EOL.Depth
-		if depth == 0 {
-			depth = branchDepth(rels)
-		}
-		l := pickLatest(firstOf(r.Next, r.Current), r.Unstable, rels, r.EOL.Latest, depth)
-		if l.Version != "" || l.NewMajor != "" {
+		if l := pickLatest(r.Unstable, rels, r.EOL.Latest); l.Version != "" {
 			out[r.Name] = l
 		}
 	}
 	return out
 }
 
-// pickLatest : parmi la version de nixpkgs-unstable, les releases (hors préversions) et la dernière
-// de chaque branche (endoflife.date), la plus
-// récente de la série de `current` (la version d'après update : celle qu'on aura), et une version
-// majeure plus récente.
-func pickLatest(current, unstable string, rels []Release, branches []Candidate, depth int) LatestInfo {
-	type cand struct{ v, url string }
-	var cands []cand
-	if unstable != "" {
-		cands = append(cands, cand{unstable, ""})
-	}
-	for _, b := range branches {
-		cands = append(cands, cand{b.Version, b.URL})
-	}
+// pickLatest : la plus récente parmi la version de nixpkgs-unstable, les releases du projet et la
+// dernière de chaque branche (endoflife.date) ; avec sa page quand une source en donne une.
+func pickLatest(unstable string, rels []Release, branches []Candidate) LatestInfo {
+	cands := []Candidate{{unstable, ""}}
+	cands = append(cands, branches...)
 	for _, rel := range rels {
-		cands = append(cands, cand{tagVersion(rel.Tag), rel.URL})
+		cands = append(cands, Candidate{tagVersion(rel.Tag), rel.URL})
 	}
 	var l LatestInfo
 	for _, c := range cands {
-		switch {
-		case sameBranch(c.v, current, depth):
-			if l.Version == "" || cmpVersions(c.v, l.Version) > 0 || (cmpVersions(c.v, l.Version) == 0 && l.URL == "") {
-				l.Version, l.URL = c.v, c.url
-			}
-		case cmpVersions(c.v, current) > 0:
-			if l.NewMajor == "" || cmpVersions(c.v, l.NewMajor) > 0 {
-				l.NewMajor = c.v
-			}
+		if c.Version == "" {
+			continue
+		}
+		if l.Version == "" || cmpVersions(c.Version, l.Version) > 0 || (cmpVersions(c.Version, l.Version) == 0 && l.URL == "") {
+			l.Version, l.URL = c.Version, c.URL
 		}
 	}
 	return l

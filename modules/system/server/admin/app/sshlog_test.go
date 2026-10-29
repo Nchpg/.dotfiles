@@ -456,17 +456,34 @@ func TestRateUrgency(t *testing.T) {
 	}
 }
 
-// La dernière version : la plus récente de la même série (release ou unstable), une majeure à part.
+// La plus récente publiée : toutes sources et toutes branches, avec sa page quand une source la donne.
 func TestPickLatest(t *testing.T) {
 	rels := []Release{{Tag: "v6.1.4", URL: "u614"}, {Tag: "v5.8.10", URL: "u5810"}, {Tag: "v5.9.0-rc1", URL: "rc", Prerelease: true}, {Tag: "v5.8.9", URL: "u589"}}
-	if l := pickLatest("5.8.8", "5.8.9", filterReleases(rels, "5.8.8"), nil, 1); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
+	if l := pickLatest("5.8.9", filterReleases(rels, "5.8.8"), nil); l.Version != "6.1.4" || l.URL != "u614" {
 		t.Errorf("podman : %+v", l)
 	}
-	if l := pickLatest("17.11", "18.6", nil, nil, 1); l.Version != "" || l.NewMajor != "18.6" {
-		t.Errorf("postgresql : %+v", l)
+	if l := pickLatest("3.15.0", nil, []Candidate{{"3.15.1", "p"}, {"3.5.12", ""}}); l.Version != "3.15.1" || l.URL != "p" {
+		t.Errorf("prometheus : %+v", l)
 	}
-	if l := pickLatest("7.3", "6.18.58", nil, []Candidate{{"7.3.4", "k"}, {"7.2.13", ""}}, 2); l.Version != "7.3.4" || l.URL != "k" || l.NewMajor != "" {
-		t.Errorf("noyau : %+v", l)
+	if l := pickLatest("", nil, nil); l.Version != "" {
+		t.Errorf("rien : %+v", l)
+	}
+}
+
+// La colonne Plus récente : ce que Nix donne de mieux (canal ou unstable), puis le projet s'il va
+// plus loin.
+func TestNixLatest(t *testing.T) {
+	prom := UpdateRow{Current: "3.12.0", Next: "3.12.0", Unstable: "3.15.0", Latest: "3.15.1"}
+	if prom.NixLatest() != "3.15.0" || !prom.FromUnstable() || !prom.ProjectAhead() || prom.Upper() != "3.15.1" {
+		t.Errorf("prometheus : %s %v %v %s", prom.NixLatest(), prom.FromUnstable(), prom.ProjectAhead(), prom.Upper())
+	}
+	nix := UpdateRow{Current: "2.34.9", Next: "2.34.9", Unstable: "2.34.9", Latest: "2.35.4"}
+	if nix.NixLatest() != "2.34.9" || nix.FromUnstable() || !nix.ProjectAhead() {
+		t.Errorf("nix : %+v", nix)
+	}
+	cloudflared := UpdateRow{Current: "2026.10.4", Next: "2026.10.6", Unstable: "2026.10.1", Latest: "2026.10.6"}
+	if cloudflared.NixLatest() != "2026.10.6" || cloudflared.FromUnstable() || cloudflared.ProjectAhead() || cloudflared.Behind() {
+		t.Errorf("cloudflared : %+v", cloudflared)
 	}
 }
 
@@ -572,14 +589,6 @@ func TestEOLProduct(t *testing.T) {
 	}
 	if p.cycleOf("7.30.1") != nil || p.repo() != "https://github.com/nginx/nginx" {
 		t.Errorf("7.30.1, dépôt %s", p.repo())
-	}
-}
-
-// Avec des branches au deuxième numéro : la dernière de la branche ; une plus récente à part.
-func TestPickLatestBranch(t *testing.T) {
-	b := []Candidate{{"1.31.8", "m"}, {"1.30.7", "s"}, {"1.28.3", ""}}
-	if l := pickLatest("1.30.6", "", nil, b, 2); l.Version != "1.30.7" || l.URL != "s" || l.NewMajor != "1.31.8" {
-		t.Errorf("nginx : %+v", l)
 	}
 }
 

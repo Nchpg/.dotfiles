@@ -398,14 +398,15 @@ type UpdateRow struct {
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
 	AI                  *Analysis
-	// La plus récente publiée dans la branche (endoflife.date, release GitHub, nixpkgs-unstable), son
-	// lien, et la dernière d'une branche plus récente s'il y en a une (NewMajor).
-	Latest, LatestURL, NewMajor string
-	Unstable                    string
-	Patches, NextPatches        []string // CVE patchées par nixpkgs : en service, après update
-	Stuck                       bool     // une faille n'est corrigée qu'au-delà du canal
-	EOL                         EOLInfo  // ses branches (endoflife.date)
-	OtherBranch                 bool     // une faille n'est corrigée que dans une autre branche
+	// La plus récente publiée par le projet, toutes branches (endoflife.date, release GitHub,
+	// nixpkgs-unstable), et sa page.
+	Latest, LatestURL    string
+	Unstable             string
+	Patches, NextPatches []string // CVE patchées par nixpkgs : en service, après update
+	Stuck                bool     // une faille n'est corrigée qu'au-delà du canal
+	EOL                  EOLInfo  // ses branches (endoflife.date)
+	OtherBranch          bool     // une faille n'est corrigée que dans une autre branche
+	FixIn                string   // la version qui corrige une faille au-delà du canal
 }
 
 // EOLAlert : la branche n'est plus maintenue en amont et une faille connue n'y est pas corrigée
@@ -413,6 +414,22 @@ type UpdateRow struct {
 // n'est qu'une mention : nixpkgs-stable garde une version pour toute sa durée et rapporte lui-même
 // les correctifs de sécurité (des patches, que la page reconnaît).
 func (r UpdateRow) EOLAlert() bool { return r.EOL.Ended && r.OtherBranch }
+
+// NixLatest : la plus récente que Nix donne : après update (le canal du paquet), ou nixpkgs-unstable.
+func (r UpdateRow) NixLatest() string {
+	if v := firstOf(r.Next, r.Current); r.Unstable == "" || cmpVersions(v, r.Unstable) >= 0 {
+		return v
+	}
+	return r.Unstable
+}
+
+// FromUnstable : la plus récente de Nix vient d'unstable (le paquet est pris ailleurs).
+func (r UpdateRow) FromUnstable() bool { return r.NixLatest() != firstOf(r.Next, r.Current) }
+
+// ProjectAhead : le projet a publié plus récent que tout ce que Nix donne.
+func (r UpdateRow) ProjectAhead() bool {
+	return r.Latest != "" && cmpVersions(r.Latest, r.NixLatest()) > 0
+}
 
 // Upper : la version la plus récente connue (la dernière publiée si elle dépasse le canal).
 func (r UpdateRow) Upper() string {
@@ -428,7 +445,7 @@ func (r UpdateRow) Behind() bool {
 }
 
 // aiPackageVersion : la façon de lire un paquet ; la changer refait ces analyses une fois.
-const aiPackageVersion = 6
+const aiPackageVersion = 7
 
 // analysisKey : la clé de l'analyse de ce paquet (de la version en service à la plus récente).
 func (r UpdateRow) analysisKey() string {
@@ -437,16 +454,15 @@ func (r UpdateRow) analysisKey() string {
 
 // LatestInfo : la version la plus récente d'un paquet dans sa série.
 type LatestInfo struct {
-	Version  string `json:"version"`
-	URL      string `json:"url"`
-	NewMajor string `json:"newMajor"`
+	Version string `json:"version"`
+	URL     string `json:"url"`
 }
 
 // applyLatest : la dernière version trouvée à la vérification, sur chaque ligne.
 func applyLatest(rows []UpdateRow, latest map[string]LatestInfo) {
 	for i := range rows {
 		if l, ok := latest[rows[i].Name]; ok {
-			rows[i].Latest, rows[i].LatestURL, rows[i].NewMajor = l.Version, l.URL, l.NewMajor
+			rows[i].Latest, rows[i].LatestURL = l.Version, l.URL
 		}
 	}
 }
@@ -667,8 +683,11 @@ func (s *Server) withAnalyses(rows []UpdateRow, inputs []InputRow, res updatesRe
 	for i := range rows {
 		if a, ok := analyses[rows[i].analysisKey()]; ok && rows[i].Upper() != rows[i].Current {
 			a = classifyRow(&rows[i], a, backports[rows[i].Source], infos)
-			if rows[i].Stuck {
-				a.StuckSource, a.StuckIn = rows[i].Source, rows[i].Latest
+			if r := rows[i]; r.Stuck || r.OtherBranch {
+				a.StuckSource, a.StuckIn = r.Source, firstOf(r.FixIn, r.Latest)
+				if r.Unstable != "" && cmpVersions(r.Unstable, a.StuckIn) >= 0 {
+					a.StuckUnstable = r.Unstable
+				}
 			}
 			rows[i].AI = &a
 		}
@@ -735,7 +754,11 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 				fmt.Fprintf(&b, "  ⚠️ branche %s plus maintenue%s, et une faille n'est corrigée que dans une plus récente\n", row.EOL.Cycle, map[bool]string{true: " depuis le " + row.EOL.Since, false: ""}[row.EOL.Since != ""])
 			}
 			if row.Stuck {
-				fmt.Fprintf(&b, "  ⚠️ faille corrigée seulement en %s, pas dans le canal %s : prendre le paquet dans unstable, ou attendre\n", row.Latest, row.Source)
+				what := "pas encore dans nixpkgs : attendre"
+				if row.AI != nil && row.AI.StuckUnstable != "" {
+					what = "nixpkgs-unstable l'a (" + row.AI.StuckUnstable + ") : prendre le paquet dans unstable"
+				}
+				fmt.Fprintf(&b, "  ⚠️ faille corrigée seulement en %s, pas dans le canal %s ; %s\n", firstOf(row.FixIn, row.Latest), row.Source, what)
 			}
 			if row.AI != nil && row.AI.Urgency == "urgent" {
 				fmt.Fprintf(&b, "  %s\n", row.AI.Summary)
