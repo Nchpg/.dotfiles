@@ -334,20 +334,23 @@ func TestAnalyzeInputs(t *testing.T) {
 	cfg := &Config{GeminiKey: "k", AIModel: "m", StateDir: t.TempDir()}
 	gh := &GitHub{cfg: cfg, cache: map[string]cacheItem{
 		"titles:Mic92/sops-nix:aaa...bbb": {time.Now(), []string{"sops-install-secrets: rename option", "fix typo", "fix typo (#12)",
-			"libsidplayfp: fix CVE-2026-1", "openssh: 10.5p1 -> 10.6p1", "linux_7_3: 7.3.1 -> 7.3.2", "nixos/openssh: new default", "nixos/tests/openssh: x", "nixos/varnish: drop", "openssl_3_6, curl: CVE fixes", "ci: bump"}}}}
+			"libsidplayfp: fix CVE-2026-1", "openssh: 10.5p1 -> 10.6p1", "linux_7_3: 7.3.1 -> 7.3.2", "nixos/openssh: new default", "nixos/tests/openssh: x", "nixos/varnish: drop", "openssl_3_6, curl: CVE fixes", "ci: bump",
+			"[Backport release-26.05] glibc: patch CVE-2026-2", "[Backport release-26.05] openssh: 10.5p1 -> 10.6p1 (#5)", "chore: update claude-code to 2.1.312", "docs(readme): typo"}}}}
 	closureNames = func(context.Context) (map[string]bool, error) {
-		return map[string]bool{"sops-install-secrets": true, "openssh": true, "linux": true, "openssl": true, "curl": true}, nil
+		return map[string]bool{"sops-install-secrets": true, "openssh": true, "linux": true, "openssl": true, "curl": true, "glibc": true}, nil
 	}
 	s := &Server{cfg: cfg, gh: gh}
 	inputs := []InputRow{{Name: "sops-nix", Owner: "Mic92", Repo: "sops-nix", ServiceRev: "aaa", MainRev: "aaa", NextRev: "bbb"},
 		{Name: "stylix", Owner: "nix-community", Repo: "stylix", ServiceRev: "ccc", MainRev: "ccc", NextRev: "ccc"}}
-	rows := []UpdateRow{{Name: "openssh", Current: "10.5p1"}, {Name: "linux", Current: "7.3.1"}}
+	// openssh et linux changent de version (analysés à part) ; glibc est corrigé à version égale.
+	rows := []UpdateRow{{Name: "openssh", Current: "10.5p1", Change: "minor"}, {Name: "linux", Current: "7.3.1", Change: "patch"},
+		{Name: "glibc", Current: "2.42", Change: "same"}}
 	if err := s.analyzeInputs(t.Context(), inputs, rows); err != nil {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[inputs[0].analysisKey()]
-	if !ok || !a.Breaking || a.Urgency != "conseille" || a.Basis != "4 titres de commits sur 11" || len(prompts) != 1 ||
-		!strings.HasSuffix(prompts[0], "sops-install-secrets: rename option\nfix typo\nnixos/openssh: new default\nopenssl_3_6, curl: CVE fixes") {
+	if !ok || !a.Breaking || a.Urgency != "conseille" || a.Basis != "6 titres de commits sur 15" || len(prompts) != 1 ||
+		!strings.HasSuffix(prompts[0], "sops-install-secrets: rename option\nfix typo\nnixos/openssh: new default\nopenssl_3_6, curl: CVE fixes\nglibc: patch CVE-2026-2\nchore: update claude-code to 2.1.312") {
 		t.Errorf("analyse : %+v, prompts %q", a, prompts)
 	}
 	_ = s.analyzeInputs(t.Context(), inputs, rows)

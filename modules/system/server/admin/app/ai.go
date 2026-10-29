@@ -442,7 +442,7 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 	return nil
 }
 
-const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une entrée de son flake, %s (dépôt GitHub %s/%s), avancerait de la révision A à la révision B ; plus bas, le titre des commits entre les deux. Ils sont déjà triés : seuls restent ceux qui touchent un paquet présent sur ce serveur, un module NixOS, ou rien de précis (%d gardés sur %d). Les paquets qui ont leur propre analyse (avec leurs notes de version) en sont retirés : n'en parle pas.
+const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une entrée de son flake, %s (dépôt GitHub %s/%s), avancerait de la révision A à la révision B ; plus bas, le titre des commits entre les deux. Ils sont déjà triés : seuls restent ceux qui touchent un paquet présent sur ce serveur, un module NixOS, ou rien de précis (%d gardés sur %d). Les paquets dont la version change ont leur propre analyse (avec leurs notes de version) et en sont retirés : n'en parle pas.
 Paquets de ce serveur qui viennent de cette entrée : %s. Les autres paquets du serveur viennent d'une autre entrée : un commit d'ici qui les touche ne compte pas, sauf une bibliothèque dont dépendent ceux de cette entrée.
 À partir UNIQUEMENT de ces titres, dis si la mise à jour est urgente :
 - "urgent" : un commit corrige une faille de sécurité sérieuse (CVE de gravité haute ou critique, exécution de code, contournement d'authentification, fuite de données) dans un paquet que ce serveur utilise depuis cette entrée ;
@@ -476,23 +476,34 @@ var reNameVersion = regexp.MustCompile(`-[0-9].*$`)
 
 var (
 	rePRSuffix   = regexp.MustCompile(` \(#\d+\)$`)
-	reAttrSuffix = regexp.MustCompile(`_[0-9].*$`) // linux_7_3, openssl_3_6…
+	reBackport   = regexp.MustCompile(`^(\[[^\]]*\]\s*)+`) // « [Backport release-26.05] », « [26.05] »
+	reAttrSuffix = regexp.MustCompile(`_[0-9].*$`)         // linux_7_3, openssl_3_6…
+	// Les types des Conventional Commits : « chore: update claude-code to 2.1.312 » n'a pas de
+	// paquet en tête ; ci, docs, test et style ne changent rien de ce qui tourne.
+	reCommitType = regexp.MustCompile(`^(feat|fix|chore|refactor|perf|build|revert|security|ci|docs|test|style)(\(.*\))?!?$`)
+	reNoOpType   = regexp.MustCompile(`^(ci|docs|test|style)\b`)
 )
 
 // relevantTitles : les titres qui comptent pour ce serveur, sans doublon (nixpkgs a souvent le
 // même avec et sans « (#PR) ») : ceux sans paquet précis, ceux du module NixOS d'un paquet du serveur
 // (changements cassants), et ceux d'un paquet présent sur le serveur, sauf ceux des paquets analysés
-// à part (`own`, leur ligne dans Versions).
+// à part (`own` : ceux dont la version change, avec leurs notes de version).
 func relevantTitles(titles []string, closure, own map[string]bool) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, t := range titles {
-		t = strings.TrimSpace(rePRSuffix.ReplaceAllString(strings.TrimSpace(t), ""))
+		t = strings.TrimSpace(rePRSuffix.ReplaceAllString(reBackport.ReplaceAllString(strings.TrimSpace(t), ""), ""))
 		if seen[t] {
 			continue
 		}
 		seen[t] = true
 		pre, _, found := strings.Cut(t, ": ")
+		if found && reCommitType.MatchString(pre) {
+			if !reNoOpType.MatchString(pre) {
+				out = append(out, t)
+			}
+			continue
+		}
 		keep := !found || strings.ContainsAny(strings.TrimSpace(strings.ReplaceAll(pre, ", ", ",")), " \"")
 		for _, tok := range strings.Split(pre, ",") {
 			if keep {
@@ -531,9 +542,13 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 	if s.cfg.GeminiKey == "" {
 		return nil
 	}
+	// Un paquet dont la version change a sa propre analyse ; pas un paquet corrigé par un patch, à
+	// version égale (fréquent sur une branche stable) : ses titres restent ici.
 	own := map[string]bool{}
 	for _, r := range rows {
-		own[strings.ToLower(r.Name)] = true
+		if r.Change != "" && r.Change != "same" {
+			own[strings.ToLower(r.Name)] = true
+		}
 	}
 	done := s.analyses()
 	var closure map[string]bool
@@ -592,7 +607,7 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 }
 
 // aiInputVersion : la façon de lire une entrée du flake ; la changer refait ces analyses une fois.
-const aiInputVersion = 2
+const aiInputVersion = 3
 
 // inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
 func inputKey(name string) string { return fmt.Sprintf("input.%s@%d", name, aiInputVersion) }
