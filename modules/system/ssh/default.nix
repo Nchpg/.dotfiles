@@ -3,6 +3,7 @@
   lib,
   myLib,
   pkgs-stable,
+  pkgs-unstable,
   ...
 }:
 
@@ -70,59 +71,64 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable (
-    lib.mkMerge [
-      (lib.mkIf cfg.openFirewall (myLib.server.mkInternalPorts config { tcp = [ cfg.port ]; }))
+  config = lib.mkMerge [
+    # Client, et sshd par défaut (services.openssh.package suit programs.ssh.package).
+    { programs.ssh.package = pkgs-unstable.openssh; }
 
-      # Relu par `rebuild` avant d'activer (le dashboard l'écrit).
-      (lib.mkIf (cfg.keysFile != null) {
-        systemSettings.accessReview.files.ssh-keys = {
-          source = cfg.keysFile;
-          kind = "ssh";
-        };
-      })
+    (lib.mkIf cfg.enable (
+      lib.mkMerge [
+        (lib.mkIf cfg.openFirewall (myLib.server.mkInternalPorts config { tcp = [ cfg.port ]; }))
 
-      {
-        assertions = [
-          {
-            assertion = lib.all (n: lib.elem n userNames) (lib.attrNames fileKeys);
-            message = "systemSettings.ssh.keysFile : compte(s) inconnu(s) ${toString (lib.subtractLists userNames (lib.attrNames fileKeys))}.";
-          }
-          {
-            assertion = lib.all (k: builtins.match rePubKey k != null) (
-              lib.concatLists (lib.attrValues fileKeys)
-            );
-            message = "systemSettings.ssh.keysFile : clé(s) publique(s) mal formée(s).";
-          }
-          {
-            # Sinon plus personne ne pourrait ouvrir de session.
-            assertion = cfg.passwordAuthentication || keyedUsers != [ ];
-            message = "systemSettings.ssh : aucun utilisateur n'a de sshKeys et passwordAuthentication est faux — plus personne ne pourrait ouvrir de session SSH. Renseigne systemSettings.users.*.sshKeys ou keysFile.";
-          }
-        ];
-
-        services.openssh = {
-          enable = true;
-          ports = [ cfg.port ];
-          openFirewall = false;
-
-          settings = {
-            PasswordAuthentication = cfg.passwordAuthentication;
-            # L'autre porte vers PAM.
-            KbdInteractiveAuthentication = cfg.passwordAuthentication;
-            PermitRootLogin = "no";
-            # COLORTERM ne traverse pas SSH : sans lui les TUI retombent en 256 couleurs.
-            SetEnv = "COLORTERM=truecolor";
+        # Relu par `rebuild` avant d'activer (le dashboard l'écrit).
+        (lib.mkIf (cfg.keysFile != null) {
+          systemSettings.accessReview.files.ssh-keys = {
+            source = cfg.keysFile;
+            kind = "ssh";
           };
-        };
-      }
+        })
 
-      (lib.mkIf cfg.waypipe {
-        environment.systemPackages = with pkgs-stable; [
-          waypipe
-          wl-clipboard
-        ];
-      })
-    ]
-  );
+        {
+          assertions = [
+            {
+              assertion = lib.all (n: lib.elem n userNames) (lib.attrNames fileKeys);
+              message = "systemSettings.ssh.keysFile : compte(s) inconnu(s) ${toString (lib.subtractLists userNames (lib.attrNames fileKeys))}.";
+            }
+            {
+              assertion = lib.all (k: builtins.match rePubKey k != null) (
+                lib.concatLists (lib.attrValues fileKeys)
+              );
+              message = "systemSettings.ssh.keysFile : clé(s) publique(s) mal formée(s).";
+            }
+            {
+              # Sinon plus personne ne pourrait ouvrir de session.
+              assertion = cfg.passwordAuthentication || keyedUsers != [ ];
+              message = "systemSettings.ssh : aucun utilisateur n'a de sshKeys et passwordAuthentication est faux — plus personne ne pourrait ouvrir de session SSH. Renseigne systemSettings.users.*.sshKeys ou keysFile.";
+            }
+          ];
+
+          services.openssh = {
+            enable = true;
+            ports = [ cfg.port ];
+            openFirewall = false;
+
+            settings = {
+              PasswordAuthentication = cfg.passwordAuthentication;
+              # L'autre porte vers PAM.
+              KbdInteractiveAuthentication = cfg.passwordAuthentication;
+              PermitRootLogin = "no";
+              # COLORTERM ne traverse pas SSH : sans lui les TUI retombent en 256 couleurs.
+              SetEnv = "COLORTERM=truecolor";
+            };
+          };
+        }
+
+        (lib.mkIf cfg.waypipe {
+          environment.systemPackages = with pkgs-stable; [
+            waypipe
+            wl-clipboard
+          ];
+        })
+      ]
+    ))
+  ];
 }
