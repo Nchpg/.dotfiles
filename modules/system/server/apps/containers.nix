@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs-unstable,
   ...
 }:
 
@@ -250,6 +251,10 @@ in
 
     # Explicite : le défaut amont dépend de system.stateVersion.
     virtualisation.oci-containers.backend = "podman";
+
+    # Unstable : la série de la version stable prend du retard (correctifs, version majeure). Le
+    # paquet embarque ses outils réseau (netavark, aardvark-dns) de la même version.
+    virtualisation.podman.package = pkgs-unstable.podman;
 
     virtualisation.oci-containers.containers = lib.listToAttrs (
       map (
