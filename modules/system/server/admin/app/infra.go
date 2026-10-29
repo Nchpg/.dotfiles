@@ -687,25 +687,74 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
-	accepted := 0
-	for _, x := range act.Accepts {
-		x.Device, x.Last = devices[x.IP], ago(time.Since(x.last))
-		x.Key = "hors liste"
-		for _, row := range rows {
-			if row.Fingerprint == x.Fingerprint && !row.Unknown {
-				x.Key = firstOf(row.Comment, row.Type)
-			}
-		}
-		accepted += x.Count
-	}
 	refused := 0
 	for _, x := range act.Refusals {
 		x.Device, x.Last = devices[x.IP], ago(time.Since(x.last))
 		refused += x.Count
 	}
 	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r),
-		"Sessions": len(act.Sessions), "Open": open, "Accepts": act.Accepts, "Accepted": accepted, "Refusals": act.Refusals, "Refused": refused, "LogsOK": act.LogsOK,
+		"Sessions": len(act.Sessions), "Open": open, "Logins": s.sshLogins(r.Context(), sshLoginStep), "Accepted": len(act.Logins), "Refusals": act.Refusals, "Refused": refused, "LogsOK": act.LogsOK,
 		"Truncated": act.Truncated, "Window": windowLabel(s.cfg.LogsWindow)})
+}
+
+// SSHLogin : une connexion acceptée, lisiblement.
+type SSHLogin struct {
+	Time, Device, IP, User, Key string
+	Unknown                     bool // clé qui n'est plus autorisée
+	Open                        bool // sa session est encore ouverte
+}
+
+type SSHLoginDay struct {
+	Label string
+	Items []SSHLogin
+}
+
+// SSHLogins : les `N` dernières connexions acceptées, par jour ; `More` s'il en reste.
+type SSHLogins struct {
+	Days    []SSHLoginDay
+	N, Next int
+	More    bool
+	Window  string
+}
+
+const sshLoginStep = 10
+
+// sshLogins : les `n` dernières connexions acceptées (journal de sshd), comme l'historique des sites.
+func (s *Server) sshLogins(ctx context.Context, n int) SSHLogins {
+	n = max(n, sshLoginStep)
+	act := s.sshActivityOf()
+	devices := s.vpnDevices(ctx)
+	keys := map[string]string{}
+	for _, u := range s.cfg.SSH.Users {
+		for _, k := range u.Keys {
+			row := sshKeyRow(u.Name, k)
+			keys[row.Fingerprint] = firstOf(row.Comment, row.Type)
+		}
+	}
+	out := SSHLogins{N: n, Next: n + sshLoginStep, More: len(act.Logins) > n, Window: windowLabel(s.cfg.LogsWindow)}
+	for _, e := range act.Logins[:min(n, len(act.Logins))] {
+		at := e.At.Local()
+		label := frenchDay(at)
+		if len(out.Days) == 0 || out.Days[len(out.Days)-1].Label != label {
+			out.Days = append(out.Days, SSHLoginDay{Label: label})
+		}
+		key, known := keys[e.Fingerprint]
+		it := SSHLogin{Time: at.Format("15:04"), Device: devices[e.IP], IP: e.IP, User: e.User, Key: key, Unknown: !known}
+		for _, se := range act.Sessions {
+			if se.Fingerprint == e.Fingerprint && se.IP == e.IP && !se.Since.IsZero() && se.Since.Sub(e.At).Abs() < 5*time.Second {
+				it.Open = true
+			}
+		}
+		d := &out.Days[len(out.Days)-1]
+		d.Items = append(d.Items, it)
+	}
+	return out
+}
+
+// sshLoginsMore : « Voir plus » des connexions acceptées.
+func (s *Server) sshLoginsMore(w http.ResponseWriter, r *http.Request) {
+	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+	s.render(w, "ssh-logins", s.sshLogins(r.Context(), n))
 }
 
 // windowLabel : la fenêtre des journaux, lisible (« 30 j »).

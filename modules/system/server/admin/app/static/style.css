@@ -723,3 +723,10 @@ button.link-btn { border: 0; background: none; padding: 0; font: inherit; font-s
   /* Mises à jour : deux colonnes, la source (nixpkgs-unstable) tient entière. */
   table.sites.updates tr:not(.ai-row) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
 }
+
+/* Connexions SSH acceptées : l'heure compte, elle reste sur téléphone (l'icône part). */
+@media (max-width: 720px) {
+  .activity.with-time .day li { grid-template-columns: 42px minmax(0, 1fr) auto; }
+  .activity.with-time .day .time { display: inline; }
+  .activity.with-time .day .kind { display: none; }
+}

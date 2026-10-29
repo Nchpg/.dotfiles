@@ -217,23 +217,8 @@
     </section>
     {{if .LogsOK}}
     <section class="block" aria-labelledby="accepted-title">
-      <div class="block-head"><h2 id="accepted-title" class="line">Connexions acceptées{{template "info" (args "ID" "info-accepted" "Text" "Chaque ouverture de session par une clé autorisée, d'après le journal de sshd : par clé et par provenance. SSH n'est ouvert qu'au réseau interne (LAN et VPN) : une adresse du VPN est traduite en appareil.")}}</h2><small class="muted">sur {{.Window}}</small></div>
-      <section class="card table-card" aria-label="Connexions acceptées">
-        <table class="list">
-          <thead><tr><th scope="col">D'où</th><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Connexions</th><th scope="col">Dernière</th></tr></thead>
-          <tbody>
-            {{range .Accepts}}
-            <tr>
-              <td class="mono small">{{if .Device}}{{.Device}} <span class="muted">({{.IP}})</span>{{else}}{{.IP}}{{end}}</td>
-              <td class="mono small">{{.User}}</td>
-              <td title="{{.Fingerprint}}">{{if eq .Key "hors liste"}}<span class="chip amber">hors liste</span>{{else}}{{.Key}}{{end}}</td>
-              <td><span class="ok">{{.Count}}</span></td>
-              <td class="muted">{{.Last}}</td>
-            </tr>
-            {{else}}<tr><td colspan="5" class="muted">Aucune.</td></tr>{{end}}
-          </tbody>
-        </table>
-      </section>
+      <div class="block-head"><h2 id="accepted-title" class="line">Connexions acceptées{{template "info" (args "ID" "info-accepted" "Text" "Chaque ouverture de session par une clé autorisée, d'après le journal de sshd, la plus récente d'abord. SSH n'est ouvert qu'au réseau interne (LAN et VPN) : une adresse du VPN est traduite en appareil.")}}</h2><small class="muted">sur {{.Window}}</small></div>
+      {{template "ssh-logins" .Logins}}
     </section>
     <section class="block" aria-labelledby="refused-title">
       <div class="block-head"><h2 id="refused-title" class="line">Tentatives refusées{{template "info" (args "ID" "info-refused" "Text" "Connexions fermées avant authentification : compte inconnu, ou clé qui n'est pas autorisée. sshd ne note pas l'empreinte d'une clé refusée : elles se comptent par IP. SSH n'est ouvert qu'au réseau interne (LAN et VPN) : une adresse du VPN est traduite en appareil.")}}</h2><small class="muted">sur {{.Window}}</small></div>
@@ -447,3 +432,28 @@
   </div>
 </main>
 {{template "bottom" .}}{{end}}
+
+{{/* Connexions acceptées, une par ligne et par jour (comme l'historique des sites), « Voir plus ». */}}
+{{define "ssh-logins"}}
+<section class="activity with-time" id="ssh-logins" aria-label="Connexions acceptées">
+  {{range .Days}}
+  <div class="day">
+    <div class="day-label">{{.Label}}</div>
+    <ol>
+      {{range .Items}}
+      <li>
+        <span class="time mono small muted">{{.Time}}</span>
+        <span class="kind" style="color: var(--ok)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg></span>
+        <span class="stack tight">
+          <span><strong>{{if .Device}}{{.Device}}{{else}}{{.IP}}{{end}}</strong>{{if .Device}} <span class="what mono small">{{.IP}}</span>{{end}}</span>
+          <small class="muted">{{.User}} · {{if .Unknown}}<span class="warn-ink">clé hors liste</span>{{else}}{{.Key}}{{end}}</small>
+        </span>
+        <span>{{if .Open}}<span class="line small"><span class="dot up" aria-hidden="true"></span>ouverte</span>{{end}}</span>
+      </li>
+      {{end}}
+    </ol>
+  </div>
+  {{else}}<p class="muted small day-empty">Aucune connexion sur {{.Window}}.</p>{{end}}
+  {{if .More}}<button type="button" class="more" hx-get="/ssh/connexions?n={{.Next}}" hx-target="#ssh-logins" hx-swap="outerHTML" hx-disabled-elt="this"><span class="spin" aria-hidden="true"></span><span class="more-label">Voir plus</span><span class="more-busy">Chargement</span></button>{{end}}
+</section>
+{{end}}

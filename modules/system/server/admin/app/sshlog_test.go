@@ -396,16 +396,16 @@ func TestBumpPins(t *testing.T) {
 	}
 }
 
-// Connexions acceptées : par clé et par IP, la plus récente d'abord.
-func TestSSHAccepts(t *testing.T) {
+// Connexions acceptées : une par ligne, la plus récente d'abord ; les refus à part.
+func TestSSHLogins(t *testing.T) {
 	t0 := time.Date(2026, 10, 29, 10, 0, 0, 0, time.UTC)
 	a := summarize([]sshEvent{
 		{At: t0, Accepted: true, User: "nchpg", IP: "10.8.0.3", Fingerprint: "SHA256:a"},
-		{At: t0.Add(time.Hour), Accepted: true, User: "nchpg", IP: "10.8.0.3", Fingerprint: "SHA256:a"},
 		{At: t0.Add(2 * time.Hour), Accepted: true, User: "nchpg", IP: "10.8.0.2", Fingerprint: "SHA256:b"},
+		{At: t0.Add(time.Hour), Accepted: true, User: "nchpg", IP: "10.8.0.3", Fingerprint: "SHA256:a"},
 		{At: t0.Add(3 * time.Hour), User: "root", IP: "192.168.1.9"},
 	}, nil)
-	if len(a.Accepts) != 2 || a.Accepts[0].IP != "10.8.0.2" || a.Accepts[1].Count != 2 || len(a.Refusals) != 1 {
-		t.Errorf("acceptées : %+v %+v", a.Accepts[0], a.Accepts[1])
+	if len(a.Logins) != 3 || a.Logins[0].IP != "10.8.0.2" || !a.Logins[2].At.Equal(t0) || len(a.Refusals) != 1 {
+		t.Errorf("connexions : %+v", a.Logins)
 	}
 }
