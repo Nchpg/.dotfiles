@@ -340,7 +340,7 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 			rows := updateRows(cur, res.Main, res.Next)
 			res.Releases = s.releaseLinks(ctx, rows)
 			var errs []string
-			for _, e := range []error{s.analyze(ctx, rows), s.analyzeInputs(ctx, res.Inputs, rows)} {
+			for _, e := range []error{s.analyze(ctx, rows), s.analyzeInputs(ctx, res.Inputs, rows), s.scoreCVEs(ctx)} {
 				if e != nil {
 					errs = append(errs, e.Error())
 				}

@@ -31,22 +31,42 @@ type Analysis struct {
 	Summary string  `json:"summary"`
 	CVEs    []AICVE `json:"cves"`
 	// Breaking : un changement cassant pour la config annoncé (entrées du flake, lues par leurs commits).
-	Breaking bool      `json:"breaking,omitempty"`
-	Basis    string    `json:"basis"` // ce qu'elle a lu
-	Model    string    `json:"model"`
-	At       time.Time `json:"at"`
+	Breaking bool   `json:"breaking,omitempty"`
+	Basis    string `json:"basis"` // ce qu'elle a lu
+	// ModelUrgency : le niveau donné par l'IA (Urgency, à l'affichage, vient des CVE).
+	ModelUrgency string    `json:"-"`
+	Model        string    `json:"model"`
+	At           time.Time `json:"at"`
 }
 
 type AICVE struct {
 	ID       string `json:"id"`
 	Severity string `json:"severity"`
 	Pkg      string `json:"pkg,omitempty"` // le paquet qu'elle touche (relevé dans un titre de commit)
+	// Sa note (cves.json), à l'affichage.
+	Score   float64 `json:"-"`
+	Network bool    `json:"-"`
+	KEV     bool    `json:"-"`
 }
 
-// UrgencyLabel : le niveau, lisiblement.
-func (a Analysis) UrgencyLabel() string {
-	return map[string]string{"urgent": "urgent", "conseille": "conseillé", "sans": "sans urgence"}[a.Urgency]
+// Level : la gravité de la note CVSS, lisiblement.
+func (c AICVE) Level() string {
+	switch {
+	case c.Score >= 9:
+		return "critique"
+	case c.Score >= 7:
+		return "élevée"
+	case c.Score >= 4:
+		return "moyenne"
+	}
+	return "faible"
 }
+
+var urgencyLabels = map[string]string{"urgent": "urgent", "conseille": "conseillé", "sans": "sans urgence"}
+
+// UrgencyLabel, ModelUrgencyLabel : le niveau, et celui que donnait l'IA, lisiblement.
+func (a Analysis) UrgencyLabel() string      { return urgencyLabels[a.Urgency] }
+func (a Analysis) ModelUrgencyLabel() string { return urgencyLabels[a.ModelUrgency] }
 
 func analysisKey(name, from, to string) string { return name + "|" + from + "|" + to }
 
@@ -57,7 +77,29 @@ var aiCache struct {
 
 func (s *Server) aiFile() string { return filepath.Join(s.cfg.StateDir, "ai.json") }
 
+// analyses : les analyses, leur niveau recalculé d'après la note de leurs CVE (rateUrgency) ; ce que
+// l'IA disait reste dans ModelUrgency.
 func (s *Server) analyses() map[string]Analysis {
+	infos := s.cveInfos()
+	out := s.rawAnalyses()
+	for k, a := range out {
+		a.ModelUrgency = a.Urgency
+		a.Urgency = rateUrgency(a.Urgency, a.CVEs, infos)
+		cves := make([]AICVE, len(a.CVEs))
+		for i, c := range a.CVEs {
+			if info, ok := infos[strings.ToUpper(c.ID)]; ok {
+				c.Score, c.Network, c.KEV = info.Score, info.Network, info.KEV
+			}
+			cves[i] = c
+		}
+		a.CVEs = cves
+		out[k] = a
+	}
+	return out
+}
+
+// rawAnalyses : les analyses telles que gardées (niveau donné par l'IA).
+func (s *Server) rawAnalyses() map[string]Analysis {
 	aiCache.Lock()
 	defer aiCache.Unlock()
 	if aiCache.m == nil {
@@ -74,7 +116,7 @@ func (s *Server) analyses() map[string]Analysis {
 }
 
 func (s *Server) saveAnalyses(add map[string]Analysis) {
-	s.analyses()
+	s.rawAnalyses()
 	aiCache.Lock()
 	defer aiCache.Unlock()
 	for k, v := range add {

@@ -744,3 +744,9 @@ button.link-btn { border: 0; background: none; padding: 0; font: inherit; font-s
 .visit-pages[open] .route-toggle::after { content: " ▴"; }
 .visit-route { margin: 6px 0 4px; padding: 0 0 0 10px; list-style: none; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
 .visit-route li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
+
+/* Note d'une CVE (CVSS) et faille exploitée en pratique. */
+.cve-score { padding: 0 5px; font-weight: 500; }
+.cve-critique { background: var(--bad); color: #FFFFFF; } .cve-élevée { background: var(--bad-soft); color: var(--bad); }
+.cve-moyenne { background: var(--warn-soft); color: var(--warn); } .cve-faible { background: #EEF0F3; color: var(--muted); }
+.cve-kev { padding: 0 5px; background: var(--bad); color: #FFFFFF; font-weight: 600; }

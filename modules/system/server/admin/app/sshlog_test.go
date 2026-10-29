@@ -266,14 +266,14 @@ func TestAnalyze(t *testing.T) {
 	}))
 	defer srv.Close()
 	geminiBase = srv.URL
-	aiCache.m = nil
+	aiCache.m, cveCache.m = nil, nil
 	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "m", AIThinking: "low", StateDir: t.TempDir()}}
 	rows := []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}, {ID: "services.nginx", Name: "nginx", Current: "1", Next: "1", Change: "same"}}
 	if err := s.analyze(t.Context(), rows); err != nil {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]
-	if !ok || a.Urgency != "urgent" || a.Model != "m" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
+	if !ok || a.ModelUrgency != "urgent" || a.Urgency != "conseille" || a.Model != "m" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
 		t.Errorf("analyse : %+v (appels %v)", a, calls)
 	}
 	_ = s.analyze(t.Context(), rows)
@@ -304,7 +304,7 @@ func TestAnalyzeErrors(t *testing.T) {
 	defer func() { aiTimeout = 2 * time.Minute }()
 	rows := []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}}
 	for model, want := range map[string]string{"slow": "slow : pas de réponse", "busy": "busy : HTTP 429 quota"} {
-		aiCache.m = nil
+		aiCache.m, cveCache.m = nil, nil
 		s := &Server{cfg: &Config{GeminiKey: "k", AIModel: model, StateDir: t.TempDir()}}
 		if err := s.analyze(t.Context(), rows); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%s : %v", model, err)
@@ -349,7 +349,7 @@ func TestAnalyzeInputs(t *testing.T) {
 	}))
 	defer srv.Close()
 	geminiBase = srv.URL
-	aiCache.m = nil
+	aiCache.m, cveCache.m = nil, nil
 	cfg := &Config{GeminiKey: "k", AIModel: "m", StateDir: t.TempDir()}
 	gh := &GitHub{cfg: cfg, cache: map[string]cacheItem{
 		"titles:Mic92/sops-nix:aaa...bbb": {time.Now(), []string{"sops-install-secrets: rename option", "fix typo", "fix typo (#12)",
@@ -425,5 +425,30 @@ func TestSSHLogins(t *testing.T) {
 	}, nil)
 	if len(a.Logins) != 3 || a.Logins[0].IP != "10.8.0.2" || !a.Logins[2].At.Equal(t0) || len(a.Refusals) != 1 {
 		t.Errorf("connexions : %+v", a.Logins)
+	}
+}
+
+// Le niveau vient des CVE : exploitée, critique, ou grave par le réseau : urgent ; grave en local
+// ou moyenne : conseillé ; faible : sans ; pas notée : la gravité annoncée. Sans CVE, l'IA au plus
+// « conseillé ».
+func TestRateUrgency(t *testing.T) {
+	infos := map[string]CVEInfo{
+		"CVE-1": {Score: 9.8}, "CVE-2": {Score: 7.5, Network: true}, "CVE-3": {Score: 7.8}, "CVE-4": {Score: 5.3, Network: true},
+		"CVE-5": {Score: 2.1, Network: true}, "CVE-6": {Score: 3, KEV: true},
+	}
+	cve := func(id string) []AICVE { return []AICVE{{ID: id}} }
+	for _, c := range []struct {
+		model string
+		cves  []AICVE
+		want  string
+	}{
+		{"sans", cve("CVE-1"), "urgent"}, {"sans", cve("cve-2"), "urgent"}, {"urgent", cve("CVE-3"), "conseille"},
+		{"urgent", cve("CVE-4"), "conseille"}, {"urgent", cve("CVE-5"), "sans"}, {"sans", cve("CVE-6"), "urgent"},
+		{"sans", []AICVE{{ID: "CVE-9", Severity: "critical"}}, "urgent"}, {"urgent", []AICVE{{ID: "CVE-9", Severity: "high"}}, "conseille"},
+		{"urgent", []AICVE{{ID: "CVE-5"}, {ID: "CVE-2"}}, "urgent"}, {"urgent", nil, "conseille"}, {"sans", nil, "sans"},
+	} {
+		if got := rateUrgency(c.model, c.cves, infos); got != c.want {
+			t.Errorf("%s %v : %s, voulu %s", c.model, c.cves, got, c.want)
+		}
 	}
 }
