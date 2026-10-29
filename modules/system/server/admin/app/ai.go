@@ -10,8 +10,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -440,10 +442,11 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 	return nil
 }
 
-const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une entrée de son flake, %s (dépôt GitHub %s/%s), avancerait de la révision A à la révision B ; plus bas, le titre de chacun des commits entre les deux (%d). Sur ce serveur tournent : %s ; et les bibliothèques de base dont tout dépend (openssl, glibc, curl, zlib, xz, systemd…).
+const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une entrée de son flake, %s (dépôt GitHub %s/%s), avancerait de la révision A à la révision B ; plus bas, le titre des commits entre les deux. Ils sont déjà triés : seuls restent ceux qui touchent un paquet présent sur ce serveur, un module NixOS, ou rien de précis (%d gardés sur %d). Les paquets qui ont leur propre analyse (avec leurs notes de version) en sont retirés : n'en parle pas.
+Paquets de ce serveur qui viennent de cette entrée : %s. Les autres paquets du serveur viennent d'une autre entrée : un commit d'ici qui les touche ne compte pas, sauf une bibliothèque dont dépendent ceux de cette entrée.
 À partir UNIQUEMENT de ces titres, dis si la mise à jour est urgente :
-- "urgent" : un commit corrige une faille de sécurité sérieuse (CVE de gravité haute ou critique, exécution de code, contournement d'authentification, fuite de données) dans un paquet ou un module que ce serveur utilise ;
-- "conseille" : une faille mineure, ou des bugs gênants, corrigés dans ce que ce serveur utilise ;
+- "urgent" : un commit corrige une faille de sécurité sérieuse (CVE de gravité haute ou critique, exécution de code, contournement d'authentification, fuite de données) dans un paquet que ce serveur utilise depuis cette entrée ;
+- "conseille" : une faille mineure, ou des bugs gênants, corrigés dans ce que ce serveur utilise depuis cette entrée ;
 - "sans" : rien d'important pour ce serveur.
 "breaking" : true seulement si un commit annonce un changement cassant pour la config de ce serveur (option renommée ou retirée, comportement par défaut changé, migration à faire à la main) dans un module ou un paquet qu'il utilise.
 "summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : les CVE (ou GHSA) citées dans les titres, avec leur gravité si elle est dite. N'invente rien. Réponds avec un seul élément, d'"id" %q.
@@ -451,20 +454,89 @@ const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une e
 Commits :
 `
 
+// closureNames : le nom (sans version) de chaque paquet du système actif ; remplacé dans les tests.
+var closureNames = func(ctx context.Context) (map[string]bool, error) {
+	out, err := exec.CommandContext(ctx, "nix-store", "--query", "--requisites", "/run/current-system").Output()
+	if err != nil {
+		return nil, fmt.Errorf("paquets du système illisibles : %w", err)
+	}
+	names := map[string]bool{}
+	for _, line := range strings.Fields(string(out)) {
+		base := filepath.Base(line)
+		if len(base) > 33 {
+			base = base[33:] // le hash et son tiret
+		}
+		names[strings.ToLower(reNameVersion.ReplaceAllString(base, ""))] = true
+	}
+	return names, nil
+}
+
+// reNameVersion : la version au bout d'un nom du store (« openssl-3.5.4-bin » → « openssl »).
+var reNameVersion = regexp.MustCompile(`-[0-9].*$`)
+
+var (
+	rePRSuffix   = regexp.MustCompile(` \(#\d+\)$`)
+	reAttrSuffix = regexp.MustCompile(`_[0-9].*$`) // linux_7_3, openssl_3_6…
+)
+
+// relevantTitles : les titres qui comptent pour ce serveur, sans doublon (nixpkgs a souvent le
+// même avec et sans « (#PR) ») : ceux sans paquet précis, ceux du module NixOS d'un paquet du serveur
+// (changements cassants), et ceux d'un paquet présent sur le serveur, sauf ceux des paquets analysés
+// à part (`own`, leur ligne dans Versions).
+func relevantTitles(titles []string, closure, own map[string]bool) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, t := range titles {
+		t = strings.TrimSpace(rePRSuffix.ReplaceAllString(strings.TrimSpace(t), ""))
+		if seen[t] {
+			continue
+		}
+		seen[t] = true
+		pre, _, found := strings.Cut(t, ": ")
+		keep := !found || strings.ContainsAny(strings.TrimSpace(strings.ReplaceAll(pre, ", ", ",")), " \"")
+		for _, tok := range strings.Split(pre, ",") {
+			if keep {
+				break
+			}
+			tok = strings.ToLower(strings.TrimSpace(tok))
+			// Un module NixOS (nixos/virtualisation/podman) : celui d'un paquet du serveur ; pas
+			// ses tests, sa doc ni ses profils.
+			if mod, ok := strings.CutPrefix(tok, "nixos/"); ok {
+				parts := strings.Split(mod, "/")
+				last := parts[len(parts)-1]
+				keep = !slices.Contains([]string{"tests", "doc", "profiles"}, parts[0]) && (closure[last] || own[last])
+				continue
+			}
+			if k := strings.LastIndex(tok, "."); k >= 0 {
+				tok = tok[k+1:] // python3Packages.foo
+			}
+			base := reAttrSuffix.ReplaceAllString(tok, "")
+			if own[tok] || own[base] {
+				continue
+			}
+			keep = closure[tok] || closure[base]
+		}
+		if keep {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // analyzeInputs : chaque entrée du flake qui avancerait, lue par les titres de ses commits (sops-nix,
 // home-manager… n'ont pas de numéro de version ; pour nixpkgs, ce sont surtout des montées de version
-// et des correctifs de sécurité, bibliothèques comprises). Une analyse par couple de révisions.
+// et des correctifs de sécurité, bibliothèques comprises), triés d'après ce qui tourne. Une analyse
+// par couple de révisions.
 func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []UpdateRow) error {
 	if s.cfg.GeminiKey == "" {
 		return nil
 	}
-	var running []string
+	own := map[string]bool{}
 	for _, r := range rows {
-		if r.Current != "" {
-			running = append(running, r.Name+" "+r.Current)
-		}
+		own[strings.ToLower(r.Name)] = true
 	}
 	done := s.analyses()
+	var closure map[string]bool
 	var errs []string
 	for _, in := range inputs {
 		if !in.Changed() || in.Owner == "" {
@@ -475,15 +547,29 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 		if _, ok := done[key]; ok {
 			continue
 		}
-		titles, err := s.gh.CompareTitles(ctx, in.Owner, in.Repo, from, in.NextRev)
+		if closure == nil {
+			c, err := closureNames(ctx)
+			if err != nil {
+				return err
+			}
+			closure = c
+		}
+		all, err := s.gh.CompareTitles(ctx, in.Owner, in.Repo, from, in.NextRev)
 		if err != nil {
 			errs = append(errs, in.Name+" : commits illisibles ("+err.Error()+")")
 			continue
 		}
+		titles := relevantTitles(all, closure, own)
 		if len(titles) == 0 {
 			continue
 		}
-		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), strings.Join(running, ", "), in.Name) +
+		var mine []string
+		for _, r := range rows {
+			if r.Source == in.Name && r.Current != "" {
+				mine = append(mine, r.Name+" "+r.Current)
+			}
+		}
+		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), len(all), firstOf(strings.Join(mine, ", "), "aucun (module ou outil)"), in.Name) +
 			strings.Join(titles, "\n")
 		raw, err := s.gemini(ctx, prompt)
 		if err != nil {
@@ -497,7 +583,7 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 		}
 		a := answers[0]
 		s.saveAnalyses(map[string]Analysis{key: {Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs, Breaking: a.Breaking,
-			Basis: plural(len(titles), "titre de commit", "titres de commits"), Model: s.cfg.AIModel, At: time.Now()}})
+			Basis: fmt.Sprintf("%s sur %d", plural(len(titles), "titre de commit", "titres de commits"), len(all)), Model: s.cfg.AIModel, At: time.Now()}})
 	}
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, " ; "))
@@ -505,8 +591,11 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 	return nil
 }
 
+// aiInputVersion : la façon de lire une entrée du flake ; la changer refait ces analyses une fois.
+const aiInputVersion = 2
+
 // inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
-func inputKey(name string) string { return "input." + name }
+func inputKey(name string) string { return fmt.Sprintf("input.%s@%d", name, aiInputVersion) }
 
 // analysisKey : la clé de l'analyse de ce que update apporterait à cette entrée.
 func (r InputRow) analysisKey() string {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -332,17 +333,21 @@ func TestAnalyzeInputs(t *testing.T) {
 	aiCache.m = nil
 	cfg := &Config{GeminiKey: "k", AIModel: "m", StateDir: t.TempDir()}
 	gh := &GitHub{cfg: cfg, cache: map[string]cacheItem{
-		"titles:Mic92/sops-nix:aaa...bbb": {time.Now(), []string{"sops-nix: rename option", "fix typo"}}}}
+		"titles:Mic92/sops-nix:aaa...bbb": {time.Now(), []string{"sops-install-secrets: rename option", "fix typo", "fix typo (#12)",
+			"libsidplayfp: fix CVE-2026-1", "openssh: 10.5p1 -> 10.6p1", "linux_7_3: 7.3.1 -> 7.3.2", "nixos/openssh: new default", "nixos/tests/openssh: x", "nixos/varnish: drop", "openssl_3_6, curl: CVE fixes", "ci: bump"}}}}
+	closureNames = func(context.Context) (map[string]bool, error) {
+		return map[string]bool{"sops-install-secrets": true, "openssh": true, "linux": true, "openssl": true, "curl": true}, nil
+	}
 	s := &Server{cfg: cfg, gh: gh}
 	inputs := []InputRow{{Name: "sops-nix", Owner: "Mic92", Repo: "sops-nix", ServiceRev: "aaa", MainRev: "aaa", NextRev: "bbb"},
 		{Name: "stylix", Owner: "nix-community", Repo: "stylix", ServiceRev: "ccc", MainRev: "ccc", NextRev: "ccc"}}
-	rows := []UpdateRow{{Name: "openssh", Current: "10.5p1"}}
+	rows := []UpdateRow{{Name: "openssh", Current: "10.5p1"}, {Name: "linux", Current: "7.3.1"}}
 	if err := s.analyzeInputs(t.Context(), inputs, rows); err != nil {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[inputs[0].analysisKey()]
-	if !ok || !a.Breaking || a.Urgency != "conseille" || a.Basis != "2 titres de commits" || len(prompts) != 1 ||
-		!strings.Contains(prompts[0], "sops-nix: rename option\nfix typo") || !strings.Contains(prompts[0], "openssh 10.5p1") {
+	if !ok || !a.Breaking || a.Urgency != "conseille" || a.Basis != "4 titres de commits sur 11" || len(prompts) != 1 ||
+		!strings.HasSuffix(prompts[0], "sops-install-secrets: rename option\nfix typo\nnixos/openssh: new default\nopenssl_3_6, curl: CVE fixes") {
 		t.Errorf("analyse : %+v, prompts %q", a, prompts)
 	}
 	_ = s.analyzeInputs(t.Context(), inputs, rows)
