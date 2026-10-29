@@ -637,7 +637,7 @@ func (s *Server) withAnalyses(rows []UpdateRow, inputs []InputRow, res updatesRe
 		if a, ok := analyses[in.analysisKey()]; ok {
 			set := map[string]bool{}
 			for _, c := range a.CVEs {
-				set[strings.ToUpper(c.ID)] = true
+				set[cveID(c.ID)] = true
 			}
 			backports[sourceLabel(in.Name)] = set
 		}

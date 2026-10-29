@@ -69,13 +69,27 @@ func (s *Server) saveCVEInfos(m map[string]CVEInfo) {
 	}
 }
 
+// addCVEInfos : des notes connues d'ailleurs (avis d'un dépôt), sans écraser une note déjà là.
+func (s *Server) addCVEInfos(add map[string]CVEInfo) {
+	if len(add) == 0 {
+		return
+	}
+	infos := s.cveInfos()
+	for id, info := range add {
+		if old, ok := infos[id]; !ok || old.Score == 0 {
+			infos[id] = info
+		}
+	}
+	s.saveCVEInfos(infos)
+}
+
 // scoreCVEs : la note de chaque CVE des analyses (celles qui manquent ou ont vieilli) et le KEV.
 func (s *Server) scoreCVEs(ctx context.Context) error {
 	infos := s.cveInfos()
 	ids := map[string]bool{}
 	for _, a := range s.rawAnalyses() {
 		for _, c := range a.CVEs {
-			ids[strings.ToUpper(c.ID)] = true
+			ids[cveID(c.ID)] = true
 		}
 	}
 	kev, kevErr := s.kevSet(ctx)
@@ -97,6 +111,8 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 				if !ok {
 					continue
 				}
+			} else if fresh.Score == 0 && ok && info.Score > 0 {
+				info.At = fresh.At // pas de note publique : celle de l'avis du dépôt reste
 			} else {
 				info = fresh
 			}
@@ -116,6 +132,16 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 	return nil
 }
 
+// cveID : un identifiant dans sa forme officielle, la clé des notes : CVE en majuscules ; GHSA avec
+// son préfixe en majuscules et le reste en minuscules (l'API GitHub distingue la casse).
+func cveID(id string) string {
+	id = strings.TrimSpace(id)
+	if len(id) > 5 && strings.EqualFold(id[:5], "GHSA-") {
+		return "GHSA-" + strings.ToLower(id[5:])
+	}
+	return strings.ToUpper(id)
+}
+
 // fetchCVE : la note d'une CVE (NVD) ou d'un GHSA (avis GitHub).
 func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 	info := CVEInfo{At: time.Now()}
@@ -126,7 +152,11 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 				Vector string  `json:"vector_string"`
 			} `json:"cvss"`
 		}
-		if _, err := s.gh.api(ctx, "GET", "https://api.github.com/advisories/"+id, s.cfg.DispatchToken, nil, &adv); err != nil {
+		code, err := s.gh.api(ctx, "GET", "https://api.github.com/advisories/"+id, s.cfg.DispatchToken, nil, &adv)
+		if code == http.StatusNotFound {
+			return info, nil // pas (encore) dans la base publique : pas de note, redemandée plus tard
+		}
+		if err != nil {
 			return info, err
 		}
 		info.Score, info.Network = adv.CVSS.Score, strings.Contains(adv.CVSS.Vector, "AV:N")
@@ -209,7 +239,7 @@ func (s *Server) kevSet(ctx context.Context) (map[string]bool, error) {
 		}
 		set := map[string]bool{}
 		for _, x := range body.Vulns {
-			set[strings.ToUpper(x.ID)] = true
+			set[cveID(x.ID)] = true
 		}
 		return set, nil
 	})
@@ -257,7 +287,7 @@ func rateUrgency(model string, cves []AICVE, infos map[string]CVEInfo) string {
 	}
 	best := "sans"
 	for _, c := range cves {
-		info, ok := infos[strings.ToUpper(c.ID)]
+		info, ok := infos[cveID(c.ID)]
 		if u := cveUrgency(c, info, ok); urgencyRank[u] > urgencyRank[best] {
 			best = u
 		}
@@ -277,7 +307,7 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 	var counted []AICVE
 	cves := make([]AICVE, len(a.CVEs))
 	for i, c := range a.CVEs {
-		id := strings.ToUpper(c.ID)
+		id := cveID(c.ID)
 		switch {
 		case slices.Contains(row.Patches, id):
 			c.Status = "service"

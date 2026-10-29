@@ -491,3 +491,11 @@ func TestClassifyRow(t *testing.T) {
 		t.Error("Behind")
 	}
 }
+
+func TestCVEID(t *testing.T) {
+	for in, want := range map[string]string{"GHSA-99CJ-7HG9-MP4M": "GHSA-99cj-7hg9-mp4m", "ghsa-99cj-7hg9-mp4m": "GHSA-99cj-7hg9-mp4m", "cve-2026-1": "CVE-2026-1", " CVE-2026-2 ": "CVE-2026-2"} {
+		if got := cveID(in); got != want {
+			t.Errorf("cveID(%q) = %q", in, got)
+		}
+	}
+}

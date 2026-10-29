@@ -92,7 +92,7 @@ func (s *Server) analyses() map[string]Analysis {
 		a.Urgency = rateUrgency(a.Urgency, a.CVEs, infos)
 		cves := make([]AICVE, len(a.CVEs))
 		for i, c := range a.CVEs {
-			if info, ok := infos[strings.ToUpper(c.ID)]; ok {
+			if info, ok := infos[cveID(c.ID)]; ok {
 				c.Score, c.Network, c.KEV = info.Score, info.Network, info.KEV
 			}
 			cves[i] = c
@@ -354,9 +354,21 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 				Range   string `json:"vulnerable_version_range"`
 				Patched string `json:"patched_versions"`
 			} `json:"vulnerabilities"`
+			CVSS struct {
+				Score  float64 `json:"score"`
+				Vector string  `json:"vector_string"`
+			} `json:"cvss"`
 		}
 		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/security-advisories?per_page=30&state=published", owner, repo)
 		if _, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &advs); err == nil && len(advs) > 0 {
+			// La note d'un avis publié dans le seul dépôt du projet (absent de la base publique de GitHub).
+			scored := map[string]CVEInfo{}
+			for _, v := range advs {
+				if v.CVSS.Score > 0 {
+					scored[cveID(v.GHSA)] = CVEInfo{Score: v.CVSS.Score, Network: strings.Contains(v.CVSS.Vector, "AV:N"), At: time.Now()}
+				}
+			}
+			s.addCVEInfos(scored)
 			var a strings.Builder
 			for _, v := range advs {
 				var ranges []string
