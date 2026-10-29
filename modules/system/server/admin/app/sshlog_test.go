@@ -226,3 +226,46 @@ func TestGithubRepo(t *testing.T) {
 		}
 	}
 }
+
+// Analyse par l'IA : la réponse rangée par paquet et gardée ; le secours si le modèle refuse ; une
+// montée de version déjà analysée n'est plus redemandée.
+func TestAnalyze(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		if strings.Contains(r.URL.Path, "/models/m1:") {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"message":"quota"}}`))
+			return
+		}
+		if r.Header.Get("x-goog-api-key") != "k" {
+			t.Error("clé absente")
+		}
+		answer := `[{"id":"services.openssh","urgency":"urgent","summary":"Corrige une faille.","cves":[{"id":"CVE-2026-1","severity":"high"}]}]`
+		b, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": answer}}}}}})
+		_, _ = w.Write(b)
+	}))
+	defer srv.Close()
+	geminiBase = srv.URL
+	aiCache.m = nil
+	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "m1", AIFallback: "m2", StateDir: t.TempDir()}}
+	rows := []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}, {ID: "services.nginx", Name: "nginx", Current: "1", Next: "1", Change: "same"}}
+	if err := s.analyze(t.Context(), rows); err != nil {
+		t.Fatal(err)
+	}
+	a, ok := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]
+	if !ok || a.Urgency != "urgent" || a.Model != "m2" || len(a.CVEs) != 1 || a.Basis != "rien à lire" {
+		t.Errorf("analyse : %+v (appels %v)", a, calls)
+	}
+	n := len(calls)
+	_ = s.analyze(t.Context(), rows)
+	if len(calls) != n {
+		t.Error("une montée de version déjà analysée a été redemandée")
+	}
+	if o, r := repoOf("https://github.com/authelia/authelia/releases/tag/v4.39.28"); o != "authelia" || r != "authelia" {
+		t.Errorf("dépôt : %s/%s", o, r)
+	}
+	if cmpVersions("v4.40.0", "4.39.28") != 1 || cmpVersions("10.6p1", "10.6p1") != 0 {
+		t.Error("cmpVersions")
+	}
+}

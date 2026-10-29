@@ -44,12 +44,15 @@ type Config struct {
 	Fonts        string
 	Peers        []string
 	SecretKeys   []string
-	Services     []Service    // services de think hors apps.json (lecture seule)
-	VPN          VPNInfo      // tunnel et appareils (page VPN)
-	SSH          SSHInfo      // clés autorisées (page SSH)
-	AccountsFile string       // résumé des comptes Authelia, écrit par admin-accounts (root)
-	TrafficFile  string       // applis et sessions de Nextcloud et Vaultwarden, écrit par admin-traffic (root)
-	Inventory    string       // versions de la génération active (onglet Mises à jour)
+	Services     []Service // services de think hors apps.json (lecture seule)
+	VPN          VPNInfo   // tunnel et appareils (page VPN)
+	SSH          SSHInfo   // clés autorisées (page SSH)
+	AccountsFile string    // résumé des comptes Authelia, écrit par admin-accounts (root)
+	TrafficFile  string    // applis et sessions de Nextcloud et Vaultwarden, écrit par admin-traffic (root)
+	Inventory    string    // versions de la génération active (onglet Mises à jour)
+	AIKeyName    string    // secret sops de la clé Gemini (vide : analyse non prévue)
+	AIModel      string    // modèle d'analyse des mises à jour, et son secours
+	AIFallback   string
 	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
 	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage
 	RecopyStatus string       // résultats d'admin-recopy (root), lus seulement
@@ -59,6 +62,7 @@ type Config struct {
 	RegistryToken string // lit les images et la liste des packages
 	NixAccessFile string // jeton du dépôt de secrets, pour l'évaluation
 	DiscordHook   string // webhook du récapitulatif quotidien des mises à jour (vide : pas d'envoi)
+	GeminiKey     string // analyse des mises à jour (vide : pas d'analyse)
 }
 
 func loadConfig() (*Config, error) {
@@ -87,6 +91,9 @@ func loadConfig() (*Config, error) {
 		AccountsFile: env("ADMIN_ACCOUNTS_FILE", "/var/lib/admin-accounts/accounts.json"),
 		TrafficFile:  env("ADMIN_TRAFFIC_FILE", "/var/lib/admin-traffic/traffic.json"),
 		Inventory:    env("ADMIN_INVENTORY", "/etc/dotfiles/inventory.json"),
+		AIKeyName:    os.Getenv("ADMIN_AI_KEY"),
+		AIModel:      os.Getenv("ADMIN_AI_MODEL"),
+		AIFallback:   os.Getenv("ADMIN_AI_FALLBACK"),
 		WGPubkeyFile: env("ADMIN_WG_PUBKEY", "/run/admin/wg-server.pub"),
 	}
 	// DynamicUser : /var/lib/admin est un lien vers /var/lib/private/admin, et Nix refuse
@@ -126,6 +133,7 @@ func loadConfig() (*Config, error) {
 	c.DispatchToken = readSecret(creds, "dispatch")
 	c.RegistryToken = readSecret(creds, "ghcr")
 	c.DiscordHook = readSecret(creds, "discord")
+	c.GeminiKey = readSecret(creds, "gemini")
 	if creds != "" {
 		if _, err := os.Stat(filepath.Join(creds, "nix-access")); err == nil {
 			c.NixAccessFile = filepath.Join(creds, "nix-access")

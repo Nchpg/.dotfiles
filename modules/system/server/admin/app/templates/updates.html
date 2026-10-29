@@ -14,6 +14,7 @@
 <div id="updates-body" class="overview" {{if .Running}}hx-get="/updates?frag" hx-trigger="every 5s" hx-select="#updates-body" hx-swap="outerHTML"{{end}}>
   {{with .CurError}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
   {{with .Error}}<div class="alert alert-amber"><p>Vérification impossible : {{.}}</p></div>{{end}}
+  {{with .AIError}}<div class="alert alert-amber"><p>Analyse par l'IA incomplète : {{.}}</p></div>{{end}}
   <section class="strip" aria-label="Résumé">
     <div class="strip-cell">
       <span class="strip-label">Dernière vérification</span>
@@ -23,7 +24,7 @@
     <div class="strip-cell">
       <span class="strip-label">Avec <code>update</code></span>
       <span class="strip-value line">{{if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
-      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}</span>
+      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}</span>
     </div>
     <div class="strip-cell">
       <span class="strip-label">Appliquer</span>
@@ -54,7 +55,7 @@
   {{end}}
 
   <section class="block" aria-labelledby="up-vers-title">
-    <div class="block-head"><h2 id="up-vers-title" class="line">Versions{{template "info" (args "ID" "info-up-vers" "Text" "Ce qui tourne sur think, trouvé dans la config (tout service activé qui a un paquet, le noyau, systemd ; aucune liste à tenir). En service : la génération active ; sur main : la config poussée sur GitHub, avec son flake.lock ; après update : la même avec le flake.lock à jour, calculé à part (rien n'est modifié). En gras, ce qui diffère de la colonne d'avant ; le changement compare ce qui tourne à après update. Un nouveau noyau demande un redémarrage ; une version majeure de Nextcloud ou PostgreSQL se choisit dans la config, avec une migration.")}}</h2></div>
+    <div class="block-head"><h2 id="up-vers-title" class="line">Versions{{template "info" (args "ID" "info-up-vers" "Text" "Ce qui tourne sur think, trouvé dans la config (tout service activé qui a un paquet, le noyau, systemd ; aucune liste à tenir). En service : la génération active ; sur main : la config poussée sur GitHub, avec son flake.lock ; après update : la même avec le flake.lock à jour, calculé à part (rien n'est modifié). En gras, ce qui diffère de la colonne d'avant ; le changement compare ce qui tourne à après update. Un nouveau noyau demande un redémarrage ; une version majeure de Nextcloud ou PostgreSQL se choisit dans la config, avec une migration. Urgence : Gemini lit les notes des versions sautées et les avis de sécurité du projet (bouton Analyse).")}}</h2>{{if not .AIOn}}{{with .AIKey}}<small class="muted">Analyse par l'IA désactivée : <code>systemSettings.admin.ai.enable</code>, <code>secrets edit {{.}}</code> (clé gratuite de Google AI Studio), puis rebuild</small>{{end}}{{end}}</div>
     {{template "updates-table" (args "Rows" .Rows "Checked" .Checked)}}
   </section>
 </div>
@@ -88,7 +89,16 @@
   <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
   <td class="mono small">{{if not .Main}}<span class="muted">—</span>{{else if ne .Main .Current}}<strong>{{.Main}}</strong>{{else}}{{.Main}}{{end}}</td>
   <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next (firstOf .Main .Current)}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
-  <td>{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}} <small class="warn-ink">redémarrage</small>{{end}}</td>
-  <td class="end small">{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</td>
-</tr></tbody>
+  <td><span class="stack tight">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}<span class="urg urg-{{.Urgency}}">{{.UrgencyLabel}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
+  <td class="end small"><span class="stack tight end-stack">{{if .AI}}<button type="button" class="link-btn" data-toggle-next aria-expanded="false">Analyse</button>{{end}}{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</span></td>
+</tr>
+{{/* L'analyse par l'IA, dépliée par le bouton. */}}
+{{with .AI}}<tr class="ai-row" hidden><td colspan="7">
+  <div class="ai-box urg-box-{{.Urgency}}">
+    <p>{{.Summary}}</p>
+    {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Severity}}<small class="muted">{{.}}</small>{{end}}{{end}}</p>{{end}}
+    <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version font foi.</small>
+  </div>
+</td></tr>{{end}}
+</tbody>
 {{end}}

@@ -441,3 +441,13 @@ function mapInit() {
 }
 document.addEventListener("DOMContentLoaded", mapInit);
 document.addEventListener("htmx:afterSettle", mapInit);
+
+// Un bouton qui déplie la ligne suivante d'un tableau (analyse d'une mise à jour).
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-toggle-next]");
+  if (!b) return;
+  const row = b.closest("tr")?.nextElementSibling;
+  if (!row) return;
+  row.hidden = !row.hidden;
+  b.setAttribute("aria-expanded", String(!row.hidden));
+});

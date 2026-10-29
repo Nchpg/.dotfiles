@@ -79,6 +79,7 @@ type updatesResult struct {
 	Next    []InvItem  `json:"next"`
 	Inputs  []InputRow `json:"inputs"`
 	Error   string     `json:"error"`
+	AIError string     `json:"aiError"` // l'analyse par l'IA a échoué (le reste de la vérification tient)
 }
 
 var updatesState struct {
@@ -274,6 +275,11 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 		oldLock, _, res.Main, res.Next, err = s.eval.Updates(ctx, head)
 		cur, _ := s.currentInventory()
 		res.Inputs = inputRows(cur, res.Main, res.Next, oldLock)
+		if err == nil {
+			if e := s.analyze(ctx, updateRows(cur, res.Main, res.Next)); e != nil {
+				res.AIError = e.Error()
+			}
+		}
 		for i := range res.Inputs {
 			in := &res.Inputs[i]
 			if in.Changed() && in.Owner != "" {
@@ -321,6 +327,7 @@ type UpdateRow struct {
 	Changelog, Homepage string
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
+	AI                  *Analysis
 }
 
 // sourceLabel : l'entrée du flake lisiblement (self : ce dépôt).
@@ -456,7 +463,12 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 	}
 	var list []UpdateRow
 	counts := map[string]int{}
+	analyses := s.analyses()
 	for _, row := range rows {
+		if a, ok := analyses[analysisKey(row.Name, row.Current, row.Next)]; ok && row.Change != "same" {
+			row.AI = &a
+			counts[a.Urgency]++
+		}
 		if row.ID == "boot.kernel" {
 			if k := runningKernel(); k != "" && !strings.HasPrefix(k, row.Current) {
 				row.Running = k
@@ -472,7 +484,7 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 	running := updatesState.running
 	updatesState.Unlock()
 	data := map[string]any{"Nav": "updates", "Rows": list, "Inputs": inputs, "Counts": counts,
-		"Running": running, "Error": res.Error, "Hour": updatesHour, "Discord": s.cfg.DiscordHook != ""}
+		"Running": running, "Error": res.Error, "AIOn": s.cfg.GeminiKey != "", "AIKey": s.cfg.AIKeyName, "AIError": res.AIError, "Hour": updatesHour, "Discord": s.cfg.DiscordHook != ""}
 	if !res.Checked.IsZero() {
 		data["Checked"] = ago(time.Since(res.Checked))
 		data["Head"] = shortRev(res.Head)
@@ -509,11 +521,26 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 	default:
 		cur, _ := s.currentInventory()
 		var changed []UpdateRow
+		analyses := s.analyses()
 		for _, row := range updateRows(cur, res.Main, res.Next) {
 			if row.Change != "same" {
+				if a, ok := analyses[analysisKey(row.Name, row.Current, row.Next)]; ok {
+					row.AI = &a
+				}
 				changed = append(changed, row)
 			}
 		}
+		rank := map[string]int{"urgent": 0, "conseille": 1}
+		urgency := func(r UpdateRow) int {
+			if r.AI == nil {
+				return 2
+			}
+			if n, ok := rank[r.AI.Urgency]; ok {
+				return n
+			}
+			return 2
+		}
+		sort.SliceStable(changed, func(i, j int) bool { return urgency(changed[i]) < urgency(changed[j]) })
 		if len(changed) == 0 {
 			fmt.Fprintf(&b, "✅ **%s** est à jour : `update` ne changerait aucune version.", host)
 			break
@@ -529,7 +556,15 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 			if row.ID == "boot.kernel" {
 				extra = ", redémarrage"
 			}
-			fmt.Fprintf(&b, "• **%s** %s → %s (%s%s)\n", row.Name, from, to, row.ChangeLabel, extra)
+			mark := "•"
+			if row.AI != nil {
+				mark = map[string]string{"urgent": "🔴", "conseille": "🟠", "sans": "⚪"}[row.AI.Urgency]
+				extra += ", " + row.AI.UrgencyLabel()
+			}
+			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, row.ChangeLabel, extra)
+			if row.AI != nil && row.AI.Urgency == "urgent" {
+				fmt.Fprintf(&b, "  %s\n", row.AI.Summary)
+			}
 		}
 		for _, in := range res.Inputs {
 			if in.Changed() {

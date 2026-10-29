@@ -249,6 +249,30 @@ in
       default = 8095;
       description = "Port de bouclage du service, derrière nginx.";
     };
+
+    # Onglet Mises à jour : chaque montée de version lue par une IA (notes de version, avis de
+    # sécurité), pour dire si elle est urgente.
+    ai = {
+      enable = lib.mkEnableOption "l'analyse des mises à jour par Gemini";
+
+      keySops = lib.mkOption {
+        type = lib.types.str;
+        default = "admin/gemini_key";
+        description = "Secret sops de la clé d'API Gemini (Google AI Studio) : `secrets edit <ce nom>`.";
+      };
+
+      model = lib.mkOption {
+        type = lib.types.str;
+        default = "gemini-3.8-flash";
+        description = "Modèle d'analyse (identifiant de l'API Gemini).";
+      };
+
+      fallback = lib.mkOption {
+        type = lib.types.str;
+        default = "gemini-3.5-flash-lite";
+        description = "Modèle de secours, quand le premier a atteint son quota (ou n'existe pas).";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -263,7 +287,15 @@ in
       inherit host;
     };
 
+    # Comme les clés des appareils VPN : déclarée, donc `secrets edit` peut la créer ; absente, une
+    # assertion le dit.
+    sops.secrets = lib.mkIf cfg.ai.enable { ${cfg.ai.keySops} = { }; };
+
     assertions = [
+      {
+        assertion = !cfg.ai.enable || builtins.pathExists "${inputs.secrets}/${cfg.ai.keySops}.yaml";
+        message = "systemSettings.admin.ai : la clé Gemini n'existe pas : `secrets edit ${cfg.ai.keySops}` (clé de Google AI Studio), puis relance.";
+      }
       {
         assertion = wireguard.sourcesFor "admin" != [ ];
         message = "systemSettings.admin : aucun appareil VPN n'a le service « admin » (vpn-peers.json) : plus personne n'ouvrirait le dashboard.";
@@ -326,6 +358,10 @@ in
         ADMIN_TRAFFIC_FILE = "/var/lib/admin-traffic/traffic.json";
         # Onglet Mises à jour : les versions de la génération active (cf. inventory.nix).
         ADMIN_INVENTORY = "/etc/dotfiles/inventory.json";
+        # Le secret de la clé, pour que la page dise comment activer l'analyse.
+        ADMIN_AI_KEY = cfg.ai.keySops;
+        ADMIN_AI_MODEL = cfg.ai.model;
+        ADMIN_AI_FALLBACK = cfg.ai.fallback;
         ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
         # Tableau de bord système de Grafana, affiché dans la page Métriques (vide sans monitoring).
@@ -352,6 +388,7 @@ in
           "nix-access:/var/lib/nix/access-tokens.conf"
         ]
         # Le récapitulatif quotidien des mises à jour, sur Discord.
+        ++ lib.optional cfg.ai.enable "gemini:${config.sops.secrets.${cfg.ai.keySops}.path}"
         ++ lib.optional config.systemSettings.notify.discord.enable "discord:${
           config.sops.secrets.${config.systemSettings.notify.discord.webhookKey}.path
         }";
