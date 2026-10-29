@@ -8,7 +8,7 @@
 
 # Onglet Mises à jour : les versions de ce qui tourne, découvertes dans la config et jamais listées à
 # la main. Tout module activé qui a un paquet (`services.<x>`, ses `instances` comprises,
-# `virtualisation.<x>`, `security.<x>` comme sudo, `programs.<x>`), puis le noyau, systemd et nix ; chacun avec l'entrée du flake qui le fournit.
+# `virtualisation.<x>`, `security.<x>` comme sudo, `networking.<x>` comme le pare-feu, `programs.<x>`), puis le noyau, systemd et nix ; chacun avec l'entrée du flake qui le fournit.
 # Et la révision de chaque entrée du flake (sauf ce dépôt et les secrets). La génération active le garde dans
 # /etc/dotfiles/inventory.json (colonne « En service ») ; le dashboard évalue le même attribut avec
 # un flake.lock à jour (colonne « Après update »).
@@ -65,8 +65,25 @@ let
   # et n'est jamais lu (sa lecture affiche un avertissement, ou interrompt l'évaluation).
   real = o: lib.isOption o && safe o.isDefined == true;
 
-  # Les services d'un ensemble d'options : `enable` et `package` déclarés, puis la valeur ; ou ses
-  # instances (services.authelia.instances.main…).
+  # Les entrées activées des options `attrsOf` d'un module (services.authelia.instances.main,
+  # services.redis.servers.nextcloud…).
+  subsOf =
+    o: v:
+    lib.concatMap (
+      k:
+      let
+        x = safe v.${k};
+      in
+      lib.optionals (
+        lib.isOption o.${k}
+        && safe (o.${k}.type.name or null) == "attrsOf"
+        && real o.${k}
+        && builtins.isAttrs x
+      ) (lib.mapAttrsToList (i: iv: { inherit i iv; }) (lib.filterAttrs (_: enabled) x))
+    ) (lib.attrNames o);
+
+  # Les modules d'un ensemble d'options qui ont un paquet : activés (`enable`), ou par une de leurs
+  # entrées ; une entrée qui a son propre paquet est une ligne à elle.
   fromSet =
     prefix: opts: cfg:
     lib.concatLists (
@@ -75,22 +92,18 @@ let
         if !(builtins.isAttrs o) || lib.isOption o then
           [ ]
         else
-          lib.optionals (real (o.enable or null) && lib.isOption (o.package or null) && enabled cfg.${name}) (
+          let
+            # Un module qui a son `enable` le suit, entrées comprises (drupal a une entrée par défaut).
+            hasEnable = real (o.enable or null);
+            topOn = hasEnable && enabled cfg.${name};
+            subs = lib.optionals (!hasEnable || topOn) (subsOf o (cfg.${name} or { }));
+            own = lib.filter (s: s.iv ? package) subs;
+            on = topOn || lib.length own < lib.length subs;
+          in
+          lib.optionals (lib.isOption (o.package or null) && on) (
             info "${prefix}.${name}" "service" (safe cfg.${name}.package)
           )
-          ++ lib.optionals (real (o.instances or null)) (
-            let
-              instances = safe cfg.${name}.instances;
-            in
-            lib.concatLists (
-              lib.mapAttrsToList (
-                i: iv:
-                lib.optionals (enabled iv && iv ? package) (
-                  info "${prefix}.${name}.${i}" "service" (safe iv.package)
-                )
-              ) (if builtins.isAttrs instances then instances else { })
-            )
-          )
+          ++ lib.concatMap (s: info "${prefix}.${name}.${s.i}" "service" (safe s.iv.package)) own
       ) opts
     );
 
@@ -98,6 +111,7 @@ let
     fromSet "services" options.services config.services
     ++ fromSet "virtualisation" options.virtualisation config.virtualisation
     ++ fromSet "security" options.security config.security
+    ++ fromSet "networking" options.networking config.networking
     ++ fromSet "programs" options.programs config.programs
     ++ info "boot.kernel" "base" config.boot.kernelPackages.kernel
     ++ info "systemd" "base" config.systemd.package
