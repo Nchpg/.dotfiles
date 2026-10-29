@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// Activité SSH de la page SSH, en lecture seule : les connexions acceptées et les tentatives refusées
+// Activité SSH de la page SSH, en lecture seule : les connexions acceptées (par clé et par IP) et les tentatives refusées
 // viennent du journal de sshd gardé par Loki (sa durée de conservation), les sessions ouvertes de
 // logind. sshd note l'empreinte de la clé acceptée, pas celle d'une clé refusée : les refus se
 // comptent par IP.
@@ -61,6 +61,15 @@ type SSHRefusal struct {
 	last       time.Time
 }
 
+// SSHAccept : les connexions acceptées d'une clé depuis une IP.
+type SSHAccept struct {
+	User, IP, Fingerprint string
+	Device, Key           string // remplis par la page (appareil VPN, commentaire de la clé)
+	Count                 int
+	Last                  string
+	last                  time.Time
+}
+
 // SSHSession : une session SSH ouverte (logind), et la clé qui l'a ouverte quand le journal la donne.
 type SSHSession struct {
 	User, IP    string
@@ -70,6 +79,7 @@ type SSHSession struct {
 
 type sshActivity struct {
 	Uses      map[string]*SSHUse // par empreinte
+	Accepts   []*SSHAccept       // par clé et par IP, la plus récente d'abord
 	Refusals  []*SSHRefusal
 	Sessions  []SSHSession
 	Truncated bool // plus de lignes que Loki n'en rend en une fois : comptes minorés
@@ -81,8 +91,19 @@ type sshActivity struct {
 func summarize(events []sshEvent, sessions []SSHSession) sshActivity {
 	a := sshActivity{Uses: map[string]*SSHUse{}}
 	refused := map[string]*SSHRefusal{}
+	accepted := map[string]*SSHAccept{}
 	for _, e := range events {
 		if e.Accepted {
+			k := e.Fingerprint + " " + e.IP
+			x := accepted[k]
+			if x == nil {
+				x = &SSHAccept{User: e.User, IP: e.IP, Fingerprint: e.Fingerprint}
+				accepted[k] = x
+			}
+			x.Count++
+			if e.At.After(x.last) {
+				x.last = e.At
+			}
 			u := a.Uses[e.Fingerprint]
 			if u == nil {
 				u = &SSHUse{}
@@ -107,6 +128,10 @@ func summarize(events []sshEvent, sessions []SSHSession) sshActivity {
 			r.last = e.At
 		}
 	}
+	for _, x := range accepted {
+		a.Accepts = append(a.Accepts, x)
+	}
+	sort.Slice(a.Accepts, func(i, j int) bool { return a.Accepts[i].last.After(a.Accepts[j].last) })
 	for _, r := range refused {
 		sort.Strings(r.Users)
 		a.Refusals = append(a.Refusals, r)

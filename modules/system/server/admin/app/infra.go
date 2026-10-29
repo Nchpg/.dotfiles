@@ -687,13 +687,24 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	sort.SliceStable(rows, func(i, j int) bool { return rows[i].Connected && !rows[j].Connected })
+	accepted := 0
+	for _, x := range act.Accepts {
+		x.Device, x.Last = devices[x.IP], ago(time.Since(x.last))
+		x.Key = "hors liste"
+		for _, row := range rows {
+			if row.Fingerprint == x.Fingerprint && !row.Unknown {
+				x.Key = firstOf(row.Comment, row.Type)
+			}
+		}
+		accepted += x.Count
+	}
 	refused := 0
 	for _, x := range act.Refusals {
 		x.Device, x.Last = devices[x.IP], ago(time.Since(x.last))
 		refused += x.Count
 	}
 	s.render(w, "ssh", map[string]any{"Nav": "ssh", "Rows": rows, "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r),
-		"Sessions": len(act.Sessions), "Open": open, "Refusals": act.Refusals, "Refused": refused, "LogsOK": act.LogsOK,
+		"Sessions": len(act.Sessions), "Open": open, "Accepts": act.Accepts, "Accepted": accepted, "Refusals": act.Refusals, "Refused": refused, "LogsOK": act.LogsOK,
 		"Truncated": act.Truncated, "Window": windowLabel(s.cfg.LogsWindow)})
 }
 

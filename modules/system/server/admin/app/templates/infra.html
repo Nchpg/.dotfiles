@@ -173,6 +173,11 @@
         <span class="mono small muted">en ce moment</span>
       </div>
       <div class="strip-cell">
+        <span class="strip-label">Connexions acceptées</span>
+        <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq" style="background: {{if .Accepted}}#22C55E{{else}}#C4C9D2{{end}}"></span>{{.Accepted}}{{if .Truncated}}+{{end}}{{end}}</span>
+        <span class="mono small muted">sur {{.Window}}</span>
+      </div>
+      <div class="strip-cell">
         <span class="strip-label">Tentatives refusées</span>
         <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq" style="background: {{if .Refused}}#EF4444{{else}}#C4C9D2{{end}}"></span>{{.Refused}}{{if .Truncated}}+{{end}}{{end}}</span>
         <span class="mono small muted">sur {{.Window}}</span>
@@ -211,6 +216,25 @@
       </section>
     </section>
     {{if .LogsOK}}
+    <section class="block" aria-labelledby="accepted-title">
+      <div class="block-head"><h2 id="accepted-title" class="line">Connexions acceptées{{template "info" (args "ID" "info-accepted" "Text" "Chaque ouverture de session par une clé autorisée, d'après le journal de sshd : par clé et par provenance. SSH n'est ouvert qu'au réseau interne (LAN et VPN) : une adresse du VPN est traduite en appareil.")}}</h2><small class="muted">sur {{.Window}}</small></div>
+      <section class="card table-card" aria-label="Connexions acceptées">
+        <table class="list">
+          <thead><tr><th scope="col">D'où</th><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">Connexions</th><th scope="col">Dernière</th></tr></thead>
+          <tbody>
+            {{range .Accepts}}
+            <tr>
+              <td class="mono small">{{if .Device}}{{.Device}} <span class="muted">({{.IP}})</span>{{else}}{{.IP}}{{end}}</td>
+              <td class="mono small">{{.User}}</td>
+              <td title="{{.Fingerprint}}">{{if eq .Key "hors liste"}}<span class="chip amber">hors liste</span>{{else}}{{.Key}}{{end}}</td>
+              <td><span class="ok">{{.Count}}</span></td>
+              <td class="muted">{{.Last}}</td>
+            </tr>
+            {{else}}<tr><td colspan="5" class="muted">Aucune.</td></tr>{{end}}
+          </tbody>
+        </table>
+      </section>
+    </section>
     <section class="block" aria-labelledby="refused-title">
       <div class="block-head"><h2 id="refused-title" class="line">Tentatives refusées{{template "info" (args "ID" "info-refused" "Text" "Connexions fermées avant authentification : compte inconnu, ou clé qui n'est pas autorisée. sshd ne note pas l'empreinte d'une clé refusée : elles se comptent par IP. SSH n'est ouvert qu'au réseau interne (LAN et VPN) : une adresse du VPN est traduite en appareil.")}}</h2><small class="muted">sur {{.Window}}</small></div>
       <section class="card table-card" aria-label="Tentatives refusées">
