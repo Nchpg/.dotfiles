@@ -23,8 +23,8 @@
     </div>
     <div class="strip-cell">
       <span class="strip-label">Avec <code>update</code></span>
-      <span class="strip-value line">{{if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
-      <span class="small muted line">{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{template "urg-icon"}}{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}</span>
+      <span class="strip-value line">{{if .Running}}<span class="muted">en cours…</span>{{else if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
+      <span class="small muted line">{{if not .Running}}{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{template "urg-icon"}}{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}{{end}}</span>
     </div>
     <div class="strip-cell">
       <span class="strip-label">Appliquer</span>
@@ -33,6 +33,14 @@
     </div>
   </section>
 
+  {{if .Running}}
+  {{/* Les tableaux d'avant la vérification ne veulent plus rien dire : un chargement à leur place. */}}
+  <section class="card up-loading" role="status">
+    <span class="spin" aria-hidden="true"></span>
+    <span class="stack tight"><span class="strong">Vérification en cours</span>
+      <small class="muted">flake.lock mis à jour à part, versions évaluées sur main et après update{{if .AIOn}}, puis analyse par l'IA{{end}} ; une à deux minutes</small></span>
+  </section>
+  {{else}}
   {{if .Inputs}}
   <section class="block" aria-labelledby="up-inputs-title">
     <div class="block-head"><h2 id="up-inputs-title" class="line">Sources{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock : chaque entrée du flake (secrets à part, son lock ne bouge que par commit). En service : la génération active ; sur main : ce qui est poussé (git pull puis rebuild l'appliquent) ; après update : la dernière révision. En gras, ce qui diffère de la colonne d'avant. Commits : de ce qui tourne à après update. Les paquets viennent de l'une d'elles (colonne Source plus bas).")}}</h2></div>
@@ -58,6 +66,7 @@
     <div class="block-head"><h2 id="up-vers-title" class="line">Versions{{template "info" (args "ID" "info-up-vers" "Text" "Ce qui tourne sur think, trouvé dans la config (tout service activé qui a un paquet, le noyau, systemd ; aucune liste à tenir). En service : la génération active ; sur main : la config poussée sur GitHub, avec son flake.lock ; après update : la même avec le flake.lock à jour, calculé à part (rien n'est modifié). En gras, ce qui diffère de la colonne d'avant ; le changement compare ce qui tourne à après update. Un nouveau noyau demande un redémarrage ; une version majeure de Nextcloud ou PostgreSQL se choisit dans la config, avec une migration. Urgence : Gemini lit les notes des versions sautées et les avis de sécurité du projet (bouton Analyse).")}}</h2>{{if not .AIOn}}{{with .AIKey}}<small class="muted">Analyse par l'IA désactivée : <code>systemSettings.admin.ai.enable</code>, <code>secrets edit {{.}}</code> (clé gratuite de Google AI Studio), puis rebuild</small>{{end}}{{end}}</div>
     {{template "updates-table" (args "Rows" .Rows "Checked" .Checked)}}
   </section>
+  {{end}}
 </div>
 {{end}}
 
