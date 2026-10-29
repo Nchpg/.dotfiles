@@ -91,6 +91,11 @@ in
           reject_old_samples = false;
 
           volume_enabled = true;
+
+          # Une requête est découpée en tranches traitées 4 par 4 : à 1 h (le défaut, pensé pour un
+          # cluster), 30 jours font 720 sous-requêtes pour quelques centaines de lignes (7 s pour la
+          # page Trafic du dashboard). Une tranche par jour suffit à une machine seule.
+          split_queries_by_interval = "24h";
         };
 
         ruler = lib.mkIf lokiRuler {
