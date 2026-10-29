@@ -29,7 +29,7 @@
     <div class="strip-cell">
       <span class="strip-label">Avec <code>update</code></span>
       <span class="strip-value line">{{if .Running}}<span class="muted">en cours…</span>{{else if .Checked}}{{with index .Counts "changed"}}{{.}} version{{if gt . 1}}s{{end}} changerai{{if gt . 1}}en{{end}}t{{else}}<span class="ok">tout est à jour</span>{{end}}{{else}}—{{end}}</span>
-      <span class="small muted line">{{if not .Running}}{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{template "urg-icon"}}{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}{{end}}</span>
+      <span class="small muted line">{{if not .Running}}{{with index .Counts "major"}}<span class="chg chg-major">{{.}} majeure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "minor"}}<span class="chg chg-minor">{{.}} mineure{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "patch"}}<span class="chg chg-patch">{{.}} correctif{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "urgent"}}<span class="urg urg-urgent">{{template "urg-icon"}}{{.}} urgent{{if gt . 1}}s{{end}}</span>{{end}}{{with index .Counts "stuck"}}<span class="chg chg-stuck">{{.}} faille{{if gt . 1}}s{{end}} hors canal</span>{{end}}{{end}}</span>
     </div>
     <div class="strip-cell">
       <span class="strip-label">Appliquer</span>
@@ -89,13 +89,13 @@
 <section class="card table-card" aria-label="Versions">
   <table class="sites traffic detail updates">
     {{template "updates-cols"}}
-    <thead><tr><th scope="col">Paquet</th><th scope="col">Source</th><th scope="col">En service</th><th scope="col">Sur main</th><th scope="col">Après update</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
+    <thead><tr><th scope="col">Paquet</th><th scope="col">Source</th><th scope="col">En service</th><th scope="col">Sur main</th><th scope="col">Après update</th><th scope="col">Dernière</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
     {{$checked := .Checked}}
-    {{range .Rows}}{{if or (not $checked) (ne .Change "same")}}{{template "update-row" .}}{{end}}{{end}}
+    {{range .Rows}}{{if or (not $checked) (ne .Change "same") .Stuck}}{{template "update-row" .}}{{end}}{{end}}
   </table>
-  {{if $checked}}{{$same := 0}}{{range .Rows}}{{if eq .Change "same"}}{{$same = add $same 1}}{{end}}{{end}}
+  {{if $checked}}{{$same := 0}}{{range .Rows}}{{if and (eq .Change "same") (not .Stuck)}}{{$same = add $same 1}}{{end}}{{end}}
   {{if $same}}<details class="up-same"><summary class="muted small">{{$same}} à jour</summary>
-    <table class="sites traffic detail updates">{{template "updates-cols"}}{{range .Rows}}{{if eq .Change "same"}}{{template "update-row" .}}{{end}}{{end}}</table>
+    <table class="sites traffic detail updates">{{template "updates-cols"}}{{range .Rows}}{{if and (eq .Change "same") (not .Stuck)}}{{template "update-row" .}}{{end}}{{end}}</table>
   </details>{{end}}{{end}}
 </section>
 {{end}}
@@ -104,7 +104,7 @@
 {{define "urg"}}<span class="urg urg-{{.Urgency}}">{{if eq .Urgency "urgent"}}{{template "urg-icon"}}{{end}}{{.UrgencyLabel}}</span>{{end}}
 {{define "urg-icon"}}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20zM12 10v4M12 17.5h.01"/></svg>{{end}}
 
-{{define "updates-cols"}}<colgroup><col class="c-pkg"><col class="c-src"><col class="c-ver"><col class="c-ver"><col class="c-ver"><col class="c-chg"><col></colgroup>{{end}}
+{{define "updates-cols"}}<colgroup><col class="c-pkg"><col class="c-src"><col class="c-ver"><col class="c-ver"><col class="c-ver"><col class="c-ver"><col class="c-chg"><col></colgroup>{{end}}
 
 {{define "update-row"}}
 <tbody data-vpn><tr>
@@ -113,7 +113,8 @@
   <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
   <td class="mono small">{{if not .Main}}<span class="muted">—</span>{{else if ne .Main .Current}}<strong>{{.Main}}</strong>{{else}}{{.Main}}{{end}}</td>
   <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next (firstOf .Main .Current)}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
-  <td><span class="badges">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}{{template "urg" .}}{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
+  <td class="mono small"><span class="stack tight">{{if .Behind}}<span>{{if .LatestURL}}<a href="{{.LatestURL}}"><strong>{{.Latest}}</strong></a>{{else}}<strong>{{.Latest}}</strong>{{end}}</span><small class="warn-ink sans">pas dans le canal</small>{{else if .Latest}}<span class="muted">{{.Latest}}</span>{{else}}<span class="muted">—</span>{{end}}{{with .NewMajor}}<small class="muted sans">majeure {{.}} sortie</small>{{end}}</span></td>
+  <td><span class="badges">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}{{template "urg" .}}{{end}}{{if .Stuck}}<span class="chg chg-stuck">faille hors canal</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
   <td class="end"><span class="row-actions">
     {{- if .AI}}{{template "ai-btn"}}{{end}}
     {{- with .Release}}<a class="mini-btn" href="{{.}}" title="La release sur GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V3h9l9 9-9 9zM7.5 7.5h.01"/></svg>Release</a>{{end}}
@@ -128,10 +129,11 @@
 {{define "ai-btn"}}<button type="button" class="mini-btn" data-toggle-next aria-expanded="false">Analyse<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>{{end}}
 
 {{/* L'analyse par l'IA, dépliée par le bouton Analyse. */}}
-{{define "ai-row"}}<tr class="ai-row" hidden><td colspan="7">
+{{define "ai-row"}}<tr class="ai-row" hidden><td colspan="99">
   <div class="ai-box urg-box-{{.Urgency}}">
     <p>{{.Summary}}</p>
-    {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<span class="ai-cve"><a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Pkg}} <small class="mono">{{.}}</small>{{end}}{{if .Score}} <small class="cve-score cve-{{.Level}}">{{printf "%.1f" .Score}} {{.Level}}</small> <small class="muted">{{if .Network}}réseau{{else}}local{{end}}</small>{{else}}{{with .Severity}} <small class="muted">{{.}}, pas encore notée</small>{{else}} <small class="muted">pas encore notée</small>{{end}}{{end}}{{if .KEV}} <small class="cve-kev">exploitée</small>{{end}}</span>{{end}}</p>{{end}}
+    {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<span class="ai-cve"><a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Pkg}} <small class="mono">{{.}}</small>{{end}}{{if .Score}} <small class="cve-score cve-{{.Level}}">{{printf "%.1f" .Score}} {{.Level}}</small> <small class="muted">{{if .Network}}réseau{{else}}local{{end}}</small>{{else}}{{with .Severity}} <small class="muted">{{.}}, pas encore notée</small>{{else}} <small class="muted">pas encore notée</small>{{end}}{{end}}{{if .KEV}} <small class="cve-kev">exploitée</small>{{end}}{{if .Status}} <small class="cve-status st-{{.Status}}">{{.StatusLabel}}</small>{{end}}</span>{{end}}</p>{{end}}
+    {{if .StuckIn}}<p class="ai-stuck">Une faille n'est corrigée qu'en {{.StuckIn}}, que le canal {{.StuckSource}} ne donne pas encore : prendre le paquet dans nixpkgs-unstable, ou attendre que le canal suive.</p>{{end}}
     <small class="muted">Niveau : {{if .CVEs}}d'après la note des CVE (NVD, avis GitHub) et le catalogue des failles exploitées (CISA KEV){{else}}aucune CVE, bugs corrigés au plus « conseillé »{{end}}{{if ne .ModelUrgency .Urgency}} ; l'IA disait « {{.ModelUrgencyLabel}} »{{end}}.</small>
     <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version et les commits font foi.</small>
   </div>

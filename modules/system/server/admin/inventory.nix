@@ -3,6 +3,7 @@
   options,
   lib,
   inputs,
+  pkgs-unstable,
   ...
 }:
 
@@ -44,6 +45,21 @@ let
     in
     if builtins.isString u then u else null;
 
+  # Les CVE qu'un patch de nixpkgs corrige à version égale (son nom la cite : CVE-2026-1234.patch).
+  cvePatchesOf =
+    p:
+    let
+      patches = safe (p.patches or [ ]);
+      cve =
+        patch:
+        let
+          n = safe (lib.toUpper (patch.name or (baseNameOf (toString patch))));
+          m = if builtins.isString n then builtins.match ".*(CVE-[0-9]+-[0-9]+).*" n else null;
+        in
+        if m == null then [ ] else m;
+    in
+    lib.unique (lib.concatMap cve (if builtins.isList patches then patches else [ ]));
+
   info =
     id: kind: p:
     let
@@ -57,6 +73,9 @@ let
       homepage = safe (p.meta.homepage or null);
       src = srcOf p;
       source = safe (sourceOf p);
+      # La version de nixpkgs-unstable (avec le lock d'après update : la plus récente qu'il ait).
+      unstable = safe (pkgs-unstable.${p.pname or parsed.name}.version or null);
+      cvePatches = safe (cvePatchesOf p);
     };
 
   enabled = v: safe (builtins.isAttrs v && (v.enable or false) == true) == true;

@@ -452,3 +452,42 @@ func TestRateUrgency(t *testing.T) {
 		}
 	}
 }
+
+// La dernière version : la plus récente de la même série (release ou unstable), une majeure à part.
+func TestPickLatest(t *testing.T) {
+	rels := []Release{{Tag: "v6.1.4", URL: "u614"}, {Tag: "v5.8.10", URL: "u5810"}, {Tag: "v5.9.0-rc1", URL: "rc", Prerelease: true}, {Tag: "v5.8.9", URL: "u589"}}
+	if l := pickLatest("5.8.8", "5.8.9", rels); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
+		t.Errorf("podman : %+v", l)
+	}
+	if l := pickLatest("17.11", "18.6", nil); l.Version != "" || l.NewMajor != "18.6" {
+		t.Errorf("postgresql : %+v", l)
+	}
+	if l := pickLatest("7.3", "6.18.58", nil); l.Version != "" || l.NewMajor != "" {
+		t.Errorf("noyau : %+v", l)
+	}
+}
+
+// L'état de chaque CVE : patchée en service (ne compte pas), corrigée par update (version,
+// patch ou backport), ou seulement au-delà du canal (la ligne le signale).
+func TestClassifyRow(t *testing.T) {
+	infos := map[string]CVEInfo{"CVE-1": {Score: 9.8, Network: true}, "CVE-2": {Score: 8.1, Network: true}, "CVE-3": {Score: 5}}
+	row := UpdateRow{Name: "podman", Current: "5.8.8", Next: "5.8.9", Latest: "5.8.10", Patches: []string{"CVE-1"}, NextPatches: []string{"CVE-4"}}
+	a := Analysis{ModelUrgency: "urgent", CVEs: []AICVE{{ID: "CVE-1"}, {ID: "CVE-2", FixedIn: "5.8.10"}, {ID: "CVE-3", FixedIn: "5.8.9"}, {ID: "CVE-4"}, {ID: "CVE-5"}}}
+	got := classifyRow(&row, a, map[string]bool{"CVE-5": true}, infos)
+	var st []string
+	for _, c := range got.CVEs {
+		st = append(st, c.Status)
+	}
+	if strings.Join(st, " ") != "service channel update update update" || !row.Stuck || got.Urgency != "urgent" {
+		t.Errorf("états %v, bloquée %v, niveau %s", st, row.Stuck, got.Urgency)
+	}
+	// Plus rien au-delà du canal : seule la 5.8.9 compte, CVE-1 est déjà patchée.
+	row = UpdateRow{Name: "podman", Current: "5.8.8", Next: "5.8.9", Latest: "5.8.9", Patches: []string{"CVE-1"}}
+	got = classifyRow(&row, Analysis{ModelUrgency: "urgent", CVEs: []AICVE{{ID: "CVE-1"}, {ID: "CVE-3"}}}, nil, infos)
+	if row.Stuck || got.Urgency != "conseille" || got.CVEs[1].Status != "update" {
+		t.Errorf("sans retard : %+v", got)
+	}
+	if !(UpdateRow{Current: "5.8.8", Next: "5.8.9", Latest: "5.8.10"}).Behind() || (UpdateRow{Current: "5.8.8", Next: "5.8.9", Latest: "5.8.9"}).Behind() {
+		t.Error("Behind")
+	}
+}

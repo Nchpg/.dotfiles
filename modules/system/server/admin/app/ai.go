@@ -34,15 +34,20 @@ type Analysis struct {
 	Breaking bool   `json:"breaking,omitempty"`
 	Basis    string `json:"basis"` // ce qu'elle a lu
 	// ModelUrgency : le niveau donné par l'IA (Urgency, à l'affichage, vient des CVE).
-	ModelUrgency string    `json:"-"`
-	Model        string    `json:"model"`
-	At           time.Time `json:"at"`
+	ModelUrgency string `json:"-"`
+	// StuckSource, StuckIn : une faille n'est corrigée qu'au-delà du canal (lequel, en quelle version).
+	StuckSource, StuckIn string    `json:"-"`
+	Model                string    `json:"model"`
+	At                   time.Time `json:"at"`
 }
 
 type AICVE struct {
 	ID       string `json:"id"`
 	Severity string `json:"severity"`
-	Pkg      string `json:"pkg,omitempty"` // le paquet qu'elle touche (relevé dans un titre de commit)
+	Pkg      string `json:"pkg,omitempty"`      // le paquet qu'elle touche (relevé dans un titre de commit)
+	FixedIn  string `json:"fixed_in,omitempty"` // la première version qui la corrige (notes de version)
+	// Status : où elle en est pour ce serveur (classifyRow) : service, update, channel, unknown.
+	Status string `json:"-"`
 	// Sa note (cves.json), à l'affichage.
 	Score   float64 `json:"-"`
 	Network bool    `json:"-"`
@@ -180,9 +185,11 @@ func clip(s string, n int) string {
 
 // Release : une release GitHub d'un projet.
 type Release struct {
-	Tag  string `json:"tag_name"`
-	Body string `json:"body"`
-	URL  string `json:"html_url"`
+	Tag        string `json:"tag_name"`
+	Body       string `json:"body"`
+	URL        string `json:"html_url"`
+	Prerelease bool   `json:"prerelease"`
+	Draft      bool   `json:"draft"`
 }
 
 // releases : les dernières releases d'un dépôt GitHub (gardées quelques heures : la vérification et
@@ -219,6 +226,73 @@ func releaseOf(rels []Release, version string) string {
 	return ""
 }
 
+// tagVersion : la version d'un tag (« v1.2.3 », « release-1.2.3 » → « 1.2.3 »).
+func tagVersion(tag string) string {
+	if i := strings.IndexFunc(tag, func(r rune) bool { return r >= '0' && r <= '9' }); i >= 0 {
+		return tag[i:]
+	}
+	return tag
+}
+
+// major : le premier nombre d'une version (la série : 17 pour 17.11, 2026 pour 2026.10.4).
+func major(v string) int {
+	if p := versionParts(v); len(p) > 0 {
+		return p[0]
+	}
+	return -1
+}
+
+// latestVersions : pour chaque paquet, la version la plus récente publiée dans sa série (celle de la
+// version en service : un projet y corrige ses failles, PostgreSQL 17 comme Nextcloud 33) parmi ses
+// releases GitHub et nixpkgs-unstable ; et une version majeure plus récente, à part (une migration se
+// choisit dans la config).
+func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[string]LatestInfo {
+	out := map[string]LatestInfo{}
+	for _, r := range rows {
+		if r.Current == "" {
+			continue
+		}
+		var rels []Release
+		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src); owner != "" {
+			rels, _ = s.releases(ctx, owner, repo)
+		}
+		l := pickLatest(r.Current, r.Unstable, rels)
+		if l.Version != "" || l.NewMajor != "" {
+			out[r.Name] = l
+		}
+	}
+	return out
+}
+
+// pickLatest : parmi la version de nixpkgs-unstable et les releases (hors préversions), la plus
+// récente de la série de `current`, et une version majeure plus récente.
+func pickLatest(current, unstable string, rels []Release) LatestInfo {
+	type cand struct{ v, url string }
+	var cands []cand
+	if unstable != "" {
+		cands = append(cands, cand{unstable, ""})
+	}
+	for _, rel := range rels {
+		if !rel.Prerelease && !rel.Draft {
+			cands = append(cands, cand{tagVersion(rel.Tag), rel.URL})
+		}
+	}
+	var l LatestInfo
+	for _, c := range cands {
+		switch {
+		case major(c.v) == major(current):
+			if l.Version == "" || cmpVersions(c.v, l.Version) > 0 || (cmpVersions(c.v, l.Version) == 0 && l.URL == "") {
+				l.Version, l.URL = c.v, c.url
+			}
+		case major(c.v) > major(current):
+			if l.NewMajor == "" || cmpVersions(c.v, l.NewMajor) > 0 {
+				l.NewMajor = c.v
+			}
+		}
+	}
+	return l
+}
+
 // releaseLinks : la page de release GitHub de chaque version affichée (en service, après update).
 func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]string {
 	links := map[string]string{}
@@ -249,7 +323,7 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 		if rels, err := s.releases(ctx, owner, repo); err == nil {
 			n := 0
 			for _, r := range rels {
-				if cmpVersions(r.Tag, row.Current) > 0 && cmpVersions(r.Tag, row.Next) <= 0 {
+				if cmpVersions(r.Tag, row.Current) > 0 && cmpVersions(r.Tag, row.Upper()) <= 0 {
 					fmt.Fprintf(&b, "## %s\n%s\n\n", r.Tag, strings.TrimSpace(r.Body))
 					n++
 				}
@@ -262,7 +336,7 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 	if b.Len() == 0 && row.Changelog != "" {
 		if page, err := fetchText(ctx, row.Changelog); err == nil {
 			// La page couvre souvent toutes les versions : le texte autour de la nouvelle.
-			if i := strings.Index(page, row.Next); i >= 0 {
+			if i := strings.Index(page, row.Upper()); i >= 0 {
 				page = page[max(0, i-300):]
 			}
 			b.WriteString(clip(page, notesMax))
@@ -332,11 +406,11 @@ func fetchText(ctx context.Context, url string) (string, error) {
 	})), nil
 }
 
-const aiPrompt = `Tu aides à administrer un serveur NixOS personnel. Pour chaque paquet ci-dessous, une mise à jour est disponible de la version A à la version B. À partir UNIQUEMENT des textes fournis (notes de version, avis de sécurité du projet), dis si elle est urgente :
-- "urgent" : elle corrige une faille de sécurité qui touche la version A et qui est sérieuse (exécution de code, contournement d'authentification, fuite de données, CVE de gravité haute ou critique) ;
-- "conseille" : elle corrige une faille mineure, ou des bugs gênants ;
+const aiPrompt = `Tu aides à administrer un serveur NixOS personnel. Pour chaque paquet ci-dessous : A est la version en service, C la plus récente publiée par le projet dans la même série, et B celle que donnera la mise à jour de son canal (souvent B = C ; B peut être plus ancienne que C, voire égale à A). À partir UNIQUEMENT des textes fournis (notes des versions de A exclue à C incluse, avis de sécurité du projet), dis si passer de A à C est urgent :
+- "urgent" : une faille de sécurité sérieuse qui touche la version A est corrigée (exécution de code, contournement d'authentification, fuite de données, CVE de gravité haute ou critique) ;
+- "conseille" : une faille mineure, ou des bugs gênants, sont corrigés ;
 - "sans" : rien d'important pour un serveur.
-"summary" : en français, deux ou trois phrases sur ce qui change d'important (sécurité d'abord). "cves" : les CVE (ou GHSA) corrigées entre A (exclue) et B (incluse), avec leur gravité. Si les textes ne disent rien d'utile, "urgency" = "sans" et "summary" le dit ("Aucune note de version lisible"). N'invente rien, ne suppose rien au-delà des textes. Réponds pour chaque paquet, avec son "id".`
+"summary" : en français, deux ou trois phrases sur ce qui change d'important (sécurité d'abord). "cves" : les CVE (ou GHSA) corrigées entre A (exclue) et C (incluse), avec leur gravité et "fixed_in" : la première version qui la corrige, telle que les textes la donnent (vide si les textes ne le disent pas). Si les textes ne disent rien d'utile, "urgency" = "sans" et "summary" le dit ("Aucune note de version lisible"). N'invente rien, ne suppose rien au-delà des textes. Réponds pour chaque paquet, avec son "id".`
 
 var aiSchema = map[string]any{
 	"type": "ARRAY",
@@ -348,7 +422,7 @@ var aiSchema = map[string]any{
 			"summary":  map[string]any{"type": "STRING"},
 			"breaking": map[string]any{"type": "BOOLEAN"},
 			"cves": map[string]any{"type": "ARRAY", "items": map[string]any{"type": "OBJECT", "properties": map[string]any{
-				"id": map[string]any{"type": "STRING"}, "severity": map[string]any{"type": "STRING"}}}},
+				"id": map[string]any{"type": "STRING"}, "severity": map[string]any{"type": "STRING"}, "fixed_in": map[string]any{"type": "STRING"}}}},
 		},
 		"required": []string{"id", "urgency", "summary"},
 	},
@@ -436,8 +510,9 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 	done := s.analyses()
 	var todo []UpdateRow
 	for _, r := range rows {
-		if r.Change != "" && r.Change != "same" && r.Current != "" && r.Next != "" {
-			if _, ok := done[analysisKey(r.Name, r.Current, r.Next)]; !ok {
+		// Ce que la mise à jour change, ou ce que le projet a publié au-delà du canal.
+		if r.Current != "" && r.Upper() != "" && r.Upper() != r.Current && (r.Change != "same" || r.Behind()) {
+			if _, ok := done[r.analysisKey()]; !ok {
 				todo = append(todo, r)
 			}
 		}
@@ -451,7 +526,7 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		for _, r := range batch {
 			text, basis := s.releaseNotes(ctx, r)
 			bases[r.ID] = strings.Join(basis, ", ")
-			fmt.Fprintf(&p, "\n\n### id: %s — %s : A = %s, B = %s\n", r.ID, r.Name, r.Current, r.Next)
+			fmt.Fprintf(&p, "\n\n### id: %s — %s : A = %s, B = %s, C = %s\n", r.ID, r.Name, r.Current, firstOf(r.Next, r.Current), r.Upper())
 			if text == "" {
 				p.WriteString("(aucun texte trouvé)\n")
 			} else {
@@ -472,7 +547,7 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		for _, a := range answers {
 			for _, r := range batch {
 				if r.ID == a.ID {
-					add[analysisKey(r.Name, r.Current, r.Next)] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs,
+					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs,
 						Basis: firstOf(bases[r.ID], "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
 				}
 			}

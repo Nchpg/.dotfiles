@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -262,4 +263,62 @@ func rateUrgency(model string, cves []AICVE, infos map[string]CVEInfo) string {
 		}
 	}
 	return best
+}
+
+// classifyRow : où en est chaque CVE de l'analyse d'un paquet, et le niveau qui en découle :
+//   - service : déjà corrigée dans la version en service (un patch de nixpkgs la cite) ; ne compte pas ;
+//   - update : la mise à jour du canal la corrige (patch, backport cité par les commits du canal,
+//     version de correction atteinte) ;
+//   - channel : corrigée seulement dans une version plus récente que le canal ;
+//   - unknown : version de correction inconnue, le canal étant en retard sur le projet.
+//
+// `backports` : les CVE citées par les commits de l'entrée du flake qui fournit le paquet.
+func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos map[string]CVEInfo) Analysis {
+	var counted []AICVE
+	cves := make([]AICVE, len(a.CVEs))
+	for i, c := range a.CVEs {
+		id := strings.ToUpper(c.ID)
+		switch {
+		case slices.Contains(row.Patches, id):
+			c.Status = "service"
+		case slices.Contains(row.NextPatches, id), backports[id],
+			c.FixedIn != "" && row.Next != "" && cmpVersions(c.FixedIn, row.Next) <= 0, c.FixedIn == "" && !row.Behind():
+			c.Status = "update"
+		case c.FixedIn != "":
+			c.Status = "channel"
+		default:
+			c.Status = "unknown"
+		}
+		cves[i] = c
+		if c.Status == "service" {
+			continue
+		}
+		counted = append(counted, c)
+		info, ok := infos[id]
+		if c.Status == "channel" && urgencyRank[cveUrgency(c, info, ok)] >= urgencyRank["conseille"] {
+			row.Stuck = true
+		}
+	}
+	a.CVEs = cves
+	if len(a.CVEs) > 0 && len(counted) == 0 {
+		a.Urgency = "sans" // toutes déjà corrigées par nixpkgs
+	} else {
+		a.Urgency = rateUrgency(a.ModelUrgency, counted, infos)
+	}
+	return a
+}
+
+// StatusLabel : où en est la CVE, lisiblement.
+func (c AICVE) StatusLabel() string {
+	switch c.Status {
+	case "service":
+		return "déjà corrigée (patch nixpkgs)"
+	case "update":
+		return "corrigée par update"
+	case "channel":
+		return "corrigée en " + c.FixedIn + ", pas dans le canal"
+	case "unknown":
+		return "version de correction inconnue"
+	}
+	return ""
 }

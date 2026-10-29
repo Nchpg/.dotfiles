@@ -28,15 +28,17 @@ const updatesHour = 7
 
 // InvItem : un paquet de l'inventaire, ou une entrée du flake (kind input : version = révision).
 type InvItem struct {
-	ID           string `json:"id"`
-	Kind         string `json:"kind"` // service, base ou input
-	LastModified int64  `json:"lastModified"`
-	Pname        string `json:"pname"`
-	Version      string `json:"version"`
-	Changelog    string `json:"changelog"`
-	Homepage     string `json:"homepage"`
-	Src          string `json:"src"`    // d'où vient le code (dépôt, archive)
-	Source       string `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
+	ID           string   `json:"id"`
+	Kind         string   `json:"kind"` // service, base ou input
+	LastModified int64    `json:"lastModified"`
+	Pname        string   `json:"pname"`
+	Version      string   `json:"version"`
+	Changelog    string   `json:"changelog"`
+	Homepage     string   `json:"homepage"`
+	Src          string   `json:"src"`    // d'où vient le code (dépôt, archive)
+	Source       string   `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
+	Unstable     string   `json:"unstable"`
+	CVEPatches   []string `json:"cvePatches"` // CVE corrigées par un patch de nixpkgs, à version égale
 }
 
 // InputRow : une entrée du flake : en service, sur main, après update ; les commits d'écart entre
@@ -84,6 +86,8 @@ type updatesResult struct {
 	AIError string     `json:"aiError"` // l'analyse par l'IA a échoué (le reste de la vérification tient)
 	// Releases : la page GitHub de chaque version vue (clé releaseKey), trouvée à la vérification.
 	Releases map[string]string `json:"releases"`
+	// Latest : la dernière version publiée de chaque paquet (par nom), dans sa série.
+	Latest map[string]LatestInfo `json:"latest"`
 }
 
 func releaseKey(name, version string) string { return name + "|" + version }
@@ -339,6 +343,8 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 		if err == nil {
 			rows := updateRows(cur, res.Main, res.Next)
 			res.Releases = s.releaseLinks(ctx, rows)
+			res.Latest = s.latestVersions(ctx, rows)
+			applyLatest(rows, res.Latest)
 			var errs []string
 			for _, e := range []error{s.analyze(ctx, rows), s.analyzeInputs(ctx, res.Inputs, rows), s.scoreCVEs(ctx)} {
 				if e != nil {
@@ -388,6 +394,44 @@ type UpdateRow struct {
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
 	AI                  *Analysis
+	// La plus récente publiée dans la même série (release GitHub, ou nixpkgs-unstable), son lien, et
+	// une nouvelle version majeure s'il y en a une.
+	Latest, LatestURL, NewMajor string
+	Unstable                    string
+	Patches, NextPatches        []string // CVE patchées par nixpkgs : en service, après update
+	Stuck                       bool     // une faille n'est corrigée qu'au-delà du canal
+}
+
+// Upper : la version la plus récente connue (la dernière publiée si elle dépasse le canal).
+func (r UpdateRow) Upper() string {
+	if r.Behind() {
+		return r.Latest
+	}
+	return r.Next
+}
+
+// Behind : le projet a publié plus récent que ce que le canal donnera.
+func (r UpdateRow) Behind() bool {
+	return r.Latest != "" && cmpVersions(r.Latest, firstOf(r.Next, r.Current)) > 0
+}
+
+// analysisKey : la clé de l'analyse de ce paquet (de la version en service à la plus récente).
+func (r UpdateRow) analysisKey() string { return analysisKey(r.Name, r.Current, r.Upper()) }
+
+// LatestInfo : la version la plus récente d'un paquet dans sa série.
+type LatestInfo struct {
+	Version  string `json:"version"`
+	URL      string `json:"url"`
+	NewMajor string `json:"newMajor"`
+}
+
+// applyLatest : la dernière version trouvée à la vérification, sur chaque ligne.
+func applyLatest(rows []UpdateRow, latest map[string]LatestInfo) {
+	for i := range rows {
+		if l, ok := latest[rows[i].Name]; ok {
+			rows[i].Latest, rows[i].LatestURL, rows[i].NewMajor = l.Version, l.URL, l.NewMajor
+		}
+	}
 }
 
 // sourceLabel : l'entrée du flake lisiblement (self : ce dépôt).
@@ -469,7 +513,8 @@ func updateRows(cur, main, next []InvItem) []UpdateRow {
 		}
 		r := UpdateRow{ID: id, Name: it.Pname, Kind: it.Kind, Changelog: firstOf(it.Changelog, ci.Changelog), Homepage: firstOf(it.Homepage, ci.Homepage),
 			Src:    firstOf(it.Src, ci.Src),
-			Source: sourceLabel(firstOf(it.Source, firstOf(mi.Source, ci.Source)))}
+			Source: sourceLabel(firstOf(it.Source, firstOf(mi.Source, ci.Source))), Unstable: it.Unstable,
+			Patches: ci.CVEPatches, NextPatches: ni.CVEPatches}
 		if inCur {
 			r.Current = ci.Version
 		}
@@ -531,10 +576,12 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 			counts[a.Urgency]++
 		}
 	}
-	for _, row := range rows {
-		if a, ok := analyses[analysisKey(row.Name, row.Current, row.Next)]; ok && row.Change != "same" {
-			row.AI = &a
-			counts[a.Urgency]++
+	for _, row := range s.withAnalyses(rows, inputs, res) {
+		if row.AI != nil {
+			counts[row.AI.Urgency]++
+		}
+		if row.Stuck {
+			counts["stuck"]++
 		}
 		row.Release = res.Releases[releaseKey(row.Name, firstOf(row.Next, row.Current))]
 		if row.ID == "boot.kernel" {
@@ -580,6 +627,34 @@ func (s *Server) updatesCheck(w http.ResponseWriter, r *http.Request) {
 // urgencyMarks : l'urgence selon l'IA, sur Discord.
 var urgencyMarks = map[string]string{"urgent": "🔴", "conseille": "🟠", "sans": "⚪"}
 
+// withAnalyses : chaque ligne avec sa dernière version publiée, son analyse et ses CVE classées
+// (classifyRow ; les backports : les CVE citées par les commits de l'entrée qui fournit le paquet).
+func (s *Server) withAnalyses(rows []UpdateRow, inputs []InputRow, res updatesResult) []UpdateRow {
+	analyses := s.analyses()
+	infos := s.cveInfos()
+	backports := map[string]map[string]bool{}
+	for _, in := range inputs {
+		if a, ok := analyses[in.analysisKey()]; ok {
+			set := map[string]bool{}
+			for _, c := range a.CVEs {
+				set[strings.ToUpper(c.ID)] = true
+			}
+			backports[sourceLabel(in.Name)] = set
+		}
+	}
+	applyLatest(rows, res.Latest)
+	for i := range rows {
+		if a, ok := analyses[rows[i].analysisKey()]; ok && rows[i].Upper() != rows[i].Current {
+			a = classifyRow(&rows[i], a, backports[rows[i].Source], infos)
+			if rows[i].Stuck {
+				a.StuckSource, a.StuckIn = rows[i].Source, rows[i].Latest
+			}
+			rows[i].AI = &a
+		}
+	}
+	return rows
+}
+
 func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 	if s.cfg.DiscordHook == "" {
 		return
@@ -594,11 +669,8 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 		cur, _ := s.currentInventory()
 		var changed []UpdateRow
 		analyses := s.analyses()
-		for _, row := range updateRows(cur, res.Main, res.Next) {
-			if row.Change != "same" {
-				if a, ok := analyses[analysisKey(row.Name, row.Current, row.Next)]; ok {
-					row.AI = &a
-				}
+		for _, row := range s.withAnalyses(updateRows(cur, res.Main, res.Next), res.Inputs, res) {
+			if row.Change != "same" || row.Stuck {
 				changed = append(changed, row)
 			}
 		}
@@ -633,7 +705,14 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 				mark = urgencyMarks[row.AI.Urgency]
 				extra += ", " + row.AI.UrgencyLabel()
 			}
-			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, row.ChangeLabel, extra)
+			label := row.ChangeLabel
+			if row.Change == "same" {
+				label = "le canal n'a rien de plus"
+			}
+			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, label, extra)
+			if row.Stuck {
+				fmt.Fprintf(&b, "  ⚠️ faille corrigée seulement en %s, pas dans le canal %s : prendre le paquet dans unstable, ou attendre\n", row.Latest, row.Source)
+			}
 			if row.AI != nil && row.AI.Urgency == "urgent" {
 				fmt.Fprintf(&b, "  %s\n", row.AI.Summary)
 			}
