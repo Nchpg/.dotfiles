@@ -44,15 +44,14 @@ type Config struct {
 	Fonts        string
 	Peers        []string
 	SecretKeys   []string
-	Services     []Service // services de think hors apps.json (lecture seule)
-	VPN          VPNInfo   // tunnel et appareils (page VPN)
-	SSH          SSHInfo   // clés autorisées (page SSH)
-	AccountsFile string    // résumé des comptes Authelia, écrit par admin-accounts (root)
-	TrafficFile  string    // applis et sessions de Nextcloud et Vaultwarden, écrit par admin-traffic (root)
-	Inventory    string    // versions de la génération active (onglet Mises à jour)
-	AIKeyName    string    // secret sops de la clé Gemini (vide : analyse non prévue)
-	AIModel      string    // modèle d'analyse des mises à jour, et son secours
-	AIFallback   string
+	Services     []Service    // services de think hors apps.json (lecture seule)
+	VPN          VPNInfo      // tunnel et appareils (page VPN)
+	SSH          SSHInfo      // clés autorisées (page SSH)
+	AccountsFile string       // résumé des comptes Authelia, écrit par admin-accounts (root)
+	TrafficFile  string       // applis et sessions de Nextcloud et Vaultwarden, écrit par admin-traffic (root)
+	Inventory    string       // versions de la génération active (onglet Mises à jour)
+	AIKeyName    string       // secret sops de la clé Gemini (vide : analyse non prévue)
+	AIModel      string       // modèle d'analyse des mises à jour
 	AIThinking   string       // raisonnement des modèles Gemini 3 (low, high ; vide : celui du modèle)
 	Authelia     AutheliaInfo // services ouverts compte par compte (page Authelia)
 	WGPubkeyFile string       // clé publique du serveur WireGuard, dérivée au démarrage
@@ -94,7 +93,6 @@ func loadConfig() (*Config, error) {
 		Inventory:    env("ADMIN_INVENTORY", "/etc/dotfiles/inventory.json"),
 		AIKeyName:    os.Getenv("ADMIN_AI_KEY"),
 		AIModel:      os.Getenv("ADMIN_AI_MODEL"),
-		AIFallback:   os.Getenv("ADMIN_AI_FALLBACK"),
 		AIThinking:   os.Getenv("ADMIN_AI_THINKING"),
 		WGPubkeyFile: env("ADMIN_WG_PUBKEY", "/run/admin/wg-server.pub"),
 	}

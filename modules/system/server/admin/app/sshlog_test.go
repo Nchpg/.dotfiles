@@ -227,19 +227,18 @@ func TestGithubRepo(t *testing.T) {
 	}
 }
 
-// Analyse par l'IA : la réponse rangée par paquet et gardée ; le secours si le modèle refuse ; une
-// montée de version déjà analysée n'est plus redemandée.
+// Analyse par l'IA : la réponse rangée par paquet et gardée, une montée de version déjà analysée
+// n'est plus redemandée ; le raisonnement court est demandé.
 func TestAnalyze(t *testing.T) {
 	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.URL.Path)
-		if strings.Contains(r.URL.Path, "/models/m1:") {
-			w.WriteHeader(http.StatusTooManyRequests)
-			_, _ = w.Write([]byte(`{"error":{"message":"quota"}}`))
-			return
+		var body struct {
+			GenerationConfig map[string]any `json:"generationConfig"`
 		}
-		if r.Header.Get("x-goog-api-key") != "k" {
-			t.Error("clé absente")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if tc, _ := body.GenerationConfig["thinkingConfig"].(map[string]any); tc["thinkingLevel"] != "low" || r.Header.Get("x-goog-api-key") != "k" {
+			t.Errorf("requête : %v", body.GenerationConfig)
 		}
 		answer := `[{"id":"services.openssh","urgency":"urgent","summary":"Corrige une faille.","cves":[{"id":"CVE-2026-1","severity":"high"}]}]`
 		b, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": answer}}}}}})
@@ -248,35 +247,18 @@ func TestAnalyze(t *testing.T) {
 	defer srv.Close()
 	geminiBase = srv.URL
 	aiCache.m = nil
-	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "m1", AIFallback: "m2", StateDir: t.TempDir()}}
+	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "m", AIThinking: "low", StateDir: t.TempDir()}}
 	rows := []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}, {ID: "services.nginx", Name: "nginx", Current: "1", Next: "1", Change: "same"}}
 	if err := s.analyze(t.Context(), rows); err != nil {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]
-	if !ok || a.Urgency != "urgent" || a.Model != "m2" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || !strings.Contains(a.Fallback, "429") {
+	if !ok || a.Urgency != "urgent" || a.Model != "m" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
 		t.Errorf("analyse : %+v (appels %v)", a, calls)
 	}
-	// Faite par le secours : retentée avec le principal seul (qui refuse encore : on la garde).
-	n := len(calls)
 	_ = s.analyze(t.Context(), rows)
-	if len(calls) != n+1 || !strings.Contains(calls[n], "/models/m1:") || s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")].Model != "m2" {
-		t.Errorf("nouvel essai : %v", calls[n:])
-	}
-	// Son refus est gardé sur l'analyse, pour que la page dise pourquoi.
-	if f := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")].Fallback; !strings.Contains(f, "m1") || !strings.Contains(f, "429") {
-		t.Errorf("raison du refus non gardée : %q", f)
-	}
-	// Le principal répond : son analyse remplace celle du secours, et plus rien n'est redemandé.
-	s.cfg.AIModel = "m3"
-	_ = s.analyze(t.Context(), rows)
-	if a := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]; a.Model != "m3" || a.Fallback != "" {
-		t.Errorf("après le principal : %+v", a)
-	}
-	n = len(calls)
-	_ = s.analyze(t.Context(), rows)
-	if len(calls) != n {
-		t.Error("une montée de version déjà analysée par le principal a été redemandée")
+	if len(calls) != 1 {
+		t.Error("une montée de version déjà analysée a été redemandée")
 	}
 	if o, r := repoOf("https://github.com/authelia/authelia/releases/tag/v4.39.28"); o != "authelia" || r != "authelia" {
 		t.Errorf("dépôt : %s/%s", o, r)
@@ -286,33 +268,29 @@ func TestAnalyze(t *testing.T) {
 	}
 }
 
-// Un modèle qui ne répond pas à temps : le secours, en le disant ; et le raisonnement court demandé.
-func TestAnalyzeTimeout(t *testing.T) {
+// Un refus, ou pas de réponse à temps : une erreur claire, rien de gardé (retenté à la vérification
+// suivante).
+func TestAnalyzeErrors(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			GenerationConfig map[string]any `json:"generationConfig"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&body)
-		if tc, _ := body.GenerationConfig["thinkingConfig"].(map[string]any); tc["thinkingLevel"] != "low" {
-			t.Errorf("raisonnement : %v", body.GenerationConfig["thinkingConfig"])
-		}
 		if strings.Contains(r.URL.Path, "/models/slow:") {
 			time.Sleep(300 * time.Millisecond)
 			return
 		}
-		answer := `[{"id":"services.openssh","urgency":"conseille","summary":"Bugs."}]`
-		b, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": answer}}}}}})
-		_, _ = w.Write(b)
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"quota"}}`))
 	}))
 	defer srv.Close()
 	geminiBase, aiTimeout = srv.URL, 100*time.Millisecond
 	defer func() { aiTimeout = 2 * time.Minute }()
-	aiCache.m = nil
-	s := &Server{cfg: &Config{GeminiKey: "k", AIModel: "slow", AIFallback: "fast", AIThinking: "low", StateDir: t.TempDir()}}
-	if err := s.analyze(t.Context(), []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}}); err != nil {
-		t.Fatal(err)
-	}
-	if a := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")]; a.Model != "fast" || !strings.Contains(a.Fallback, "slow : pas de réponse") {
-		t.Errorf("%+v", a)
+	rows := []UpdateRow{{ID: "services.openssh", Name: "openssh", Current: "10.5p1", Next: "10.6p1", Change: "minor"}}
+	for model, want := range map[string]string{"slow": "slow : pas de réponse", "busy": "busy : HTTP 429 quota"} {
+		aiCache.m = nil
+		s := &Server{cfg: &Config{GeminiKey: "k", AIModel: model, StateDir: t.TempDir()}}
+		if err := s.analyze(t.Context(), rows); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s : %v", model, err)
+		}
+		if len(s.analyses()) != 0 {
+			t.Errorf("%s : une analyse gardée malgré l'erreur", model)
+		}
 	}
 }

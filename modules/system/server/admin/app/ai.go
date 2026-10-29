@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,9 +31,6 @@ type Analysis struct {
 	Basis   string    `json:"basis"` // ce qu'elle a lu
 	Model   string    `json:"model"`
 	At      time.Time `json:"at"`
-	// Faite par le modèle de secours : pourquoi (le refus du principal). Toute analyse d'un autre
-	// modèle que le principal est retentée avec lui à la vérification suivante.
-	Fallback string `json:"fallback,omitempty"`
 }
 
 type AICVE struct {
@@ -256,7 +252,7 @@ var aiSchema = map[string]any{
 // geminiBase : l'API Gemini (remplacée dans les tests).
 var geminiBase = "https://generativelanguage.googleapis.com/v1beta"
 
-// aiTimeout : l'attente d'une réponse, au-delà le modèle de secours.
+// aiTimeout : l'attente d'une réponse (au-delà, l'analyse est retentée à la vérification suivante).
 var aiTimeout = 2 * time.Minute
 
 // generationConfig : réponse en JSON imposé, peu de fantaisie ; et un raisonnement court (`thinking`,
@@ -270,13 +266,9 @@ func generationConfig(thinking string) map[string]any {
 	return c
 }
 
-// errQuota : le modèle refuse (quota atteint, indisponible, ou inconnu) : on passe au secours.
-type errQuota struct{ msg string }
-
-func (e errQuota) Error() string { return e.msg }
-
 // gemini : une requête, la réponse JSON du modèle.
-func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, error) {
+func (s *Server) gemini(ctx context.Context, prompt string) ([]byte, error) {
+	model := s.cfg.AIModel
 	body, _ := json.Marshal(map[string]any{
 		"contents":         []any{map[string]any{"role": "user", "parts": []any{map[string]any{"text": prompt}}}},
 		"generationConfig": generationConfig(s.cfg.AIThinking),
@@ -292,9 +284,8 @@ func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, erro
 	req.Header.Set("x-goog-api-key", s.cfg.GeminiKey)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		// Pas de réponse à temps (modèle surchargé, ou qui réfléchit trop longtemps) : le secours.
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, errQuota{model + " : pas de réponse en " + aiTimeout.String()}
+			return nil, fmt.Errorf("%s : pas de réponse en %s", model, aiTimeout)
 		}
 		return nil, err
 	}
@@ -305,14 +296,7 @@ func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, erro
 			Error struct{ Message string } `json:"error"`
 		}
 		_ = json.Unmarshal(b, &e)
-		msg := fmt.Sprintf("%s : HTTP %d %s", model, resp.StatusCode, firstOf(e.Error.Message, resp.Status))
-		switch resp.StatusCode {
-		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
-			return nil, errQuota{msg}
-		case http.StatusNotFound:
-			return nil, errQuota{msg + s.geminiModels(ctx)}
-		}
-		return nil, errors.New(msg)
+		return nil, fmt.Errorf("%s : HTTP %d %s", model, resp.StatusCode, firstOf(e.Error.Message, resp.Status))
 	}
 	var out struct {
 		Candidates []struct {
@@ -327,68 +311,23 @@ func (s *Server) gemini(ctx context.Context, model, prompt string) ([]byte, erro
 	return []byte(out.Candidates[0].Content.Parts[0].Text), nil
 }
 
-// geminiModels : les modèles « flash » que la clé peut appeler (pour corriger le nom dans la config).
-func (s *Server) geminiModels(ctx context.Context) string {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, geminiBase+"/models?pageSize=200", nil)
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("x-goog-api-key", s.cfg.GeminiKey)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer resp.Body.Close()
-	var out struct {
-		Models []struct{ Name string } `json:"models"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
-		return ""
-	}
-	var names []string
-	for _, m := range out.Models {
-		if n := strings.TrimPrefix(m.Name, "models/"); strings.Contains(n, "flash") {
-			names = append(names, n)
-		}
-	}
-	sort.Strings(names)
-	return " (modèles disponibles : " + strings.Join(names, ", ") + ")"
-}
-
 // aiBatch : paquets analysés par requête (quelques requêtes par jour, loin des quotas gratuits).
 const aiBatch = 5
 
-// analyze : les montées de version pas encore analysées ; l'erreur, s'il y en a une.
+// analyze : les montées de version pas encore analysées, par lots ; l'erreur, s'il y en a une.
 func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 	if s.cfg.GeminiKey == "" {
 		return nil
 	}
 	done := s.analyses()
-	var todo, retry []UpdateRow
+	var todo []UpdateRow
 	for _, r := range rows {
 		if r.Change != "" && r.Change != "same" && r.Current != "" && r.Next != "" {
-			a, ok := done[analysisKey(r.Name, r.Current, r.Next)]
-			switch {
-			case !ok:
+			if _, ok := done[analysisKey(r.Name, r.Current, r.Next)]; !ok {
 				todo = append(todo, r)
-			case a.Model != s.cfg.AIModel:
-				// Faite par le secours (ou par un modèle qu'on a changé depuis) : retentée avec le principal.
-				retry = append(retry, r)
 			}
 		}
 	}
-	errs := s.analyzeBatches(ctx, todo, true)
-	// Faites par le secours : le principal seulement ; s'il refuse encore, on garde ce qu'on a.
-	s.analyzeBatches(ctx, retry, false)
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, " ; "))
-	}
-	return nil
-}
-
-// analyzeBatches : les analyses de ces montées de version, par lots ; `fallback` : le modèle de
-// secours si le principal refuse. Les erreurs, lot par lot.
-func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback bool) []string {
 	var errs []string
 	for start := 0; start < len(todo); start += aiBatch {
 		batch := todo[start:min(start+aiBatch, len(todo))]
@@ -405,27 +344,9 @@ func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback 
 				p.WriteString(text)
 			}
 		}
-		model, why := s.cfg.AIModel, ""
-		raw, err := s.gemini(ctx, model, p.String())
-		var q errQuota
-		if errors.As(err, &q) && fallback && s.cfg.AIFallback != "" {
-			model, why = s.cfg.AIFallback, q.msg
-			raw, err = s.gemini(ctx, model, p.String())
-		}
+		raw, err := s.gemini(ctx, p.String())
 		if err != nil {
 			errs = append(errs, err.Error())
-			// Nouvel essai du principal, refusé : la raison sur l'analyse gardée (la page la montre).
-			if !fallback {
-				done, kept := s.analyses(), map[string]Analysis{}
-				for _, r := range batch {
-					k := analysisKey(r.Name, r.Current, r.Next)
-					if a, ok := done[k]; ok {
-						a.Fallback = err.Error()
-						kept[k] = a
-					}
-				}
-				s.saveAnalyses(kept)
-			}
 			continue
 		}
 		var answers []struct {
@@ -435,7 +356,7 @@ func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback 
 			CVEs    []AICVE `json:"cves"`
 		}
 		if err := json.Unmarshal(raw, &answers); err != nil {
-			errs = append(errs, model+" : réponse illisible")
+			errs = append(errs, s.cfg.AIModel+" : réponse illisible")
 			continue
 		}
 		add := map[string]Analysis{}
@@ -443,11 +364,14 @@ func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback 
 			for _, r := range batch {
 				if r.ID == a.ID {
 					add[analysisKey(r.Name, r.Current, r.Next)] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs,
-						Basis: firstOf(bases[r.ID], "rien à lire"), Model: model, At: time.Now(), Fallback: why}
+						Basis: firstOf(bases[r.ID], "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
 				}
 			}
 		}
 		s.saveAnalyses(add)
 	}
-	return errs
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, " ; "))
+	}
+	return nil
 }

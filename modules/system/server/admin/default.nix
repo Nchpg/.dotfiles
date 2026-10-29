@@ -263,14 +263,8 @@ in
 
       model = lib.mkOption {
         type = lib.types.str;
-        default = "gemini-3.8-flash";
-        description = "Modèle d'analyse (identifiant de l'API Gemini).";
-      };
-
-      fallback = lib.mkOption {
-        type = lib.types.str;
         default = "gemini-3.5-flash-lite";
-        description = "Modèle de secours, quand le premier refuse (quota, surcharge, nom inconnu) ou ne répond pas à temps.";
+        description = "Modèle d'analyse (identifiant de l'API Gemini).";
       };
 
       thinking = lib.mkOption {
@@ -371,7 +365,6 @@ in
         # Le secret de la clé, pour que la page dise comment activer l'analyse.
         ADMIN_AI_KEY = cfg.ai.keySops;
         ADMIN_AI_MODEL = cfg.ai.model;
-        ADMIN_AI_FALLBACK = cfg.ai.fallback;
         ADMIN_AI_THINKING = cfg.ai.thinking;
         ADMIN_AUTHELIA_FILE = pkgs-stable.writeText "admin-authelia.json" (builtins.toJSON autheliaInfo);
         ADMIN_WG_PUBKEY = "/run/admin/wg-server.pub";
