@@ -1,7 +1,7 @@
 {{define "updates"}}{{template "top" .}}
 <header class="topbar">
   {{template "crumbs" (args "Title" "Mises à jour")}}
-  <form method="post" action="/updates/check"><button class="btn btn-primary" {{if .Running}}disabled{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>{{if .Running}}Vérification…{{else}}Vérifier maintenant{{end}}</button></form>
+  <form method="post" action="/updates/check"><button class="btn btn-primary" {{if .Running}}disabled{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg>{{if .Running}}Vérification…{{else}}Vérifier maintenant{{end}}</button></form>
 </header>
 <main class="page">
   <h1>Mises à jour</h1>
@@ -32,22 +32,12 @@
     </div>
   </section>
 
-  <section class="block" aria-labelledby="up-base-title">
-    <div class="block-head"><h2 id="up-base-title" class="line">Système{{template "info" (args "ID" "info-up-base" "Text" "Le noyau, systemd et nixpkgs. En service : la génération active de think. Après update : la config de main, avec un flake.lock mis à jour comme le ferait update (calculé à part, rien n'est modifié). Un nouveau noyau demande un redémarrage.")}}</h2></div>
-    {{template "updates-table" (args "Rows" .Base "Checked" .Checked)}}
-  </section>
-
-  <section class="block" aria-labelledby="up-svc-title">
-    <div class="block-head"><h2 id="up-svc-title" class="line">Services{{template "info" (args "ID" "info-up-svc" "Text" "Tout service activé sur think qui a un paquet, trouvé dans la config (aucune liste à tenir). Une version majeure de Nextcloud ou PostgreSQL ne vient jamais d'un simple update : elle se choisit dans la config, avec une migration.")}}</h2></div>
-    {{template "updates-table" (args "Rows" .Services "Checked" .Checked)}}
-  </section>
-
   {{if .Inputs}}
   <section class="block" aria-labelledby="up-inputs-title">
-    <div class="block-head"><h2 id="up-inputs-title" class="line">Entrées du flake{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock (secrets à part : son lock ne bouge que par commit). Comparer : les changements de l'entrée sur GitHub.")}}</h2></div>
+    <div class="block-head"><h2 id="up-inputs-title" class="line">Sources{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock : chaque entrée du flake (secrets à part, son lock ne bouge que par commit). Les paquets viennent de l'une d'elles (colonne Source plus bas) : nixpkgs-stable pour la plupart, nixpkgs-unstable pour ceux qui veulent une version plus récente. Comparer : ses changements sur GitHub.")}}</h2></div>
     <section class="card table-card" aria-label="Entrées du flake">
       <table class="sites traffic detail">
-        <thead><tr><th scope="col">Entrée</th><th scope="col">Actuelle</th><th scope="col">Après update</th><th scope="col">Écart</th><th scope="col"><span class="sr-only">Lien</span></th></tr></thead>
+        <thead><tr><th scope="col">Source</th><th scope="col">Actuelle</th><th scope="col">Après update</th><th scope="col">Écart</th><th scope="col"><span class="sr-only">Lien</span></th></tr></thead>
         {{range .Inputs}}
         <tbody data-vpn><tr>
           <td class="site-td"><span class="mono strong">{{.Name}}</span></td>
@@ -61,6 +51,11 @@
     </section>
   </section>
   {{end}}
+
+  <section class="block" aria-labelledby="up-vers-title">
+    <div class="block-head"><h2 id="up-vers-title" class="line">Versions{{template "info" (args "ID" "info-up-vers" "Text" "Ce qui tourne sur think, trouvé dans la config (tout service activé qui a un paquet, le noyau, systemd ; aucune liste à tenir), et sa version après update. En service : la génération active. Après update : la config de main avec le flake.lock à jour, calculé à part (rien n'est modifié). Un nouveau noyau demande un redémarrage ; une version majeure de Nextcloud ou PostgreSQL se choisit dans la config, avec une migration.")}}</h2></div>
+    {{template "updates-table" (args "Rows" .Rows "Checked" .Checked)}}
+  </section>
 </div>
 {{end}}
 
@@ -68,7 +63,7 @@
 {{define "updates-table"}}
 <section class="card table-card" aria-label="Versions">
   <table class="sites traffic detail updates">
-    <thead><tr><th scope="col">Paquet</th><th scope="col">En service</th><th scope="col">Après update</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
+    <thead><tr><th scope="col">Paquet</th><th scope="col">Source</th><th scope="col">Version</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
     {{$checked := .Checked}}
     {{range .Rows}}{{if or (not $checked) (ne .Change "same")}}{{template "update-row" .}}{{end}}{{end}}
   </table>
@@ -82,8 +77,8 @@
 {{define "update-row"}}
 <tbody data-vpn><tr>
   <td class="site-td"><span class="stack tight"><span class="strong">{{.Name}}</span><small class="mono muted">{{.ID}}</small></span></td>
-  <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
-  <td class="mono small">{{if .Next}}{{.Next}}{{else}}<span class="muted">—</span>{{end}}</td>
+  <td>{{with .Source}}<span class="src">{{.}}</span>{{end}}</td>
+  <td class="mono small"><span class="ver">{{firstOf .Current "—"}}{{if and .Next (ne .Next .Current)}}<span class="muted"> → </span><strong>{{.Next}}</strong>{{end}}</span>{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
   <td>{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}} <small class="warn-ink">redémarrage</small>{{end}}</td>
   <td class="end small">{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</td>
 </tr></tbody>

@@ -2,12 +2,13 @@
   config,
   options,
   lib,
+  inputs,
   ...
 }:
 
 # Onglet Mises à jour : les versions de ce qui tourne, découvertes dans la config et jamais listées à
 # la main. Tout service activé qui a un paquet (`services.<x>`, ses `instances` comprises, et
-# `virtualisation.<x>`), puis le noyau, systemd et nixpkgs. La génération active le garde dans
+# `virtualisation.<x>`), puis le noyau et systemd ; chacun avec l'entrée du flake qui le fournit. La génération active le garde dans
 # /etc/dotfiles/inventory.json (colonne « En service ») ; le dashboard évalue le même attribut avec
 # un flake.lock à jour (colonne « Après update »).
 let
@@ -18,6 +19,20 @@ let
       r = builtins.tryEval v;
     in
     if r.success then r.value else null;
+
+  # L'entrée du flake qui fournit un paquet : celle dont la source contient sa définition
+  # (`meta.position`) ; `self` pour un paquet de ce dépôt.
+  sourceOf =
+    p:
+    let
+      pos = safe (p.meta.position or null);
+    in
+    if !(builtins.isString pos) then
+      null
+    else
+      lib.findFirst (n: lib.hasPrefix "${toString (inputs.${n}.outPath or "/nonexistent")}/" pos) null (
+        lib.attrNames inputs
+      );
 
   info =
     id: kind: p:
@@ -30,6 +45,7 @@ let
       version = safe (p.version or parsed.version);
       changelog = safe (p.meta.changelog or null);
       homepage = safe (p.meta.homepage or null);
+      source = safe (sourceOf p);
     };
 
   enabled = v: safe (builtins.isAttrs v && (v.enable or false) == true) == true;
@@ -71,17 +87,7 @@ let
     fromSet "services" options.services config.services
     ++ fromSet "virtualisation" options.virtualisation config.virtualisation
     ++ info "boot.kernel" "base" config.boot.kernelPackages.kernel
-    ++ info "systemd" "base" config.systemd.package
-    ++ [
-      {
-        id = "nixpkgs";
-        kind = "base";
-        pname = "nixpkgs";
-        version = lib.version;
-        changelog = null;
-        homepage = "https://github.com/NixOS/nixpkgs";
-      }
-    ];
+    ++ info "systemd" "base" config.systemd.package;
 in
 {
   options.systemSettings.admin.inventory = lib.mkOption {

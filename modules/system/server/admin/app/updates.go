@@ -34,6 +34,7 @@ type InvItem struct {
 	Version   string `json:"version"`
 	Changelog string `json:"changelog"`
 	Homepage  string `json:"homepage"`
+	Source    string `json:"source"` // l'entrée du flake qui le fournit (self : ce dépôt)
 }
 
 // InputRow : une entrée du flake, avant et après la mise à jour.
@@ -254,7 +255,16 @@ type UpdateRow struct {
 	Current, Next       string
 	Change, ChangeLabel string // major, minor, patch, same, new, gone, other
 	Changelog, Homepage string
+	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
+}
+
+// sourceLabel : l'entrée du flake lisiblement (self : ce dépôt).
+func sourceLabel(s string) string {
+	if s == "self" {
+		return "ce dépôt"
+	}
+	return s
 }
 
 var reVersionPart = regexp.MustCompile(`\d+`)
@@ -303,7 +313,7 @@ func updateRows(cur, next []InvItem) []UpdateRow {
 		if it == nil {
 			it = n
 		}
-		r := UpdateRow{ID: it.ID, Name: it.Pname, Kind: it.Kind, Changelog: it.Changelog, Homepage: it.Homepage}
+		r := UpdateRow{ID: it.ID, Name: it.Pname, Kind: it.Kind, Changelog: it.Changelog, Homepage: it.Homepage, Source: sourceLabel(it.Source)}
 		switch {
 		case c == nil:
 			r.Next, r.Change = n.Version, "new"
@@ -312,6 +322,7 @@ func updateRows(cur, next []InvItem) []UpdateRow {
 		default:
 			r.Current, r.Next, r.Change = c.Version, n.Version, versionChange(c.Version, n.Version)
 			r.Changelog, r.Homepage = firstOf(n.Changelog, c.Changelog), firstOf(n.Homepage, c.Homepage)
+			r.Source = sourceLabel(firstOf(n.Source, c.Source))
 		}
 		if r.ID == "nixpkgs" && r.Change != "same" && r.Change != "new" && r.Change != "gone" {
 			r.Change = "other"
@@ -360,9 +371,13 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 			rows[i].Next, rows[i].Change, rows[i].ChangeLabel = "", "", ""
 		}
 	}
-	var services, base []UpdateRow
+	// Une seule liste, la plus importante d'abord ; nixpkgs (ancien inventaire) est dans les sources.
+	var list []UpdateRow
 	counts := map[string]int{}
 	for _, row := range rows {
+		if row.ID == "nixpkgs" {
+			continue
+		}
 		if row.ID == "boot.kernel" {
 			if k := runningKernel(); k != "" && !strings.HasPrefix(k, row.Current) {
 				row.Running = k
@@ -372,16 +387,12 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 			counts["changed"]++
 			counts[row.Change]++
 		}
-		if row.Kind == "base" {
-			base = append(base, row)
-		} else {
-			services = append(services, row)
-		}
+		list = append(list, row)
 	}
 	updatesState.Lock()
 	running := updatesState.running
 	updatesState.Unlock()
-	data := map[string]any{"Nav": "updates", "Services": services, "Base": base, "Inputs": res.Inputs, "Counts": counts,
+	data := map[string]any{"Nav": "updates", "Rows": list, "Inputs": res.Inputs, "Counts": counts,
 		"Running": running, "Error": res.Error, "Hour": updatesHour, "Discord": s.cfg.DiscordHook != ""}
 	if !res.Checked.IsZero() {
 		data["Checked"] = ago(time.Since(res.Checked))
@@ -420,7 +431,7 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 		cur, _ := s.currentInventory()
 		var changed []UpdateRow
 		for _, row := range updateRows(cur, res.Next) {
-			if row.Change != "same" {
+			if row.Change != "same" && row.ID != "nixpkgs" {
 				changed = append(changed, row)
 			}
 		}
