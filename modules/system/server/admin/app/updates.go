@@ -388,7 +388,8 @@ func updateRows(cur, main, next []InvItem) []UpdateRow {
 				break
 			}
 		}
-		r := UpdateRow{ID: id, Name: it.Pname, Kind: it.Kind, Changelog: it.Changelog, Homepage: it.Homepage, Source: sourceLabel(it.Source)}
+		r := UpdateRow{ID: id, Name: it.Pname, Kind: it.Kind, Changelog: firstOf(it.Changelog, ci.Changelog), Homepage: firstOf(it.Homepage, ci.Homepage),
+			Source: sourceLabel(firstOf(it.Source, firstOf(mi.Source, ci.Source)))}
 		if inCur {
 			r.Current = ci.Version
 		}

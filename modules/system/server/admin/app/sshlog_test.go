@@ -202,3 +202,12 @@ func TestPostUpdates(t *testing.T) {
 		t.Error("un paquet à jour ne doit pas figurer")
 	}
 }
+
+// Sans colonne « sur main » (vérification ancienne), la source vient de ce qui tourne.
+func TestUpdateRowsSource(t *testing.T) {
+	cur := []InvItem{{ID: "services.nginx", Kind: "service", Pname: "nginx", Version: "1.30.6", Source: "nixpkgs-stable"}}
+	rows := updateRows(cur, nil, []InvItem{{ID: "services.nginx", Kind: "service", Pname: "nginx", Version: "1.30.6"}})
+	if len(rows) != 1 || rows[0].Source != "nixpkgs-stable" || rows[0].Change != "same" {
+		t.Errorf("%+v", rows)
+	}
+}

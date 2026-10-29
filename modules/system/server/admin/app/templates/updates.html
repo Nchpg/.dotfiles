@@ -67,16 +67,19 @@
 {{define "updates-table"}}
 <section class="card table-card" aria-label="Versions">
   <table class="sites traffic detail updates">
+    {{template "updates-cols"}}
     <thead><tr><th scope="col">Paquet</th><th scope="col">Source</th><th scope="col">En service</th><th scope="col">Sur main</th><th scope="col">Après update</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Notes</span></th></tr></thead>
     {{$checked := .Checked}}
     {{range .Rows}}{{if or (not $checked) (ne .Change "same")}}{{template "update-row" .}}{{end}}{{end}}
   </table>
   {{if $checked}}{{$same := 0}}{{range .Rows}}{{if eq .Change "same"}}{{$same = add $same 1}}{{end}}{{end}}
   {{if $same}}<details class="up-same"><summary class="muted small">{{$same}} à jour</summary>
-    <table class="sites traffic detail updates">{{range .Rows}}{{if eq .Change "same"}}{{template "update-row" .}}{{end}}{{end}}</table>
+    <table class="sites traffic detail updates">{{template "updates-cols"}}{{range .Rows}}{{if eq .Change "same"}}{{template "update-row" .}}{{end}}{{end}}</table>
   </details>{{end}}{{end}}
 </section>
 {{end}}
+
+{{define "updates-cols"}}<colgroup><col class="c-pkg"><col class="c-src"><col class="c-ver"><col class="c-ver"><col class="c-ver"><col class="c-chg"><col></colgroup>{{end}}
 
 {{define "update-row"}}
 <tbody data-vpn><tr>
@@ -84,7 +87,7 @@
   <td>{{with .Source}}<span class="src">{{.}}</span>{{end}}</td>
   <td class="mono small">{{firstOf .Current "—"}}{{with .Running}}<br><small class="warn-ink">tourne : {{.}}</small>{{end}}</td>
   <td class="mono small">{{if not .Main}}<span class="muted">—</span>{{else if ne .Main .Current}}<strong>{{.Main}}</strong>{{else}}{{.Main}}{{end}}</td>
-  <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next .Main}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
+  <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next (firstOf .Main .Current)}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
   <td>{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}} <small class="warn-ink">redémarrage</small>{{end}}</td>
   <td class="end small">{{if .Changelog}}<a href="{{.Changelog}}">Notes de version</a>{{else if .Homepage}}<a class="muted" href="{{.Homepage}}">Site</a>{{end}}</td>
 </tr></tbody>
