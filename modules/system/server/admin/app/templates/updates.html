@@ -43,10 +43,10 @@
   {{else}}
   {{if .Inputs}}
   <section class="block" aria-labelledby="up-inputs-title">
-    <div class="block-head"><h2 id="up-inputs-title" class="line">Sources{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock : chaque entrée du flake (secrets à part, son lock ne bouge que par commit). En service : la génération active ; sur main : ce qui est poussé (git pull puis rebuild l'appliquent) ; après update : la dernière révision. En gras, ce qui diffère de la colonne d'avant. Commits : de ce qui tourne à après update. Les paquets viennent de l'une d'elles (colonne Source plus bas).")}}</h2></div>
+    <div class="block-head"><h2 id="up-inputs-title" class="line">Sources{{template "info" (args "ID" "info-up-inputs" "Text" "Ce que update met à jour dans flake.lock : chaque entrée du flake (secrets à part, son lock ne bouge que par commit). En service : la génération active ; sur main : ce qui est poussé (git pull puis rebuild l'appliquent) ; après update : la dernière révision. En gras, ce qui diffère de la colonne d'avant. Commits : de ce qui tourne à après update ; Gemini en lit les titres (bouton Analyse) : failles corrigées et changements cassants pour cette config. Les paquets viennent de l'une d'elles (colonne Source plus bas).")}}</h2></div>
     <section class="card table-card" aria-label="Entrées du flake">
       <table class="sites traffic detail">
-        <thead><tr><th scope="col">Source</th><th scope="col">En service</th><th scope="col">Sur main</th><th scope="col">Après update</th><th scope="col">Commits</th><th scope="col"><span class="sr-only">Lien</span></th></tr></thead>
+        <thead><tr><th scope="col">Source</th><th scope="col">En service</th><th scope="col">Sur main</th><th scope="col">Après update</th><th scope="col">Commits</th><th scope="col">Changement</th><th scope="col"><span class="sr-only">Liens</span></th></tr></thead>
         {{range .Inputs}}
         <tbody data-vpn><tr>
           <td class="site-td"><span class="mono strong">{{.Name}}</span></td>
@@ -54,8 +54,14 @@
           <td>{{template "rev" (args "Rev" .MainRev "Day" (.Day .MainAt) "Bold" .Pending)}}</td>
           <td>{{if .Changed}}{{template "rev" (args "Rev" .NextRev "Day" (.Day .NextAt) "Bold" true)}}{{else}}<span class="muted small">inchangée</span>{{end}}</td>
           <td>{{if .Changed}}{{if ge .Commits 0}}<strong>{{.Commits}}</strong>{{else}}<span class="muted">?</span>{{end}}{{else}}<span class="muted">—</span>{{end}}</td>
-          <td class="end">{{with .Compare}}<a class="small" href="{{.}}">Comparer</a>{{end}}</td>
-        </tr></tbody>
+          <td>{{with .AI}}<span class="badges">{{if .Breaking}}<span class="chg chg-major">cassant</span>{{end}}{{template "urg" .}}</span>{{end}}</td>
+          <td class="end"><span class="row-actions">
+            {{- if .AI}}{{template "ai-btn"}}{{end}}
+            {{- with .Compare}}<a class="mini-btn" href="{{.}}" title="Les commits sur GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"/></svg>Comparer</a>{{end -}}
+          </span></td>
+        </tr>
+        {{with .AI}}{{template "ai-row" .}}{{end}}
+        </tbody>
         {{end}}
       </table>
     </section>
@@ -104,19 +110,23 @@
   <td class="mono small">{{if not .Next}}<span class="muted">—</span>{{else if ne .Next (firstOf .Main .Current)}}<strong>{{.Next}}</strong>{{else}}{{.Next}}{{end}}</td>
   <td><span class="badges">{{with .ChangeLabel}}<span class="chg chg-{{$.Change}}">{{.}}</span>{{end}}{{with .AI}}{{template "urg" .}}{{end}}{{if and (eq .ID "boot.kernel") (ne .Change "same") .Change}}<small class="warn-ink">redémarrage</small>{{end}}</span></td>
   <td class="end"><span class="row-actions">
-    {{- if .AI}}<button type="button" class="mini-btn" data-toggle-next aria-expanded="false">Analyse<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>{{end}}
+    {{- if .AI}}{{template "ai-btn"}}{{end}}
     {{- with .Release}}<a class="mini-btn" href="{{.}}" title="La release sur GitHub"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V3h9l9 9-9 9zM7.5 7.5h.01"/></svg>Release</a>{{end}}
     {{- if .Changelog}}<a class="mini-btn" href="{{.Changelog}}" title="Notes de version"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h4"/></svg>Notes</a>
     {{- else if .Homepage}}<a class="mini-btn quiet" href="{{.Homepage}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>Site</a>{{end -}}
   </span></td>
 </tr>
-{{/* L'analyse par l'IA, dépliée par le bouton. */}}
-{{with .AI}}<tr class="ai-row" hidden><td colspan="7">
+{{with .AI}}{{template "ai-row" .}}{{end}}
+</tbody>
+{{end}}
+
+{{define "ai-btn"}}<button type="button" class="mini-btn" data-toggle-next aria-expanded="false">Analyse<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>{{end}}
+
+{{/* L'analyse par l'IA, dépliée par le bouton Analyse. */}}
+{{define "ai-row"}}<tr class="ai-row" hidden><td colspan="7">
   <div class="ai-box urg-box-{{.Urgency}}">
     <p>{{.Summary}}</p>
     {{if .CVEs}}<p class="line ai-cves">{{range .CVEs}}<a class="mono small" href="https://osv.dev/vulnerability/{{.ID}}">{{.ID}}</a>{{with .Severity}}<small class="muted">{{.}}</small>{{end}}{{end}}</p>{{end}}
-    <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version font foi.</small>
+    <small class="muted">Lu : {{.Basis}} · {{.Model}}, {{.At.Local.Format "02/01 15:04"}}. Une IA peut se tromper : les notes de version et les commits font foi.</small>
   </div>
 </td></tr>{{end}}
-</tbody>
-{{end}}

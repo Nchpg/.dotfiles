@@ -25,12 +25,14 @@ import (
 
 // Analysis : ce que l'IA dit d'une montée de version.
 type Analysis struct {
-	Urgency string    `json:"urgency"` // urgent, conseille, sans
-	Summary string    `json:"summary"`
-	CVEs    []AICVE   `json:"cves"`
-	Basis   string    `json:"basis"` // ce qu'elle a lu
-	Model   string    `json:"model"`
-	At      time.Time `json:"at"`
+	Urgency string  `json:"urgency"` // urgent, conseille, sans
+	Summary string  `json:"summary"`
+	CVEs    []AICVE `json:"cves"`
+	// Breaking : un changement cassant pour la config annoncé (entrées du flake, lues par leurs commits).
+	Breaking bool      `json:"breaking,omitempty"`
+	Basis    string    `json:"basis"` // ce qu'elle a lu
+	Model    string    `json:"model"`
+	At       time.Time `json:"at"`
 }
 
 type AICVE struct {
@@ -296,9 +298,10 @@ var aiSchema = map[string]any{
 	"items": map[string]any{
 		"type": "OBJECT",
 		"properties": map[string]any{
-			"id":      map[string]any{"type": "STRING"},
-			"urgency": map[string]any{"type": "STRING", "enum": []string{"urgent", "conseille", "sans"}},
-			"summary": map[string]any{"type": "STRING"},
+			"id":       map[string]any{"type": "STRING"},
+			"urgency":  map[string]any{"type": "STRING", "enum": []string{"urgent", "conseille", "sans"}},
+			"summary":  map[string]any{"type": "STRING"},
+			"breaking": map[string]any{"type": "BOOLEAN"},
 			"cves": map[string]any{"type": "ARRAY", "items": map[string]any{"type": "OBJECT", "properties": map[string]any{
 				"id": map[string]any{"type": "STRING"}, "severity": map[string]any{"type": "STRING"}}}},
 		},
@@ -368,6 +371,15 @@ func (s *Server) gemini(ctx context.Context, prompt string) ([]byte, error) {
 	return []byte(out.Candidates[0].Content.Parts[0].Text), nil
 }
 
+// aiAnswer : un élément de la réponse du modèle (aiSchema).
+type aiAnswer struct {
+	ID       string  `json:"id"`
+	Urgency  string  `json:"urgency"`
+	Summary  string  `json:"summary"`
+	CVEs     []AICVE `json:"cves"`
+	Breaking bool    `json:"breaking"`
+}
+
 // aiBatch : paquets analysés par requête (quelques requêtes par jour, loin des quotas gratuits).
 const aiBatch = 5
 
@@ -406,12 +418,7 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 			errs = append(errs, err.Error())
 			continue
 		}
-		var answers []struct {
-			ID      string  `json:"id"`
-			Urgency string  `json:"urgency"`
-			Summary string  `json:"summary"`
-			CVEs    []AICVE `json:"cves"`
-		}
+		var answers []aiAnswer
 		if err := json.Unmarshal(raw, &answers); err != nil {
 			errs = append(errs, s.cfg.AIModel+" : réponse illisible")
 			continue
@@ -431,4 +438,77 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		return errors.New(strings.Join(errs, " ; "))
 	}
 	return nil
+}
+
+const aiInputPrompt = `Tu aides à administrer un serveur NixOS personnel. Une entrée de son flake, %s (dépôt GitHub %s/%s), avancerait de la révision A à la révision B ; plus bas, le titre de chacun des commits entre les deux (%d). Sur ce serveur tournent : %s ; et les bibliothèques de base dont tout dépend (openssl, glibc, curl, zlib, xz, systemd…).
+À partir UNIQUEMENT de ces titres, dis si la mise à jour est urgente :
+- "urgent" : un commit corrige une faille de sécurité sérieuse (CVE de gravité haute ou critique, exécution de code, contournement d'authentification, fuite de données) dans un paquet ou un module que ce serveur utilise ;
+- "conseille" : une faille mineure, ou des bugs gênants, corrigés dans ce que ce serveur utilise ;
+- "sans" : rien d'important pour ce serveur.
+"breaking" : true seulement si un commit annonce un changement cassant pour la config de ce serveur (option renommée ou retirée, comportement par défaut changé, migration à faire à la main) dans un module ou un paquet qu'il utilise.
+"summary" : en français, deux ou trois phrases : la sécurité d'abord, puis les changements cassants, puis ce qui compte pour ce serveur, en citant les paquets ; ignore ce que ce serveur n'utilise pas. "cves" : les CVE (ou GHSA) citées dans les titres, avec leur gravité si elle est dite. N'invente rien. Réponds avec un seul élément, d'"id" %q.
+
+Commits :
+`
+
+// analyzeInputs : chaque entrée du flake qui avancerait, lue par les titres de ses commits (sops-nix,
+// home-manager… n'ont pas de numéro de version ; pour nixpkgs, ce sont surtout des montées de version
+// et des correctifs de sécurité, bibliothèques comprises). Une analyse par couple de révisions.
+func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []UpdateRow) error {
+	if s.cfg.GeminiKey == "" {
+		return nil
+	}
+	var running []string
+	for _, r := range rows {
+		if r.Current != "" {
+			running = append(running, r.Name+" "+r.Current)
+		}
+	}
+	done := s.analyses()
+	var errs []string
+	for _, in := range inputs {
+		if !in.Changed() || in.Owner == "" {
+			continue
+		}
+		from := firstOf(in.ServiceRev, in.MainRev)
+		key := analysisKey(inputKey(in.Name), from, in.NextRev)
+		if _, ok := done[key]; ok {
+			continue
+		}
+		titles, err := s.gh.CompareTitles(ctx, in.Owner, in.Repo, from, in.NextRev)
+		if err != nil {
+			errs = append(errs, in.Name+" : commits illisibles ("+err.Error()+")")
+			continue
+		}
+		if len(titles) == 0 {
+			continue
+		}
+		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), strings.Join(running, ", "), in.Name) +
+			strings.Join(titles, "\n")
+		raw, err := s.gemini(ctx, prompt)
+		if err != nil {
+			errs = append(errs, in.Name+" : "+err.Error())
+			continue
+		}
+		var answers []aiAnswer
+		if err := json.Unmarshal(raw, &answers); err != nil || len(answers) == 0 {
+			errs = append(errs, in.Name+" : "+s.cfg.AIModel+" : réponse illisible")
+			continue
+		}
+		a := answers[0]
+		s.saveAnalyses(map[string]Analysis{key: {Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs, Breaking: a.Breaking,
+			Basis: plural(len(titles), "titre de commit", "titres de commits"), Model: s.cfg.AIModel, At: time.Now()}})
+	}
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, " ; "))
+	}
+	return nil
+}
+
+// inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
+func inputKey(name string) string { return "input." + name }
+
+// analysisKey : la clé de l'analyse de ce que update apporterait à cette entrée.
+func (r InputRow) analysisKey() string {
+	return analysisKey(inputKey(r.Name), firstOf(r.ServiceRev, r.MainRev), r.NextRev)
 }

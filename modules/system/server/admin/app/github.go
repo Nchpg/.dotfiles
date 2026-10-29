@@ -265,3 +265,59 @@ func (g *GitHub) CompareCount(ctx context.Context, owner, repo, base, head strin
 	}
 	return v.(int), nil
 }
+
+// compareMaxPages : au plus 5000 commits lus (par pages de 100) ; nixpkgs-unstable en fait quelques
+// milliers par semaine.
+const compareMaxPages = 50
+
+// CompareTitles : le titre de chaque commit de base à head, du plus ancien au plus récent (celui de
+// la PR pour un merge de PR ; les merges de branches, sans contenu propre, sautent).
+func (g *GitHub) CompareTitles(ctx context.Context, owner, repo, base, head string) ([]string, error) {
+	v, err := g.cached("titles:"+owner+"/"+repo+":"+base+"..."+head, 30*24*time.Hour, func() (any, error) {
+		var titles []string
+		for page := 1; page <= compareMaxPages; page++ {
+			var out struct {
+				Commits []struct {
+					Commit struct {
+						Message string `json:"message"`
+					} `json:"commit"`
+				} `json:"commits"`
+			}
+			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s?per_page=100&page=%d", owner, repo, base, head, page)
+			if _, err := g.api(ctx, "GET", url, g.cfg.DispatchToken, nil, &out); err != nil {
+				return nil, err
+			}
+			for _, c := range out.Commits {
+				if t := commitTitle(c.Commit.Message); t != "" {
+					titles = append(titles, t)
+				}
+			}
+			if len(out.Commits) < 100 {
+				break
+			}
+		}
+		return titles, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]string), nil
+}
+
+// commitTitle : la première ligne d'un message ; pour « Merge pull request #… », le titre de la PR
+// (sa ligne suivante) ; rien pour un autre merge.
+func commitTitle(msg string) string {
+	lines := strings.Split(strings.TrimSpace(msg), "\n")
+	first := strings.TrimSpace(lines[0])
+	if !strings.HasPrefix(first, "Merge ") {
+		return first
+	}
+	if strings.HasPrefix(first, "Merge pull request ") {
+		for _, l := range lines[1:] {
+			if l = strings.TrimSpace(l); l != "" {
+				return l
+			}
+		}
+	}
+	return ""
+}

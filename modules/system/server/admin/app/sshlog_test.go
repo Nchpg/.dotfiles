@@ -306,3 +306,47 @@ func TestReleaseOf(t *testing.T) {
 		t.Errorf("repoOf src = %s/%s", o, r)
 	}
 }
+
+// Une entrée du flake : les titres de ses commits envoyés à Gemini (merges de PR par leur titre),
+// une analyse gardée par couple de révisions.
+func TestAnalyzeInputs(t *testing.T) {
+	if commitTitle("Merge pull request #1 from a/b\n\nopenssl: 3.5.4 -> 3.5.5") != "openssl: 3.5.4 -> 3.5.5" ||
+		commitTitle("Merge branch 'master' into staging-next") != "" || commitTitle("sops-nix: rename option\n\nbody") != "sops-nix: rename option" {
+		t.Error("commitTitle")
+	}
+	var prompts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Contents []struct {
+				Parts []struct{ Text string } `json:"parts"`
+			} `json:"contents"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		prompts = append(prompts, body.Contents[0].Parts[0].Text)
+		answer := `[{"id":"sops-nix","urgency":"conseille","summary":"Option renommée.","breaking":true}]`
+		b, _ := json.Marshal(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]any{"text": answer}}}}}})
+		_, _ = w.Write(b)
+	}))
+	defer srv.Close()
+	geminiBase = srv.URL
+	aiCache.m = nil
+	cfg := &Config{GeminiKey: "k", AIModel: "m", StateDir: t.TempDir()}
+	gh := &GitHub{cfg: cfg, cache: map[string]cacheItem{
+		"titles:Mic92/sops-nix:aaa...bbb": {time.Now(), []string{"sops-nix: rename option", "fix typo"}}}}
+	s := &Server{cfg: cfg, gh: gh}
+	inputs := []InputRow{{Name: "sops-nix", Owner: "Mic92", Repo: "sops-nix", ServiceRev: "aaa", MainRev: "aaa", NextRev: "bbb"},
+		{Name: "stylix", Owner: "nix-community", Repo: "stylix", ServiceRev: "ccc", MainRev: "ccc", NextRev: "ccc"}}
+	rows := []UpdateRow{{Name: "openssh", Current: "10.5p1"}}
+	if err := s.analyzeInputs(t.Context(), inputs, rows); err != nil {
+		t.Fatal(err)
+	}
+	a, ok := s.analyses()[inputs[0].analysisKey()]
+	if !ok || !a.Breaking || a.Urgency != "conseille" || a.Basis != "2 titres de commits" || len(prompts) != 1 ||
+		!strings.Contains(prompts[0], "sops-nix: rename option\nfix typo") || !strings.Contains(prompts[0], "openssh 10.5p1") {
+		t.Errorf("analyse : %+v, prompts %q", a, prompts)
+	}
+	_ = s.analyzeInputs(t.Context(), inputs, rows)
+	if len(prompts) != 1 {
+		t.Error("une entrée déjà analysée a été redemandée")
+	}
+}

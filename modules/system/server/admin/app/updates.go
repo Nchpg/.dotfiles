@@ -47,6 +47,7 @@ type InputRow struct {
 	ServiceAt, MainAt, NextAt    int64
 	Commits                      int // -1 : inconnu
 	CommitsFrom                  string
+	AI                           *Analysis `json:"-"`
 }
 
 // Day : une date de révision (« 25/10/2026 »), ou rien.
@@ -280,13 +281,6 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 		oldLock, _, res.Main, res.Next, err = s.eval.Updates(ctx, head)
 		cur, _ := s.currentInventory()
 		res.Inputs = inputRows(cur, res.Main, res.Next, oldLock)
-		if err == nil {
-			rows := updateRows(cur, res.Main, res.Next)
-			res.Releases = s.releaseLinks(ctx, rows)
-			if e := s.analyze(ctx, rows); e != nil {
-				res.AIError = e.Error()
-			}
-		}
 		for i := range res.Inputs {
 			in := &res.Inputs[i]
 			if in.Changed() && in.Owner != "" {
@@ -295,6 +289,17 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 					in.Commits, in.CommitsFrom = n, from
 				}
 			}
+		}
+		if err == nil {
+			rows := updateRows(cur, res.Main, res.Next)
+			res.Releases = s.releaseLinks(ctx, rows)
+			var errs []string
+			for _, e := range []error{s.analyze(ctx, rows), s.analyzeInputs(ctx, res.Inputs, rows)} {
+				if e != nil {
+					errs = append(errs, e.Error())
+				}
+			}
+			res.AIError = strings.Join(errs, " ; ")
 		}
 	}
 	if err != nil {
@@ -474,6 +479,12 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 	var list []UpdateRow
 	counts := map[string]int{}
 	analyses := s.analyses()
+	for i := range inputs {
+		if a, ok := analyses[inputs[i].analysisKey()]; ok && inputs[i].Changed() {
+			inputs[i].AI = &a
+			counts[a.Urgency]++
+		}
+	}
 	for _, row := range rows {
 		if a, ok := analyses[analysisKey(row.Name, row.Current, row.Next)]; ok && row.Change != "same" {
 			row.AI = &a
@@ -519,6 +530,9 @@ func (s *Server) updatesCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // postUpdates : le récapitulatif sur Discord (ce qui change, le plus important d'abord).
+// urgencyMarks : l'urgence selon l'IA, sur Discord.
+var urgencyMarks = map[string]string{"urgent": "🔴", "conseille": "🟠", "sans": "⚪"}
+
 func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 	if s.cfg.DiscordHook == "" {
 		return
@@ -569,7 +583,7 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 			}
 			mark := "•"
 			if row.AI != nil {
-				mark = map[string]string{"urgent": "🔴", "conseille": "🟠", "sans": "⚪"}[row.AI.Urgency]
+				mark = urgencyMarks[row.AI.Urgency]
 				extra += ", " + row.AI.UrgencyLabel()
 			}
 			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, row.ChangeLabel, extra)
@@ -583,7 +597,19 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 				if in.Commits >= 0 {
 					commits = ", " + plural(in.Commits, "commit", "commits")
 				}
-				fmt.Fprintf(&b, "• source `%s` : %s → %s%s\n", in.Name, in.Day(firstOf64(in.ServiceAt, in.MainAt)), in.Day(in.NextAt), commits)
+				mark := "•"
+				a, ok := analyses[in.analysisKey()]
+				if ok {
+					mark = urgencyMarks[a.Urgency]
+					if a.Breaking {
+						commits += ", changement cassant"
+					}
+					commits += ", " + a.UrgencyLabel()
+				}
+				fmt.Fprintf(&b, "%s source `%s` : %s → %s%s\n", mark, in.Name, in.Day(firstOf64(in.ServiceAt, in.MainAt)), in.Day(in.NextAt), commits)
+				if ok && (a.Urgency == "urgent" || a.Breaking) {
+					fmt.Fprintf(&b, "  %s\n", a.Summary)
+				}
 			}
 		}
 		fmt.Fprintf(&b, "Rien n'est appliqué : sur think, `update` puis `rebuild`. %s", link)
