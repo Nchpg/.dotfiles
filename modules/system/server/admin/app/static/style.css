@@ -389,8 +389,8 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-mark svg { width: 17px; height: 17px; }
   .nav-title, .side nav a small, .side .nav-links { display: none; }
-  .side nav:not(.nav-links) { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid #1F2531; }
-  .side nav a { flex-direction: column; justify-content: center; gap: 3px; min-height: 54px; padding: 0; font-size: 11.5px; }
+  .side nav:not(.nav-links) { position: fixed; z-index: 40; left: 0; right: 0; bottom: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); background: var(--side); border-top: 1px solid #1F2531; }
+  .side nav a { flex-direction: column; justify-content: center; gap: 3px; min-height: 54px; padding: 0; font-size: 11px; white-space: nowrap; }
   .side nav a[aria-current="page"] { background: transparent; }
   .side nav a svg { width: 20px; height: 20px; }
   .content { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
@@ -690,3 +690,36 @@ table.sites tr.ai-row td { border-top: 0; padding-top: 0; }
 .urg-box-urgent { border-left-color: var(--bad); } .urg-box-conseille { border-left-color: #F5C46B; }
 .ai-cves { flex-wrap: wrap; gap: 4px 12px; }
 button.link-btn { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; }
+
+/* Barre d'onglets du bas : tous sur une ligne, le libellé court quand il faut. */
+.nav-short { display: none; }
+@media (max-width: 800px) {
+  .nav-long { display: none; }
+  .nav-short { display: inline; }
+}
+@media (max-width: 800px) and (min-width: 560px) {
+  .nav-long { display: inline; }
+  .nav-short { display: none; }
+}
+
+/* Téléphone : le titre de colonne de chaque cellule (data-label, app.js). */
+@media (max-width: 720px) {
+  .block-head { flex-wrap: wrap; }
+  /* Listes (VPN, SSH, Authelia) : le nom en tête, puis une ligne « titre  valeur » par cellule. */
+  table.list td[data-label]:not(:first-child) { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+  table.list td[data-label]:not(:first-child)::before { content: attr(data-label); color: var(--muted); font: 400 12.5px/1.5 var(--sans); }
+  table.list td:first-child { padding-bottom: 6px !important; }
+  table.list td:last-child:not([data-label]) { padding-top: 8px !important; }
+  /* Détails (Trafic, Mises à jour) et nombres du Trafic : des cases « titre au-dessus, valeur ». */
+  table.sites.detail tr:not(.visit-item):not(.ai-row) { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px 14px; }
+  table.sites.detail td[data-label]:not(.site-td)::before,
+  table.sites.traffic td.num-td[data-label]::before, table.sites.traffic td.last-td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 2px; color: var(--muted); font-size: 11.5px; font-family: var(--sans); font-weight: 400; }
+  table.sites.detail td { min-width: 0; overflow-wrap: anywhere; }
+  table.sites.detail td.site-td, table.sites.detail td.end { grid-column: 1 / -1 !important; }
+  table.sites.detail td.end { text-align: left; }
+  table.sites.detail td.end .row-actions { justify-content: flex-start; }
+  table.sites.detail tr.ai-row { display: block; padding-top: 0; }
+  table.sites.detail tr.ai-row td { display: block; }
+  .badges { flex-direction: row; flex-wrap: wrap; }
+  .badges .chg:not(.chg-same), .badges .urg:not(.urg-sans) { width: auto; }
+}

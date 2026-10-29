@@ -451,3 +451,27 @@ document.addEventListener("click", (ev) => {
   row.hidden = !row.hidden;
   b.setAttribute("aria-expanded", String(!row.hidden));
 });
+
+// Sur téléphone, les tableaux deviennent des cartes sans en-tête : chaque cellule reçoit le titre de
+// sa colonne (data-label), affiché à côté de sa valeur (style.css). Un tableau sans en-tête (les
+// lignes repliées des Mises à jour) prend celui du premier tableau de sa carte.
+function labelCells() {
+  document.querySelectorAll("table").forEach((t) => {
+    const head = t.tHead || t.closest(".table-card")?.querySelector("thead");
+    if (!head) return;
+    const labels = [];
+    head.querySelectorAll("th").forEach((th) => {
+      const text = th.querySelector(".sr-only") ? "" : th.textContent.trim();
+      for (let i = 0; i < th.colSpan; i++) labels.push(text);
+    });
+    t.querySelectorAll("tbody tr").forEach((tr) => {
+      let col = 0;
+      for (const td of tr.cells) {
+        if (td.colSpan === 1 && labels[col] && !td.dataset.label) td.dataset.label = labels[col];
+        col += td.colSpan;
+      }
+    });
+  });
+}
+document.addEventListener("DOMContentLoaded", labelCells);
+document.addEventListener("htmx:afterSettle", labelCells);
