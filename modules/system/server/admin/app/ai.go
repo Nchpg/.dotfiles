@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,6 +39,8 @@ type Analysis struct {
 	// Fixed : les CVE déjà corrigées dans la branche en service (ses notes de version jusqu'à elle, les
 	// avis du dépôt), d'après le code, pas l'IA.
 	Fixed []string `json:"fixed,omitempty"`
+	// Depth : les numéros qui nomment une branche du projet, à l'analyse (classifyRow).
+	Depth int `json:"depth,omitempty"`
 	// StuckSource, StuckIn : une faille n'est corrigée qu'au-delà du canal (lequel, en quelle version).
 	StuckSource, StuckIn string    `json:"-"`
 	Model                string    `json:"model"`
@@ -177,7 +180,9 @@ func cmpVersions(a, b string) int {
 	return 0
 }
 
-const notesMax = 12000
+// notesMax : texte de notes envoyé à l'IA par paquet (les notes d'une seule version d'OpenSSH
+// dépassent 12 000 caractères ; le relevé des CVE par le code, lui, lit tout).
+const notesMax = 30000
 
 func clip(s string, n int) string {
 	if len(s) <= n {
@@ -247,14 +252,30 @@ func sameBranch(a, b string, depth int) bool {
 	return true
 }
 
-// releases : les dernières releases d'un dépôt GitHub (gardées quelques heures : la vérification et
-// l'analyse les lisent toutes deux).
+// releasePages : pages de 100 releases lues au plus (un projet actif en publie des centaines ; les
+// plus anciennes ne servent qu'à reconnaître ce que la branche en service a déjà corrigé).
+const releasePages = 3
+
+// releases : les dernières releases d'un dépôt GitHub, telles quelles (gardées quelques heures : la
+// vérification et l'analyse les lisent toutes deux) ; projectReleases les trie.
 func (s *Server) releases(ctx context.Context, owner, repo string) ([]Release, error) {
 	v, err := s.gh.cached("releases/"+owner+"/"+repo, 6*time.Hour, func() (any, error) {
-		var rels []Release
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=40", owner, repo)
-		_, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &rels)
-		return rels, err
+		var all []Release
+		for page := 1; page <= releasePages; page++ {
+			var rels []Release
+			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases?per_page=100&page=%d", owner, repo, page)
+			if _, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &rels); err != nil {
+				if page == 1 {
+					return nil, err
+				}
+				break
+			}
+			all = append(all, rels...)
+			if len(rels) < 100 {
+				break
+			}
+		}
+		return all, nil
 	})
 	if err != nil {
 		return nil, err
@@ -309,7 +330,7 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 		}
 		var rels []Release
 		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src, r.EOL.Repo); owner != "" {
-			rels, _ = s.releases(ctx, owner, repo)
+			rels, _ = s.projectReleases(ctx, owner, repo, r.Current, r.Next)
 		}
 		// La branche : celle d'endoflife.date, sinon d'après les dates des releases.
 		depth := r.EOL.Depth
@@ -338,9 +359,7 @@ func pickLatest(current, unstable string, rels []Release, branches []Candidate, 
 		cands = append(cands, cand{b.Version, b.URL})
 	}
 	for _, rel := range rels {
-		if !rel.Prerelease && !rel.Draft {
-			cands = append(cands, cand{tagVersion(rel.Tag), rel.URL})
-		}
+		cands = append(cands, cand{tagVersion(rel.Tag), rel.URL})
 	}
 	var l LatestInfo
 	for _, c := range cands {
@@ -366,7 +385,7 @@ func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]
 		if owner == "" {
 			continue
 		}
-		rels, err := s.releases(ctx, owner, repo)
+		rels, err := s.projectReleases(ctx, owner, repo, r.Current, r.Next)
 		if err != nil {
 			continue
 		}
@@ -377,134 +396,6 @@ func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]
 		}
 	}
 	return links
-}
-
-// releaseNotes : les notes des versions sautées (releases GitHub entre `from` exclue et `to`
-// incluse), sinon la page de notes de version autour de `to` ; et les avis de sécurité du projet.
-func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, basis []string, fixed []string) {
-	owner, repo := repoOf(row.Changelog, row.Homepage, row.Src, row.EOL.Repo)
-	var b strings.Builder
-	seen := map[string]bool{}
-	fix := func(id string) {
-		if id = cveID(id); id != "" && !seen[id] {
-			seen[id] = true
-			fixed = append(fixed, id)
-		}
-	}
-	depth := max(row.EOL.Depth, 1) // endoflife.date, sinon d'après les dates des releases
-	if owner != "" {
-		if rels, err := s.releases(ctx, owner, repo); err == nil {
-			if row.EOL.Depth == 0 {
-				depth = branchDepth(rels)
-			}
-			n := 0
-			for _, r := range rels {
-				// Les notes de la branche en service, jusqu'à sa version : leurs CVE y sont déjà
-				// corrigées (une 6.0 les recite, corrigées en parallèle en 5.8).
-				if sameBranch(r.Tag, row.Current, depth) && cmpVersions(r.Tag, row.Current) <= 0 {
-					for _, id := range reCVE.FindAllString(r.Body, -1) {
-						fix(id)
-					}
-				}
-				if cmpVersions(r.Tag, row.Current) > 0 && cmpVersions(r.Tag, row.Upper()) <= 0 {
-					fmt.Fprintf(&b, "## %s\n%s\n\n", r.Tag, strings.TrimSpace(r.Body))
-					n++
-				}
-			}
-			if n > 0 {
-				basis = append(basis, fmt.Sprintf("notes GitHub (%s)", plural(n, "version", "versions")))
-			}
-		}
-	}
-	if b.Len() == 0 && row.Changelog != "" {
-		if page, err := fetchText(ctx, row.Changelog); err == nil {
-			// La page couvre souvent toutes les versions : le texte autour de la nouvelle.
-			if i := strings.Index(page, row.Upper()); i >= 0 {
-				page = page[max(0, i-300):]
-			}
-			b.WriteString(clip(page, notesMax))
-			basis = append(basis, "page des notes de version")
-		}
-	}
-	text = clip(b.String(), notesMax)
-	if owner != "" {
-		var advs []struct {
-			GHSA     string `json:"ghsa_id"`
-			CVE      string `json:"cve_id"`
-			Severity string `json:"severity"`
-			Summary  string `json:"summary"`
-			Vulns    []struct {
-				Range   string `json:"vulnerable_version_range"`
-				Patched string `json:"patched_versions"`
-			} `json:"vulnerabilities"`
-			CVSS struct {
-				Score  float64 `json:"score"`
-				Vector string  `json:"vector_string"`
-			} `json:"cvss"`
-		}
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/security-advisories?per_page=30&state=published", owner, repo)
-		if _, err := s.gh.api(ctx, "GET", url, s.cfg.DispatchToken, nil, &advs); err == nil && len(advs) > 0 {
-			// La note d'un avis publié dans le seul dépôt du projet (absent de la base publique de GitHub).
-			scored := map[string]CVEInfo{}
-			for _, v := range advs {
-				if v.CVSS.Score > 0 {
-					scored[cveID(v.GHSA)] = CVEInfo{Score: v.CVSS.Score, Network: strings.Contains(v.CVSS.Vector, "AV:N"), At: time.Now()}
-				}
-			}
-			s.addCVEInfos(scored)
-			var a strings.Builder
-			for _, v := range advs {
-				if !advisoryOpen(row.Current, depth, v.Vulns) {
-					fix(v.GHSA)
-					if v.CVE != "" {
-						fix(v.CVE)
-					}
-					continue
-				}
-				var ranges []string
-				for _, x := range v.Vulns {
-					ranges = append(ranges, fmt.Sprintf("touchées %s, corrigées %s", x.Range, x.Patched))
-				}
-				fmt.Fprintf(&a, "- %s %s (%s) : %s [%s]\n", firstOf(v.CVE, v.GHSA), v.GHSA, v.Severity, v.Summary, strings.Join(ranges, " ; "))
-			}
-			if a.Len() > 0 {
-				text += "\n\nAvis de sécurité du projet (GitHub), ceux qui touchent encore A :\n" + clip(a.String(), 6000)
-				basis = append(basis, "avis de sécurité GitHub")
-			}
-		}
-	}
-	return text, basis, fixed
-}
-
-var reVersion = regexp.MustCompile(`\d+(?:\.\d+)+[0-9A-Za-z.+~-]*`)
-
-// advisoryOpen : un avis touche encore la version `current`. Un projet corrige souvent sur plusieurs
-// branches (« corrigées v5.8.8 ; corrigées v6.1.3 ») : une version corrigée de la série de `current`,
-// déjà atteinte, le règle ; sinon une version corrigée plus récente le laisse ouvert ; un avis sans
-// version corrigée aussi. Les vieux avis d'un projet n'en sont pas : sans ce tri, l'IA les recopie et
-// l'urgence gonfle.
-func advisoryOpen(current string, depth int, vulns []struct {
-	Range   string `json:"vulnerable_version_range"`
-	Patched string `json:"patched_versions"`
-}) bool {
-	if current == "" {
-		return true
-	}
-	var patched []string
-	for _, v := range vulns {
-		patched = append(patched, reVersion.FindAllString(v.Patched, -1)...)
-	}
-	for _, p := range patched {
-		if sameBranch(p, current, depth) && cmpVersions(p, current) <= 0 {
-			return false
-		}
-	}
-	for _, p := range patched {
-		if cmpVersions(p, current) > 0 {
-			return true
-		}
-	}
-	return len(patched) == 0
 }
 
 var (
@@ -634,6 +525,43 @@ type aiAnswer struct {
 	Breaking bool    `json:"breaking"`
 }
 
+// mergeFound : les CVE d'une analyse : celles relevées par le code (avec les versions qui les
+// corrigent), et celles de l'IA qui figurent bien dans ce qu'elle a lu (une CVE absente des textes est
+// inventée). La version de correction du code prime ; un GHSA dont le numéro CVE est déjà là saute.
+func mergeFound(n notesResult, model []AICVE, infos map[string]CVEInfo) []AICVE {
+	text := strings.ToUpper(n.Text)
+	byID := map[string]*AICVE{}
+	var order []string
+	add := func(c AICVE) {
+		c.ID = cveID(c.ID)
+		if old, ok := byID[c.ID]; ok {
+			old.Severity = firstOf(old.Severity, c.Severity)
+			old.FixedIn = firstOf(old.FixedIn, c.FixedIn)
+			return
+		}
+		byID[c.ID] = &c
+		order = append(order, c.ID)
+	}
+	for id, versions := range n.Found {
+		add(AICVE{ID: id, FixedIn: strings.Join(versions, ", ")})
+	}
+	for _, c := range model {
+		id := cveID(c.ID)
+		if _, ok := n.Found[id]; ok || strings.Contains(text, strings.ToUpper(id)) || slices.Contains(n.Fixed, id) {
+			add(c)
+		}
+	}
+	sort.Strings(order)
+	var out []AICVE
+	for _, id := range order {
+		if alias := infos[id].Alias; strings.HasPrefix(id, "GHSA-") && alias != "" && byID[alias] != nil {
+			continue
+		}
+		out = append(out, *byID[id])
+	}
+	return out
+}
+
 // aiBatch : paquets analysés par requête (quelques requêtes par jour, loin des quotas gratuits).
 const aiBatch = 5
 
@@ -657,17 +585,19 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		batch := todo[start:min(start+aiBatch, len(todo))]
 		var p strings.Builder
 		p.WriteString(aiPrompt)
-		bases := map[string]string{}
-		fixed := map[string][]string{}
+		notes := map[string]notesResult{}
 		for _, r := range batch {
-			text, basis, already := s.releaseNotes(ctx, r)
-			fixed[r.ID] = already
-			bases[r.ID] = strings.Join(basis, ", ")
+			n := s.releaseNotes(ctx, r)
+			notes[r.ID] = n
 			fmt.Fprintf(&p, "\n\n### id: %s — %s : A = %s, B = %s, C = %s\n", r.ID, r.Name, r.Current, firstOf(r.Next, r.Current), r.Upper())
-			if text == "" {
+			if n.Text == "" {
 				p.WriteString("(aucun texte trouvé)\n")
 			} else {
-				p.WriteString(text)
+				p.WriteString(n.Text)
+			}
+			if len(n.Fixed) > 0 {
+				// Une branche plus récente recite des failles déjà corrigées dans celle de A.
+				fmt.Fprintf(&p, "\nDéjà corrigées dans la version A (n'en parle pas, ni dans le résumé ni dans les CVE) : %s\n", strings.Join(n.Fixed[:min(len(n.Fixed), 80)], ", "))
 			}
 		}
 		raw, err := s.gemini(ctx, p.String())
@@ -684,8 +614,9 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		for _, a := range answers {
 			for _, r := range batch {
 				if r.ID == a.ID {
-					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: a.CVEs, Fixed: fixed[r.ID],
-						Basis: firstOf(bases[r.ID], "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
+					n := notes[r.ID]
+					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: mergeFound(n, a.CVEs, s.cveInfos()),
+						Fixed: n.Fixed, Depth: n.Depth, Basis: firstOf(strings.Join(n.Basis, ", "), "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
 				}
 			}
 		}
@@ -861,8 +792,6 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 	return nil
 }
 
-var reCVE = regexp.MustCompile(`\b(CVE-\d{4}-\d{4,}|GHSA(?:-[0-9a-z]{4}){3})\b`)
-
 // titleCVEs : les CVE citées dans les titres, avec le paquet en tête du titre : relevées par le code,
 // un petit modèle en oublie.
 func titleCVEs(titles []string) []AICVE {
@@ -872,22 +801,24 @@ func titleCVEs(titles []string) []AICVE {
 		if !found || strings.Contains(strings.ReplaceAll(pre, ", ", ","), " ") {
 			pre = ""
 		}
-		for _, id := range reCVE.FindAllString(t, -1) {
+		for _, id := range cveIDsIn(t) {
 			out = append(out, AICVE{ID: id, Pkg: pre})
 		}
 	}
 	return out
 }
 
-// mergeCVEs : celles des titres, complétées par le modèle (sa gravité ; celles qu'il a vues ailleurs).
+// mergeCVEs : celles relevées dans les titres, avec la gravité que le modèle leur donne. Le modèle
+// n'en ajoute pas : il n'a lu que ces titres, une CVE qu'il citerait en plus serait inventée.
 func mergeCVEs(found, model []AICVE) []AICVE {
 	sev := map[string]string{}
 	for _, c := range model {
-		sev[c.ID] = c.Severity
+		sev[cveID(c.ID)] = c.Severity
 	}
 	seen := map[string]bool{}
 	var out []AICVE
-	for _, c := range append(found, model...) {
+	for _, c := range found {
+		c.ID = cveID(c.ID)
 		if seen[c.ID] {
 			continue
 		}
@@ -899,7 +830,7 @@ func mergeCVEs(found, model []AICVE) []AICVE {
 }
 
 // aiInputVersion : la façon de lire une entrée du flake ; la changer refait ces analyses une fois.
-const aiInputVersion = 5
+const aiInputVersion = 6
 
 // inputKey : le nom d'une entrée du flake dans le cache des analyses (à part des paquets).
 func inputKey(name string) string { return fmt.Sprintf("input.%s@%d", name, aiInputVersion) }

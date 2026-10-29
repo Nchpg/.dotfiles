@@ -273,7 +273,7 @@ func TestAnalyze(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, ok := s.analyses()[rows[0].analysisKey()]
-	if !ok || a.ModelUrgency != "urgent" || a.Urgency != "conseille" || a.Model != "m" || len(a.CVEs) != 1 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
+	if !ok || a.ModelUrgency != "urgent" || a.Urgency != "conseille" || a.Model != "m" || len(a.CVEs) != 0 || a.Basis != "rien à lire" || len(calls) != 1 || !strings.Contains(calls[0], "/models/m:") {
 		t.Errorf("analyse : %+v (appels %v)", a, calls)
 	}
 	_ = s.analyze(t.Context(), rows)
@@ -382,7 +382,7 @@ func TestTitleCVEs(t *testing.T) {
 	got := mergeCVEs(titleCVEs([]string{"glibc: 2.42-100 -> 2.42-103; fixes CVE-2026-89092, CVE-2026-97399", "zlib: backport fix for CVE-2026-85091", "sqlite, sqlite-analyzer: 3.53.3 (CVE-2026-11822)", "make it CVE-2026-1111 safe"}),
 		[]AICVE{{ID: "CVE-2026-89092", Severity: "high"}, {ID: "GHSA-99cj-7hg9-mp4m"}})
 	want := []AICVE{{ID: "CVE-2026-89092", Severity: "high", Pkg: "glibc"}, {ID: "CVE-2026-97399", Pkg: "glibc"}, {ID: "CVE-2026-85091", Pkg: "zlib"}, {ID: "CVE-2026-11822", Pkg: "sqlite, sqlite-analyzer"},
-		{ID: "CVE-2026-1111"}, {ID: "GHSA-99cj-7hg9-mp4m"}}
+		{ID: "CVE-2026-1111"}} // le GHSA du modèle, absent des titres, est inventé
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("CVE : %v", got)
 	}
@@ -435,6 +435,8 @@ func TestRateUrgency(t *testing.T) {
 	infos := map[string]CVEInfo{
 		"CVE-1": {Score: 9.8}, "CVE-2": {Score: 7.5, Network: true}, "CVE-3": {Score: 7.8}, "CVE-4": {Score: 5.3, Network: true},
 		"CVE-5": {Score: 2.1, Network: true}, "CVE-6": {Score: 3, KEV: true},
+		// Pas encore notée, critique d'après l'avis du projet ; rejetée par NVD.
+		"CVE-7": {Severity: "critical"}, "CVE-8": {Score: 9.8, Network: true, Rejected: true},
 	}
 	cve := func(id string) []AICVE { return []AICVE{{ID: id}} }
 	for _, c := range []struct {
@@ -444,7 +446,8 @@ func TestRateUrgency(t *testing.T) {
 	}{
 		{"sans", cve("CVE-1"), "urgent"}, {"sans", cve("cve-2"), "urgent"}, {"urgent", cve("CVE-3"), "conseille"},
 		{"urgent", cve("CVE-4"), "conseille"}, {"urgent", cve("CVE-5"), "sans"}, {"sans", cve("CVE-6"), "urgent"},
-		{"sans", []AICVE{{ID: "CVE-9", Severity: "critical"}}, "urgent"}, {"urgent", []AICVE{{ID: "CVE-9", Severity: "high"}}, "conseille"},
+		{"sans", []AICVE{{ID: "CVE-9", Severity: "critical"}}, "conseille"}, {"urgent", []AICVE{{ID: "CVE-9", Severity: "high"}}, "conseille"},
+		{"sans", cve("CVE-7"), "urgent"}, {"urgent", []AICVE{{ID: "CVE-9", Severity: "low"}}, "sans"}, {"urgent", cve("CVE-8"), "sans"},
 		{"urgent", []AICVE{{ID: "CVE-5"}, {ID: "CVE-2"}}, "urgent"}, {"urgent", nil, "conseille"}, {"sans", nil, "sans"},
 	} {
 		if got := rateUrgency(c.model, c.cves, infos); got != c.want {
@@ -456,7 +459,7 @@ func TestRateUrgency(t *testing.T) {
 // La dernière version : la plus récente de la même série (release ou unstable), une majeure à part.
 func TestPickLatest(t *testing.T) {
 	rels := []Release{{Tag: "v6.1.4", URL: "u614"}, {Tag: "v5.8.10", URL: "u5810"}, {Tag: "v5.9.0-rc1", URL: "rc", Prerelease: true}, {Tag: "v5.8.9", URL: "u589"}}
-	if l := pickLatest("5.8.8", "5.8.9", rels, nil, 1); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
+	if l := pickLatest("5.8.8", "5.8.9", filterReleases(rels, "5.8.8"), nil, 1); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
 		t.Errorf("podman : %+v", l)
 	}
 	if l := pickLatest("17.11", "18.6", nil, nil, 1); l.Version != "" || l.NewMajor != "18.6" {
@@ -503,20 +506,16 @@ func TestCVEID(t *testing.T) {
 // Un avis du dépôt touche encore la version en service : une version corrigée plus récente (ou
 // aucune annoncée). Une CVE corrigée avant la version en service ne compte pas.
 func TestAdvisoryOpen(t *testing.T) {
-	type vuln = struct {
-		Range   string `json:"vulnerable_version_range"`
-		Patched string `json:"patched_versions"`
-	}
 	for _, c := range []struct {
 		patched string
 		want    bool
-	}{{"4.0.3, 3.4.7", false}, {"5.8.10", true}, {">= 6.0.1", true}, {"", true}, {"5.8.9", false}} {
-		if got := advisoryOpen("5.8.9", 1, []vuln{{Patched: c.patched}}); got != c.want {
+	}{{"4.0.3, 3.4.7", false}, {"5.8.10", true}, {">= 6.0.1", true}, {"", false}, {"5.8.9", false}} {
+		if got := advisoryAffects("5.8.9", 1, []advisoryVuln{{Patched: c.patched}}); got != c.want {
 			t.Errorf("corrigée %q : %v", c.patched, got)
 		}
 	}
 	// Corrigée sur deux branches : celle de la version en service est déjà atteinte.
-	if advisoryOpen("5.8.9", 1, []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) || !advisoryOpen("5.8.7", 1, []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) {
+	if advisoryAffects("5.8.9", 1, []advisoryVuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) || !advisoryAffects("5.8.7", 1, []advisoryVuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) {
 		t.Error("deux branches")
 	}
 	row := UpdateRow{Current: "5.8.9", Next: "6.1.4"}
@@ -546,17 +545,13 @@ func TestBranchDepth(t *testing.T) {
 	if branchDepth(podman) != 1 || branchDepth(nginx) != 2 {
 		t.Errorf("podman %d, nginx %d", branchDepth(podman), branchDepth(nginx))
 	}
-	type vuln = struct {
-		Range   string `json:"vulnerable_version_range"`
-		Patched string `json:"patched_versions"`
-	}
 	// 1.28.3 : corrigée en 1.29.1 et 1.28.4 ; sa branche (1.28) n'a pas encore le correctif.
-	if !advisoryOpen("1.28.3", 2, []vuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) || advisoryOpen("1.28.4", 2, []vuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) {
+	if !advisoryAffects("1.28.3", 2, []advisoryVuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) || advisoryAffects("1.28.4", 2, []advisoryVuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) {
 		t.Error("branches au deuxième numéro")
 	}
 	// Au premier numéro, la 1.28.3 se croirait corrigée par… rien : 1.28.4 > 1.28.3 laisse ouvert,
 	// mais une 1.27.9 corrigée la fermerait à tort.
-	if advisoryOpen("1.28.3", 1, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) == advisoryOpen("1.28.3", 2, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) {
+	if advisoryAffects("1.28.3", 1, []advisoryVuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) == advisoryAffects("1.28.3", 2, []advisoryVuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) {
 		t.Error("la profondeur ne change rien")
 	}
 }
@@ -585,5 +580,89 @@ func TestPickLatestBranch(t *testing.T) {
 	b := []Candidate{{"1.31.8", "m"}, {"1.30.7", "s"}, {"1.28.3", ""}}
 	if l := pickLatest("1.30.6", "", nil, b, 2); l.Version != "1.30.7" || l.URL != "s" || l.NewMajor != "1.31.8" {
 		t.Errorf("nginx : %+v", l)
+	}
+}
+
+// Les intervalles d'un avis : une faille introduite après la version en service ne la touche pas ;
+// un intervalle illisible laisse trancher les versions corrigées.
+func TestAdvisoryRanges(t *testing.T) {
+	for _, c := range []struct {
+		current string
+		vulns   []advisoryVuln
+		want    bool
+	}{
+		{"5.8.9", []advisoryVuln{{Range: ">= 6.0.0, < 6.1.3", Patched: "6.1.3"}}, false},
+		{"6.1.2", []advisoryVuln{{Range: ">= 6.0.0, < 6.1.3", Patched: "6.1.3"}}, true},
+		{"5.8.3", []advisoryVuln{{Range: ">= v1.8.1, <= v5.8.3", Patched: "v5.8.4"}, {Range: "< v6.0.0", Patched: "v6.0.0"}}, true},
+		{"5.8.9", []advisoryVuln{{Range: ">= v1.8.1, <= v5.8.3", Patched: "v5.8.4"}, {Range: "< v6.0.0", Patched: "v6.0.0"}}, false},
+		{"5.8.9", []advisoryVuln{{Range: "None", Patched: ""}}, false},
+		{"1.30.6", []advisoryVuln{{Range: "= 1.30.6", Patched: "1.30.7"}}, true},
+		// grafana : plusieurs intervalles sans virgule ; borne basse seule, sans version corrigée ;
+		// intervalle trop large, versions corrigées toutes anciennes.
+		{"9.3.2", []advisoryVuln{{Range: ">=9.2.0 <9.2.10 >=9.3.0 <9.3.4", Patched: "9.3.4"}}, true},
+		{"9.2.12", []advisoryVuln{{Range: ">=9.2.0 <9.2.10 >=9.3.0 <9.3.4", Patched: "9.3.4"}}, false},
+		{"13.0.11", []advisoryVuln{{Range: ">=8.1"}}, false},
+		{"13.0.11", []advisoryVuln{{Range: ">=v3.0-beta1", Patched: "8.3.5, 7.5.15"}}, false},
+	} {
+		if got := advisoryAffects(c.current, 1, c.vulns); got != c.want {
+			t.Errorf("%s %v : %v", c.current, c.vulns, got)
+		}
+	}
+	if in, ok := inRange(">= 4.4.0, < 5.8.8", "5.8.7"); !in || !ok {
+		t.Error("inRange")
+	}
+	if in, ok := inRange("None", "1.0"); in || ok {
+		t.Error("inRange")
+	}
+}
+
+// Le relevé du code : préversions et tags d'autres choses (chartes Helm) écartés, de la plus ancienne
+// à la plus récente ; la page de notes coupée à la version en service.
+func TestFilterReleasesAndChangelog(t *testing.T) {
+	rels := []Release{{Tag: "v3.7.9"}, {Tag: "helm-loki-6.1.0"}, {Tag: "v3.8.0-rc1", Prerelease: true}, {Tag: "v3.7.8"}, {Tag: "helm-loki-6.0.9"}}
+	var got []string
+	for _, r := range filterReleases(rels, "3.7.8") {
+		got = append(got, r.Tag)
+	}
+	if strings.Join(got, " ") != "v3.7.8 v3.7.9" {
+		t.Errorf("loki : %v", got)
+	}
+	page := "OpenSSH 10.7 (2026-11-01)\nfixes CVE-2026-0003\nOpenSSH 10.6/10.6p1 (2026-10-01)\nfixes CVE-2026-0002\nOpenSSH 10.5/10.5p1 (2026-04-01)\nfixes cve-2026-0001\n"
+	newer, older := changelogSlice(page, "10.5p1", "10.6p1")
+	if !strings.Contains(newer, "CVE-2026-0002") || strings.Contains(newer, "0001") || fmt.Sprint(cveIDsIn(older)) != "[CVE-2026-0001]" {
+		t.Errorf("page : %q / %q", newer, older)
+	}
+}
+
+// La fusion : les CVE du code (avec leurs versions), celles de l'IA présentes dans les textes ; une
+// inventée saute, un GHSA dont la CVE est là aussi.
+func TestMergeFound(t *testing.T) {
+	n := notesResult{Text: "## v6.1.3\nfix CVE-2026-0001\nGHSA-aaaa-bbbb-cccc", Found: map[string][]string{"CVE-2026-0001": {"6.1.3"}}}
+	model := []AICVE{{ID: "cve-2026-0001", Severity: "high", FixedIn: "6.0"}, {ID: "CVE-2026-9999", Severity: "critical"}, {ID: "GHSA-AAAA-BBBB-CCCC"}}
+	got := mergeFound(n, model, map[string]CVEInfo{"GHSA-aaaa-bbbb-cccc": {Alias: "CVE-2026-0001"}})
+	if len(got) != 1 || got[0].ID != "CVE-2026-0001" || got[0].FixedIn != "6.1.3" || got[0].Severity != "high" {
+		t.Errorf("%+v", got)
+	}
+}
+
+// Version corrigée par branche : la branche de la version d'abord ; d'autres branches seules ne
+// disent rien.
+func TestFixedFor(t *testing.T) {
+	for _, c := range []struct {
+		versions     []string
+		ref          string
+		depth        int
+		fixed, known bool
+	}{
+		{[]string{"5.8.8", "6.1.3"}, "5.8.9", 1, true, true},
+		{[]string{"5.8.8", "6.1.3"}, "6.1.2", 1, false, true},
+		{[]string{"1.31.2"}, "1.30.6", 2, false, true},
+		{[]string{"1.28.4", "1.31.2"}, "1.30.6", 2, false, false},
+		{[]string{"4.0.3"}, "5.8.9", 1, true, true},
+		{nil, "5.8.9", 1, false, false},
+	} {
+		if f, k := fixedFor(c.versions, c.ref, c.depth); f != c.fixed || k != c.known {
+			t.Errorf("%v / %s : %v %v", c.versions, c.ref, f, k)
+		}
 	}
 }

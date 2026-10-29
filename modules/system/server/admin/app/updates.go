@@ -421,7 +421,7 @@ func (r UpdateRow) Behind() bool {
 }
 
 // aiPackageVersion : la façon de lire un paquet ; la changer refait ces analyses une fois.
-const aiPackageVersion = 5
+const aiPackageVersion = 6
 
 // analysisKey : la clé de l'analyse de ce paquet (de la version en service à la plus récente).
 func (r UpdateRow) analysisKey() string {

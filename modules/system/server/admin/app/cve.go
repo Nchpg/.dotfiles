@@ -13,17 +13,20 @@ import (
 	"time"
 )
 
-// Onglet Mises à jour : l'urgence ne vient pas de l'IA mais des CVE elles-mêmes. Gemini les relève
-// (et le code dans les titres de commits) ; le dashboard va chercher la note de chacune (NVD, sinon
+// Onglet Mises à jour : l'urgence ne vient pas de l'IA mais des CVE elles-mêmes. Le code les relève
+// (notes de version, avis de sécurité, titres de commits ; cf. notes.go), l'IA en complète ; le dashboard va chercher la note de chacune (NVD, sinon
 // l'avis GitHub pour un GHSA) et si elle est exploitée en pratique (catalogue KEV de la CISA), puis
 // rateUrgency classe. Les notes sont gardées sur disque ; une CVE pas encore notée est redemandée.
 
 // CVEInfo : la note d'une CVE.
 type CVEInfo struct {
-	Score   float64   `json:"score"`   // CVSS de base, 0 si pas encore notée
-	Network bool      `json:"network"` // attaquable par le réseau (AV:N)
-	KEV     bool      `json:"kev"`     // exploitée en pratique (CISA)
-	At      time.Time `json:"at"`
+	Score    float64   `json:"score"`              // CVSS de base, 0 si pas encore notée
+	Network  bool      `json:"network"`            // attaquable par le réseau (AV:N)
+	KEV      bool      `json:"kev"`                // exploitée en pratique (CISA)
+	Severity string    `json:"severity,omitempty"` // la gravité donnée par l'avis du projet
+	Alias    string    `json:"alias,omitempty"`    // le numéro CVE d'un GHSA
+	Rejected bool      `json:"rejected,omitempty"` // rejetée par NVD (doublon, pas une faille)
+	At       time.Time `json:"at"`
 }
 
 var (
@@ -69,16 +72,24 @@ func (s *Server) saveCVEInfos(m map[string]CVEInfo) {
 	}
 }
 
-// addCVEInfos : des notes connues d'ailleurs (avis d'un dépôt), sans écraser une note déjà là.
+// addCVEInfos : ce que dit l'avis d'un dépôt (note, gravité, numéro CVE), sans écraser une note déjà
+// là ni avancer la date de sa prochaine relecture.
 func (s *Server) addCVEInfos(add map[string]CVEInfo) {
 	if len(add) == 0 {
 		return
 	}
 	infos := s.cveInfos()
 	for id, info := range add {
-		if old, ok := infos[id]; !ok || old.Score == 0 {
+		old, ok := infos[id]
+		if !ok {
 			infos[id] = info
+			continue
 		}
+		if old.Score == 0 && info.Score > 0 {
+			old.Score, old.Network = info.Score, info.Network
+		}
+		old.Severity, old.Alias = firstOf(info.Severity, old.Severity), firstOf(info.Alias, old.Alias)
+		infos[id] = old
 	}
 	s.saveCVEInfos(infos)
 }
@@ -89,7 +100,11 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 	ids := map[string]bool{}
 	for _, a := range s.rawAnalyses() {
 		for _, c := range a.CVEs {
-			ids[cveID(c.ID)] = true
+			id := cveID(c.ID)
+			ids[id] = true
+			if alias := infos[id].Alias; alias != "" {
+				ids[alias] = true // un GHSA : sa CVE, pour NVD et le KEV
+			}
 		}
 	}
 	kev, kevErr := s.kevSet(ctx)
@@ -111,9 +126,12 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 				if !ok {
 					continue
 				}
-			} else if fresh.Score == 0 && ok && info.Score > 0 {
-				info.At = fresh.At // pas de note publique : celle de l'avis du dépôt reste
 			} else {
+				// Une note publique remplace celle de l'avis du dépôt ; sans elle, l'avis reste.
+				if fresh.Score == 0 && ok {
+					fresh.Score, fresh.Network = info.Score, info.Network
+				}
+				fresh.Severity, fresh.Alias = firstOf(fresh.Severity, info.Severity), firstOf(fresh.Alias, info.Alias)
 				info = fresh
 			}
 		}
@@ -121,6 +139,16 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 			info.KEV = kev[id]
 		}
 		infos[id] = info
+	}
+	// Un GHSA prend la note et le KEV de sa CVE.
+	for id, info := range infos {
+		if a, ok := infos[info.Alias]; ok && info.Alias != "" {
+			if a.Score > 0 {
+				info.Score, info.Network = a.Score, a.Network
+			}
+			info.KEV, info.Rejected = info.KEV || a.KEV, a.Rejected
+			infos[id] = info
+		}
 	}
 	s.saveCVEInfos(infos)
 	if kevErr != nil {
@@ -147,7 +175,9 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 	info := CVEInfo{At: time.Now()}
 	if strings.HasPrefix(id, "GHSA-") {
 		var adv struct {
-			CVSS struct {
+			CVE      string `json:"cve_id"`
+			Severity string `json:"severity"`
+			CVSS     struct {
 				Score  float64 `json:"score"`
 				Vector string  `json:"vector_string"`
 			} `json:"cvss"`
@@ -160,6 +190,7 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 			return info, err
 		}
 		info.Score, info.Network = adv.CVSS.Score, strings.Contains(adv.CVSS.Vector, "AV:N")
+		info.Severity, info.Alias = strings.ToLower(adv.Severity), cveID(adv.CVE)
 		return info, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -177,6 +208,7 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 		return info, fmt.Errorf("NVD : %s", resp.Status)
 	}
 	type metric struct {
+		Type string `json:"type"` // Primary : la note de NVD ; Secondary : celle de l'éditeur
 		Data struct {
 			Score  float64 `json:"baseScore"`
 			Vector string  `json:"attackVector"`
@@ -186,6 +218,7 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 	var body struct {
 		Vulns []struct {
 			CVE struct {
+				Status  string `json:"vulnStatus"`
 				Metrics struct {
 					V40 []metric `json:"cvssMetricV40"`
 					V31 []metric `json:"cvssMetricV31"`
@@ -201,13 +234,25 @@ func (s *Server) fetchCVE(ctx context.Context, id string) (CVEInfo, error) {
 	if len(body.Vulns) == 0 {
 		return info, nil // inconnue de NVD pour l'instant
 	}
-	m := body.Vulns[0].CVE.Metrics
+	cve := body.Vulns[0].CVE
+	if cve.Status == "Rejected" {
+		info.Rejected = true
+		return info, nil
+	}
+	m := cve.Metrics
 	for _, list := range [][]metric{m.V31, m.V40, m.V30, m.V2} {
-		if len(list) > 0 {
-			d := list[0].Data
-			info.Score, info.Network = d.Score, d.Vector == "NETWORK" || d.Access == "NETWORK"
-			break
+		if len(list) == 0 {
+			continue
 		}
+		pick := list[0]
+		for _, x := range list {
+			if x.Type == "Primary" {
+				pick = x
+				break
+			}
+		}
+		info.Score, info.Network = pick.Data.Score, pick.Data.Vector == "NETWORK" || pick.Data.Access == "NETWORK"
+		break
 	}
 	return info, nil
 }
@@ -253,9 +298,12 @@ var urgencyRank = map[string]int{"sans": 0, "conseille": 1, "urgent": 2}
 
 // cveUrgency : le niveau d'une CVE. Exploitée en pratique, critique (≥ 9) ou grave (≥ 7) et
 // attaquable par le réseau : urgent ; grave en local seulement, ou moyenne (≥ 4) : conseillé ; faible :
-// sans. Pas encore notée : la gravité annoncée (projet, avis GitHub), sinon conseillé.
+// sans. Pas encore notée : la gravité de l'avis du projet (critical : urgent) ; celle que l'IA a lue
+// dans les notes ne rend jamais urgent. Rejetée par NVD : sans.
 func cveUrgency(c AICVE, info CVEInfo, known bool) string {
 	switch {
+	case known && info.Rejected:
+		return "sans"
 	case known && info.KEV:
 		return "urgent"
 	case known && info.Score > 0:
@@ -267,9 +315,16 @@ func cveUrgency(c AICVE, info CVEInfo, known bool) string {
 		}
 		return "sans"
 	}
-	switch strings.ToLower(c.Severity) {
-	case "critical", "critique":
+	switch strings.ToLower(info.Severity) {
+	case "critical":
 		return "urgent"
+	case "low":
+		return "sans"
+	case "":
+	default:
+		return "conseille"
+	}
+	switch strings.ToLower(c.Severity) {
 	case "low", "faible":
 		return "sans"
 	}
@@ -295,33 +350,87 @@ func rateUrgency(model string, cves []AICVE, infos map[string]CVEInfo) string {
 	return best
 }
 
+// fixedFor : une faille aux versions corrigées `versions` est-elle corrigée dans `ref` ? `known` faux
+// si on ne peut pas le dire. La branche de `ref` d'abord (une faille corrigée en 5.8.8 et 6.1.3 :
+// 5.8.9 l'a, 6.1.2 non) ; sinon des versions toutes plus anciennes la corrigent, toutes plus récentes
+// non ; un mélange d'autres branches ne dit rien.
+func fixedFor(versions []string, ref string, depth int) (fixed, known bool) {
+	if ref == "" || len(versions) == 0 {
+		return false, false
+	}
+	var branch []string
+	older, newer := false, false
+	for _, v := range versions {
+		if sameBranch(v, ref, depth) {
+			branch = append(branch, v)
+		}
+		if cmpVersions(v, ref) <= 0 {
+			older = true
+		} else {
+			newer = true
+		}
+	}
+	if len(branch) > 0 {
+		low := branch[0]
+		for _, v := range branch {
+			if cmpVersions(v, low) < 0 {
+				low = v
+			}
+		}
+		return cmpVersions(low, ref) <= 0, true
+	}
+	if older != newer {
+		return older, true
+	}
+	return false, false
+}
+
 // classifyRow : où en est chaque CVE de l'analyse d'un paquet, et le niveau qui en découle :
-//   - service : déjà corrigée dans la version en service (un patch de nixpkgs la cite) ; ne compte pas ;
+//   - service : déjà corrigée dans la version en service (patch de nixpkgs, notes ou avis de sa
+//     branche, version corrigée atteinte) ; rejected : rejetée par NVD ; duplicate : le GHSA d'une CVE
+//     déjà listée. Aucune ne compte ;
 //   - update : la mise à jour du canal la corrige (patch, backport cité par les commits du canal,
-//     version de correction atteinte) ;
-//   - channel : corrigée seulement dans une version plus récente que le canal ;
+//     version corrigée atteinte) ;
+//   - channel : corrigée dans la branche d'après update, mais plus loin que le canal ;
+//   - other : corrigée seulement dans une autre branche (rien ne dit que la tienne le sera) ;
 //   - unknown : version de correction inconnue, le canal étant en retard sur le projet.
 //
 // `backports` : les CVE citées par les commits de l'entrée du flake qui fournit le paquet.
 func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos map[string]CVEInfo) Analysis {
+	depth := max(a.Depth, 1)
+	listed := map[string]bool{}
+	for _, c := range a.CVEs {
+		listed[cveID(c.ID)] = true
+	}
 	var counted []AICVE
 	cves := make([]AICVE, len(a.CVEs))
 	for i, c := range a.CVEs {
 		id := cveID(c.ID)
+		vs := fixedVersions(c.FixedIn)
+		inService, _ := fixedFor(vs, row.Current, depth)
+		byUpdate, knownNext := fixedFor(vs, row.Next, depth)
+		nextBranch := false
+		for _, v := range vs {
+			nextBranch = nextBranch || sameBranch(v, row.Next, depth)
+		}
 		switch {
-		case slices.Contains(row.Patches, id), slices.Contains(a.Fixed, id),
-			c.FixedIn != "" && row.Current != "" && cmpVersions(c.FixedIn, row.Current) <= 0:
-			c.Status = "service" // patchée par nixpkgs, déjà corrigée dans la branche, ou version dépassée
-		case slices.Contains(row.NextPatches, id), backports[id],
-			c.FixedIn != "" && row.Next != "" && cmpVersions(c.FixedIn, row.Next) <= 0, c.FixedIn == "" && !row.Behind():
+		case infos[id].Rejected:
+			c.Status = "rejected"
+		case strings.HasPrefix(id, "GHSA-") && listed[infos[id].Alias]:
+			c.Status = "duplicate" // le GHSA d'une CVE déjà listée
+		case slices.Contains(row.Patches, id), slices.Contains(a.Fixed, id), inService:
+			c.Status = "service"
+		case slices.Contains(row.NextPatches, id), backports[id], byUpdate, len(vs) == 0 && !row.Behind():
 			c.Status = "update"
-		case c.FixedIn != "":
+		case knownNext && nextBranch:
 			c.Status = "channel"
+		case len(vs) > 0:
+			c.Status = "other"
 		default:
 			c.Status = "unknown"
 		}
 		cves[i] = c
-		if c.Status == "service" {
+		if c.Status == "service" || c.Status == "rejected" || c.Status == "duplicate" {
 			continue
 		}
 		counted = append(counted, c)
@@ -332,7 +441,7 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 	}
 	a.CVEs = cves
 	if len(a.CVEs) > 0 && len(counted) == 0 {
-		a.Urgency = "sans" // toutes déjà corrigées par nixpkgs
+		a.Urgency = "sans" // toutes déjà corrigées en service
 	} else {
 		a.Urgency = rateUrgency(a.ModelUrgency, counted, infos)
 	}
@@ -348,6 +457,8 @@ func (c AICVE) StatusLabel() string {
 		return "corrigée par update"
 	case "channel":
 		return "corrigée en " + c.FixedIn + ", pas dans le canal"
+	case "other":
+		return "corrigée en " + c.FixedIn + ", pas dans cette branche"
 	case "unknown":
 		return "version de correction inconnue"
 	}
@@ -358,7 +469,7 @@ func (c AICVE) StatusLabel() string {
 func (a Analysis) ShownCVEs() []AICVE {
 	var out []AICVE
 	for _, c := range a.CVEs {
-		if c.Status != "service" {
+		if c.Status != "service" && c.Status != "rejected" && c.Status != "duplicate" {
 			out = append(out, c)
 		}
 	}
