@@ -435,15 +435,22 @@ function mapInit() {
       const count = document.createElement("small");
       count.textContent = spot.dataset.count;
       const list = document.createElement("ul");
-      for (const line of (spot.dataset.sites || "").split("\n").filter(Boolean)) {
-        const [domain, n] = line.split("\t");
+      // Par site : son nombre, puis ses chemins les plus vus (« domaine, n, plus, chemin, n, … »).
+      const row = (cls, a, b) => {
         const li = document.createElement("li");
-        const d = document.createElement("span");
-        d.textContent = domain;
-        const c = document.createElement("span");
-        c.textContent = n;
-        li.append(d, c);
-        list.append(li);
+        li.className = cls;
+        const x = document.createElement("span");
+        x.textContent = a;
+        const y = document.createElement("span");
+        y.textContent = b;
+        li.append(x, y);
+        return li;
+      };
+      for (const line of (spot.dataset.sites || "").split("\n").filter(Boolean)) {
+        const [domain, n, more, ...paths] = line.split("\t");
+        list.append(row("tip-site", domain, n));
+        for (let i = 0; i + 1 < paths.length; i += 2) list.append(row("tip-path", paths[i], paths[i + 1]));
+        if (+more > 0) list.append(row("tip-path tip-more", `et ${more} autre${+more > 1 ? "s" : ""}`, ""));
       }
       tip.replaceChildren(head, count, ...(list.children.length ? [list] : []));
       tip.className = `map-tip tip-${spot.classList.contains("spot-vpn") ? "vpn" : "internet"}`;

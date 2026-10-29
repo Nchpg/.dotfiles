@@ -730,3 +730,11 @@ button.link-btn { border: 0; background: none; padding: 0; font: inherit; font-s
   .activity.with-time .day .time { display: inline; }
   .activity.with-time .day .kind { display: none; }
 }
+
+/* Trafic : les chemins vus, dans l'info-bulle de la carte (sous chaque site) et sous chaque visite. */
+.map-tip { max-width: 320px; }
+.map-tip li.tip-site + li.tip-site, .map-tip li.tip-path + li.tip-site { margin-top: 4px; }
+.map-tip li.tip-path { padding-left: 12px; font-size: 11.5px; color: var(--muted); }
+.map-tip li.tip-more span:first-child { font-family: var(--sans); font-style: italic; }
+.visit-route { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; margin-top: 2px; font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.visit-route .arrow { color: var(--faint); }

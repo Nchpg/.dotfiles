@@ -175,6 +175,7 @@ type Visit struct {
 	Lat, Lon                              *float64
 	Start, End                            time.Time
 	Pages                                 int
+	Paths                                 []string // les pages vues, dans l'ordre
 }
 
 func visitsOf(lines []visitLine) []Visit {
@@ -197,6 +198,7 @@ func visitsOf(lines []visitLine) []Visit {
 			v := &out[n-1]
 			if v.Site == l.Site && v.IP == l.IP && v.UA == l.UA && l.At.Sub(v.End) <= visitGap {
 				v.End, v.Pages = l.At, v.Pages+1
+				v.Paths = append(v.Paths, l.Path)
 				if l.SSO != "" {
 					v.SSO = l.SSO
 				}
@@ -204,7 +206,7 @@ func visitsOf(lines []visitLine) []Visit {
 			}
 		}
 		out = append(out, Visit{Site: l.Site, IP: l.IP, Via: l.Via, UA: l.UA, SSO: l.SSO, City: l.City, Country: l.place(),
-			Lat: l.Lat, Lon: l.Lon, Start: l.At, End: l.At, Pages: 1})
+			Lat: l.Lat, Lon: l.Lon, Start: l.At, End: l.At, Pages: 1, Paths: []string{l.Path}})
 	}
 	return out
 }
@@ -236,7 +238,8 @@ var viaLabels = map[string]string{"public": "internet", "vpn": "VPN", "lan": "lo
 type mapPoint struct {
 	Lat, Lon    float64
 	Label, Kind string
-	Site        string // le domaine visité (ou le service où l'on s'est connecté)
+	Site        string   // le domaine visité (ou le service où l'on s'est connecté)
+	Paths       []string // les pages vues sur ce site
 }
 
 // Projection de static/world.svg : Mercator (les pays gardent leur forme ; plus grands près des
@@ -262,6 +265,31 @@ type MapDot struct {
 type SiteHit struct {
 	Domain string
 	N      int
+	Paths  []PathHit // les chemins vus, les plus vus d'abord (tipPaths au plus)
+	More   int       // chemins de plus, non listés
+}
+
+type PathHit struct {
+	Path string
+	N    int
+}
+
+// tipPaths : chemins listés par site dans l'info-bulle.
+const tipPaths = 6
+
+// pathHits : des pages vues, comptées par chemin, les plus vues d'abord.
+func pathHits(counts map[string]int) []PathHit {
+	var out []PathHit
+	for p, n := range counts {
+		out = append(out, PathHit{p, n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].N != out[j].N {
+			return out[i].N > out[j].N
+		}
+		return out[i].Path < out[j].Path
+	})
+	return out
 }
 
 func mapDots(points []mapPoint, one, many string) []MapDot {
@@ -269,16 +297,24 @@ func mapDots(points []mapPoint, one, many string) []MapDot {
 		mapPoint
 		n     int
 		sites map[string]int
+		paths map[string]map[string]int
 	}
 	spots := map[string]*spot{}
 	for _, p := range points {
 		k := fmt.Sprintf("%s|%s|%.1f,%.1f", p.Kind, p.Label, p.Lat, p.Lon)
 		if spots[k] == nil {
-			spots[k] = &spot{mapPoint: p, sites: map[string]int{}}
+			spots[k] = &spot{mapPoint: p, sites: map[string]int{}, paths: map[string]map[string]int{}}
 		}
-		spots[k].n++
+		sp := spots[k]
+		sp.n++
 		if p.Site != "" {
-			spots[k].sites[p.Site]++
+			sp.sites[p.Site]++
+			if sp.paths[p.Site] == nil {
+				sp.paths[p.Site] = map[string]int{}
+			}
+			for _, path := range p.Paths {
+				sp.paths[p.Site][path]++
+			}
 		}
 	}
 	var out []MapDot
@@ -287,7 +323,10 @@ func mapDots(points []mapPoint, one, many string) []MapDot {
 			R: math.Min(2.2+math.Sqrt(float64(sp.n))*1.1, 9), Kind: sp.Kind, Label: sp.Label, Count: plural(sp.n, one, many)}
 		d.Title = d.Label + " : " + d.Count
 		for site, n := range sp.sites {
-			d.Sites = append(d.Sites, SiteHit{site, n})
+			hit := SiteHit{Domain: site, N: n}
+			paths := pathHits(sp.paths[site])
+			hit.Paths, hit.More = paths[:min(len(paths), tipPaths)], max(0, len(paths)-tipPaths)
+			d.Sites = append(d.Sites, hit)
 		}
 		sort.Slice(d.Sites, func(i, j int) bool {
 			if d.Sites[i].N != d.Sites[j].N {
@@ -339,7 +378,7 @@ func (g geoPlaces) visitDots(visits []Visit) []MapDot {
 	var pts []mapPoint
 	for _, v := range visits {
 		if p, ok := g.point(v.Via, v.IP, v.Lat, v.Lon, v.City, v.Country); ok {
-			p.Site = v.Site
+			p.Site, p.Paths = v.Site, v.Paths
 			pts = append(pts, p)
 		}
 	}
@@ -703,7 +742,12 @@ type VisitItem struct {
 	When, Duration, Browser string
 	Pages                   int
 	SSO                     string
+	Route                   []PathHit // le parcours : les pages dans l'ordre, une page rechargée d'affilée comptée une fois (N)
+	RouteMore               int       // étapes de plus, non listées (au-delà de routeMax)
 }
+
+// routeMax : étapes du parcours listées sous une visite.
+const routeMax = 20
 
 // originMax : visites listées sous une origine (les plus récentes).
 const originMax = 12
@@ -727,7 +771,16 @@ func visitItem(v Visit) VisitItem {
 	case d >= time.Minute:
 		dur = fmt.Sprintf("%d min", int(d.Minutes()))
 	}
-	return VisitItem{When: when, Duration: dur, Browser: browserOf(v.UA), Pages: v.Pages, SSO: v.SSO}
+	var route []PathHit
+	for _, p := range v.Paths {
+		if n := len(route); n > 0 && route[n-1].Path == p {
+			route[n-1].N++
+			continue
+		}
+		route = append(route, PathHit{p, 1})
+	}
+	more := max(0, len(route)-routeMax)
+	return VisitItem{When: when, Duration: dur, Browser: browserOf(v.UA), Pages: v.Pages, SSO: v.SSO, Route: route[:len(route)-more], RouteMore: more}
 }
 
 // browserOf : le navigateur et le système d'un User-Agent (« Firefox, Linux »), ou rien.
