@@ -188,11 +188,63 @@ func clip(s string, n int) string {
 
 // Release : une release GitHub d'un projet.
 type Release struct {
-	Tag        string `json:"tag_name"`
-	Body       string `json:"body"`
-	URL        string `json:"html_url"`
-	Prerelease bool   `json:"prerelease"`
-	Draft      bool   `json:"draft"`
+	Tag        string    `json:"tag_name"`
+	Body       string    `json:"body"`
+	URL        string    `json:"html_url"`
+	Prerelease bool      `json:"prerelease"`
+	Draft      bool      `json:"draft"`
+	Published  time.Time `json:"published_at"`
+}
+
+// branchDepth : combien de numéros nomment une branche du projet. 1 (podman 5 / 6, PostgreSQL 17 /
+// 18), sauf si une suite au deuxième numéro reçoit encore des versions après la sortie d'une suite
+// plus récente de même premier numéro (nginx 1.28 stable à côté de 1.29) : alors 2.
+func branchDepth(rels []Release) int {
+	type line struct {
+		major, minor int
+		first, last  time.Time
+	}
+	lines := map[[2]int]*line{}
+	for _, r := range rels {
+		p := versionParts(r.Tag)
+		if r.Prerelease || r.Draft || len(p) < 2 || r.Published.IsZero() {
+			continue
+		}
+		k := [2]int{p[0], p[1]}
+		l := lines[k]
+		if l == nil {
+			l = &line{major: p[0], minor: p[1], first: r.Published, last: r.Published}
+			lines[k] = l
+		}
+		if r.Published.Before(l.first) {
+			l.first = r.Published
+		}
+		if r.Published.After(l.last) {
+			l.last = r.Published
+		}
+	}
+	for _, a := range lines {
+		for _, b := range lines {
+			if a.major == b.major && a.minor < b.minor && a.last.After(b.first) {
+				return 2
+			}
+		}
+	}
+	return 1
+}
+
+// sameBranch : deux versions de la même branche (leurs `depth` premiers numéros).
+func sameBranch(a, b string, depth int) bool {
+	pa, pb := versionParts(a), versionParts(b)
+	if len(pa) < depth || len(pb) < depth {
+		return false
+	}
+	for i := 0; i < depth; i++ {
+		if pa[i] != pb[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // releases : les dernières releases d'un dépôt GitHub (gardées quelques heures : la vérification et
@@ -330,13 +382,15 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			fixed = append(fixed, id)
 		}
 	}
+	depth := 1
 	if owner != "" {
 		if rels, err := s.releases(ctx, owner, repo); err == nil {
+			depth = branchDepth(rels)
 			n := 0
 			for _, r := range rels {
 				// Les notes de la branche en service, jusqu'à sa version : leurs CVE y sont déjà
 				// corrigées (une 6.0 les recite, corrigées en parallèle en 5.8).
-				if major(r.Tag) == major(row.Current) && cmpVersions(r.Tag, row.Current) <= 0 {
+				if sameBranch(r.Tag, row.Current, depth) && cmpVersions(r.Tag, row.Current) <= 0 {
 					for _, id := range reCVE.FindAllString(r.Body, -1) {
 						fix(id)
 					}
@@ -389,7 +443,7 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			s.addCVEInfos(scored)
 			var a strings.Builder
 			for _, v := range advs {
-				if !advisoryOpen(row.Current, v.Vulns) {
+				if !advisoryOpen(row.Current, depth, v.Vulns) {
 					fix(v.GHSA)
 					if v.CVE != "" {
 						fix(v.CVE)
@@ -418,7 +472,7 @@ var reVersion = regexp.MustCompile(`\d+(?:\.\d+)+[0-9A-Za-z.+~-]*`)
 // déjà atteinte, le règle ; sinon une version corrigée plus récente le laisse ouvert ; un avis sans
 // version corrigée aussi. Les vieux avis d'un projet n'en sont pas : sans ce tri, l'IA les recopie et
 // l'urgence gonfle.
-func advisoryOpen(current string, vulns []struct {
+func advisoryOpen(current string, depth int, vulns []struct {
 	Range   string `json:"vulnerable_version_range"`
 	Patched string `json:"patched_versions"`
 }) bool {
@@ -430,7 +484,7 @@ func advisoryOpen(current string, vulns []struct {
 		patched = append(patched, reVersion.FindAllString(v.Patched, -1)...)
 	}
 	for _, p := range patched {
-		if major(p) == major(current) && cmpVersions(p, current) <= 0 {
+		if sameBranch(p, current, depth) && cmpVersions(p, current) <= 0 {
 			return false
 		}
 	}

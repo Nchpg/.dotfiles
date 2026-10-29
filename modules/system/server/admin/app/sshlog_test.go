@@ -511,12 +511,12 @@ func TestAdvisoryOpen(t *testing.T) {
 		patched string
 		want    bool
 	}{{"4.0.3, 3.4.7", false}, {"5.8.10", true}, {">= 6.0.1", true}, {"", true}, {"5.8.9", false}} {
-		if got := advisoryOpen("5.8.9", []vuln{{Patched: c.patched}}); got != c.want {
+		if got := advisoryOpen("5.8.9", 1, []vuln{{Patched: c.patched}}); got != c.want {
 			t.Errorf("corrigée %q : %v", c.patched, got)
 		}
 	}
 	// Corrigée sur deux branches : celle de la version en service est déjà atteinte.
-	if advisoryOpen("5.8.9", []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) || !advisoryOpen("5.8.7", []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) {
+	if advisoryOpen("5.8.9", 1, []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) || !advisoryOpen("5.8.7", 1, []vuln{{Patched: "v5.8.8"}, {Patched: "v6.1.3"}}) {
 		t.Error("deux branches")
 	}
 	row := UpdateRow{Current: "5.8.9", Next: "6.1.4"}
@@ -534,5 +534,29 @@ func TestClassifyFixedInBranch(t *testing.T) {
 	got := classifyRow(&row, a, nil, map[string]CVEInfo{"CVE-2026-94603": {Score: 10, Network: true}, "CVE-2026-5": {Score: 5}})
 	if got.CVEs[0].Status != "service" || got.CVEs[1].Status != "update" || got.Urgency != "conseille" {
 		t.Errorf("%+v", got)
+	}
+}
+
+// Les branches d'un projet : au premier numéro, ou au deuxième quand une suite plus ancienne reçoit
+// encore des versions après la sortie d'une plus récente (nginx 1.28 à côté de 1.29).
+func TestBranchDepth(t *testing.T) {
+	d := func(s string) time.Time { t, _ := time.Parse("2006-01-02", s); return t }
+	podman := []Release{{Tag: "v5.8.9", Published: d("2026-10-20")}, {Tag: "v6.1.4", Published: d("2026-10-22")}, {Tag: "v6.0.0", Published: d("2026-08-01")}, {Tag: "v5.8.0", Published: d("2026-06-01")}, {Tag: "v5.7.3", Published: d("2026-05-01")}}
+	nginx := []Release{{Tag: "release-1.29.2", Published: d("2026-10-01")}, {Tag: "release-1.28.4", Published: d("2026-10-02")}, {Tag: "release-1.29.0", Published: d("2026-06-01")}, {Tag: "release-1.28.0", Published: d("2026-04-01")}}
+	if branchDepth(podman) != 1 || branchDepth(nginx) != 2 {
+		t.Errorf("podman %d, nginx %d", branchDepth(podman), branchDepth(nginx))
+	}
+	type vuln = struct {
+		Range   string `json:"vulnerable_version_range"`
+		Patched string `json:"patched_versions"`
+	}
+	// 1.28.3 : corrigée en 1.29.1 et 1.28.4 ; sa branche (1.28) n'a pas encore le correctif.
+	if !advisoryOpen("1.28.3", 2, []vuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) || advisoryOpen("1.28.4", 2, []vuln{{Patched: "1.29.1"}, {Patched: "1.28.4"}}) {
+		t.Error("branches au deuxième numéro")
+	}
+	// Au premier numéro, la 1.28.3 se croirait corrigée par… rien : 1.28.4 > 1.28.3 laisse ouvert,
+	// mais une 1.27.9 corrigée la fermerait à tort.
+	if advisoryOpen("1.28.3", 1, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) == advisoryOpen("1.28.3", 2, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) {
+		t.Error("la profondeur ne change rien")
 	}
 }
