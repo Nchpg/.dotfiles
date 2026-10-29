@@ -405,7 +405,14 @@ type UpdateRow struct {
 	Patches, NextPatches        []string // CVE patchées par nixpkgs : en service, après update
 	Stuck                       bool     // une faille n'est corrigée qu'au-delà du canal
 	EOL                         EOLInfo  // ses branches (endoflife.date)
+	OtherBranch                 bool     // une faille n'est corrigée que dans une autre branche
 }
+
+// EOLAlert : la branche n'est plus maintenue en amont et une faille connue n'y est pas corrigée
+// (seule une branche plus récente l'est) : aucun correctif à attendre. Sans faille, la fin de vie
+// n'est qu'une mention : nixpkgs-stable garde une version pour toute sa durée et rapporte lui-même
+// les correctifs de sécurité (des patches, que la page reconnaît).
+func (r UpdateRow) EOLAlert() bool { return r.EOL.Ended && r.OtherBranch }
 
 // Upper : la version la plus récente connue (la dernière publiée si elle dépasse le canal).
 func (r UpdateRow) Upper() string {
@@ -593,7 +600,7 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 		if row.Stuck {
 			counts["stuck"]++
 		}
-		if row.EOL.Ended {
+		if row.EOLAlert() {
 			counts["eol"]++
 		}
 		row.Release = res.Releases[releaseKey(row.Name, firstOf(row.Next, row.Current))]
@@ -684,7 +691,7 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 		var changed []UpdateRow
 		analyses := s.analyses()
 		for _, row := range s.withAnalyses(updateRows(cur, res.Main, res.Next), res.Inputs, res) {
-			if row.Change != "same" || row.Stuck || row.EOL.Ended {
+			if row.Change != "same" || row.Stuck || row.EOLAlert() {
 				changed = append(changed, row)
 			}
 		}
@@ -724,8 +731,8 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 				label = "le canal n'a rien de plus"
 			}
 			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, label, extra)
-			if row.EOL.Ended {
-				fmt.Fprintf(&b, "  ⚠️ branche %s plus maintenue%s : plus aucun correctif de sécurité\n", row.EOL.Cycle, map[bool]string{true: " depuis le " + row.EOL.Since, false: ""}[row.EOL.Since != ""])
+			if row.EOLAlert() {
+				fmt.Fprintf(&b, "  ⚠️ branche %s plus maintenue%s, et une faille n'est corrigée que dans une plus récente\n", row.EOL.Cycle, map[bool]string{true: " depuis le " + row.EOL.Since, false: ""}[row.EOL.Since != ""])
 			}
 			if row.Stuck {
 				fmt.Fprintf(&b, "  ⚠️ faille corrigée seulement en %s, pas dans le canal %s : prendre le paquet dans unstable, ou attendre\n", row.Latest, row.Source)

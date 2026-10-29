@@ -666,3 +666,17 @@ func TestFixedFor(t *testing.T) {
 		}
 	}
 }
+
+// Fin de vie : une mention, sauf si une faille n'est corrigée que dans une autre branche.
+func TestEOLAlert(t *testing.T) {
+	infos := map[string]CVEInfo{"CVE-1": {Score: 7.5, Network: true}}
+	row := UpdateRow{Current: "3.12.0", Next: "3.12.0", EOL: EOLInfo{Ended: true, Cycle: "3.12"}}
+	_ = classifyRow(&row, Analysis{}, nil, infos)
+	if row.EOLAlert() {
+		t.Error("sans faille : pas d'alerte")
+	}
+	_ = classifyRow(&row, Analysis{Depth: 2, CVEs: []AICVE{{ID: "CVE-1", FixedIn: "3.15.1"}}}, nil, infos)
+	if !row.EOLAlert() {
+		t.Error("faille corrigée seulement en 3.15 : alerte")
+	}
+}

@@ -435,8 +435,12 @@ func classifyRow(row *UpdateRow, a Analysis, backports map[string]bool, infos ma
 		}
 		counted = append(counted, c)
 		info, ok := infos[id]
-		if c.Status == "channel" && urgencyRank[cveUrgency(c, info, ok)] >= urgencyRank["conseille"] {
+		serious := urgencyRank[cveUrgency(c, info, ok)] >= urgencyRank["conseille"]
+		if c.Status == "channel" && serious {
 			row.Stuck = true
+		}
+		if c.Status == "other" && serious {
+			row.OtherBranch = true
 		}
 	}
 	a.CVEs = cves
