@@ -656,7 +656,7 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	act := s.sshActivityOf(r.Context())
+	act := s.sshActivityOf()
 	devices := s.vpnDevices(r.Context())
 	from := func(ip string) string {
 		if d := devices[ip]; d != "" {

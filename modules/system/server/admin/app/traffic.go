@@ -348,6 +348,11 @@ func (g geoPlaces) visitDots(visits []Visit) []MapDot {
 
 // trafficPeriod : la période choisie (?p=24h, 7j, 30j), bornée par la conservation des journaux.
 func (s *Server) trafficPeriod(r *http.Request) (string, time.Duration, []Opt) {
+	return s.periodOf(r.URL.Query().Get("p"))
+}
+
+// periodOf : la période d'une clé (7j par défaut).
+func (s *Server) periodOf(want string) (string, time.Duration, []Opt) {
 	periods := []struct {
 		Key string
 		D   time.Duration
@@ -358,7 +363,7 @@ func (s *Server) trafficPeriod(r *http.Request) (string, time.Duration, []Opt) {
 		if p.D > s.cfg.LogsWindow {
 			continue
 		}
-		if r.URL.Query().Get("p") == p.Key {
+		if want == p.Key {
 			key, d = p.Key, p.D
 		}
 		opts = append(opts, Opt{Value: p.Key, Label: p.Key})
@@ -591,8 +596,17 @@ func (s *Server) loginServices(ctx context.Context, sum trafficSummary, period t
 }
 
 func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	key, period, periods := s.trafficPeriod(r)
+	s.render(w, "traffic", s.trafficPage(r.URL.Query().Get("p")))
+}
+
+// trafficPage : les données de la page Trafic d'une période (gardées, cf. slowCache ; préchauffées
+// pour la période par défaut).
+func (s *Server) trafficPage(p string) any {
+	key, period, periods := s.periodOf(p)
+	return s.slow.get("traffic|"+key, func(ctx context.Context) any { return s.trafficData(ctx, key, period, periods) })
+}
+
+func (s *Server) trafficData(ctx context.Context, key string, period time.Duration, periods []Opt) map[string]any {
 	rows := s.trafficTargets(ctx)
 	lines, complete, err := s.visitLines(ctx, "page", "", period)
 	visits := visitsOf(lines)
@@ -634,8 +648,8 @@ func (s *Server) traffic(w http.ResponseWriter, r *http.Request) {
 	for _, ls := range logins {
 		ok, failed = ok+ls.OK, failed+ls.Failed
 	}
-	s.render(w, "traffic", map[string]any{"Nav": "traffic", "Groups": groups, "Services": services, "Sites": len(rows), "Logins": logins, "Period": key, "Periods": periods,
-		"Total": len(known), "Visited": visited, "OK": ok, "Failed": failed, "Dots": s.places(ctx).visitDots(known), "LogsOK": err == nil, "Complete": complete})
+	return map[string]any{"Nav": "traffic", "Groups": groups, "Services": services, "Sites": len(rows), "Logins": logins, "Period": key, "Periods": periods,
+		"Total": len(known), "Visited": visited, "OK": ok, "Failed": failed, "Dots": s.places(ctx).visitDots(known), "LogsOK": err == nil, "Complete": complete}
 }
 
 // TrafficGroup : un site et ses environnements, ses visites en tout.
@@ -792,8 +806,22 @@ func bars(visits []Visit, period time.Duration) []Bar {
 }
 
 func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	key, period, periods := s.trafficPeriod(r)
 	domain := r.PathValue("domain")
+	data := s.slow.get("traffic-site|"+domain+"|"+key, func(ctx context.Context) any {
+		if d := s.trafficSiteData(ctx, domain, key, period, periods); d != nil {
+			return d
+		}
+		return nil
+	})
+	if data == nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.render(w, "traffic-site", data)
+}
+
+func (s *Server) trafficSiteData(ctx context.Context, domain, key string, period time.Duration, periods []Opt) map[string]any {
 	var target *TrafficRow
 	for _, t := range s.trafficTargets(ctx) {
 		if t.Domain == domain {
@@ -802,10 +830,8 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if target == nil {
-		http.NotFound(w, r)
-		return
+		return nil
 	}
-	key, period, periods := s.trafficPeriod(r)
 	devices := s.vpnDevices(ctx)
 	lines, complete, err := s.visitLines(ctx, "page", domain, period)
 	visits := visitsOf(lines)
@@ -852,25 +878,38 @@ func (s *Server) trafficSite(w http.ResponseWriter, r *http.Request) {
 			login = ls
 		}
 	}
-	s.render(w, "traffic-site", map[string]any{"Nav": "traffic", "Target": target, "Period": key, "Periods": periods,
+	return map[string]any{"Nav": "traffic", "Target": target, "Period": key, "Periods": periods,
 		"Visits": len(visits), "Pages": len(lines), "Bars": bars(visits, period), "Dots": s.places(ctx).visitDots(visits),
 		"Origins": sortedOrigins(origins), "Accounts": sortedRows(values(accounts), 0), "Paths": sortedRows(values(paths), 10),
-		"Login": login, "LogsOK": err == nil, "Complete": complete})
+		"Login": login, "LogsOK": err == nil, "Complete": complete}
 }
 
 func (s *Server) trafficLogins(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	key, period, periods := s.trafficPeriod(r)
+	id := r.PathValue("service")
+	data := s.slow.get("traffic-logins|"+id+"|"+key, func(ctx context.Context) any {
+		if d := s.trafficLoginsData(ctx, id, key, period, periods); d != nil {
+			return d
+		}
+		return nil
+	})
+	if data == nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.render(w, "traffic-logins", data)
+}
+
+func (s *Server) trafficLoginsData(ctx context.Context, id, key string, period time.Duration, periods []Opt) map[string]any {
 	sum := s.readTrafficSummary()
 	var ls *LoginService
 	for _, x := range s.loginServices(ctx, sum, period, key) {
-		if x.ID == r.PathValue("service") {
+		if x.ID == id {
 			ls = x
 		}
 	}
 	if ls == nil {
-		http.NotFound(w, r)
-		return
+		return nil
 	}
 	since := time.Now().Add(-period)
 	devices := s.vpnDevices(ctx)
@@ -952,9 +991,9 @@ func (s *Server) trafficLogins(w http.ResponseWriter, r *http.Request) {
 		}
 		syncs = values(byApp)
 	}
-	s.render(w, "traffic-logins", map[string]any{"Nav": "traffic", "Service": ls, "Period": key, "Periods": periods,
+	return map[string]any{"Nav": "traffic", "Service": ls, "Period": key, "Periods": periods,
 		"Rows": sortedRows(values(byKey), 0), "Connected": sortedRows(connected, 0), "Sessions": sortedRows(sessions, 0),
-		"Syncs": sortedRows(syncs, 0), "Dots": loginDots(s.places(ctx), ls.events)})
+		"Syncs": sortedRows(syncs, 0), "Dots": loginDots(s.places(ctx), ls.events)}
 }
 
 // loginDots : les connexions sur la carte, réussies ou non, par lieu.

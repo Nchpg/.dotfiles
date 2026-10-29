@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -229,24 +228,15 @@ func sshSessions(ctx context.Context) []SSHSession {
 	return sessions
 }
 
-var sshCache struct {
-	sync.Mutex
-	at time.Time
-	a  sshActivity
-}
-
-// sshActivityOf : l'activité SSH, relue au plus toutes les 30 secondes.
-func (s *Server) sshActivityOf(ctx context.Context) sshActivity {
-	sshCache.Lock()
-	defer sshCache.Unlock()
-	if time.Since(sshCache.at) < 30*time.Second {
-		return sshCache.a
-	}
-	events, truncated, err := s.sshLog(ctx)
-	a := summarize(events, sshSessions(ctx))
-	a.Truncated, a.LogsOK = truncated, err == nil
-	sshCache.at, sshCache.a = time.Now(), a
-	return a
+// sshActivityOf : l'activité SSH (journal de sshd et sessions ouvertes), gardée (cf. slowCache ;
+// préchauffée).
+func (s *Server) sshActivityOf() sshActivity {
+	return s.slow.get("ssh", func(ctx context.Context) any {
+		events, truncated, err := s.sshLog(ctx)
+		a := summarize(events, sshSessions(ctx))
+		a.Truncated, a.LogsOK = truncated, err == nil
+		return a
+	}).(sshActivity)
 }
 
 // vpnDevices : le nom de l'appareil VPN de chaque adresse du tunnel (actifs et en attente).

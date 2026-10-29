@@ -34,6 +34,7 @@ type Server struct {
 	tmpl *template.Template
 
 	applyMu sync.Mutex // sérialise « aucune demande en cours » puis « lancer »
+	slow    slowCache  // données lentes des pages (Loki, journal de sshd)
 }
 
 func main() {
@@ -290,6 +291,9 @@ func (s *Server) warm(ctx context.Context) {
 		}
 		_, _ = s.gh.Packages(ctx)
 		s.activity(ctx, activityStep)
+		// Les pages lentes les plus ouvertes, prêtes avant qu'on les demande.
+		_ = s.trafficPage("")
+		_ = s.sshActivityOf()
 		select {
 		case <-ctx.Done():
 			return
