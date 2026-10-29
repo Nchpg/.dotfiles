@@ -456,13 +456,13 @@ func TestRateUrgency(t *testing.T) {
 // La dernière version : la plus récente de la même série (release ou unstable), une majeure à part.
 func TestPickLatest(t *testing.T) {
 	rels := []Release{{Tag: "v6.1.4", URL: "u614"}, {Tag: "v5.8.10", URL: "u5810"}, {Tag: "v5.9.0-rc1", URL: "rc", Prerelease: true}, {Tag: "v5.8.9", URL: "u589"}}
-	if l := pickLatest("5.8.8", "5.8.9", rels); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
+	if l := pickLatest("5.8.8", "5.8.9", rels, nil, 1); l.Version != "5.8.10" || l.URL != "u5810" || l.NewMajor != "6.1.4" {
 		t.Errorf("podman : %+v", l)
 	}
-	if l := pickLatest("17.11", "18.6", nil); l.Version != "" || l.NewMajor != "18.6" {
+	if l := pickLatest("17.11", "18.6", nil, nil, 1); l.Version != "" || l.NewMajor != "18.6" {
 		t.Errorf("postgresql : %+v", l)
 	}
-	if l := pickLatest("7.3", "6.18.58", nil); l.Version != "" || l.NewMajor != "" {
+	if l := pickLatest("7.3", "6.18.58", nil, []Candidate{{"7.3.4", "k"}, {"7.2.13", ""}}, 2); l.Version != "7.3.4" || l.URL != "k" || l.NewMajor != "" {
 		t.Errorf("noyau : %+v", l)
 	}
 }
@@ -558,5 +558,32 @@ func TestBranchDepth(t *testing.T) {
 	// mais une 1.27.9 corrigée la fermerait à tort.
 	if advisoryOpen("1.28.3", 1, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) == advisoryOpen("1.28.3", 2, []vuln{{Patched: "1.27.9"}, {Patched: "1.28.4"}}) {
 		t.Error("la profondeur ne change rien")
+	}
+}
+
+// endoflife.date : la branche d'une version (son nom en est le début), le dépôt GitHub d'un purl.
+func TestEOLProduct(t *testing.T) {
+	var p eolProduct
+	_ = json.Unmarshal([]byte(`{"releases":[{"name":"7.3","isMaintained":true,"latest":{"name":"7.3.4"}},{"name":"7.2","isMaintained":false,"eolFrom":"2026-09-01","latest":{"name":"7.2.13"}},{"name":"17","isMaintained":true}],
+		"identifiers":[{"type":"cpe","id":"cpe:x"},{"type":"purl","id":"pkg:github/nginx/nginx"}]}`), &p)
+	if c := p.cycleOf("7.2.11"); c == nil || c.Name != "7.2" || c.Maintained {
+		t.Errorf("7.2.11 : %+v", c)
+	}
+	if c := p.cycleOf("7.3"); c == nil || c.Name != "7.3" {
+		t.Errorf("7.3 : %+v", c)
+	}
+	if c := p.cycleOf("17.11"); c == nil || c.Name != "17" {
+		t.Errorf("17.11 : %+v", c)
+	}
+	if p.cycleOf("7.30.1") != nil || p.repo() != "https://github.com/nginx/nginx" {
+		t.Errorf("7.30.1, dépôt %s", p.repo())
+	}
+}
+
+// Avec des branches au deuxième numéro : la dernière de la branche ; une plus récente à part.
+func TestPickLatestBranch(t *testing.T) {
+	b := []Candidate{{"1.31.8", "m"}, {"1.30.7", "s"}, {"1.28.3", ""}}
+	if l := pickLatest("1.30.6", "", nil, b, 2); l.Version != "1.30.7" || l.URL != "s" || l.NewMajor != "1.31.8" {
+		t.Errorf("nginx : %+v", l)
 	}
 }

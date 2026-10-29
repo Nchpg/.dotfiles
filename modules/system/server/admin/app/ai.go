@@ -297,10 +297,10 @@ func major(v string) int {
 	return -1
 }
 
-// latestVersions : pour chaque paquet, la version la plus récente publiée dans sa série (celle de la
-// version d'après update : un projet y corrige ses failles, PostgreSQL 17 comme Nextcloud 33) parmi ses
-// releases GitHub et nixpkgs-unstable ; et une version majeure plus récente, à part (une migration se
-// choisit dans la config).
+// latestVersions : pour chaque paquet, la version la plus récente publiée dans sa branche (celle de
+// la version d'après update : un projet y corrige ses failles, PostgreSQL 17 comme nginx 1.30) parmi
+// endoflife.date, ses releases GitHub et nixpkgs-unstable ; et une branche plus récente, à part
+// (en changer se choisit dans la config).
 func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[string]LatestInfo {
 	out := map[string]LatestInfo{}
 	for _, r := range rows {
@@ -308,10 +308,15 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 			continue
 		}
 		var rels []Release
-		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src); owner != "" {
+		if owner, repo := repoOf(r.Changelog, r.Homepage, r.Src, r.EOL.Repo); owner != "" {
 			rels, _ = s.releases(ctx, owner, repo)
 		}
-		l := pickLatest(firstOf(r.Next, r.Current), r.Unstable, rels)
+		// La branche : celle d'endoflife.date, sinon d'après les dates des releases.
+		depth := r.EOL.Depth
+		if depth == 0 {
+			depth = branchDepth(rels)
+		}
+		l := pickLatest(firstOf(r.Next, r.Current), r.Unstable, rels, r.EOL.Latest, depth)
 		if l.Version != "" || l.NewMajor != "" {
 			out[r.Name] = l
 		}
@@ -319,14 +324,18 @@ func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[strin
 	return out
 }
 
-// pickLatest : parmi la version de nixpkgs-unstable et les releases (hors préversions), la plus
+// pickLatest : parmi la version de nixpkgs-unstable, les releases (hors préversions) et la dernière
+// de chaque branche (endoflife.date), la plus
 // récente de la série de `current` (la version d'après update : celle qu'on aura), et une version
 // majeure plus récente.
-func pickLatest(current, unstable string, rels []Release) LatestInfo {
+func pickLatest(current, unstable string, rels []Release, branches []Candidate, depth int) LatestInfo {
 	type cand struct{ v, url string }
 	var cands []cand
 	if unstable != "" {
 		cands = append(cands, cand{unstable, ""})
+	}
+	for _, b := range branches {
+		cands = append(cands, cand{b.Version, b.URL})
 	}
 	for _, rel := range rels {
 		if !rel.Prerelease && !rel.Draft {
@@ -336,11 +345,11 @@ func pickLatest(current, unstable string, rels []Release) LatestInfo {
 	var l LatestInfo
 	for _, c := range cands {
 		switch {
-		case major(c.v) == major(current):
+		case sameBranch(c.v, current, depth):
 			if l.Version == "" || cmpVersions(c.v, l.Version) > 0 || (cmpVersions(c.v, l.Version) == 0 && l.URL == "") {
 				l.Version, l.URL = c.v, c.url
 			}
-		case major(c.v) > major(current):
+		case cmpVersions(c.v, current) > 0:
 			if l.NewMajor == "" || cmpVersions(c.v, l.NewMajor) > 0 {
 				l.NewMajor = c.v
 			}
@@ -353,7 +362,7 @@ func pickLatest(current, unstable string, rels []Release) LatestInfo {
 func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]string {
 	links := map[string]string{}
 	for _, r := range rows {
-		owner, repo := repoOf(r.Changelog, r.Homepage, r.Src)
+		owner, repo := repoOf(r.Changelog, r.Homepage, r.Src, r.EOL.Repo)
 		if owner == "" {
 			continue
 		}
@@ -373,7 +382,7 @@ func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]
 // releaseNotes : les notes des versions sautées (releases GitHub entre `from` exclue et `to`
 // incluse), sinon la page de notes de version autour de `to` ; et les avis de sécurité du projet.
 func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, basis []string, fixed []string) {
-	owner, repo := repoOf(row.Changelog, row.Homepage, row.Src)
+	owner, repo := repoOf(row.Changelog, row.Homepage, row.Src, row.EOL.Repo)
 	var b strings.Builder
 	seen := map[string]bool{}
 	fix := func(id string) {
@@ -382,10 +391,12 @@ func (s *Server) releaseNotes(ctx context.Context, row UpdateRow) (text string, 
 			fixed = append(fixed, id)
 		}
 	}
-	depth := 1
+	depth := max(row.EOL.Depth, 1) // endoflife.date, sinon d'après les dates des releases
 	if owner != "" {
 		if rels, err := s.releases(ctx, owner, repo); err == nil {
-			depth = branchDepth(rels)
+			if row.EOL.Depth == 0 {
+				depth = branchDepth(rels)
+			}
 			n := 0
 			for _, r := range rels {
 				// Les notes de la branche en service, jusqu'à sa version : leurs CVE y sont déjà

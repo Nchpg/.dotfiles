@@ -88,6 +88,8 @@ type updatesResult struct {
 	Releases map[string]string `json:"releases"`
 	// Latest : la dernière version publiée de chaque paquet (par nom), dans sa série.
 	Latest map[string]LatestInfo `json:"latest"`
+	// EOL : les branches de chaque paquet recensé par endoflife.date (par nom).
+	EOL map[string]EOLInfo `json:"eol"`
 }
 
 func releaseKey(name, version string) string { return name + "|" + version }
@@ -342,6 +344,8 @@ func (s *Server) checkUpdates(ctx context.Context, notify bool) {
 		}
 		if err == nil {
 			rows := updateRows(cur, res.Main, res.Next)
+			res.EOL = s.eolInfos(ctx, rows)
+			applyEOL(rows, res.EOL)
 			res.Releases = s.releaseLinks(ctx, rows)
 			res.Latest = s.latestVersions(ctx, rows)
 			applyLatest(rows, res.Latest)
@@ -394,12 +398,13 @@ type UpdateRow struct {
 	Source              string // nixpkgs-stable, nixpkgs-unstable, ce dépôt…
 	Running             string // le noyau qui tourne (uname), s'il diffère
 	AI                  *Analysis
-	// La plus récente publiée dans la même série (release GitHub, ou nixpkgs-unstable), son lien, et
-	// une nouvelle version majeure s'il y en a une.
+	// La plus récente publiée dans la branche (endoflife.date, release GitHub, nixpkgs-unstable), son
+	// lien, et la dernière d'une branche plus récente s'il y en a une (NewMajor).
 	Latest, LatestURL, NewMajor string
 	Unstable                    string
 	Patches, NextPatches        []string // CVE patchées par nixpkgs : en service, après update
 	Stuck                       bool     // une faille n'est corrigée qu'au-delà du canal
+	EOL                         EOLInfo  // ses branches (endoflife.date)
 }
 
 // Upper : la version la plus récente connue (la dernière publiée si elle dépasse le canal).
@@ -416,7 +421,7 @@ func (r UpdateRow) Behind() bool {
 }
 
 // aiPackageVersion : la façon de lire un paquet ; la changer refait ces analyses une fois.
-const aiPackageVersion = 4
+const aiPackageVersion = 5
 
 // analysisKey : la clé de l'analyse de ce paquet (de la version en service à la plus récente).
 func (r UpdateRow) analysisKey() string {
@@ -588,6 +593,9 @@ func (s *Server) updates(w http.ResponseWriter, r *http.Request) {
 		if row.Stuck {
 			counts["stuck"]++
 		}
+		if row.EOL.Ended {
+			counts["eol"]++
+		}
 		row.Release = res.Releases[releaseKey(row.Name, firstOf(row.Next, row.Current))]
 		if row.ID == "boot.kernel" {
 			if k := runningKernel(); k != "" && !strings.HasPrefix(k, row.Current) {
@@ -647,6 +655,7 @@ func (s *Server) withAnalyses(rows []UpdateRow, inputs []InputRow, res updatesRe
 			backports[sourceLabel(in.Name)] = set
 		}
 	}
+	applyEOL(rows, res.EOL)
 	applyLatest(rows, res.Latest)
 	for i := range rows {
 		if a, ok := analyses[rows[i].analysisKey()]; ok && rows[i].Upper() != rows[i].Current {
@@ -675,7 +684,7 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 		var changed []UpdateRow
 		analyses := s.analyses()
 		for _, row := range s.withAnalyses(updateRows(cur, res.Main, res.Next), res.Inputs, res) {
-			if row.Change != "same" || row.Stuck {
+			if row.Change != "same" || row.Stuck || row.EOL.Ended {
 				changed = append(changed, row)
 			}
 		}
@@ -715,6 +724,9 @@ func (s *Server) postUpdates(ctx context.Context, res updatesResult) {
 				label = "le canal n'a rien de plus"
 			}
 			fmt.Fprintf(&b, "%s **%s** %s → %s (%s%s)\n", mark, row.Name, from, to, label, extra)
+			if row.EOL.Ended {
+				fmt.Fprintf(&b, "  ⚠️ branche %s plus maintenue%s : plus aucun correctif de sécurité\n", row.EOL.Cycle, map[bool]string{true: " depuis le " + row.EOL.Since, false: ""}[row.EOL.Since != ""])
+			}
 			if row.Stuck {
 				fmt.Fprintf(&b, "  ⚠️ faille corrigée seulement en %s, pas dans le canal %s : prendre le paquet dans unstable, ou attendre\n", row.Latest, row.Source)
 			}
