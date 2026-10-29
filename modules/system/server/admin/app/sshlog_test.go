@@ -263,6 +263,10 @@ func TestAnalyze(t *testing.T) {
 	if len(calls) != n+1 || !strings.Contains(calls[n], "/models/m1:") || s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")].Model != "m2" {
 		t.Errorf("nouvel essai : %v", calls[n:])
 	}
+	// Son refus est gardé sur l'analyse, pour que la page dise pourquoi.
+	if f := s.analyses()[analysisKey("openssh", "10.5p1", "10.6p1")].Fallback; !strings.Contains(f, "m1") || !strings.Contains(f, "429") {
+		t.Errorf("raison du refus non gardée : %q", f)
+	}
 	// Le principal répond : son analyse remplace celle du secours, et plus rien n'est redemandé.
 	s.cfg.AIModel = "m3"
 	_ = s.analyze(t.Context(), rows)

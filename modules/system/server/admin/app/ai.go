@@ -396,6 +396,18 @@ func (s *Server) analyzeBatches(ctx context.Context, todo []UpdateRow, fallback 
 		}
 		if err != nil {
 			errs = append(errs, err.Error())
+			// Nouvel essai du principal, refusé : la raison sur l'analyse gardée (la page la montre).
+			if !fallback {
+				done, kept := s.analyses(), map[string]Analysis{}
+				for _, r := range batch {
+					k := analysisKey(r.Name, r.Current, r.Next)
+					if a, ok := done[k]; ok {
+						a.Fallback = err.Error()
+						kept[k] = a
+					}
+				}
+				s.saveAnalyses(kept)
+			}
 			continue
 		}
 		var answers []struct {
