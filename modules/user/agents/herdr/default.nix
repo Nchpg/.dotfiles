@@ -35,6 +35,13 @@ let
       mainProgram = "herdr";
     };
   };
+
+  # Le serveur hérite du SHLVL de qui l'a lancé : le prompt fish afficherait 2.
+  # exec -a garde le « - » d'un shell de login.
+  paneShell = cfg.pkgs.writeShellScript "herdr-shell" ''
+    unset SHLVL
+    exec -a "$0" ${lib.getExe config.programs.${config.userSettings.shell.default}.package} "$@"
+  '';
 in
 {
   options.userSettings.agents.herdr = {
@@ -71,7 +78,7 @@ in
             name = "gruvbox";
             auto_switch = false;
           };
-          terminal.default_shell = lib.getExe config.programs.${config.userSettings.shell.default}.package;
+          terminal.default_shell = paneShell;
         };
   };
 }
