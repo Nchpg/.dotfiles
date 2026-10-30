@@ -83,6 +83,7 @@
         herdr = {
           enable = true;
           app.enable = true;
+          machines = [ "think" ];
         };
         gemini.enable = true;
         opencode.enable = true;

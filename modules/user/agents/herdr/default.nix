@@ -149,6 +149,12 @@ in
       inherit lib config;
       default = pkgs-unstable;
     };
+    machines = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      example = [ "think" ];
+      description = "Hôtes SSH ajoutés aux machines de herdr (herdr doit y être installé). Ajout seulement : en retirer un ne le supprime pas de herdr.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -178,5 +184,40 @@ in
         run ${lib.getExe herdr} server reload-config >/dev/null 2>&1 || true
       fi
     '';
+
+    # Le catalogue de herdr (ids opaques) n'est pas écrivable en Nix : on ajoute au login
+    # les hôtes absents. Pas dans l'activation : il faut l'agent SSH de la session.
+    systemd.user.services.herdr-machines = lib.mkIf (cfg.machines != [ ]) {
+      Unit = {
+        Description = "Ajoute les machines SSH déclarées à herdr";
+        After = [ "graphical-session.target" ];
+        PartOf = [ "graphical-session.target" ];
+      };
+      Install.WantedBy = [ "graphical-session.target" ];
+      Service = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = lib.getExe (
+          cfg.pkgs.writeShellApplication {
+            name = "herdr-machines";
+            runtimeInputs = [
+              herdr
+              cfg.pkgs.jq
+              # Celui de la config SSH (avec GSSAPI si l'AFS est activé).
+              config.programs.ssh.package
+            ];
+            text = ''
+              known=$(herdr machine list --json)
+              hosts=(${lib.escapeShellArgs cfg.machines})
+              for host in "''${hosts[@]}"; do
+                if ! jq -e --arg h "$host" 'any(.. | strings; . == $h)' <<<"$known" >/dev/null; then
+                  herdr machine add "$host" --remote-session default
+                fi
+              done
+            '';
+          }
+        );
+      };
+    };
   };
 }
