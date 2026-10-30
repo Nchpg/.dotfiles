@@ -47,5 +47,17 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ herdr ];
+
+    # Lien en lecture seule : onboarding = false évite que herdr tente de le réécrire.
+    xdg.configFile."herdr/config.toml".source =
+      (cfg.pkgs.formats.toml { }).generate "herdr-config.toml"
+        {
+          onboarding = false;
+          theme = {
+            name = "gruvbox";
+            auto_switch = false;
+          };
+          terminal.default_shell = lib.getExe config.programs.${config.userSettings.shell.default}.package;
+        };
   };
 }
