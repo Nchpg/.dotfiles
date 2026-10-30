@@ -21,11 +21,13 @@ window#waybar {
   box-shadow: none;
   background: @base01@;
   color: @base04@;
-  transition: background-color 0.15s ease, color 0.15s ease;
 }
+/* Fondu au survol seulement : un bouton de workspace neuf naît gris puis passe
+   focused, une transition sur ce changement le ferait clignoter. */
 #workspaces button:hover {
   background: @base02@;
   color: @base05@;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 #workspaces button.focused,
 #workspaces button.visible {
