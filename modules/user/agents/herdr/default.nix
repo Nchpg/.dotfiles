@@ -269,6 +269,42 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ herdr ];
 
+    # herdr se tait pour l'onglet actif d'un client, même si sa fenêtre est derrière
+    # une autre : Claude notifie aussi lui-même, avec les mêmes titre et corps que
+    # herdr pour que le wrapper filtre (onglet affiché par la fenêtre focalisée) et dédoublonne.
+    userSettings.agents.claude.settings.hooks =
+      let
+        claudeNotify = cfg.pkgs.writeShellApplication {
+          name = "claude-herdr-notify";
+          runtimeInputs = [
+            herdr
+            cfg.pkgs.jq
+          ];
+          text = ''
+            [ -n "''${HERDR_TAB_ID:-}" ] || exit 0
+            ws=$(herdr workspace get "$HERDR_WORKSPACE_ID" | jq -r '.result.workspace.label')
+            tab=$(herdr tab get "$HERDR_TAB_ID" | jq -r '.result.tab | "\(.number) · \(.label)"')
+            exec ${lib.getExe notifySend} --app-name Herdr "claude $1" "$ws · $tab" >/dev/null 2>&1
+          '';
+        };
+        hook = state: [
+          {
+            type = "command";
+            command = "${lib.getExe claudeNotify} '${state}'";
+          }
+        ];
+      in
+      lib.mkIf (config.userSettings.agents.claude.enable && config.userSettings.windowManager.sway.enable)
+        {
+          Stop = [ { hooks = hook "finished"; } ];
+          Notification = [
+            {
+              matcher = "permission_prompt|elicitation_dialog";
+              hooks = hook "needs attention";
+            }
+          ];
+        };
+
     # Une nouvelle fenêtre sert à un autre projet : workspace neuf, focalisé avant
     # de rattacher la session. Serveur pas lancé : la création échoue, herdr démarre normalement.
     home.file.".config/sway/conf.d/herdr.conf" =
