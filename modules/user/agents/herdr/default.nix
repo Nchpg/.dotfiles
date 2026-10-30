@@ -41,20 +41,57 @@ let
         done
       '';
 
-  # herdr appelle `notify-send --app-name Herdr "<agent> finished|needs attention"`
-  # sans icône : on met le logo de l'agent.
-  notifySend = cfg.pkgs.writeShellScriptBin "notify-send" ''
-    for arg; do
-      case $arg in
-        *" finished" | *" needs attention")
-          logo=${agentLogos}/''${arg%% *}.svg
-          [ -f "$logo" ] && set -- --icon="$logo" "$@"
-          break
-          ;;
-      esac
-    done
-    exec ${cfg.pkgs.libnotify}/bin/notify-send "$@"
-  '';
+  # Fenêtre kitty de herdr titrée « <hôte>: <workspace> · <tab> » (cf. ui.window_title) :
+  # le wrapper de notifications s'en sert pour savoir ce que l'utilisateur regarde.
+  windowTitle = "{hostname}: {workspace} · {tab}";
+
+  # herdr appelle `notify-send --app-name Herdr "<agent> finished|needs attention" "<workspace> · <n> · <tab>"`
+  # depuis chaque client qui n'affiche pas l'agent : avec 3 fenêtres, 2 notifs.
+  # On ajoute le logo de l'agent, on se tait si la fenêtre focalisée montre déjà
+  # ce tab, et on ne laisse passer qu'une copie par 3 s.
+  notifySend = cfg.pkgs.writeShellApplication {
+    name = "notify-send";
+    runtimeInputs = with cfg.pkgs; [
+      coreutils
+      jq
+      sway
+      util-linux
+    ];
+    text = ''
+      args=("$@") title="" body=""
+      for i in "''${!args[@]}"; do
+        case ''${args[i]} in
+          *" finished" | *" needs attention")
+            title=''${args[i]}
+            body=''${args[i + 1]:-}
+            break
+            ;;
+        esac
+      done
+
+      if [ -n "$title" ]; then
+        workspace=''${body%% · *}
+        tab=''${body##* · }
+        focused=$(swaymsg -t get_tree 2>/dev/null | jq -r '.. | objects | select(.focused == true) | .name // empty' || true)
+        [[ $focused == *": $workspace · $tab" ]] && exit 0
+
+        dir=''${XDG_RUNTIME_DIR:-/tmp}/herdr-notify
+        mkdir -p "$dir"
+        stamp=$dir/$(printf '%s\n%s' "$title" "$body" | md5sum | cut -d' ' -f1)
+        exec 9>"$dir/lock"
+        flock 9
+        if [ -f "$stamp" ] && (($(date +%s) - $(stat -c %Y "$stamp") < 3)); then
+          exit 0
+        fi
+        touch "$stamp"
+        flock -u 9
+
+        logo=${agentLogos}/''${title%% *}.svg
+        [ -f "$logo" ] && set -- --icon="$logo" "$@"
+      fi
+      exec ${cfg.pkgs.libnotify}/bin/notify-send "$@"
+    '';
+  };
 
   # Absent de nixpkgs : binaire release statique (static-pie), rien à patcher.
   herdr = cfg.pkgs.stdenvNoCC.mkDerivation {
@@ -185,6 +222,7 @@ let
     };
     ui = {
       status_indicators = "dots";
+      window_title = windowTitle;
       toast.delivery = "system";
       hide_tab_bar_when_single_tab = true;
       # alt+a cache toute la sidebar au lieu de la réduire à une colonne.
