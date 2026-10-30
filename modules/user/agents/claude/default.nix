@@ -61,7 +61,8 @@ in
       (lib.mkIf cfg.screenshots.enable {
         userSettings.agents.claude.settings.hooks.PostToolUse = [
           {
-            matcher = "mcp__.*";
+            # Read : les images que Claude ouvre lui-même (captures grim, fichiers PNG…).
+            matcher = "mcp__.*|Read";
             hooks = [
               {
                 type = "command";

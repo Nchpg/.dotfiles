@@ -12,6 +12,11 @@ out_dir = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "claude-screen
 os.makedirs(out_dir, exist_ok=True)
 
 payload = json.load(sys.stdin)
+IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+if payload.get("tool_name") == "Read":
+    # Un Read de fichier texte ne nous concerne pas.
+    if not (payload.get("tool_input") or {}).get("file_path", "").lower().endswith(IMAGE_EXTS):
+        sys.exit(0)
 
 
 def images(node):
@@ -29,6 +34,12 @@ def images(node):
 
 
 paths = []
+if payload.get("tool_name") == "Read":
+    # Read : on ouvre directement l'image lue, sans la recopier.
+    path = payload["tool_input"]["file_path"]
+    if os.path.isfile(path):
+        paths.append(path)
+    payload["tool_response"] = None
 for i, (data, mime) in enumerate(images(payload.get("tool_response"))):
     ext = "jpg" if "jpeg" in mime else mime.split("/")[-1]
     path = os.path.join(out_dir, f"{time.strftime('%H%M%S')}-{i}.{ext}")
