@@ -98,7 +98,8 @@ let
       name = "gruvbox";
       auto_switch = false;
     }
-    # Tabs : blocs base01 sur fond base00, tab actif en pastille base0A.
+    # Comme sway : tab et panneau actifs en gris clair, panneaux inactifs discrets.
+    # herdr n'a pas de couleur de bordure à part : chaque token sert aussi ailleurs.
     // lib.optionalAttrs config.userSettings.stylix.enable {
       custom =
         let
@@ -107,9 +108,11 @@ let
         {
           panel_bg = c.base00; # fond de la barre et texte du tab actif
           surface0 = c.base01; # fond des tabs inactifs
-          overlay0 = c.base05; # texte des tabs inactifs
-          overlay1 = c.base05;
-          accent = c.base0A; # tab actif
+          # Bordure des panneaux inactifs, et texte secondaire de la sidebar :
+          # base02 la rendrait illisible.
+          overlay0 = c.base03;
+          overlay1 = c.base05; # texte des tabs inactifs
+          accent = c.base04; # tab actif, bordure du panneau actif, séparateurs
         };
     };
     terminal.default_shell = paneShell;
