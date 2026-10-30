@@ -139,6 +139,20 @@ let
       status_indicators = "dots";
       toast.delivery = "system";
       hide_tab_bar_when_single_tab = true;
+      # alt+a cache toute la sidebar au lieu de la réduire à une colonne.
+      sidebar_collapsed_mode = "hidden";
+      # Défaut : machine · workspace · tab sur une ligne, tronqué à 26 colonnes.
+      sidebar.agents.rows = [
+        [
+          "state_icon"
+          "workspace"
+          "tab"
+        ]
+        [
+          "machine"
+          "agent"
+        ]
+      ];
     };
   };
 in
