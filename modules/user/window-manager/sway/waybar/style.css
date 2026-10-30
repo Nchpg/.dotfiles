@@ -9,29 +9,43 @@ window#waybar {
   color: @base04@;
 }
 
+/* Workspaces : pastilles dans un bloc arrondi, l'actif en accent. */
 #workspaces {
-  margin-left: 6px;
+  margin: 4px 0 4px 8px;
+  padding: 3px;
+  border-radius: 10px;
+  background: @base01@;
 }
 #workspaces button {
-  padding: 3px 0;
-  margin: 2px 2px;
-  min-width: 22px;
+  min-width: 26px;
+  min-height: 0;
+  padding: 0;
+  margin: 0 1px;
   border: none;
-  border-radius: 4px;
+  border-radius: 7px;
   box-shadow: none;
-  background: @base01@;
+  background: transparent;
   color: @base04@;
+  font-size: 11pt;
+  font-weight: bold;
 }
-/* Fondu au survol seulement : un bouton de workspace neuf naît gris puis passe
-   focused, une transition sur ce changement le ferait clignoter. */
+#workspaces button label {
+  padding: 0;
+}
+/* Fondu au survol seulement : un bouton de workspace neuf naît sans style puis
+   passe focused, une transition sur ce changement le ferait clignoter. */
 #workspaces button:hover {
   background: @base02@;
-  color: @base05@;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  color: @base06@;
+  box-shadow: none;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-#workspaces button.focused,
 #workspaces button.visible {
-  background: @base0D@;
+  background: @base02@;
+  color: @base06@;
+}
+#workspaces button.focused {
+  background: @base0A@;
   color: @base00@;
 }
 #workspaces button.urgent {

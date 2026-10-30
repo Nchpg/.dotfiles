@@ -161,6 +161,7 @@ let
     "base03"
     "base04"
     "base05"
+    "base06"
     "base09"
     "base0A"
     "base0B"
@@ -252,6 +253,7 @@ in
 
       settings.mainBar = {
         layer = "top";
+        height = 32;
         position = "top";
         spacing = 4;
 
