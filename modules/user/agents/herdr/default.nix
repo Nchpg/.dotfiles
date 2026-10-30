@@ -48,6 +48,20 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ herdr ];
 
+    # Sans argument, herdr crée ou rattache la session persistante.
+    home.file.".config/sway/conf.d/herdr.conf" =
+      lib.mkIf config.userSettings.windowManager.sway.enable
+        {
+          text = ''
+            bindsym Control+Return exec ${
+              myLib.desktop.mkTerminalCmd {
+                inherit config;
+                exec = lib.getExe herdr;
+              }
+            }
+          '';
+        };
+
     # Lien en lecture seule : onboarding = false évite que herdr tente de le réécrire.
     xdg.configFile."herdr/config.toml".source =
       (cfg.pkgs.formats.toml { }).generate "herdr-config.toml"

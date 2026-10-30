@@ -21,16 +21,19 @@ in
     stylix.targets.tmux.enable = true;
 
     # TMUX_TMPDIR aligné sur home-manager ($XDG_RUNTIME_DIR), sinon sessions invisibles entre elles.
-    home.file.".config/sway/conf.d/tmux.conf" = lib.mkIf config.userSettings.windowManager.sway.enable {
-      text = ''
-        bindsym Control+Return exec ${
-          myLib.desktop.mkTerminalCmd {
-            inherit config;
-            exec = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
-          }
-        }
-      '';
-    };
+    # Ctrl+Entrée revient à herdr quand il est activé.
+    home.file.".config/sway/conf.d/tmux.conf" =
+      lib.mkIf (config.userSettings.windowManager.sway.enable && !config.userSettings.agents.herdr.enable)
+        {
+          text = ''
+            bindsym Control+Return exec ${
+              myLib.desktop.mkTerminalCmd {
+                inherit config;
+                exec = "env TMUX_TMPDIR=$XDG_RUNTIME_DIR tmux new-session -A -s main";
+              }
+            }
+          '';
+        };
 
     programs.tmux = {
       enable = true;
