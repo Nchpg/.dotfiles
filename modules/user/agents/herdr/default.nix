@@ -211,6 +211,11 @@ in
       inherit lib config;
       default = pkgs-unstable;
     };
+    workspaceLimit = lib.mkOption {
+      type = lib.types.ints.positive;
+      default = 10;
+      description = "Au-delà, ctrl+enter prévient (notification) qu'il est temps de fermer des workspaces.";
+    };
     machines = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -222,7 +227,8 @@ in
   config = lib.mkIf cfg.enable {
     home.packages = [ herdr ];
 
-    # Sans argument, herdr crée ou rattache la session persistante.
+    # Une nouvelle fenêtre sert à un autre projet : workspace neuf, focalisé avant
+    # de rattacher la session. Serveur pas lancé : la création échoue, herdr démarre normalement.
     home.file.".config/sway/conf.d/herdr.conf" =
       lib.mkIf config.userSettings.windowManager.sway.enable
         {
@@ -230,7 +236,40 @@ in
             bindsym Control+Return exec ${
               myLib.desktop.mkTerminalCmd {
                 inherit config;
-                exec = lib.getExe herdr;
+                exec = lib.getExe (
+                  cfg.pkgs.writeShellApplication {
+                    name = "herdr-new-workspace";
+                    runtimeInputs = [
+                      herdr
+                      cfg.pkgs.jq
+                    ];
+                    # Un workspace encore vierge (un seul shell dans ~, sans agent) est
+                    # repris plutôt que d'en empiler un de plus.
+                    text = ''
+                      if workspaces=$(herdr workspace list 2>/dev/null) && panes=$(herdr pane list 2>/dev/null); then
+                        blank=$(jq -rn --arg home "$HOME" --argjson w "$workspaces" --argjson p "$panes" '
+                          [$w.result.workspaces[]
+                            | select(.tab_count == 1 and .pane_count == 1) | .workspace_id as $id
+                            | select(any($p.result.panes[];
+                                .workspace_id == $id and .foreground_cwd == $home and .agent == null))
+                            | $id] | first // empty')
+                        if [ -n "$blank" ]; then
+                          herdr workspace focus "$blank" >/dev/null
+                        else
+                          herdr workspace create --cwd "$HOME" --focus >/dev/null
+                          count=$(( $(jq '.result.workspaces | length' <<<"$workspaces") + 1 ))
+                          if ((count > ${toString cfg.workspaceLimit})); then
+                            ${cfg.pkgs.libnotify}/bin/notify-send --app-name Herdr \
+                              --icon=${myLib.desktop.notifyIcon config cfg.pkgs "status/dialog-warning" (c: c.base0A)} \
+                              "$count workspaces herdr ouverts" \
+                              "Ferme ceux qui ne servent plus."
+                          fi
+                        fi
+                      fi
+                      exec herdr
+                    '';
+                  }
+                );
               }
             }
           '';
