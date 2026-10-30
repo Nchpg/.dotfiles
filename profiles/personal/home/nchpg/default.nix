@@ -98,6 +98,7 @@
           claudePlugin.enable = true;
         };
         supabaseCli.enable = true;
+        difit.enable = true;
 
         # Pas de cloudflareCli : son secret est celui de lego (Zone:DNS:Edit), gram ne doit pas le lire.
       };
