@@ -85,8 +85,12 @@ in
 
     # Le mode `--readonly` de pgweb filtre des mots-clés, contournable : c'est le rôle qui garantit
     # la lecture seule. `pg_monitor` : les requêtes des autres rôles dans l'onglet Activity.
+    # CONNECT nommé : l'installeur de Nextcloud le retire à PUBLIC sur sa base.
     systemd.services.postgresql-setup.script = lib.mkAfter ''
       psql -tAc 'GRANT pg_read_all_data, pg_monitor TO "${role}"'
+      ${lib.concatMapStrings (db: ''
+        psql -tAc 'GRANT CONNECT ON DATABASE "${db}" TO "${role}"'
+      '') cfg.databases}
     '';
 
     systemd.services.pgweb = {
