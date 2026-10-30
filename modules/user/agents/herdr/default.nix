@@ -50,6 +50,10 @@ let
       auto_switch = false;
     };
     terminal.default_shell = paneShell;
+    ui = {
+      status_indicators = "dots";
+      toast.delivery = "system";
+    };
   };
 in
 {
