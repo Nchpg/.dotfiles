@@ -48,6 +48,20 @@ let
     theme = {
       name = "gruvbox";
       auto_switch = false;
+    }
+    # Tabs : blocs base01 sur fond base00, tab actif en pastille base0A.
+    // lib.optionalAttrs config.userSettings.stylix.enable {
+      custom =
+        let
+          c = config.lib.stylix.colors.withHashtag;
+        in
+        {
+          panel_bg = c.base00; # fond de la barre et texte du tab actif
+          surface0 = c.base01; # fond des tabs inactifs
+          overlay0 = c.base05; # texte des tabs inactifs
+          overlay1 = c.base05;
+          accent = c.base0A; # tab actif
+        };
     };
     terminal.default_shell = paneShell;
     # ctrl+b est pris par Claude Code (passer une commande en arrière-plan).
@@ -73,6 +87,7 @@ let
     ui = {
       status_indicators = "dots";
       toast.delivery = "system";
+      hide_tab_bar_when_single_tab = true;
     };
   };
 in
