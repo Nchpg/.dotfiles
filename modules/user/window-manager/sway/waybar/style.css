@@ -17,8 +17,8 @@ window#waybar {
   background: @base01@;
 }
 #workspaces button {
-  min-width: 26px;
-  min-height: 0;
+  min-width: 24px;
+  min-height: 24px; /* carré */
   padding: 0;
   margin: 0 1px;
   border: none;
