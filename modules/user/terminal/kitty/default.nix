@@ -57,6 +57,17 @@ in
             map ctrl+alt+c copy_to_clipboard
             map ctrl+shift+v paste_from_clipboard
             # Pas de `map ctrl+v` : les TUI (Claude Code) collent les images eux-mêmes.
+
+            # AZERTY : alt+& … alt+ç envoient alt+1 … alt+9 (tabs herdr sans shift).
+            map alt+& send_key alt+1
+            map alt+é send_key alt+2
+            map alt+" send_key alt+3
+            map alt+' send_key alt+4
+            map alt+( send_key alt+5
+            map alt+- send_key alt+6
+            map alt+è send_key alt+7
+            map alt+_ send_key alt+8
+            map alt+ç send_key alt+9
           '';
         };
 
