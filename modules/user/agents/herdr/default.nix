@@ -188,18 +188,22 @@ let
       focus_pane_left = [
         "prefix+h"
         "alt+h"
+        "alt+shift+left"
       ];
       focus_pane_down = [
         "prefix+j"
         "alt+j"
+        "alt+shift+down"
       ];
       focus_pane_up = [
         "prefix+k"
         "alt+k"
+        "alt+shift+up"
       ];
       focus_pane_right = [
         "prefix+l"
         "alt+l"
+        "alt+shift+right"
       ];
       swap_pane_left = [
         "prefix+shift+h"
