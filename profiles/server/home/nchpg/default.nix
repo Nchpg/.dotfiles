@@ -18,6 +18,8 @@
           statusline.enable = true;
           settings.preferredNotifChannel = "notifications_disabled";
         };
+
+        herdr.enable = true;
       };
 
       shell = {
