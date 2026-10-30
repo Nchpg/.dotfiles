@@ -73,6 +73,7 @@
         claude = {
           enable = true;
           statusline.enable = true;
+          screenshots.enable = true;
           settings.preferredNotifChannel = "notifications_disabled";
         };
 

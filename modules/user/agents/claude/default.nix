@@ -19,6 +19,8 @@ in
 
     statusline.enable = lib.mkEnableOption "statusline maison (modèle, coût, contexte, rate limits)";
 
+    screenshots.enable = lib.mkEnableOption "affichage dans feh des images renvoyées par les outils MCP (captures)";
+
     pkgs = myLib.mkPkgsOption { inherit lib config; };
 
     settings = lib.mkOption {
@@ -52,6 +54,40 @@ in
         home.file.".claude/statusline.sh".source = cfg.pkgs.writeShellScript "claude-statusline" ''
           exec ${cfg.pkgs.nodejs-slim}/bin/node ${./statusline.js} "$@"
         '';
+      })
+
+      (lib.mkIf cfg.screenshots.enable {
+        userSettings.agents.claude.settings.hooks.PostToolUse = [
+          {
+            matcher = "mcp__.*";
+            hooks = [
+              {
+                type = "command";
+                command = "${homeDirectory}/.claude/hooks/show-screenshot.sh";
+              }
+            ];
+          }
+        ];
+        # Les deux scripts restent dans le même dossier : le hook lance le gardien à côté de lui.
+        home.file.".claude/hooks/show-screenshot.sh".source =
+          cfg.pkgs.writeShellScript "claude-show-screenshot" ''
+            export PATH=${
+              lib.makeBinPath [
+                cfg.pkgs.feh
+                cfg.pkgs.procps
+              ]
+            }:$PATH
+            exec ${lib.getExe cfg.pkgs.python3} -I ${./screenshots}/show-screenshot.py
+          '';
+
+        # Le hook pose la fenêtre sur le workspace du terminal de Claude.
+        home.file.".config/sway/conf.d/claude-screenshots.conf" =
+          lib.mkIf config.userSettings.windowManager.sway.enable
+            {
+              text = ''
+                for_window [title="^claude-screenshot"] floating enable, resize set 1500 830, move position center, border pixel 1
+              '';
+            };
       })
 
       (lib.mkIf (cfg.settings != { }) {
