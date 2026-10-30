@@ -16,17 +16,41 @@ let
     config.userSettings.stylix.enable && config.stylix.image != null
   ) "output * bg ${config.stylix.image} fill";
 
+  # Pas de barre de titre en tiling ; celles du mode stack/tabbed suivent la palette.
+  # smart_borders : aucune bordure quand une fenêtre est seule sur son workspace.
+  appearance = ''
+    default_border pixel 1
+    default_floating_border pixel 1
+    smart_borders on
+    titlebar_padding 8 3
+    titlebar_border_thickness 1
+  ''
+  + lib.optionalString config.userSettings.stylix.enable (
+    let
+      c = config.lib.stylix.colors.withHashtag;
+    in
+    ''
+      font pango:${config.stylix.fonts.sansSerif.name} 10
+      client.focused          ${c.base03} ${c.base02} ${c.base06} ${c.base03} ${c.base03}
+      client.focused_inactive ${c.base01} ${c.base00} ${c.base04} ${c.base01} ${c.base01}
+      client.unfocused        ${c.base01} ${c.base00} ${c.base03} ${c.base01} ${c.base01}
+      client.urgent           ${c.base08} ${c.base08} ${c.base00} ${c.base08} ${c.base08}
+    ''
+  );
+
   finalConfigContent =
     lib.replaceStrings
       [
         "@terminal@"
         "@wallpaperBg@"
         "@sessionVars@"
+        "@appearance@"
       ]
       [
         config.userSettings.terminal.default
         wallpaperBg
         (lib.concatStringsSep " " osConfig.systemSettings.windowManager.sway.sessionVariables)
+        appearance
       ]
       templateContent;
 

@@ -116,6 +116,6 @@ mode "resize" {
 }
 bindsym $mod+r mode "resize"
 
-client.focused  #285577 #285577 #ffffff #323232 #323232
+@appearance@
 
 include ~/.config/sway/conf.d/*.conf
