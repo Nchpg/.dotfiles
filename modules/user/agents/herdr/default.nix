@@ -135,6 +135,51 @@ let
       previous_workspace = "alt+up";
       toggle_sidebar = "alt+a";
       zoom = "alt+z";
+      # Panneaux à la vim, en gardant les prefix+… par défaut.
+      split_vertical = [
+        "prefix+v"
+        "alt+v"
+      ];
+      split_horizontal = [
+        "prefix+minus"
+        "alt+shift+v"
+      ];
+      close_pane = [
+        "prefix+x"
+        "alt+x"
+      ];
+      focus_pane_left = [
+        "prefix+h"
+        "alt+h"
+      ];
+      focus_pane_down = [
+        "prefix+j"
+        "alt+j"
+      ];
+      focus_pane_up = [
+        "prefix+k"
+        "alt+k"
+      ];
+      focus_pane_right = [
+        "prefix+l"
+        "alt+l"
+      ];
+      swap_pane_left = [
+        "prefix+shift+h"
+        "alt+shift+h"
+      ];
+      swap_pane_down = [
+        "prefix+shift+j"
+        "alt+shift+j"
+      ];
+      swap_pane_up = [
+        "prefix+shift+k"
+        "alt+shift+k"
+      ];
+      swap_pane_right = [
+        "prefix+shift+l"
+        "alt+shift+l"
+      ];
       # alt+1…9 ; en AZERTY, kitty traduit alt+& … alt+ç (cf. modules/user/terminal/kitty).
       indexed.tabs = "alt";
     };
