@@ -68,6 +68,8 @@ let
     # Raccourcis directs sur alt : libre dans sway (mod = Super).
     keys = {
       prefix = "ctrl+space";
+      new_tab = "alt+n";
+      new_workspace = "alt+shift+n";
       # alt+left/right ne sautent plus de mot dans fish et Claude Code : ctrl+left/right le font.
       next_tab = [
         "alt+tab"
