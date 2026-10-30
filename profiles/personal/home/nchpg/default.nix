@@ -80,7 +80,10 @@
 
         kimiCode.enable = true;
         mammouthCode.enable = true;
-        herdr.enable = true;
+        herdr = {
+          enable = true;
+          app.enable = true;
+        };
         gemini.enable = true;
         opencode.enable = true;
         codex.enable = true;

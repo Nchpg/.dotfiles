@@ -1,0 +1,8 @@
+{
+  "version": "0.1.9",
+  "url": "https://releases.herdr.dev/app/0.1.9/herdr-app-linux-x86_64.tar.gz",
+  "hash": "sha256-2m97QPbEFsW03vjbz4t2Z30Cvk9LRdBqTWWHZoUOC0U=",
+  "core_version": "0.1.14",
+  "core_url": "https://releases.herdr.dev/core/0.1.14/herdr-core-linux-x86_64.tar.gz",
+  "core_hash": "sha256-6dur3q0M4M495RtvVMyVSe/tu0Gy+ESLaTKrDRRCND4="
+}
