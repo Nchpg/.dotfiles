@@ -171,6 +171,10 @@ let
       next_workspace = "alt+down";
       previous_workspace = "alt+up";
       toggle_sidebar = "alt+a";
+      workspace_picker = [
+        "prefix+w"
+        "alt+w"
+      ];
       zoom = "alt+z";
       # Panneaux à la vim, en gardant les prefix+… par défaut.
       split_vertical = [
