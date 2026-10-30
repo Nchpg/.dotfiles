@@ -11,6 +11,51 @@ let
 
   pinned = lib.importJSON ./pinned.json;
 
+  # Logos des agents (lobe-icons), un <nom>.svg par agent : version couleur si elle
+  # existe, sinon le monochrome recoloré (currentColor rendrait noir sur fond sombre).
+  # Taille fixe : le 1em d'origine sortirait minuscule.
+  agentLogos =
+    let
+      mono =
+        if config.userSettings.stylix.enable then
+          config.lib.stylix.colors.withHashtag.base05
+        else
+          "#d5c4a1";
+    in
+    cfg.pkgs.runCommand "herdr-agent-logos"
+      {
+        src = cfg.pkgs.fetchurl {
+          url = "https://registry.npmjs.org/@lobehub/icons-static-svg/-/icons-static-svg-1.99.0.tgz";
+          hash = "sha256-YB1bKNHupSwngVbEEInB0isFv8HtioI8HvtMNyplIBM=";
+        };
+      }
+      ''
+        tar xzf $src
+        mkdir $out
+        for f in package/icons/*.svg; do
+          name=$(basename "$f" .svg)
+          case $name in *-text) continue ;; *-color) continue ;; esac
+          [ -f "package/icons/$name-color.svg" ] && f=package/icons/$name-color.svg
+          sed -e 's/currentColor/${mono}/g' -e 's/height="1em"/height="128"/' -e 's/width="1em"/width="128"/' \
+            "$f" > "$out/$name.svg"
+        done
+      '';
+
+  # herdr appelle `notify-send --app-name Herdr "<agent> finished|needs attention"`
+  # sans icône : on met le logo de l'agent.
+  notifySend = cfg.pkgs.writeShellScriptBin "notify-send" ''
+    for arg; do
+      case $arg in
+        *" finished" | *" needs attention")
+          logo=${agentLogos}/''${arg%% *}.svg
+          [ -f "$logo" ] && set -- --icon="$logo" "$@"
+          break
+          ;;
+      esac
+    done
+    exec ${cfg.pkgs.libnotify}/bin/notify-send "$@"
+  '';
+
   # Absent de nixpkgs : binaire release statique (static-pie), rien à patcher.
   herdr = cfg.pkgs.stdenvNoCC.mkDerivation {
     pname = "herdr";
@@ -21,9 +66,13 @@ let
     dontUnpack = true;
     dontBuild = true;
 
+    nativeBuildInputs = [ cfg.pkgs.makeWrapper ];
+
     installPhase = ''
       runHook preInstall
-      install -Dm755 $src $out/bin/herdr
+      install -Dm755 $src $out/libexec/herdr
+      makeWrapper $out/libexec/herdr $out/bin/herdr \
+        --prefix PATH : ${notifySend}/bin
       runHook postInstall
     '';
 
