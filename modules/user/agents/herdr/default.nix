@@ -188,38 +188,38 @@ let
       focus_pane_left = [
         "prefix+h"
         "alt+h"
-        "alt+shift+left"
       ];
       focus_pane_down = [
         "prefix+j"
         "alt+j"
-        "alt+shift+down"
       ];
       focus_pane_up = [
         "prefix+k"
         "alt+k"
-        "alt+shift+up"
       ];
       focus_pane_right = [
         "prefix+l"
         "alt+l"
-        "alt+shift+right"
       ];
       swap_pane_left = [
         "prefix+shift+h"
         "alt+shift+h"
+        "alt+shift+left"
       ];
       swap_pane_down = [
         "prefix+shift+j"
         "alt+shift+j"
+        "alt+shift+down"
       ];
       swap_pane_up = [
         "prefix+shift+k"
         "alt+shift+k"
+        "alt+shift+up"
       ];
       swap_pane_right = [
         "prefix+shift+l"
         "alt+shift+l"
+        "alt+shift+right"
       ];
       # alt+1…9 ; en AZERTY, kitty traduit alt+& … alt+ç (cf. modules/user/terminal/kitty).
       indexed.tabs = "alt";
