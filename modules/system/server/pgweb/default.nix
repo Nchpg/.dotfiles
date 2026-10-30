@@ -29,6 +29,10 @@ let
     }) cfg.databases
   );
 
+  # Mot de passe de l'auth basique, que nginx ajoute après Authelia : sans lui, tout processus de
+  # think lirait les bases par le port de bouclage. Tiré à chaque démarrage, jamais conservé.
+  authDir = "/run/pgweb-auth";
+
   allowed =
     wireguard.sourcesFor "pgweb" ++ lib.optional (wireguard.selfSource != null) wireguard.selfSource;
 in
@@ -93,12 +97,55 @@ in
       '') cfg.databases}
     '';
 
+    # Si absent seulement : un nouveau tirage désaccorderait nginx, qui ne relit pas son include.
+    systemd.services.pgweb-auth = {
+      description = "Mot de passe entre nginx et pgweb";
+      wantedBy = [ "multi-user.target" ];
+      before = [
+        "pgweb.service"
+        "nginx.service"
+      ];
+      path = [ pkgs-stable.coreutils ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        UMask = "0077";
+      };
+      script = ''
+        if [ -s ${authDir}/nginx.conf ]; then
+          exit 0
+        fi
+        mkdir -p ${authDir}
+        pass=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')
+        printf 'PGWEB_AUTH_USER=${role}\nPGWEB_AUTH_PASS=%s\n' "$pass" > ${authDir}/env
+        printf 'proxy_set_header Authorization "Basic %s";\n' \
+          "$(printf '%s' "${role}:$pass" | base64 -w0)" > ${authDir}/nginx.conf.new
+        chgrp ${config.services.nginx.group} ${authDir} ${authDir}/nginx.conf.new
+        chmod 0750 ${authDir}
+        chmod 0440 ${authDir}/nginx.conf.new
+        mv ${authDir}/nginx.conf.new ${authDir}/nginx.conf
+      '';
+    };
+
+    systemd.services.nginx = {
+      after = [ "pgweb-auth.service" ];
+      requires = [ "pgweb-auth.service" ];
+    };
+
     systemd.services.pgweb = {
       description = "Visionneuse Postgres pgweb";
       wantedBy = [ "multi-user.target" ];
-      after = [ "postgresql-setup.service" ];
-      requires = [ "postgresql-setup.service" ];
+      after = [
+        "postgresql-setup.service"
+        "pgweb-auth.service"
+      ];
+      requires = [
+        "postgresql-setup.service"
+        "pgweb-auth.service"
+      ];
       serviceConfig = {
+        # Lu par systemd avant le changement d'utilisateur : il peut rester à root.
+        EnvironmentFile = "${authDir}/env";
         ExecStart = lib.escapeShellArgs [
           (lib.getExe pkgs-stable.pgweb)
           "--bind=127.0.0.1"
@@ -135,7 +182,12 @@ in
     services.nginx.virtualHosts.${host} = lib.mkMerge [
       (myLib.server.mkTlsVhost {
         extraConfig = myLib.server.nginxAllowOnly allowed;
-        locations."/".proxyPass = "http://127.0.0.1:${toString cfg.port}";
+        locations."/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.port}";
+          # Écrase aussi l'en-tête du client. Motif glob : le fichier absent (rechargement avant
+          # pgweb-auth) laisse nginx démarrer, pgweb répond alors 401.
+          extraConfig = "include ${authDir}/nginx*.conf;";
+        };
       })
       authelia.nginxProtect
     ];
