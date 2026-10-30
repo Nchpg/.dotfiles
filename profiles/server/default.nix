@@ -14,6 +14,7 @@ in
     ./vaultwarden.nix
     ./apps.nix
     ./admin.nix
+    ./pgweb.nix
   ];
 
   config = {

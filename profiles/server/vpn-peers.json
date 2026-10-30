@@ -6,6 +6,7 @@
       "admin",
       "grafana",
       "nextcloud",
+      "pgweb",
       "vaultwarden"
     ]
   },
@@ -30,6 +31,7 @@
       "admin",
       "grafana",
       "nextcloud",
+      "pgweb",
       "vaultwarden"
     ]
   },
@@ -47,6 +49,7 @@
       "admin",
       "grafana",
       "nextcloud",
+      "pgweb",
       "vaultwarden"
     ]
   },

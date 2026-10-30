@@ -3,7 +3,8 @@
     "services": [
       "admin",
       "grafana",
-      "nextcloud"
+      "nextcloud",
+      "pgweb"
     ]
   },
   "nathan2": {
