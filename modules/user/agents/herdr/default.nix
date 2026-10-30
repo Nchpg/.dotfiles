@@ -42,6 +42,15 @@ let
     unset SHLVL
     exec -a "$0" ${lib.getExe config.programs.${config.userSettings.shell.default}.package} "$@"
   '';
+
+  configFile = (cfg.pkgs.formats.toml { }).generate "herdr-config.toml" {
+    onboarding = false;
+    theme = {
+      name = "gruvbox";
+      auto_switch = false;
+    };
+    terminal.default_shell = paneShell;
+  };
 in
 {
   options.userSettings.agents.herdr = {
@@ -69,16 +78,15 @@ in
           '';
         };
 
-    # Lien en lecture seule : onboarding = false évite que herdr tente de le réécrire.
-    xdg.configFile."herdr/config.toml".source =
-      (cfg.pkgs.formats.toml { }).generate "herdr-config.toml"
-        {
-          onboarding = false;
-          theme = {
-            name = "gruvbox";
-            auto_switch = false;
-          };
-          terminal.default_shell = paneShell;
-        };
+    # Copie et pas lien : les settings de herdr restent modifiables jusqu'au prochain rebuild.
+    home.activation.herdrConfig = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+      target=${config.xdg.configHome}/herdr/config.toml
+      if ! cmp -s ${configFile} "$target"; then
+        run rm -f "$target"
+        run install -Dm644 ${configFile} "$target"
+        # Sans serveur lancé, rien à recharger.
+        run ${lib.getExe herdr} server reload-config >/dev/null 2>&1 || true
+      fi
+    '';
   };
 }
