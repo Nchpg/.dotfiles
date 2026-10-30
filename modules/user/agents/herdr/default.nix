@@ -50,6 +50,26 @@ let
       auto_switch = false;
     };
     terminal.default_shell = paneShell;
+    # ctrl+b est pris par Claude Code (passer une commande en arrière-plan).
+    # Raccourcis directs sur alt : libre dans sway (mod = Super).
+    keys = {
+      prefix = "ctrl+space";
+      # alt+left/right ne sautent plus de mot dans fish et Claude Code : ctrl+left/right le font.
+      next_tab = [
+        "alt+tab"
+        "alt+right"
+      ];
+      previous_tab = [
+        "alt+shift+tab"
+        "alt+left"
+      ];
+      next_workspace = "alt+down";
+      previous_workspace = "alt+up";
+      toggle_sidebar = "alt+a";
+      zoom = "alt+z";
+      # alt+1…9 ; en AZERTY, kitty traduit alt+& … alt+ç (cf. modules/user/terminal/kitty).
+      indexed.tabs = "alt";
+    };
     ui = {
       status_indicators = "dots";
       toast.delivery = "system";
