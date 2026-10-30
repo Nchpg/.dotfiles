@@ -225,7 +225,7 @@ let
       indexed.tabs = "alt";
     };
     ui = {
-      status_indicators = "dots";
+      status_indicators = "symbols";
       window_title = windowTitle;
       toast.delivery = "system";
       hide_tab_bar_when_single_tab = true;
