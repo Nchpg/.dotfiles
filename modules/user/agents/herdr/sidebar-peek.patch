@@ -14,10 +14,10 @@ index f55db19..e157895 100644
                              if !shell.endpoint_is_active(&expired.endpoint_id) {
                                  continue;
 diff --git a/src/client/shell/actions.rs b/src/client/shell/actions.rs
-index 86a30f1..e9fffcf 100644
+index 5c13011..42f9355 100644
 --- a/src/client/shell/actions.rs
 +++ b/src/client/shell/actions.rs
-@@ -6,12 +6,26 @@ impl ClientShellState {
+@@ -6,15 +6,28 @@ impl ClientShellState {
          binding: crate::input::KeybindMatch,
          outcome: &mut ClientShellInput,
      ) {
@@ -44,9 +44,12 @@ index 86a30f1..e9fffcf 100644
 +                }
                  self.sidebar_collapsed_manual = true;
                  self.reveal_navigation_workspace = true;
-                 self.invalidate_pane_surface();
+-                self.invalidate_pane_surface();
+                 outcome.repaint = true;
+                 outcome.resize = true;
+                 self.persist_chrome_preferences(outcome);
 diff --git a/src/client/shell/state.rs b/src/client/shell/state.rs
-index 5a73292..abcc51f 100644
+index 5a73292..0d7375e 100644
 --- a/src/client/shell/state.rs
 +++ b/src/client/shell/state.rs
 @@ -871,6 +871,8 @@ pub(crate) struct ClientShellState {
@@ -66,7 +69,7 @@ index 5a73292..abcc51f 100644
              sidebar_width,
              sidebar_width_manual: preferences.sidebar_width.is_some(),
              sidebar_section_split,
-@@ -1878,6 +1881,37 @@ impl ClientShellState {
+@@ -1878,6 +1881,35 @@ impl ClientShellState {
          false
      }
  
@@ -84,7 +87,6 @@ index 5a73292..abcc51f 100644
 +        self.sidebar_collapsed = false;
 +        self.sidebar_peek_deadline = Some(deadline);
 +        self.reveal_navigation_workspace = true;
-+        self.invalidate_pane_surface();
 +        true
 +    }
 +
@@ -95,7 +97,6 @@ index 5a73292..abcc51f 100644
 +        {
 +            self.sidebar_peek_deadline = None;
 +            self.sidebar_collapsed = true;
-+            self.invalidate_pane_surface();
 +            return true;
 +        }
 +        false

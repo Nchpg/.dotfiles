@@ -1,14 +1,13 @@
 diff --git a/src/client/shell/actions.rs b/src/client/shell/actions.rs
-index 83819b0..86a30f1 100644
+index 83819b0..5c13011 100644
 --- a/src/client/shell/actions.rs
 +++ b/src/client/shell/actions.rs
-@@ -19,6 +19,12 @@ impl ClientShellState {
+@@ -19,6 +19,11 @@ impl ClientShellState {
                  outcome.resize = true;
                  self.persist_chrome_preferences(outcome);
              }
 +            crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleTabBar) => {
 +                self.config.hide_tab_bar_when_single_tab = !self.config.hide_tab_bar_when_single_tab;
-+                self.invalidate_pane_surface();
 +                outcome.repaint = true;
 +                outcome.resize = true;
 +            }

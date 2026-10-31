@@ -63,7 +63,7 @@ index b7ab4a9..ae2c2e5 100644
          self.selection_repaint_deadline = None;
          if self.last_composed_size != Some((cols, rows)) && self.mode == ClientShellMode::Navigate {
 diff --git a/src/client/shell/state.rs b/src/client/shell/state.rs
-index ac3d1ca..bce333c 100644
+index 0d7375e..43ecd24 100644
 --- a/src/client/shell/state.rs
 +++ b/src/client/shell/state.rs
 @@ -873,6 +873,12 @@ pub(crate) struct ClientShellState {
@@ -105,7 +105,7 @@ index ac3d1ca..bce333c 100644
              sidebar_width,
              sidebar_width_manual: preferences.sidebar_width.is_some(),
              sidebar_section_split,
-@@ -1912,6 +1924,66 @@ impl ClientShellState {
+@@ -1910,6 +1922,66 @@ impl ClientShellState {
          false
      }
  
