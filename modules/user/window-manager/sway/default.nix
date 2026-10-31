@@ -45,14 +45,26 @@ let
         "@wallpaperBg@"
         "@sessionVars@"
         "@appearance@"
+        "@focusOrWorkspace@"
       ]
       [
         config.userSettings.terminal.default
         wallpaperBg
         (lib.concatStringsSep " " osConfig.systemSettings.windowManager.sway.sessionVariables)
         appearance
+        (lib.getExe focusOrWorkspace)
       ]
       templateContent;
+
+  # mod+flèches gauche/droite : fenêtre voisine, puis workspace suivant au bord.
+  focusOrWorkspace = pkgs.writeShellApplication {
+    name = "focus-or-workspace";
+    runtimeInputs = [
+      pkgs.sway
+      pkgs.jq
+    ];
+    text = builtins.readFile ./sway-config/focus-or-workspace.sh;
+  };
 
   wpctl = "${pkgs.wireplumber}/bin/wpctl";
   playerctl = "${pkgs.playerctl}/bin/playerctl";

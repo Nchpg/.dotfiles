@@ -40,10 +40,10 @@ seat * keyboard_grouping none
     bindsym $mod+$down focus down
     bindsym $mod+$up focus up
     bindsym $mod+$right focus right
-    bindsym $mod+Left focus left
+    bindsym $mod+Left exec @focusOrWorkspace@ left
     bindsym $mod+Down focus down
     bindsym $mod+Up focus up
-    bindsym $mod+Right focus right
+    bindsym $mod+Right exec @focusOrWorkspace@ right
 
     bindsym $mod+Shift+$left move left
     bindsym $mod+Shift+$down move down
