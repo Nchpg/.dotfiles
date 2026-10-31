@@ -124,9 +124,34 @@ let
 
   # Le serveur hérite du SHLVL de qui l'a lancé : le prompt fish afficherait 2.
   # exec -a garde le « - » d'un shell de login.
+  # Un tab sans nom porte sa position (« 3 ») : on le renomme « <hôte>: <dossier> »
+  # au lancement de son premier shell. Le nom ne suit pas les cd.
   paneShell = cfg.pkgs.writeShellScript "herdr-shell" ''
     unset SHLVL
+    if [ -n "''${HERDR_TAB_ID:-}" ]; then
+      label=$(${lib.getExe herdr} tab get "$HERDR_TAB_ID" 2>/dev/null \
+        | ${lib.getExe cfg.pkgs.jq} -r '.result.tab.label // empty')
+      case $label in
+        "" | *[!0-9]*) ;;
+        *) ${lib.getExe herdr} tab rename "$HERDR_TAB_ID" "$HOSTNAME: ''${PWD/#"$HOME"/\~}" >/dev/null 2>&1 ;;
+      esac
+    fi
     exec -a "$0" ${lib.getExe config.programs.${config.userSettings.shell.default}.package} "$@"
+  '';
+
+  # herdr n'a pas d'action pour la barre des tabs : on bascule l'option dans la copie
+  # de la config, puis on recharge. Le prochain rebuild remet la valeur par défaut.
+  # herdr lance la commande deux fois par appui (~150 ms d'écart) : on ignore le second.
+  toggleTabBar = cfg.pkgs.writeShellScript "herdr-toggle-tab-bar" ''
+    stamp=''${XDG_RUNTIME_DIR:-/tmp}/herdr-toggle-tab-bar
+    now=$(date +%s%N)
+    last=$(cat "$stamp" 2>/dev/null || echo 0)
+    [ $((now - last)) -lt 500000000 ] && exit 0
+    echo "$now" > "$stamp"
+    f=${config.xdg.configHome}/herdr/config.toml
+    if grep -q '^hide_tab_bar_when_single_tab = true' "$f"; then v=false; else v=true; fi
+    sed -i "s/^hide_tab_bar_when_single_tab = .*/hide_tab_bar_when_single_tab = $v/" "$f"
+    ${lib.getExe herdr} server reload-config >/dev/null 2>&1
   '';
 
   configFile = (cfg.pkgs.formats.toml { }).generate "herdr-config.toml" {
@@ -171,6 +196,13 @@ let
       next_workspace = "alt+down";
       previous_workspace = "alt+up";
       toggle_sidebar = "alt+a";
+      command = [
+        {
+          key = "alt+t";
+          type = "shell";
+          command = toString toggleTabBar;
+        }
+      ];
       workspace_picker = [
         "prefix+w"
         "alt+w"
@@ -232,7 +264,9 @@ let
       status_indicators = "symbols";
       window_title = windowTitle;
       toast.delivery = "system";
+      # alt+t l'affiche pour un tab seul (toggleTabBar) : elle porte l'indicateur de zoom.
       hide_tab_bar_when_single_tab = true;
+      tab_bar_right = [ { type = "zoom"; } ];
       pane_scrollbars = false;
       # alt+a cache toute la sidebar au lieu de la réduire à une colonne.
       sidebar_collapsed_mode = "hidden";
@@ -268,6 +302,19 @@ in
 
   config = lib.mkIf cfg.enable {
     home.packages = [ herdr ];
+
+    # Suite de herdr-shell : un tab nommé « <hôte>: <dossier> » suit les cd.
+    # Un nom donné à la main ne commence pas par l'hôte et reste tel quel.
+    programs.fish.interactiveShellInit = lib.mkAfter ''
+      if set -q HERDR_TAB_ID
+          function __herdr_tab_follow_pwd --on-variable PWD
+              set -l label (${lib.getExe herdr} tab get $HERDR_TAB_ID 2>/dev/null \
+                  | ${lib.getExe cfg.pkgs.jq} -r '.result.tab.label // empty')
+              string match -q -- "$hostname: *" $label; or return
+              ${lib.getExe herdr} tab rename $HERDR_TAB_ID "$hostname: "(string replace -r -- "^$HOME" "~" $PWD) >/dev/null 2>&1
+          end
+      end
+    '';
 
     # herdr se tait pour l'onglet actif d'un client, même si sa fenêtre est derrière
     # une autre : Claude notifie aussi lui-même, avec les mêmes titre et corps que
