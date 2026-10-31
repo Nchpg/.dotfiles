@@ -96,8 +96,23 @@ let
   # Absent de nixpkgs : compilé depuis les sources de la release (paquet nix de l'amont),
   # pour y ajouter l'action toggle_tab_bar. fetchTarball et pas fetchFromGitHub : son
   # nix/package.nix est importé, ce qui ferait de l'import-from-derivation.
+  # HERDR_NEW_WORKSPACE_CWD : le client ouvre lui-même un workspace local neuf, sans
+  # déplacer les autres fenêtres (un focus par la CLI les recentrerait toutes). Sidebar
+  # fermée, et rien n'est dessiné avant que ce workspace soit focalisé (3 s au plus).
+  herdrUnwrapped = myLib.packaging.mkGuardedPatch {
+    package = sidebarPeek;
+    patch = ./startup-workspace.patch;
+    files = {
+      "src/client/mod.rs" = "918298d730dc9fb8dcd2ef00018e204d592697e4bb0acd6f1b68a59a7bf0604e";
+      "src/client/shell/composition.rs" =
+        "007992bb1dc3989fa9a0146f757a502e9082664727d3cca94e6ccd70f51f58e0";
+      "src/client/shell/state.rs" = "bbecf709e8e01ebc32becf41b6d532a09c348c3ba4b66c2a0ee3948d73b02362";
+    };
+    where = "modules/user/agents/herdr/default.nix";
+  };
+
   # Alt+up/down montre aussi la sidebar repliée pendant 0,5 s (sidebar-peek.patch).
-  herdrUnwrapped =
+  sidebarPeek =
     # Une release qui touche un de ces fichiers fait échouer le build : rebaser ou retirer le patch.
     # sidebar-peek.patch s'applique par-dessus toggle-tab-bar.patch (actions.rs en commun).
     myLib.packaging.mkGuardedPatch {
@@ -132,6 +147,18 @@ let
       };
       where = "modules/user/agents/herdr/default.nix";
     };
+
+  # mod+entrée : une fenêtre sur un workspace neuf dans ~. Les workspaces restent ouverts :
+  # à partir de 10 en local, une notification le signale sans bloquer l'ouverture.
+  herdrNewWindow = cfg.pkgs.writeShellScript "herdr-new-window" ''
+    n=$(${lib.getExe herdr} workspace list 2>/dev/null \
+      | ${lib.getExe cfg.pkgs.jq} '.result.workspaces | length' 2>/dev/null || echo 0)
+    n=$((''${n:-0} + 1))
+    if [ "$n" -ge 10 ]; then
+      ${cfg.pkgs.libnotify}/bin/notify-send --app-name Herdr "herdr" "$n workspaces ouverts" &
+    fi
+    HERDR_NEW_WORKSPACE_CWD=$HOME exec ${lib.getExe herdr}
+  '';
 
   herdr = cfg.pkgs.stdenvNoCC.mkDerivation {
     pname = "herdr";
@@ -412,16 +439,15 @@ in
           ];
         };
 
-    # Sans argument, herdr crée ou rattache la session persistante. Pas de workspace
-    # neuf automatique : le focus de l'API est celui du serveur, toutes les fenêtres suivraient.
+    # herdr-new-window rattache la session persistante sur un workspace neuf (startup-workspace.patch).
     home.file.".config/sway/conf.d/herdr.conf" =
       lib.mkIf config.userSettings.windowManager.sway.enable
         {
           text = ''
-            bindsym Control+Return exec ${
+            bindsym $mod+Return exec ${
               myLib.desktop.mkTerminalCmd {
                 inherit config;
-                exec = lib.getExe herdr;
+                exec = toString herdrNewWindow;
                 # En points : 1.5 pt = 2 px en haut et en bas. waybar (30 px) + 58 lignes
                 # de 27 px remplissent alors l'écran, sans bande vide autour de herdr.
                 kittyExtraOpts = "-o 'window_padding_width=1.5 4'";

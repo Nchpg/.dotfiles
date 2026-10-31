@@ -32,7 +32,7 @@ seat * keyboard_grouping none
     set $right l
     bindsym $mod+Shift+s reload
 
-    bindsym $mod+Return exec $term
+    bindsym Control+Return exec $term
     bindsym $mod+Shift+q kill
     bindsym $mod+Shift+e exec swaynag -t warning -m 'You pressed the exit shortcut. Do you really want to exit sway? This will end your Wayland session.' -B 'Yes, exit sway' 'swaymsg exit'
 

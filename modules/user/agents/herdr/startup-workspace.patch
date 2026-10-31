@@ -1,0 +1,174 @@
+diff --git a/src/client/mod.rs b/src/client/mod.rs
+index e157895..048b6c8 100644
+--- a/src/client/mod.rs
++++ b/src/client/mod.rs
+@@ -232,7 +232,7 @@ fn run_client_with_mode(
+     crate::logging::startup("client");
+     info!(path = %socket_path.display(), "{log_message}");
+ 
+-    let endpoint_catalog = if client_rendered_shell && !is_remote_client_process() {
++    let mut endpoint_catalog = if client_rendered_shell && !is_remote_client_process() {
+         endpoint::EndpointCatalog::load().unwrap_or_else(|error| {
+             warn!(%error, "saved SSH endpoint catalog is unavailable");
+             endpoint::EndpointCatalog::default()
+@@ -240,6 +240,10 @@ fn run_client_with_mode(
+     } else {
+         endpoint::EndpointCatalog::default()
+     };
++    // A window opened on a fresh local workspace must not follow the saved remote selection.
++    if startup_workspace_cwd().is_some() {
++        endpoint_catalog.select_local();
++    }
+     let federated = endpoint_catalog.has_enabled_ssh();
+ 
+     let initial_stream = match crate::ipc::connect_local_stream(&socket_path) {
+@@ -2313,6 +2317,7 @@ async fn run_client_loop(
+                             outcome.repaint = true;
+                             outcome.resize = true;
+                         }
++                        shell.tick_startup_workspace(&mut outcome);
+                         for expired in expired_endpoints {
+                             if !shell.endpoint_is_active(&expired.endpoint_id) {
+                                 continue;
+@@ -2369,3 +2374,11 @@ async fn run_client_loop(
+ 
+ #[cfg(test)]
+ mod tests;
++
++/// HERDR_NEW_WORKSPACE_CWD: open this client on a new local workspace rooted there.
++/// The workspace is created by the client itself, so other attached clients keep their view.
++pub(crate) fn startup_workspace_cwd() -> Option<String> {
++    std::env::var("HERDR_NEW_WORKSPACE_CWD")
++        .ok()
++        .filter(|cwd| !cwd.is_empty())
++}
+diff --git a/src/client/shell/composition.rs b/src/client/shell/composition.rs
+index b7ab4a9..ae2c2e5 100644
+--- a/src/client/shell/composition.rs
++++ b/src/client/shell/composition.rs
+@@ -152,6 +152,15 @@ impl ClientShellState {
+         cols: u16,
+         rows: u16,
+     ) -> Option<crate::client::frame_output::ComposedFrame> {
++        // Hold the first frames until the startup workspace is focused and its panes arrived.
++        // tick_startup_workspace gives up after its deadline.
++        if self.startup_workspace_deadline.is_some() {
++            if !self.startup_workspace_ready() {
++                return None;
++            }
++            self.startup_workspace_cwd = None;
++            self.startup_workspace_deadline = None;
++        }
+         self.last_composed_at = Some(std::time::Instant::now());
+         self.selection_repaint_deadline = None;
+         if self.last_composed_size != Some((cols, rows)) && self.mode == ClientShellMode::Navigate {
+diff --git a/src/client/shell/state.rs b/src/client/shell/state.rs
+index ac3d1ca..bce333c 100644
+--- a/src/client/shell/state.rs
++++ b/src/client/shell/state.rs
+@@ -873,6 +873,12 @@ pub(crate) struct ClientShellState {
+     pub(super) sidebar_collapsed_manual: bool,
+     /// Set while a workspace switch shows a collapsed sidebar for a moment.
+     pub(super) sidebar_peek_deadline: Option<std::time::Instant>,
++    /// Pending HERDR_NEW_WORKSPACE_CWD workspace, created once the local snapshot arrives.
++    pub(super) startup_workspace_cwd: Option<String>,
++    /// Workspaces that existed when the startup workspace was requested; Some once requested.
++    pub(super) startup_workspace_known: Option<Vec<String>>,
++    /// Nothing is drawn before this deadline unless the startup workspace is focused first.
++    pub(super) startup_workspace_deadline: Option<std::time::Instant>,
+     pub(super) sidebar_width: u16,
+     pub(super) sidebar_width_manual: bool,
+     pub(super) sidebar_section_split: f32,
+@@ -1001,9 +1007,11 @@ impl ClientShellState {
+         let overlay = config
+             .startup_onboarding
+             .then_some(ClientShellOverlay::Onboarding);
+-        let sidebar_collapsed = preferences
+-            .sidebar_collapsed
+-            .unwrap_or(config.sidebar_start_collapsed);
++        // A window opened on a fresh workspace starts with the sidebar hidden.
++        let sidebar_collapsed = crate::client::startup_workspace_cwd().is_some()
++            || preferences
++                .sidebar_collapsed
++                .unwrap_or(config.sidebar_start_collapsed);
+         let (min_width, max_width) = crate::config::validated_sidebar_bounds(
+             config.sidebar_min_width,
+             config.sidebar_max_width,
+@@ -1048,6 +1056,10 @@ impl ClientShellState {
+             sidebar_collapsed,
+             sidebar_collapsed_manual: preferences.sidebar_collapsed.is_some(),
+             sidebar_peek_deadline: None,
++            startup_workspace_cwd: crate::client::startup_workspace_cwd(),
++            startup_workspace_known: None,
++            startup_workspace_deadline: crate::client::startup_workspace_cwd()
++                .map(|_| std::time::Instant::now() + std::time::Duration::from_secs(3)),
+             sidebar_width,
+             sidebar_width_manual: preferences.sidebar_width.is_some(),
+             sidebar_section_split,
+@@ -1912,6 +1924,66 @@ impl ClientShellState {
+         false
+     }
+ 
++    pub(crate) fn tick_startup_workspace(&mut self, outcome: &mut ClientShellInput) {
++        let Some(deadline) = self.startup_workspace_deadline else {
++            return;
++        };
++        if std::time::Instant::now() >= deadline {
++            self.startup_workspace_cwd = None;
++            self.startup_workspace_deadline = None;
++            outcome.repaint = true;
++            return;
++        }
++        if !self.active_endpoint_id.is_local() || self.snapshot.is_none() {
++            return;
++        }
++        let Some(cwd) = self.startup_workspace_cwd.take() else {
++            return;
++        };
++        self.startup_workspace_known = self.snapshot.as_deref().map(|snapshot| {
++            snapshot
++                .workspaces
++                .iter()
++                .map(|workspace| workspace.workspace_id.clone())
++                .collect()
++        });
++        self.push_endpoint_method(
++            crate::api::schema::Method::WorkspaceCreate(crate::api::schema::WorkspaceCreateParams {
++                source_workspace_id: None,
++                cwd: Some(cwd),
++                focus: true,
++                label: None,
++                env: Default::default(),
++            }),
++            outcome,
++        );
++        outcome.repaint = true;
++    }
++
++    /// The startup workspace is focused and its panes are in the surface: safe to draw.
++    pub(super) fn startup_workspace_ready(&self) -> bool {
++        let Some(known) = self.startup_workspace_known.as_ref() else {
++            return false;
++        };
++        let Some(focused) = self
++            .snapshot
++            .as_deref()
++            .and_then(|snapshot| snapshot.focused_workspace_id.as_deref())
++        else {
++            return false;
++        };
++        if known.iter().any(|id| id == focused) {
++            return false;
++        }
++        let prefix = format!("{focused}:");
++        self.pane_surface.as_ref().is_some_and(|surface| {
++            surface
++                .panes
++                .iter()
++                .any(|pane| pane.pane_id.starts_with(&prefix))
++        })
++    }
++
+     pub(crate) fn timer_delay(&self, now: std::time::Instant) -> std::time::Duration {
+         let default = std::time::Duration::from_millis(100);
+         self.selection_autoscroll_deadline
