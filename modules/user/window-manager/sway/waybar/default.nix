@@ -318,6 +318,7 @@ in
           interval = 60;
           signal = cfg.signals.vpn;
           return-type = "json";
+          on-click = "${scriptDir}/vpn.sh toggle";
         };
 
         "custom/dns" = {

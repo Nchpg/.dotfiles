@@ -104,6 +104,17 @@ in
         ${cfg.presharedKeyKey} = forTunnel;
       };
 
+    # Les admins montent et démontent le tunnel sans mot de passe (bouton waybar), et rien d'autre.
+    security.polkit.extraConfig = ''
+      polkit.addRule(function(action, subject) {
+        if (action.id == "org.freedesktop.systemd1.manage-units"
+            && action.lookup("unit") == "wg-quick-wg0.service"
+            && subject.isInGroup("wheel")) {
+          return polkit.Result.YES;
+        }
+      });
+    '';
+
     networking.wg-quick.interfaces.wg0 = {
       address = [ cfg.address ];
       privateKeyFile = config.sops.secrets.${cfg.privateKeyKey}.path;

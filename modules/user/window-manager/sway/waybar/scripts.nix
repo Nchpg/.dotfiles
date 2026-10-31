@@ -91,6 +91,9 @@ let
         DNS_HOST = privateDns.hostname or "";
       };
     };
+    "vpn.sh".deps = [
+      pkgs.systemd
+    ];
     "vpn.sh".env = {
       VPN_IFACE = vpnProbe.iface;
       VPN_PEER = vpnProbe.peer;
