@@ -220,6 +220,7 @@ in
         backlight = 9;
         vpn = 10;
         dns = 11;
+        screenrec = 12;
       };
       description = "Signaux RTMIN des modules custom de waybar.";
     };
@@ -262,25 +263,28 @@ in
 
         modules-left = [ "sway/workspaces" ];
         modules-center = [ ];
-        modules-right = [
-          "custom/nowplaying"
-          "custom/bluetooth"
-          "network"
-          "custom/vpn"
-        ]
-        # Bouton du DNS privé (systemSettings.network.privateDns), s'il est configuré.
-        ++ lib.optional (osConfig.systemSettings.network.privateDns != null) "custom/dns"
-        ++ [
-          "custom/resources"
-          "custom/backlight"
-          "wireplumber"
-          "custom/swaync"
-          "custom/disk"
-          "custom/battery"
-          "custom/weather"
-          "clock"
-          "tray"
-        ];
+        modules-right =
+          # Indicateur d'enregistrement d'écran (userSettings.gui.wfRecorder), en tête pour se voir.
+          lib.optional config.userSettings.gui.wfRecorder.enable "custom/rec"
+          ++ [
+            "custom/nowplaying"
+            "custom/bluetooth"
+            "network"
+            "custom/vpn"
+          ]
+          # Bouton du DNS privé (systemSettings.network.privateDns), s'il est configuré.
+          ++ lib.optional (osConfig.systemSettings.network.privateDns != null) "custom/dns"
+          ++ [
+            "custom/resources"
+            "custom/backlight"
+            "wireplumber"
+            "custom/swaync"
+            "custom/disk"
+            "custom/battery"
+            "custom/weather"
+            "clock"
+            "tray"
+          ];
 
         "sway/workspaces" = {
           disable-scroll = false;
@@ -319,6 +323,17 @@ in
           signal = cfg.signals.vpn;
           return-type = "json";
           on-click = "${scriptDir}/vpn.sh toggle";
+        };
+
+        "custom/rec" = {
+          exec = "${scriptDir}/rec.sh";
+          interval = 1;
+          # screenrec le réveille au début et à la fin de la capture : sans attendre le relevé
+          # suivant, et le chrono repart de zéro à cet instant.
+          signal = cfg.signals.screenrec;
+          return-type = "json";
+          hide-empty-text = true;
+          on-click = "${scriptDir}/rec.sh click";
         };
 
         "custom/dns" = {

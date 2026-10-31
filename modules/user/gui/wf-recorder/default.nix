@@ -9,9 +9,8 @@
 let
   cfg = config.userSettings.gui.wfRecorder;
 
-  icon = myLib.desktop.notifyIcon config cfg.pkgs;
-  iconRec = icon "actions/media-record" (c: c.base08);
-  iconDone = icon "actions/object-select" (c: c.base0B);
+  # Signal RTMIN du module rec de waybar (cf. waybar/scripts/rec.sh).
+  recSignal = toString config.userSettings.windowManager.sway.waybar.signals.screenrec;
 
   # L'arrêt DOIT être un SIGINT, sinon le mp4 sort sans index.
   screenrec = cfg.pkgs.writeShellApplication {
@@ -19,11 +18,10 @@ let
     runtimeInputs = with cfg.pkgs; [
       cfg.package
       slurp
-      libnotify
       wl-clipboard
+      procps # pkill
       osConfig.programs.sway.package
       jq
-      glib.bin # gdbus
     ];
     text = ''
       # -x : pas ce wrapper (son store path contient "wf-recorder")
@@ -51,31 +49,44 @@ let
       mkdir -p ${lib.escapeShellArg cfg.outputDir}
       file=${lib.escapeShellArg cfg.outputDir}/"rec-$(date +%F-%H%M%S).mp4"
 
-      # La notif ne doit pas finir dans la vidéo (0.5 s : animation de sortie de swaync)
-      id=$(notify-send -p -i ${iconRec} "Enregistrement démarré" "$(basename "$file")")
-      sleep 1
-      gdbus call --session --dest org.freedesktop.Notifications \
-        --object-path /org/freedesktop/Notifications \
-        --method org.freedesktop.Notifications.CloseNotification "$id" >/dev/null || true
-      sleep 0.5
+      # Le module rec de waybar (scripts/rec.sh) affiche l'état, sans notification :
+      #   start = « pid heure_de_départ_en_µs », tant que la capture tourne
+      #   last  = « epoch chemin », une fois sauvegardé
+      state_dir="''${XDG_RUNTIME_DIR:-/tmp}/screenrec"
+      mkdir -p "$state_dir"
+
+      dnd_set=false
+      cleanup() {
+        rm -f "$state_dir/start"
+        if [ "$dnd_set" = true ]; then
+          swaync-client -df >/dev/null
+        fi
+      }
+      trap cleanup EXIT
 
       if command -v swaync-client >/dev/null; then
-        dnd_before=$(swaync-client -D 2>/dev/null || echo false)
-        if [ "$dnd_before" != true ]; then
+        if [ "$(swaync-client -D 2>/dev/null || echo false)" != true ]; then
           swaync-client -dn >/dev/null
-          trap 'swaync-client -df >/dev/null' EXIT
+          dnd_set=true
         fi
       fi
 
+      # L'heure (µs, par date : EPOCHREALTIME prend la virgule de la locale) est prise juste
+      # avant la capture, puis waybar est réveillé : 00:00 s'affiche à cet instant.
+      # wf-recorder reste au premier plan, sinon il ignorerait le SIGINT d'arrêt.
+      printf '%s %s\n' "$$" "$(date +%s%6N)" > "$state_dir/start"
+      pkill -RTMIN+${recSignal} waybar || true
+
       wf-recorder ${lib.optionalString cfg.audio "--audio "}"''${target[@]}" -f "$file"
 
-      printf '%s' "$file" | wl-copy
-      # DND rétabli avant la notif de fin, sinon elle serait masquée
-      if [ "''${dnd_before:-true}" != true ]; then
+      rm -f "$state_dir/start"
+      if [ "$dnd_set" = true ]; then
         swaync-client -df >/dev/null
-        trap - EXIT
+        dnd_set=false
       fi
-      notify-send -i ${iconDone} "Enregistrement sauvegardé" "$file"
+      printf '%s' "$file" | wl-copy
+      printf '%s %s\n' "$(date +%s)" "$file" > "$state_dir/last"
+      pkill -RTMIN+${recSignal} waybar || true
     '';
   };
 in

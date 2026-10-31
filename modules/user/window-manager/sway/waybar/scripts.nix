@@ -91,6 +91,13 @@ let
         DNS_HOST = privateDns.hostname or "";
       };
     };
+    "rec.sh".deps = [
+      pkgs.coreutils
+      pkgs.procps
+      pkgs.util-linux # flock
+      pkgs.wl-clipboard
+      pkgs.zenity
+    ];
     "vpn.sh".deps = [
       pkgs.systemd
     ];

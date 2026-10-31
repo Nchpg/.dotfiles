@@ -79,6 +79,8 @@ window#waybar {
 #custom-vpn.unreachable { color: @bright-yellow@; }
 #custom-vpn.off        { color: @base04@; }
 
+#custom-rec            { color: @bright-red@; font-weight: bold; }
+#custom-rec.done       { color: @base0B@; }
 #custom-dns            { color: @base0B@; }
 #custom-dns.off        { color: @base04@; }
 
