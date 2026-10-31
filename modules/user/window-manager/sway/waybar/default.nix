@@ -2,6 +2,7 @@
   config,
   lib,
   myLib,
+  osConfig,
   ...
 }:
 
@@ -218,6 +219,7 @@ in
         weather = 8;
         backlight = 9;
         vpn = 10;
+        dns = 11;
       };
       description = "Signaux RTMIN des modules custom de waybar.";
     };
@@ -265,6 +267,10 @@ in
           "custom/bluetooth"
           "network"
           "custom/vpn"
+        ]
+        # Bouton du DNS privé (systemSettings.network.privateDns), s'il est configuré.
+        ++ lib.optional (osConfig.systemSettings.network.privateDns != null) "custom/dns"
+        ++ [
           "custom/resources"
           "custom/backlight"
           "wireplumber"
@@ -312,6 +318,14 @@ in
           interval = 60;
           signal = cfg.signals.vpn;
           return-type = "json";
+        };
+
+        "custom/dns" = {
+          exec = "${scriptDir}/dns.sh";
+          interval = 30;
+          signal = cfg.signals.dns;
+          return-type = "json";
+          on-click = "${scriptDir}/dns.sh toggle";
         };
 
         "custom/resources" = {

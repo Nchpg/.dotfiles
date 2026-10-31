@@ -1,4 +1,9 @@
-{ config, lib, ... }:
+{
+  config,
+  lib,
+  osConfig,
+  ...
+}:
 
 let
   sway = config.userSettings.windowManager.sway;
@@ -8,6 +13,7 @@ let
   libSh = builtins.readFile ./scripts/lib.sh;
 
   inherit (sway.notifications) vpnProbe;
+  inherit (osConfig.systemSettings.network) privateDns;
 
   scripts = {
     "resources.sh".deps = [
@@ -73,6 +79,16 @@ let
       env = {
         BATTERY_LOW = toString sway.notifications.lowBatteryThreshold;
         BATTERY_VERYLOW = toString sway.notifications.veryLowBatteryThreshold;
+      };
+    };
+    "dns.sh" = {
+      deps = [
+        pkgs.systemd
+        pkgs.procps
+      ];
+      env = {
+        WAYBAR_DNS_SIGNAL = toString cfg.signals.dns;
+        DNS_HOST = privateDns.hostname or "";
       };
     };
     "vpn.sh".env = {

@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   target,
   ...
 }:
@@ -54,6 +55,33 @@ in
       description = ''
         Adressage IPv4 statique. `null` = NetworkManager en DHCP. Renseigné : systemd-networkd,
         NetworkManager coupé et pare-feu nftables par interface.
+      '';
+    };
+
+    systemSettings.network.privateDns = lib.mkOption {
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            hostname = lib.mkOption {
+              type = lib.types.str;
+              description = "Nom TLS du résolveur, vérifié sur son certificat.";
+              example = "dns.adguard-dns.com";
+            };
+
+            addresses = lib.mkOption {
+              type = lib.types.nonEmptyListOf lib.types.str;
+              description = "Adresses du résolveur (resolved n'en résout pas le nom).";
+              example = [ "94.140.14.14" ];
+            };
+          };
+        }
+      );
+      default = null;
+      description = ''
+        DNS privé en DNS-over-TLS strict pour toutes les requêtes, à la place du DNS du réseau.
+        `null` = DNS fourni par le réseau. Sans repli : un portail captif qui bloque le port 853
+        coupe la résolution jusqu'à la connexion au portail. Le service `private-dns` le
+        coupe (`systemctl stop`) ou le rétablit sans rebuild.
       '';
     };
 
@@ -112,6 +140,62 @@ in
       networking.networkmanager.enable = true;
       networking.modemmanager.enable = false;
     })
+
+    (lib.mkIf (cfg.privateDns != null) (
+      let
+        dropIn = pkgs.writeText "private-dns.conf" ''
+          [Resolve]
+          DNS=${
+            lib.concatMapStringsSep " " (
+              address: "${address}#${cfg.privateDns.hostname}"
+            ) cfg.privateDns.addresses
+          }
+          DNSOverTLS=yes
+          # ~. : ces serveurs répondent à tout, avant ceux annoncés par le réseau (DHCP).
+          Domains=~.
+          # Pas de serveurs de secours en clair si le résolveur privé est injoignable.
+          FallbackDNS=
+        '';
+        dropInPath = "/run/systemd/resolved.conf.d/private-dns.conf";
+        reloadResolved = "${pkgs.systemd}/bin/systemctl --no-block reload-or-restart systemd-resolved.service";
+      in
+      {
+        services.resolved.enable = true;
+        networking.networkmanager.dns = lib.mkIf (static == null) "systemd-resolved";
+
+        # Basculable sans rebuild (bouton waybar) : start = DNS privé, stop = DNS du réseau.
+        # Drop-in dans /run : chaque boot repart sur le DNS privé.
+        systemd.services.private-dns = {
+          description = "DNS privé (${cfg.privateDns.hostname}) en DNS-over-TLS";
+          after = [ "systemd-resolved.service" ];
+          wants = [ "systemd-resolved.service" ];
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = [
+              "${pkgs.coreutils}/bin/install -Dm644 ${dropIn} ${dropInPath}"
+              reloadResolved
+            ];
+            ExecStop = [
+              "${pkgs.coreutils}/bin/rm -f ${dropInPath}"
+              reloadResolved
+            ];
+          };
+        };
+
+        # Les admins basculent private-dns sans mot de passe, et rien d'autre.
+        security.polkit.extraConfig = ''
+          polkit.addRule(function(action, subject) {
+            if (action.id == "org.freedesktop.systemd1.manage-units"
+                && action.lookup("unit") == "private-dns.service"
+                && subject.isInGroup("wheel")) {
+              return polkit.Result.YES;
+            }
+          });
+        '';
+      }
+    ))
 
     (lib.mkIf (static != null) {
       networking.networkmanager.enable = false;
