@@ -154,6 +154,38 @@ let
     ${lib.getExe herdr} server reload-config >/dev/null 2>&1
   '';
 
+  # alt+left/right : pane voisin, ou tab précédent/suivant (en boucle) au bord.
+  # Le focus est celui du serveur, commun à toutes les fenêtres.
+  focusPaneOrTab = cfg.pkgs.writeShellScript "herdr-focus-pane-or-tab" ''
+    dir=$1
+    herdr=${lib.getExe herdr}
+    jq=${lib.getExe cfg.pkgs.jq}
+    snap=$($herdr api snapshot)
+    pane=$($jq -r '.result.snapshot.focused_pane_id' <<<"$snap")
+    if $herdr pane neighbor --direction "$dir" --pane "$pane" \
+      | $jq -e '.result.neighbor.neighbor_pane_id' >/dev/null; then
+      exec $herdr pane focus --direction "$dir" --pane "$pane"
+    fi
+    step=1 back=left
+    [ "$dir" = left ] && step=-1 back=right
+    tab=$($jq -r --argjson step "$step" '
+      .result.snapshot as $s
+      | [$s.tabs[] | select(.workspace_id == $s.focused_workspace_id) | .tab_id] as $t
+      | ($t | index($s.focused_tab_id)) as $i
+      | $t[($i + $step) % ($t | length)]
+    ' <<<"$snap")
+    $herdr tab focus "$tab" >/dev/null
+    # On entre par le bord : le pane le plus à gauche en allant à droite, et inversement.
+    pane=$($jq -r --arg tab "$tab" '.result.snapshot.layouts[] | select(.tab_id == $tab) | .focused_pane_id' <<<"$snap")
+    for _ in 1 2 3 4 5 6 7 8; do
+      next=$($herdr pane neighbor --direction "$back" --pane "$pane" \
+        | $jq -r '.result.neighbor.neighbor_pane_id // empty')
+      [ -n "$next" ] || break
+      $herdr pane focus --direction "$back" --pane "$pane" >/dev/null
+      pane=$next
+    done
+  '';
+
   configFile = (cfg.pkgs.formats.toml { }).generate "herdr-config.toml" {
     onboarding = false;
     theme = {
@@ -185,14 +217,8 @@ let
       new_tab = "alt+n";
       new_workspace = "alt+shift+n";
       # alt+left/right ne sautent plus de mot dans fish et Claude Code : ctrl+left/right le font.
-      next_tab = [
-        "alt+tab"
-        "alt+right"
-      ];
-      previous_tab = [
-        "alt+shift+tab"
-        "alt+left"
-      ];
+      next_tab = "alt+tab";
+      previous_tab = "alt+shift+tab";
       next_workspace = "alt+down";
       previous_workspace = "alt+up";
       toggle_sidebar = "alt+a";
@@ -201,6 +227,16 @@ let
           key = "alt+t";
           type = "shell";
           command = toString toggleTabBar;
+        }
+        {
+          key = "alt+left";
+          type = "shell";
+          command = "${focusPaneOrTab} left";
+        }
+        {
+          key = "alt+right";
+          type = "shell";
+          command = "${focusPaneOrTab} right";
         }
       ];
       workspace_picker = [
@@ -266,6 +302,8 @@ let
       toast.delivery = "system";
       # alt+t l'affiche pour un tab seul (toggleTabBar) : elle porte l'indicateur de zoom.
       hide_tab_bar_when_single_tab = true;
+      # Le tab naît avec sa position pour nom, que herdr-shell remplace par « <hôte>: <dossier> ».
+      prompt_new_tab_name = false;
       tab_bar_right = [ { type = "zoom"; } ];
       pane_scrollbars = false;
       # alt+a cache toute la sidebar au lieu de la réduire à une colonne.
