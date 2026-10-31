@@ -148,16 +148,34 @@ let
       where = "modules/user/agents/herdr/default.nix";
     };
 
-  # mod+entrée : une fenêtre sur un workspace neuf dans ~. Les workspaces restent ouverts :
-  # à partir de 10 en local, une notification le signale sans bloquer l'ouverture.
+  # mod+entrée : une fenêtre sur un workspace neuf dans ~, ajouté en fin de liste. Les
+  # workspaces vierges laissés par une ouverture précédente (un tab, un pane, dans ~, sans
+  # agent, sans historique, rien d'autre que le shell) sont fermés d'abord. Les autres
+  # restent : à partir de 10 en local, une notification le signale sans bloquer l'ouverture.
   herdrNewWindow = cfg.pkgs.writeShellScript "herdr-new-window" ''
-    n=$(${lib.getExe herdr} workspace list 2>/dev/null \
-      | ${lib.getExe cfg.pkgs.jq} '.result.workspaces | length' 2>/dev/null || echo 0)
+    herdr=${lib.getExe herdr}
+    jq=${lib.getExe cfg.pkgs.jq}
+    workspaces=$($herdr workspace list 2>/dev/null) || workspaces='{}'
+    panes=$($herdr pane list 2>/dev/null) || panes='{}'
+    blank=$($jq -rn --argjson ws "$workspaces" --argjson p "$panes" --arg home "$HOME" '
+      [$ws.result.workspaces[]? | select(.tab_count == 1 and .pane_count == 1 and .label == "~")
+        | .workspace_id] as $ids
+      | $p.result.panes[]? | select(.workspace_id as $w | $ids | index($w))
+      | select(.cwd == $home and .foreground_cwd == $home and .agent == null
+          and .scroll.max_offset_from_bottom == 0)
+      | .pane_id')
+    for pane in $blank; do
+      $herdr pane process-info --pane "$pane" 2>/dev/null | $jq -e '
+        .result.process_info as $i
+        | ($i.foreground_processes | length) == 1 and $i.foreground_processes[0].pid == $i.shell_pid
+      ' >/dev/null && $herdr workspace close "''${pane%%:*}" >/dev/null 2>&1
+    done
+    n=$($herdr workspace list 2>/dev/null | $jq '.result.workspaces | length' 2>/dev/null || echo 0)
     n=$((''${n:-0} + 1))
     if [ "$n" -ge 10 ]; then
       ${cfg.pkgs.libnotify}/bin/notify-send --app-name Herdr "herdr" "$n workspaces ouverts" &
     fi
-    HERDR_NEW_WORKSPACE_CWD=$HOME exec ${lib.getExe herdr}
+    HERDR_NEW_WORKSPACE_CWD=$HOME exec $herdr
   '';
 
   herdr = cfg.pkgs.stdenvNoCC.mkDerivation {
