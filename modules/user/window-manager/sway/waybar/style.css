@@ -11,8 +11,8 @@ window#waybar {
 
 /* Workspaces : pastilles dans un bloc arrondi, l'actif en accent. */
 #workspaces {
-  margin: 4px 0 4px 8px;
-  padding: 3px;
+  margin: 1px 0 1px 8px;
+  padding: 2px;
   border-radius: 10px;
   background: @base01@;
 }

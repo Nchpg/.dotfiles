@@ -403,6 +403,9 @@ in
               myLib.desktop.mkTerminalCmd {
                 inherit config;
                 exec = lib.getExe herdr;
+                # En points : 1.5 pt = 2 px en haut et en bas. waybar (30 px) + 58 lignes
+                # de 27 px remplissent alors l'écran, sans bande vide autour de herdr.
+                kittyExtraOpts = "-o 'window_padding_width=1.5 4'";
               }
             }
           '';

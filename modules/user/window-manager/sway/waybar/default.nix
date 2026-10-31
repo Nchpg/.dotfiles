@@ -253,7 +253,8 @@ in
 
       settings.mainBar = {
         layer = "top";
-        height = 38;
+        # Minimum imposé par la pastille des workspaces (style.css).
+        height = 30;
         position = "top";
         spacing = 4;
 
