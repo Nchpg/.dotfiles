@@ -300,8 +300,11 @@ let
       status_indicators = "symbols";
       window_title = windowTitle;
       toast.delivery = "system";
+      sound.enabled = false;
       # alt+t l'affiche pour un tab seul (toggleTabBar) : elle porte l'indicateur de zoom.
       hide_tab_bar_when_single_tab = true;
+      # waybar ferme le haut de l'écran, les tabs le bas.
+      tab_bar_position = "bottom";
       # Le tab naît avec sa position pour nom, que herdr-shell remplace par « <hôte>: <dossier> ».
       prompt_new_tab_name = false;
       tab_bar_right = [ { type = "zoom"; } ];
