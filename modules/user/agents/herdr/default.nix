@@ -93,12 +93,49 @@ let
     '';
   };
 
-  # Absent de nixpkgs : binaire release statique (static-pie), rien à patcher.
+  # Absent de nixpkgs : compilé depuis les sources de la release (paquet nix de l'amont),
+  # pour y ajouter l'action toggle_tab_bar. fetchTarball et pas fetchFromGitHub : son
+  # nix/package.nix est importé, ce qui ferait de l'import-from-derivation.
+  # Alt+up/down montre aussi la sidebar repliée pendant 0,5 s (sidebar-peek.patch).
+  herdrUnwrapped =
+    # Une release qui touche un de ces fichiers fait échouer le build : rebaser ou retirer le patch.
+    # sidebar-peek.patch s'applique par-dessus toggle-tab-bar.patch (actions.rs en commun).
+    myLib.packaging.mkGuardedPatch {
+      package = toggleTabBar;
+      patch = ./sidebar-peek.patch;
+      files = {
+        "src/client/mod.rs" = "918298d730dc9fb8dcd2ef00018e204d592697e4bb0acd6f1b68a59a7bf0604e";
+        "src/client/shell/actions.rs" = "3ce241364f1a35c20926c27b400b576e954f46040e0144f3f5f7e5bc37ed2256";
+        "src/client/shell/state.rs" = "bbecf709e8e01ebc32becf41b6d532a09c348c3ba4b66c2a0ee3948d73b02362";
+      };
+      where = "modules/user/agents/herdr/default.nix";
+    };
+
+  # Action toggle_tab_bar : affiche ou masque la barre des tabs d'un workspace à un seul tab.
+  toggleTabBar =
+    let
+      src = builtins.fetchTarball {
+        url = "https://github.com/herdrdev/herdr/archive/refs/tags/v${pinned.version}.tar.gz";
+        sha256 = pinned.hash;
+      };
+    in
+    myLib.packaging.mkGuardedPatch {
+      package = cfg.pkgs.callPackage "${src}/nix/package.nix" { };
+      patch = ./toggle-tab-bar.patch;
+      files = {
+        "src/client/shell/actions.rs" = "3ce241364f1a35c20926c27b400b576e954f46040e0144f3f5f7e5bc37ed2256";
+        "src/config/keybinds.rs" = "4c56cc268ae9c54ca834d18cb3dfda938a17467cc0057179611f10113ff874b2";
+        "src/config/model.rs" = "22a0e0ea19728d63dca866ea8669ca558e516d8d4ccac346a262aba4ec6ad6b2";
+        "src/input/keybind_help.rs" = "b2b061038953772c4b49ecff58356bb26decdddaa5610e3063035fecfedc0183";
+        "src/input/keybindings.rs" = "c6d01acf8fb18812662ee64d7d570ccfac16d23e902aa3378c896d3c5b58f876";
+        "src/main.rs" = "0c7be66cb1c0247d1bfebb68eae6d5fcdf40b8a6931d19d4554b1376becb9c45";
+      };
+      where = "modules/user/agents/herdr/default.nix";
+    };
+
   herdr = cfg.pkgs.stdenvNoCC.mkDerivation {
     pname = "herdr";
     version = pinned.version;
-
-    src = myLib.packaging.fetchPinned cfg.pkgs ./pinned.json;
 
     dontUnpack = true;
     dontBuild = true;
@@ -107,7 +144,7 @@ let
 
     installPhase = ''
       runHook preInstall
-      install -Dm755 $src $out/libexec/herdr
+      install -Dm755 ${lib.getExe herdrUnwrapped} $out/libexec/herdr
       makeWrapper $out/libexec/herdr $out/bin/herdr \
         --prefix PATH : ${notifySend}/bin
       runHook postInstall
@@ -137,21 +174,6 @@ let
       esac
     fi
     exec -a "$0" ${lib.getExe config.programs.${config.userSettings.shell.default}.package} "$@"
-  '';
-
-  # herdr n'a pas d'action pour la barre des tabs : on bascule l'option dans la copie
-  # de la config, puis on recharge. Le prochain rebuild remet la valeur par défaut.
-  # herdr lance la commande deux fois par appui (~150 ms d'écart) : on ignore le second.
-  toggleTabBar = cfg.pkgs.writeShellScript "herdr-toggle-tab-bar" ''
-    stamp=''${XDG_RUNTIME_DIR:-/tmp}/herdr-toggle-tab-bar
-    now=$(date +%s%N)
-    last=$(cat "$stamp" 2>/dev/null || echo 0)
-    [ $((now - last)) -lt 500000000 ] && exit 0
-    echo "$now" > "$stamp"
-    f=${config.xdg.configHome}/herdr/config.toml
-    if grep -q '^hide_tab_bar_when_single_tab = true' "$f"; then v=false; else v=true; fi
-    sed -i "s/^hide_tab_bar_when_single_tab = .*/hide_tab_bar_when_single_tab = $v/" "$f"
-    ${lib.getExe herdr} server reload-config >/dev/null 2>&1
   '';
 
   # alt+left/right : pane voisin, ou tab précédent/suivant (en boucle) au bord.
@@ -222,12 +244,9 @@ let
       next_workspace = "alt+down";
       previous_workspace = "alt+up";
       toggle_sidebar = "alt+a";
+      # Action ajoutée par toggle-tab-bar.patch : côté client, donc aussi sur think.
+      toggle_tab_bar = "alt+t";
       command = [
-        {
-          key = "alt+t";
-          type = "shell";
-          command = toString toggleTabBar;
-        }
         {
           key = "alt+left";
           type = "shell";
@@ -301,7 +320,7 @@ let
       window_title = windowTitle;
       toast.delivery = "system";
       sound.enabled = false;
-      # alt+t l'affiche pour un tab seul (toggleTabBar) : elle porte l'indicateur de zoom.
+      # alt+t l'affiche pour un tab seul (toggle_tab_bar) : elle porte l'indicateur de zoom.
       hide_tab_bar_when_single_tab = true;
       # waybar ferme le haut de l'écran, les tabs le bas.
       tab_bar_position = "bottom";

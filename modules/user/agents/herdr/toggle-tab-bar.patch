@@ -1,0 +1,135 @@
+diff --git a/src/client/shell/actions.rs b/src/client/shell/actions.rs
+index 83819b0..86a30f1 100644
+--- a/src/client/shell/actions.rs
++++ b/src/client/shell/actions.rs
+@@ -19,6 +19,12 @@ impl ClientShellState {
+                 outcome.resize = true;
+                 self.persist_chrome_preferences(outcome);
+             }
++            crate::input::KeybindMatch::Action(crate::input::KeybindAction::ToggleTabBar) => {
++                self.config.hide_tab_bar_when_single_tab = !self.config.hide_tab_bar_when_single_tab;
++                self.invalidate_pane_surface();
++                outcome.repaint = true;
++                outcome.resize = true;
++            }
+             crate::input::KeybindMatch::Action(action) => {
+                 if self.workspace_preview_action_blocked()
+                     && matches!(
+diff --git a/src/config/keybinds.rs b/src/config/keybinds.rs
+index 276764a..c8f5ef0 100644
+--- a/src/config/keybinds.rs
++++ b/src/config/keybinds.rs
+@@ -403,6 +403,7 @@ pub struct Keybinds {
+     pub resize_pane_up: ActionKeybinds,
+     pub resize_pane_right: ActionKeybinds,
+     pub toggle_sidebar: ActionKeybinds,
++    pub toggle_tab_bar: ActionKeybinds,
+     pub custom_commands: Vec<CustomCommandKeybind>,
+ }
+ 
+@@ -586,6 +587,7 @@ impl Config {
+             resize_pane_up: empty_action!(),
+             resize_pane_right: empty_action!(),
+             toggle_sidebar: empty_action!(),
++            toggle_tab_bar: empty_action!(),
+             custom_commands: Vec::new(),
+         };
+ 
+@@ -734,6 +736,7 @@ impl Config {
+             apply_action!(keybinds.resize_pane_up, resize_pane_up, source);
+             apply_action!(keybinds.resize_pane_right, resize_pane_right, source);
+             apply_action!(keybinds.toggle_sidebar, toggle_sidebar, source);
++            apply_action!(keybinds.toggle_tab_bar, toggle_tab_bar, source);
+ 
+             if source == field_source!(indexed) {
+                 append_legacy_indexed_bindings(
+diff --git a/src/config/model.rs b/src/config/model.rs
+index 29802fd..2c537c0 100644
+--- a/src/config/model.rs
++++ b/src/config/model.rs
+@@ -455,6 +455,8 @@ pub struct KeysConfig {
+     pub resize_pane_right: BindingConfig,
+     /// Toggle sidebar collapse. Default: "prefix+b"
+     pub toggle_sidebar: BindingConfig,
++    /// Toggle the tab bar of single-tab workspaces. Unset by default.
++    pub toggle_tab_bar: BindingConfig,
+     /// Optional indexed shortcuts expanded over number keys 1-9.
+     pub indexed: IndexedKeysConfig,
+     /// Prefix-mode custom command bindings.
+@@ -592,6 +594,8 @@ pub(crate) struct KeysConfigOverlay {
+     #[serde(skip_serializing_if = "Option::is_none")]
+     toggle_sidebar: Option<BindingConfig>,
+     #[serde(skip_serializing_if = "Option::is_none")]
++    toggle_tab_bar: Option<BindingConfig>,
++    #[serde(skip_serializing_if = "Option::is_none")]
+     indexed: Option<IndexedKeysConfig>,
+     #[serde(skip_serializing)]
+     command: Option<Vec<CommandKeybindConfig>>,
+@@ -703,6 +707,7 @@ impl<'de> Deserialize<'de> for KeysConfig {
+         apply_field!(resize_pane_up);
+         apply_field!(resize_pane_right);
+         apply_field!(toggle_sidebar);
++        apply_field!(toggle_tab_bar);
+         apply_field!(indexed);
+         apply_field!(command);
+ 
+@@ -808,6 +813,7 @@ impl KeysConfig {
+         copy_effective_action_field!(resize_pane_up, keybinds.resize_pane_up);
+         copy_effective_action_field!(resize_pane_right, keybinds.resize_pane_right);
+         copy_effective_action_field!(toggle_sidebar, keybinds.toggle_sidebar);
++        copy_effective_action_field!(toggle_tab_bar, keybinds.toggle_tab_bar);
+         copy_user_field!(indexed);
+ 
+         profile
+@@ -1180,6 +1186,7 @@ impl Default for KeysConfig {
+             resize_pane_up: BindingConfig::empty(),
+             resize_pane_right: BindingConfig::empty(),
+             toggle_sidebar: BindingConfig::one("prefix+b"),
++            toggle_tab_bar: BindingConfig::empty(),
+             indexed: IndexedKeysConfig::default(),
+             command: Vec::new(),
+             user_fields: BTreeSet::new(),
+diff --git a/src/input/keybind_help.rs b/src/input/keybind_help.rs
+index 8007948..0d01ca0 100644
+--- a/src/input/keybind_help.rs
++++ b/src/input/keybind_help.rs
+@@ -189,6 +189,7 @@ pub(crate) fn keybind_help_groups(
+                     "resize pane right",
+                 ),
+                 entry(binding_label(&keybinds.toggle_sidebar), "toggle sidebar"),
++                entry(binding_label(&keybinds.toggle_tab_bar), "toggle tab bar"),
+                 entry(binding_label(&keybinds.focus_pane_left), "focus pane left"),
+                 entry(binding_label(&keybinds.focus_pane_down), "focus pane down"),
+                 entry(binding_label(&keybinds.focus_pane_up), "focus pane up"),
+diff --git a/src/input/keybindings.rs b/src/input/keybindings.rs
+index 9ffce2e..8bdd615 100644
+--- a/src/input/keybindings.rs
++++ b/src/input/keybindings.rs
+@@ -61,6 +61,7 @@ pub(crate) enum KeybindAction {
+     ResizePaneUp,
+     ResizePaneRight,
+     ToggleSidebar,
++    ToggleTabBar,
+     CyclePaneNext,
+     CyclePanePrevious,
+     LastPane,
+@@ -147,6 +148,7 @@ pub(crate) fn resolve_non_indexed_action(
+         (&keybinds.resize_pane_up, KeybindAction::ResizePaneUp),
+         (&keybinds.resize_pane_right, KeybindAction::ResizePaneRight),
+         (&keybinds.toggle_sidebar, KeybindAction::ToggleSidebar),
++        (&keybinds.toggle_tab_bar, KeybindAction::ToggleTabBar),
+         (&keybinds.reload_config, KeybindAction::ReloadConfig),
+         (
+             &keybinds.open_notification_target,
+diff --git a/src/main.rs b/src/main.rs
+index f97e7e2..fe98059 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -192,6 +192,7 @@ const DEFAULT_CONFIG: &str = r##"# herdr configuration
+ # resize_pane_up = ""     # optional, e.g. "ctrl+shift+alt+up"
+ # resize_pane_right = ""  # optional, e.g. "ctrl+shift+alt+right"
+ # toggle_sidebar = "prefix+b"
++# toggle_tab_bar = ""    # optional, unset by default; shows/hides the single-tab tab bar
+ 
+ # Navigate-mode movement. These local shortcuts win while navigate mode is open.
+ # They are independent from focus_pane_*. Do not include prefix+, esc, enter, tab, or 1..9 here.

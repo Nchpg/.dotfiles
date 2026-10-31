@@ -13,9 +13,10 @@ current=$(um_pinned version)
     "https://github.com/herdrdev/herdr/releases/tag/v$version"
 um_skip_if_current herdr "$current" "$version"
 
-url="https://github.com/herdrdev/herdr/releases/download/v${version}/herdr-linux-x86_64"
-echo "🔎 Fetching + hashing binary for $version..."
-hash=$(um_prefetch_url "$url")
-um_write_pinned version="$version" url="$url" hash="$hash"
+# Compilé depuis les sources (cf. default.nix) : hash de l'archive du tag.
+echo "🔎 Fetching + hashing source for $version..."
+hash=$(um_prefetch_gh herdrdev "herdr/v$version")
+um_write_pinned version="$version" hash="$hash"
+echo "⚠️ toggle-tab-bar.patch : le rebuild échoue si les fichiers patchés ont changé (empreintes dans default.nix)."
 
 echo "⬆️ Updated herdr to version $version"
