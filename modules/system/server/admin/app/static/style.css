@@ -324,11 +324,11 @@ fieldset.devices legend { font-weight: 500; padding: 0 6px; }
 :is(.seg, .seg-own) { display: inline-flex; flex-wrap: wrap; padding: 3px; gap: 2px; background: #ECEEF2; }
 :is(.seg, .seg-own) label { cursor: pointer; }
 :is(.seg, .seg-own) input { position: absolute; opacity: 0; pointer-events: none; }
-:is(.seg, .seg-own) :is(label > span, > a, > button) { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; background: none; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+:is(.seg, .seg-own) label > span, :is(.seg, .seg-own) > :is(a, button) { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; background: none; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 :is(.seg, .seg-own) > a > span { display: contents; }
-:is(.seg, .seg-own) :is(label > span, > a, > button):hover { color: var(--text); }
-:is(.seg, .seg-own) :is(input:checked + span, > a[aria-current], > button[aria-pressed="true"]) { background: var(--card); color: var(--text); font-weight: 500; }
-:is(.seg, .seg-own) input:focus-visible + span { outline: 3px solid #C7CCF7; }
+:is(.seg, .seg-own) label > span:hover, :is(.seg, .seg-own) > :is(a, button):hover { color: var(--text); }
+:is(.seg, .seg-own) input:checked + span, :is(.seg, .seg-own) > a[aria-current], :is(.seg, .seg-own) > button[aria-pressed="true"] { background: var(--card); color: var(--text); font-weight: 500; }
+:is(.seg, .seg-own) input:focus-visible + span, :is(.seg, .seg-own) > :is(a, button):focus-visible { outline: 3px solid #C7CCF7; }
 /* Ajouter un dossier de données : un lien qui ouvre un champ et son bouton. */
 .data-adder { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .link-btn { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); font-size: 13.5px; cursor: pointer; list-style: none; }
