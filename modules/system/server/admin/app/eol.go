@@ -113,6 +113,9 @@ type Candidate struct {
 func (s *Server) eolInfos(ctx context.Context, rows []UpdateRow) map[string]EOLInfo {
 	out := map[string]EOLInfo{}
 	for _, r := range rows {
+		if ctx.Err() != nil {
+			break // délai de la vérification dépassé
+		}
 		v := firstOf(r.Next, r.Current)
 		if v == "" {
 			continue

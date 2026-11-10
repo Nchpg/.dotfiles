@@ -57,13 +57,15 @@ func TestInfraTemplates(t *testing.T) {
 			{VPNPeer: VPNPeer{Name: "pixel", Address: "10.8.0.9", PublicKey: "AyLyEp/YhPJaLNMwIfyZibWt6XymReCgVUXLLQ6JqXs=", Added: true}, Pending: true}}, "Connected": 1, "Total": 1, "Endpoint": "vpn:51820", "Subnet": "10.8.0.0/24"},
 		"vpn-new": {"Nav": "vpn", "Address": "10.8.0.9", "Services": []VPNService{{Name: "admin", Label: "Dashboard admin", Host: "admin.vpn"}}, "Checked": map[string]bool{"admin": true}},
 		"vpn-access": {"Nav": "vpn", "Peer": VPNPeer{Name: "gram", Address: "10.8.0.3", Added: true}, "Services": []VPNService{{Name: "vaultwarden", Label: "Vaultwarden", Host: "vault.vpn"}}, "Checked": map[string]bool{},
-			"Sites": []AccessSite{{Site: "myetf", App: "myetf", Domain: "etf.vpn", On: true}, {Site: "myetf", Env: "staging", App: "myetf-staging", Inherited: true, From: "production"}}, "Self": true},
-		"vpn-added":       {"Nav": "vpn", "Name": "pixel", "Address": "10.8.0.9", "Conf": "[Interface]\n", "QR": qrSVG(t.Context(), "x"), "Download": "data:text/plain;base64,eA==", "Secret": "wireguard:\n  pixel_preshared_key: K", "SecretKey": "wireguard/pixel_preshared_key"},
-		"ssh":             {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
-		"ssh-new":         {"Nav": "ssh", "User": "nchpg", "Users": []string{"nchpg"}, "Device": "pixel", "Ready": true, "Comment": "nchpg@pixel", "Line": "ssh-ed25519 AAAA nchpg@pixel", "Info": SSHInfo{Port: 3249, Host: "10.8.0.1", Files: []string{"profiles/server/default.nix"}}, "Fingerprint": "SHA256:x", "Added": true},
-		"account-new":     {"Nav": "accounts", "Name": "marie", "Snippet": "marie:", "Secret": "authelia/users", "Portal": "auth.x", "Granted": true, "GrantedServices": []string{"nextcloud"}, "SSO": true, "Track": &Track{ID: "x", Label: "Accès de marie", State: "running"}},
-		"accounts":        {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h", Services: []string{"admin"}, Sites: []string{"myetf-preview"}}}},
-		"account-removed": {"Nav": "accounts", "Name": "olivier", "Secret": "authelia/users", "Track": &Track{ID: "x", Label: "Accès", State: "done", SHA: "abc1234"}},
+			"Sites": []AccessSite{{Site: "myetf", App: "myetf", Domain: "etf.vpn", On: true}, {Site: "myetf", Env: "staging", App: "myetf-staging", Inherited: true, From: "production"}}, "Self": true, "Lock": "vaultwarden", "Pending": true, "Token": "t"},
+		"vpn-added-replay": {"Nav": "vpn", "Name": "pixel", "Replay": true},
+		"vpn-added":        {"Nav": "vpn", "Name": "pixel", "Address": "10.8.0.9", "Conf": "[Interface]\n", "QR": qrSVG(t.Context(), "x"), "Download": "data:text/plain;base64,eA==", "Secret": "wireguard:\n  pixel_preshared_key: K", "SecretKey": "wireguard/pixel_preshared_key"},
+		"ssh":              {"Nav": "ssh", "Rows": []SSHKeyRow{{User: "nchpg", Type: "ed25519", Comment: "nchpg@gram", Fingerprint: "SHA256:x"}}},
+		"ssh-new":          {"Nav": "ssh", "User": "nchpg", "Users": []string{"nchpg"}, "Device": "pixel", "Ready": true, "Comment": "nchpg@pixel", "Line": "ssh-ed25519 AAAA nchpg@pixel", "Info": SSHInfo{Port: 3249, Host: "10.8.0.1", Files: []string{"profiles/server/default.nix"}}, "Fingerprint": "SHA256:x", "Added": true},
+		"account-new":      {"Nav": "accounts", "Name": "marie", "Snippet": "marie:", "Secret": "authelia/users", "Portal": "auth.x", "Granted": true, "GrantedServices": []string{"nextcloud"}, "SSO": true, "Track": &Track{ID: "x", Label: "Accès de marie", State: "running"}},
+		"accounts":         {"Nav": "accounts", "Rows": []AccountRow{{Account: Account{Name: "nathan", Email: "n@x", Groups: []string{"admins"}, TOTP: true, LastLogin: &last}, Last: "il y a 2 h", Services: []string{"admin"}, Sites: []string{"myetf-preview"}}, {Account: Account{Name: "marie"}, Pending: true, Services: []string{"nextcloud"}}}, "Notice": "rien à changer", "Error": "x", "MainError": "y", "SummaryError": "z"},
+		"account-new-form": {"Nav": "accounts", "Services": []VPNService{{Name: "admin", Label: "A"}}, "Checked": map[string]bool{}, "SSO": true, "MainError": "main", "Token": "t"},
+		"account-removed":  {"Nav": "accounts", "Name": "olivier", "Secret": "authelia/users", "Track": &Track{ID: "x", Label: "Accès", State: "done", SHA: "abc1234"}},
 		"account-access": {"Nav": "accounts", "Name": "olivier", "Services": []VPNService{{Name: "nextcloud", Label: "Nextcloud", Host: "cloud"}}, "Checked": map[string]bool{"nextcloud": true},
 			"Sites": []AccessSite{{Site: "myetf", Env: "preview", App: "myetf-preview", Domain: "etf-prev", On: true}}, "Self": true},
 		"traffic": {"Nav": "traffic", "Services": []TrafficRow{{Name: "nextcloud", Domain: "cloud.x", Link: "/traffic/cloud.x?p=7j", Access: "VPN", Visits: 3, Last: "il y a 2 min"}},
@@ -85,7 +87,7 @@ func TestInfraTemplates(t *testing.T) {
 	}
 	for name, data := range pages {
 		var buf bytes.Buffer
-		if err := s.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+		if err := s.tmpl.ExecuteTemplate(&buf, strings.TrimSuffix(strings.TrimSuffix(name, "-replay"), "-form"), data); err != nil {
 			t.Errorf("%s : %v", name, err)
 		}
 	}
@@ -172,7 +174,90 @@ func TestRebootOf(t *testing.T) {
 	if r := rebootOf(same, mk("c", "7.3.1", "initrd")); r == nil || r.Booted != "7.2.7" || r.Current != "7.3.1" {
 		t.Errorf("noyau changé : %+v", r)
 	}
+	if r := rebootOf(same, mk("c", "7.3.1", "initrd")); r == nil || !strings.HasPrefix(r.Text(), "noyau 7.3.1 installé, 7.2.7") {
+		t.Errorf("noyau changé : %v", r)
+	}
 	if r := rebootOf(same, mk("d", "7.2.7", "initrd2")); r == nil {
 		t.Errorf("initrd changé : pas de redémarrage demandé")
+	} else if !slices.Equal(r.Parts, []string{"initrd"}) || !strings.Contains(r.Text(), "même noyau 7.2.7, mais initrd changés") {
+		t.Errorf("initrd seul : %+v, %q", r, r.Text())
+	}
+}
+
+// Clés SSH : même ordre d'un rendu à l'autre (connectées, puis par compte, hors liste en dernier).
+func TestSortKeyRows(t *testing.T) {
+	rows := []SSHKeyRow{{Fingerprint: "z", Unknown: true}, {User: "b", Comment: "x"}, {User: "a", Comment: "y"}, {User: "b", Comment: "a", Connected: true}, {Fingerprint: "c", Unknown: true}}
+	sortKeyRows(rows)
+	var got []string
+	for _, r := range rows {
+		got = append(got, r.User+r.Comment+r.Fingerprint)
+	}
+	if want := []string{"ba", "ay", "bx", "c", "z"}; !slices.Equal(got, want) {
+		t.Errorf("%v, attendu %v", got, want)
+	}
+}
+
+// Accès : seuls les sites avec leur propre accès dont la case change ; services connus seulement.
+func TestAccessChanges(t *testing.T) {
+	sites := []AccessSite{{Site: "a", App: "a", On: true}, {Site: "b", App: "b"}, {Site: "c", Env: "preview", App: "c-preview", Inherited: true}}
+	got := siteChanges([]string{"b", "c-preview"}, sites)
+	if want := []siteAccess{{"a", "", false}, {"b", "", true}}; !slices.Equal(got, want) {
+		t.Errorf("changements : %v, attendu %v", got, want)
+	}
+	if got := siteChanges([]string{"a"}, sites); len(got) != 0 {
+		t.Errorf("rien de changé : %v", got)
+	}
+	services, checked := checkedServices([]string{"admin", "intrus"}, []VPNService{{Name: "admin"}, {Name: "vault"}})
+	if !slices.Equal(services, []string{"admin"}) || !checked["admin"] || checked["intrus"] {
+		t.Errorf("services : %v %v", services, checked)
+	}
+	if s, _ := checkedServices(nil, nil); s == nil {
+		t.Error("aucun service : attendu [] (pas null dans le JSON)")
+	}
+	if !sameSet([]string{"b", "a"}, []string{"a", "b", "a"}) || sameSet([]string{"a"}, nil) {
+		t.Error("sameSet")
+	}
+}
+
+// Abréviation : coupe sans paniquer, même sur une clé vide ou courte.
+func TestAbbrev(t *testing.T) {
+	for in, want := range map[string]string{"": "", "abc": "abc", "abcdefghijkl": "abcdefghij…", "éèàçùéèàçùé": "éèàçùéèàçù…"} {
+		if got := abbrev(in, 10); got != want {
+			t.Errorf("%q : %q, attendu %q", in, got, want)
+		}
+	}
+}
+
+// Jeton de formulaire : vu une fois servi ; inconnu (ou vide) sinon.
+func TestFormSeen(t *testing.T) {
+	if _, seen := formSeen(""); seen {
+		t.Error("jeton vide vu")
+	}
+	tok := formToken()
+	if _, seen := formSeen(tok); seen {
+		t.Error("jeton neuf vu")
+	}
+	forms.Lock()
+	forms.used[tok] = formUse{id: "abc"}
+	forms.Unlock()
+	if id, seen := formSeen(tok); !seen || id != "abc" {
+		t.Errorf("jeton servi : %q %v", id, seen)
+	}
+}
+
+// Page Accès depuis l'appareil qui s'en sert : le dashboard coché, grisé, et envoyé quand même ; deux
+// formulaires, deux jetons (un retour arrière ne prend pas l'un pour l'autre).
+func TestAccessLockAndTokens(t *testing.T) {
+	s, _ := testServer(t)
+	var buf bytes.Buffer
+	data := map[string]any{"Nav": "vpn", "Peer": VPNPeer{Name: "gram", Address: "10.8.0.3", Added: true}, "Services": []VPNService{{Name: "admin", Label: "Dashboard"}}, "Checked": map[string]bool{}, "Lock": "admin", "Token": "T"}
+	if err := s.tmpl.ExecuteTemplate(&buf, "vpn-access", data); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{`<input type="hidden" name="service" value="admin">`, `value="admin" checked disabled`, `name="token" value="T"`, `name="token" value="T-retrait"`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("absent : %s", want)
+		}
 	}
 }

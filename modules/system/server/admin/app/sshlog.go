@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -102,7 +100,7 @@ func summarize(events []sshEvent, sessions []SSHSession) sshActivity {
 			refused[e.IP] = r
 		}
 		r.Count++
-		if e.User != "" && !containsStr(r.Users, e.User) {
+		if e.User != "" && !slices.Contains(r.Users, e.User) {
 			r.Users = append(r.Users, e.User)
 		}
 		if e.At.After(r.last) {
@@ -127,70 +125,22 @@ func summarize(events []sshEvent, sessions []SSHSession) sshActivity {
 	return a
 }
 
-func containsStr(list []string, v string) bool {
-	for _, x := range list {
-		if x == v {
-			return true
-		}
-	}
-	return false
-}
-
-// lokiLimit : le plafond de lignes d'une requête Loki (max_entries_limit_per_query par défaut).
-const lokiLimit = 5000
-
-// sshLog : les lignes utiles du journal de sshd sur la fenêtre de Loki, les plus récentes d'abord.
+// sshLog : les événements SSH de la fenêtre des journaux, les plus récents d'abord. Même lecteur que
+// le Trafic (page par page) : `truncated` si le plafond lokiCap a coupé les plus anciens.
 func (s *Server) sshLog(ctx context.Context) (events []sshEvent, truncated bool, err error) {
-	if s.cfg.Loki == "" {
-		return nil, false, fmt.Errorf("pas de Loki")
-	}
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
 	now := time.Now()
-	q := url.Values{
-		"query":     {fmt.Sprintf(`{unit=%q} |~ "Accepted publickey|(authenticating|invalid) user"`, s.cfg.SSHUnit)},
-		"start":     {strconv.FormatInt(now.Add(-s.cfg.LogsWindow).UnixNano(), 10)},
-		"end":       {strconv.FormatInt(now.UnixNano(), 10)},
-		"limit":     {strconv.Itoa(lokiLimit)},
-		"direction": {"backward"},
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.cfg.Loki+"/loki/api/v1/query_range?"+q.Encode(), nil)
+	query := fmt.Sprintf(`{unit=%q} |~ "Accepted publickey|(authenticating|invalid) user"`, s.cfg.SSHUnit)
+	entries, complete, err := s.lokiRange(ctx, query, now.Add(-s.cfg.LogsWindow), now)
 	if err != nil {
 		return nil, false, err
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, false, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, false, fmt.Errorf("loki : %s", resp.Status)
-	}
-	var body struct {
-		Data struct {
-			Result []struct {
-				Values [][2]string `json:"values"`
-			} `json:"result"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, false, err
-	}
-	n := 0
-	for _, r := range body.Data.Result {
-		for _, v := range r.Values {
-			n++
-			ns, err := strconv.ParseInt(v[0], 10, 64)
-			if err != nil {
-				continue
-			}
-			if e, ok := parseSSHLine(time.Unix(0, ns), v[1]); ok {
-				events = append(events, e)
-			}
+	for _, e := range entries {
+		if ev, ok := parseSSHLine(e.At, e.Line); ok {
+			events = append(events, ev)
 		}
 	}
 	sort.Slice(events, func(i, j int) bool { return events[i].At.After(events[j].At) })
-	return events, n >= lokiLimit, nil
+	return events, !complete, nil
 }
 
 // sshSessions : les sessions SSH ouvertes, d'après logind.

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -52,9 +52,7 @@ func (s *Server) cveInfos() map[string]CVEInfo {
 	defer cveCache.Unlock()
 	if cveCache.m == nil {
 		cveCache.m = map[string]CVEInfo{}
-		if b, err := os.ReadFile(s.cveFile()); err == nil {
-			_ = json.Unmarshal(b, &cveCache.m)
-		}
+		loadJSONState(s.cveFile(), &cveCache.m)
 	}
 	out := make(map[string]CVEInfo, len(cveCache.m))
 	for k, v := range cveCache.m {
@@ -67,9 +65,7 @@ func (s *Server) saveCVEInfos(m map[string]CVEInfo) {
 	cveCache.Lock()
 	defer cveCache.Unlock()
 	cveCache.m = m
-	if b, err := json.Marshal(m); err == nil {
-		_ = os.WriteFile(s.cveFile(), b, 0o644)
-	}
+	saveJSONState(s.cveFile(), m)
 }
 
 // addCVEInfos : ce que dit l'avis d'un dépôt (note, gravité, numéro CVE), sans écraser une note déjà
@@ -94,7 +90,9 @@ func (s *Server) addCVEInfos(add map[string]CVEInfo) {
 	s.saveCVEInfos(infos)
 }
 
-// scoreCVEs : la note de chaque CVE des analyses (celles qui manquent ou ont vieilli) et le KEV.
+// scoreCVEs : la note de chaque CVE des analyses gardées (celles qui manquent ou ont vieilli) et le
+// KEV. Une note qui ne sert plus à aucune analyse s'en va avec l'âge (keepAnalyses). Les échecs sont
+// regroupés par message (« NVD : 403 Forbidden pour 38 CVE ») : une panne de NVD fait une ligne.
 func (s *Server) scoreCVEs(ctx context.Context) error {
 	infos := s.cveInfos()
 	ids := map[string]bool{}
@@ -108,37 +106,49 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 		}
 	}
 	kev, kevErr := s.kevSet(ctx)
-	var errs []string
-	asked := 0
+	var stale []string
 	for id := range ids {
 		info, ok := infos[id]
-		stale := !ok || (info.Score == 0 && time.Since(info.At) > cveRetry) || time.Since(info.At) > cveRefresh
-		if stale {
-			if asked > 0 && strings.HasPrefix(id, "CVE-") {
-				if !sleep(ctx, nvdPause) {
-					break
-				}
-			}
-			asked++
-			fresh, err := s.fetchCVE(ctx, id)
-			if err != nil {
-				errs = append(errs, id+" : "+err.Error())
-				if !ok {
-					continue
-				}
-			} else {
-				// Une note publique remplace celle de l'avis du dépôt ; sans elle, l'avis reste.
-				if fresh.Score == 0 && ok {
-					fresh.Score, fresh.Network = info.Score, info.Network
-				}
-				fresh.Severity, fresh.Alias = firstOf(fresh.Severity, info.Severity), firstOf(fresh.Alias, info.Alias)
-				info = fresh
+		if !ok || (info.Score == 0 && time.Since(info.At) > cveRetry) || time.Since(info.At) > cveRefresh {
+			stale = append(stale, id)
+		}
+	}
+	sort.Strings(stale)
+	failed := map[string][]string{} // message → CVE
+	var order []string
+	asked := 0
+	for _, id := range stale {
+		info, ok := infos[id]
+		if asked > 0 && strings.HasPrefix(id, "CVE-") {
+			if !sleep(ctx, nvdPause) {
+				break
 			}
 		}
-		if kevErr == nil {
-			info.KEV = kev[id]
+		asked++
+		setPhase("notes des CVE %d/%d", asked, len(stale))
+		fresh, err := s.fetchCVE(ctx, id)
+		if err != nil {
+			if failed[err.Error()] == nil {
+				order = append(order, err.Error())
+			}
+			failed[err.Error()] = append(failed[err.Error()], id)
+			continue
 		}
-		infos[id] = info
+		// Une note publique remplace celle de l'avis du dépôt ; sans elle, l'avis reste.
+		if fresh.Score == 0 && ok {
+			fresh.Score, fresh.Network = info.Score, info.Network
+		}
+		fresh.Severity, fresh.Alias = firstOf(fresh.Severity, info.Severity), firstOf(fresh.Alias, info.Alias)
+		fresh.KEV = info.KEV
+		infos[id] = fresh
+	}
+	if kevErr == nil {
+		for id := range ids {
+			if info, ok := infos[id]; ok {
+				info.KEV = kev[id]
+				infos[id] = info
+			}
+		}
 	}
 	// Un GHSA prend la note et le KEV de sa CVE.
 	for id, info := range infos {
@@ -150,12 +160,26 @@ func (s *Server) scoreCVEs(ctx context.Context) error {
 			infos[id] = info
 		}
 	}
+	for id, info := range infos {
+		if !ids[id] && time.Since(info.At) > keepAnalyses {
+			delete(infos, id)
+		}
+	}
 	s.saveCVEInfos(infos)
+	var errs []string
+	for _, msg := range order {
+		list := failed[msg]
+		if len(list) == 1 {
+			errs = append(errs, list[0]+" : "+msg)
+		} else {
+			errs = append(errs, fmt.Sprintf("%s pour %d CVE (%s…)", msg, len(list), list[0]))
+		}
+	}
 	if kevErr != nil {
 		errs = append(errs, "catalogue KEV : "+kevErr.Error())
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("notes des CVE : %s", strings.Join(errs, " ; "))
+		return fmt.Errorf("%s ; redemandées à la prochaine vérification", strings.Join(errs, " ; "))
 	}
 	return nil
 }

@@ -414,6 +414,25 @@ in
           "AF_INET"
           "AF_INET6"
         ];
+        # Confinement du reste (systemd-analyze security admin) : le service lance nix, git, bash
+        # (les update.sh du dépôt, avec un jeton GitHub), curl et qrencode. Les constructions passent
+        # par nix-daemon : le client n'a besoin ni d'espaces de noms ni de capacités. Un appel système
+        # refusé échoue (EPERM) au lieu de tuer le processus. Pas de ProcSubset=pid : la page lit
+        # /proc/sys/kernel/osrelease ; pas de MemoryDenyWriteExecute (nix eval non testé avec).
+        ProtectKernelModules = true;
+        ProtectKernelLogs = true;
+        ProtectClock = true;
+        ProtectHostname = true;
+        ProtectProc = "invisible";
+        LockPersonality = true;
+        RestrictRealtime = true;
+        RestrictNamespaces = true;
+        SystemCallArchitectures = "native";
+        SystemCallFilter = [ "@system-service" ];
+        SystemCallErrorNumber = "EPERM";
+        CapabilityBoundingSet = "";
+        # admin-recopy lit les .want en root : un masque fermé ne le gêne pas.
+        UMask = "0077";
       };
     };
 
@@ -502,6 +521,9 @@ in
             | [.[$a].pairs[] | select(($want | length) == 0 or (.to | IN($want[])))]' "$map")
           if [ "$(jq length <<< "$pairs")" = 0 ]; then
             echo "demande ignorée : aucun dossier en copie de $app ne correspond" >&2
+            # Visible dans la page (sinon la demande reste « en attente » jusqu'au délai du dashboard).
+            jq -n '{state: "failed", detail: "aucun dossier en copie ne correspond à la demande", at: (now | floor), paths: []}' > "$status_dir/$app.json.tmp"
+            mv "$status_dir/$app.json.tmp" "$status_dir/$app.json"
             continue
           fi
           write() {

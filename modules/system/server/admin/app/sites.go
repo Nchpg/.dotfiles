@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -14,29 +13,48 @@ import (
 	"time"
 )
 
-var palette = [][2]string{
-	{"#EEF0FD", "#3B47C4"}, {"#FFF1E7", "#B4440C"}, {"#E9F8EF", "#15803D"}, {"#E8F4FB", "#0B6A9E"},
-	{"#FCEEF5", "#B0185A"}, {"#FDF6E3", "#8D5B05"}, {"#F3F0FD", "#5B3DC2"}, {"#EAF7F6", "#0F766E"},
-}
-
-func colorsOf(name string) (string, string) {
-	sum := sha256.Sum256([]byte(name))
-	c := palette[int(sum[0])%len(palette)]
-	return c[0], c[1]
-}
-
+// StateCard : le bandeau d'état. Tone : ok, warn, bad, busy (en cours, animé) ou idle (inconnu) ;
+// CheckoutInk : la classe du texte du clone (ok, warn-ink, muted).
 type StateCard struct {
-	Title, Chip, Text, Tint, Ink, Icon string
-	Think, Main                        string
-	Pending                            []string
-	Checkout                           string
-	CheckoutInk                        string
-	Busy, CheckoutBusy                 bool // en cours : animés
+	Title, Chip, Text, Tone string
+	Think, Main             string
+	Pending                 []string
+	Checkout                string
+	CheckoutInk             string
+	Busy, CheckoutBusy      bool // en cours : animés
+}
+
+// Sq : la classe du carré du bandeau (.sq.up|down|idle|busy ; warn n'en a pas : le template le colore).
+func (c StateCard) Sq() string {
+	switch c.Tone {
+	case "ok":
+		return "up"
+	case "bad":
+		return "down"
+	case "warn", "busy":
+		return c.Tone
+	}
+	return "idle"
+}
+
+// Ink : la classe du texte du bandeau.
+func (c StateCard) Ink() string {
+	switch c.Tone {
+	case "ok":
+		return "ok"
+	case "warn":
+		return "warn-ink"
+	case "bad":
+		return "bad"
+	case "busy":
+		return "accent"
+	}
+	return "muted"
 }
 
 // ActivityItem : un commit de sites, lu comme une phrase (site, ce qui change, type).
 type ActivityItem struct {
-	Name, What, Kind, Icon, Ink string
+	Name, What, Kind, Icon, Ink string // Ink : classe de couleur de l'icône (ok, accent, warn-ink)
 	Rev, Time, URL              string
 }
 
@@ -58,11 +76,10 @@ type ActivityDay struct {
 type SiteRow struct {
 	Name, Label, Branch, Domain, URL, EditURL string
 	VPN, SSO, Up, Probed                      bool
-	NoTunnel                                  bool // en VPN, mais le nom ne pointe pas sur think dans le tunnel
-	Memory, Rev, Frozen                       string
+	NoTunnel                                  bool   // en VPN, mais le nom ne pointe pas sur think dans le tunnel
+	Memory, Rev, Frozen                       string // mémoire du conteneur d'entrée, commit de son image
 	First                                     bool
 	Span                                      int
-	Initial, Tint, Ink                        string
 	Repo                                      string
 	Job                                       *JobBadge // sur la ligne du déploiement touché
 	SiteJob                                   *JobBadge // sous le nom du site, si aucune ligne n'est touchée
@@ -78,6 +95,21 @@ type SiteGroup struct {
 // sitesData : tableau et compteurs de la page Sites (aussi servis seuls, pour le rafraîchissement).
 func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 	up := s.probes(ctx)
+	// Noms servis en VPN : résolus ensemble d'avance (seuls ceux jamais vus attendent le résolveur).
+	var tunnelHosts []string
+	for _, name := range snap.Apps.Names() {
+		for _, d := range snap.Apps.Entries[name].Deploys(name) {
+			if d.VPN() {
+				tunnelHosts = append(tunnelHosts, d.Domain(s.cfg.Domain))
+			}
+		}
+	}
+	for _, sv := range s.cfg.Services {
+		if !sv.Public {
+			tunnelHosts = append(tunnelHosts, sv.Domain)
+		}
+	}
+	s.prefetchTunnels(tunnelHosts)
 	var groups []SiteGroup
 	vpn, public, online, total, probed := 0, 0, 0, 0, 0
 	running := false
@@ -154,18 +186,18 @@ func (s *Server) sitesData(ctx context.Context, snap *Snapshot) map[string]any {
 		}
 	}
 	upCount, probedCount := online+svcUp, probed+svcProbed
-	onlineInk := "#8A919D" // rien de sondé
+	onlineState := "idle" // rien de sondé
 	switch {
 	case probedCount > 0 && upCount == probedCount:
-		onlineInk = "#22C55E"
+		onlineState = "up"
 	case probedCount > 0:
-		onlineInk = "#DC2626"
+		onlineState = "down"
 	}
 	return map[string]any{"Nav": "sites", "Groups": groups, "Adding": adding, "Every": every,
 		"Sites": len(groups), "Total": total, "Online": online, "VPN": vpn, "Public": public,
 		"Services": services, "ServicesUp": svcUp,
 		"CountAll": total + len(services), "CountPublic": public + svcPublic, "CountVPN": vpn + len(services) - svcPublic,
-		"UpCount": upCount, "ProbedCount": probedCount, "OnlineInk": onlineInk,
+		"UpCount": upCount, "ProbedCount": probedCount, "OnlineState": onlineState,
 		"ProbedSites": probed, "ProbedServices": svcProbed}
 }
 
@@ -203,7 +235,7 @@ func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	snap, err := s.snapshot(ctx)
 	if err != nil {
-		s.fail(w, err)
+		s.failAt(w, r, "sites", err)
 		return
 	}
 	data := s.sitesData(ctx, snap)
@@ -212,7 +244,9 @@ func (s *Server) sites(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "sites", data)
 }
 
-// fragment : un bloc de la page, rafraîchi par htmx sans recharger le reste.
+// fragment : un bloc de la page, rafraîchi par htmx sans recharger le reste. Les cartes amènent avec
+// elles (hx-swap-oob) le compteur « En ligne » et les services : un seul calcul par rafraîchissement,
+// et des chiffres toujours d'accord avec le tableau.
 func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	snap, err := s.snapshot(ctx)
@@ -225,7 +259,9 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 	case "state":
 		s.render(w, "state-card", s.stateCard(ctx, snap.Head))
 	case "cards":
-		s.render(w, "site-cards", s.sitesData(ctx, snap))
+		data := s.sitesData(ctx, snap)
+		data["OOB"] = true
+		s.render(w, "cards-refresh", data)
 	case "services":
 		s.render(w, "services", s.sitesData(ctx, snap))
 	case "online":
@@ -234,27 +270,32 @@ func (s *Server) fragment(w http.ResponseWriter, r *http.Request) {
 		n, _ := strconv.Atoi(r.URL.Query().Get("n"))
 		s.render(w, "activity", s.activity(ctx, n))
 	case "status":
-		name := r.URL.Query().Get("app")
+		// Le voyant de l'éditeur : celui du déploiement affiché (environnement compris).
+		q := r.URL.Query()
+		name, env := q.Get("app"), q.Get("env")
 		e, ok := snap.Apps.Entries[name]
 		if !ok {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
+		d, err := e.Deploy(name, env)
+		if err != nil {
+			env = ""
+			d, _ = e.Deploy(name, "")
+		}
 		up := s.probes(ctx)
-		domain := domainOf(name, e, s.cfg.Domain)
-		on, probed := up[domain]
-		s.render(w, "site-status", map[string]any{"App": name, "Up": on, "Probed": probed})
+		on, probed := up[d.Domain(s.cfg.Domain)]
+		s.render(w, "site-status", map[string]any{"App": name, "Env": env, "Up": on, "Probed": probed})
 	default:
-		http.NotFound(w, r)
+		s.notFound(w, r, "sites", "")
 	}
 }
 
 func (s *Server) row(name string, e Entry, d Deploy, snap *Snapshot, up map[string]bool) SiteRow {
 	domain := d.Domain(s.cfg.Domain)
-	tint, ink := colorsOf(name)
 	r := SiteRow{
 		Name: name, Label: d.Label, Branch: d.Branch, Domain: domain, URL: "https://" + domain,
-		Initial: initialOf(name), Tint: tint, Ink: ink, VPN: d.VPN(), SSO: d.Access.SSO,
+		VPN: d.VPN(), SSO: d.Access.SSO,
 		EditURL: "/sites/" + name,
 	}
 	if r.VPN {
@@ -298,14 +339,9 @@ func shortTag(t string) string {
 }
 
 const (
-	iconCheck   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8 12l3 3 5-6"
-	iconClock   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"
-	iconWarn    = "M12 3l10 18H2zM12 10v4M12 17h.01"
-	iconSync    = "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"
 	iconImage   = "M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8"
 	iconSliders = "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M16 4v4M10 10v4M18 16v4"
 	iconBranch  = "M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"
-	iconQuest   = "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"
 )
 
 func (s *Server) stateCard(ctx context.Context, head string) StateCard {
@@ -315,43 +351,42 @@ func (s *Server) stateCard(ctx context.Context, head string) StateCard {
 
 // stateCardOf : le bandeau, d'après la version de think, la tête de main et l'état d'apps-deploy.
 func stateCardOf(think, head, branch string, st *DeployStatus, err error) StateCard {
-	green, amber, red, blue, gray := [2]string{"#E9F8EF", "#15803D"}, [2]string{"#FEF3E2", "#9A4A07"}, [2]string{"#FDECEC", "#B42318"}, [2]string{"#EAEDFD", "#3B47C4"}, [2]string{"#F1F2F5", "#4A515D"}
 	c := StateCard{Think: shortRev(think), Main: shortRev(head)}
-	set := func(title, chip, text, icon string, col [2]string) {
-		c.Title, c.Chip, c.Text, c.Icon, c.Tint, c.Ink = title, chip, text, icon, col[0], col[1]
+	set := func(title, chip, text, tone string) {
+		c.Title, c.Chip, c.Text, c.Tone = title, chip, text, tone
 	}
 	// L'état d'apps-deploy ne vaut que pour la version de think et le commit de main qu'il a vus :
 	// juste après un rebuild ou un push, il est périmé jusqu'à son passage suivant (dans la minute).
 	switch {
 	case think == head:
-		set("think est à jour", "à jour", "", iconCheck, green)
+		set("think est à jour", "à jour", "", "ok")
 	case err != nil || !st.Fresh():
-		set("État inconnu", "inconnu", "apps-deploy ne passe plus : systemctl status apps-deploy.timer", iconQuest, gray)
+		set("État inconnu", "inconnu", "apps-deploy ne passe plus : systemctl status apps-deploy.timer", "idle")
 	case st.Deployed != think:
-		set("Vérification", "vérification", "think vient de changer de version : apps-deploy vérifie dans la minute.", iconSync, gray)
+		set("Vérification", "vérification", "think vient de changer de version : apps-deploy vérifie dans la minute.", "busy")
 		c.Busy = true
 	case st.Head != head:
-		set("main a avancé", "nouveau commit", "apps-deploy le regarde dans la minute.", iconSync, blue)
+		set("main a avancé", "nouveau commit", "apps-deploy le regarde dans la minute.", "busy")
 		c.Busy = true
 	case st.State == "deploiement":
-		set("Application en cours", "en cours", "", iconSync, blue)
+		set("Application en cours", "en cours", "", "busy")
 		c.Busy = true
 	case st.State == "attente":
-		set("Rebuild à faire", "en attente", "Pas que des sites sur main : rebuild à la main.", iconClock, amber)
+		set("Rebuild à faire", "en attente", "Pas que des sites sur main : rebuild à la main.", "warn")
 	case st.State == "local":
-		set("Version locale non commitée", "modifié", "Les sites attendent un rebuild propre.", iconWarn, red)
+		set("Version locale non commitée", "modifié", "Les sites attendent un rebuild propre.", "bad")
 	case st.State == "en_avance":
-		set("Commits pas poussés", "à pousser", "think tourne déjà ces commits : git push suffit.", iconWarn, amber)
+		set("Commits pas poussés", "à pousser", "think tourne déjà ces commits : git push suffit.", "warn")
 	case st.State == "non_pousse":
-		set("Commits pas poussés", "à pousser", "main a aussi avancé : git pull --rebase, git push, puis rebuild.", iconWarn, red)
+		set("Commits pas poussés", "à pousser", "main a aussi avancé : git pull --rebase, git push, puis rebuild.", "bad")
 	case st.State == "diverge":
-		set("main a divergé", "à vérifier", "Rebuild à la main.", iconWarn, red)
+		set("main a divergé", "à vérifier", "Rebuild à la main.", "bad")
 	case st.State == "github":
-		set("GitHub injoignable", "GitHub ?", "apps-deploy réessaie chaque minute (quota d'API ou réseau).", iconWarn, amber)
+		set("GitHub injoignable", "GitHub ?", "apps-deploy réessaie chaque minute (quota d'API ou réseau).", "warn")
 	case st.State == "echec":
-		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", iconWarn, red)
+		set("Déploiement en échec", "échec", "L'ancienne version tourne : journalctl -u apps-deploy", "bad")
 	default:
-		set("Vérification", "vérification", "apps-deploy vérifie dans la minute.", iconSync, gray)
+		set("Vérification", "vérification", "apps-deploy vérifie dans la minute.", "busy")
 		c.Busy = true
 	}
 	// Ce qui attend, seulement quand quelque chose attend : le dernier commit, et combien d'autres.
@@ -365,7 +400,7 @@ func stateCardOf(think, head, branch string, st *DeployStatus, err error) StateC
 	// Ligne calculée par apps-deploy contre un autre main que l'actuel (push dans la dernière minute) :
 	// elle serait fausse, on attend son prochain passage.
 	if st != nil && st.Checkout != nil && st.Head != head {
-		c.Checkout, c.CheckoutInk, c.CheckoutBusy = "vérification", "#5D6573", true
+		c.Checkout, c.CheckoutInk, c.CheckoutBusy = "vérification", "muted", true
 	} else if st != nil && st.Checkout != nil {
 		co := st.Checkout
 		var parts []string
@@ -385,9 +420,9 @@ func stateCardOf(think, head, branch string, st *DeployStatus, err error) StateC
 			parts = append(parts, plural(*co.Behind, "commit en retard", "commits en retard"))
 		}
 		if len(parts) == 0 {
-			c.Checkout, c.CheckoutInk = "propre", "#15803D"
+			c.Checkout, c.CheckoutInk = "propre", "ok"
 		} else {
-			c.Checkout, c.CheckoutInk = strings.Join(parts, ", "), "#9A4A07"
+			c.Checkout, c.CheckoutInk = strings.Join(parts, ", "), "warn-ink"
 		}
 	}
 	return c
@@ -411,14 +446,6 @@ func shortRev(r string) string {
 		return r[:7] + "-dirty"
 	}
 	return r[:7]
-}
-
-// initialOf : la lettre du badge d'un site (vide si le nom l'est : formulaire en cours de saisie).
-func initialOf(name string) string {
-	if name == "" {
-		return ""
-	}
-	return strings.ToUpper(name[:1])
 }
 
 // activity : les `n` derniers commits qui touchent apps.json (réglages) ou le lock (images), par jour.
@@ -471,9 +498,9 @@ var reSubject = regexp.MustCompile(`^[a-z]+(?:\(([^)]*)\))?!?: (.+)$`)
 // describeCommit : site, description et type d'un commit de sites (`feat(myetf): make public`,
 // `chore(apps): bump myetf (481f826)`) ; un message libre reste tel quel.
 func describeCommit(subject string, config bool) ActivityItem {
-	it := ActivityItem{What: subject, Kind: "nouvelle image", Icon: iconImage, Ink: "#15803D"}
+	it := ActivityItem{What: subject, Kind: "nouvelle image", Icon: iconImage, Ink: "ok"}
 	if config {
-		it.Kind, it.Icon, it.Ink = "réglages", iconSliders, "#3B47C4"
+		it.Kind, it.Icon, it.Ink = "réglages", iconSliders, "accent"
 	}
 	m := reSubject.FindStringSubmatch(subject)
 	if m == nil {
@@ -489,7 +516,7 @@ func describeCommit(subject string, config bool) ActivityItem {
 		it.Name, it.What = scope, rest
 	}
 	if config && strings.Contains(rest, "environment") {
-		it.Kind, it.Icon, it.Ink = "environnement", iconBranch, "#9A4A07"
+		it.Kind, it.Icon, it.Ink = "environnement", iconBranch, "warn-ink"
 	}
 	return it
 }
@@ -529,8 +556,8 @@ var funcs = template.FuncMap{
 		}
 		return m
 	},
-	"status": func(app string, up, probed bool) map[string]any {
-		return map[string]any{"App": app, "Up": up, "Probed": probed}
+	"status": func(app, env string, up, probed bool) map[string]any {
+		return map[string]any{"App": app, "Env": env, "Up": up, "Probed": probed}
 	},
 	// Logo GitHub (Octicons, MIT), en un seul tracé rempli.
 	"metricsReady": func() bool { return metricsReady },

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html"
 	"html/template"
 	"net/http/httptest"
@@ -12,6 +14,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -255,9 +259,6 @@ func TestNextLink(t *testing.T) {
 }
 
 func TestSmallHelpers(t *testing.T) {
-	if initialOf("") != "" || initialOf("myetf") != "M" {
-		t.Error("initialOf")
-	}
 	for in, want := range map[string]string{"": "?", "abc": "abc", "0123456789": "0123456", "0123456789-dirty": "0123456-dirty"} {
 		if got := shortRev(in); got != want {
 			t.Errorf("shortRev(%q) = %q, veut %q", in, got, want)
@@ -351,10 +352,12 @@ func TestJobsPersist(t *testing.T) {
 	js.add(&Job{ID: "deploie", App: "b", Steps: steps("done", "done", "active", "todo"), Dispatched: true, Head: "h", Req: Request{App: "b", Entry: &entry, Base: "new"}})
 	js.add(&Job{ID: "commit-envoye", App: "c", Steps: steps("done", "active", "todo", "todo"), Dispatched: true})
 	js.add(&Job{ID: "commit-pas-envoye", App: "d", Steps: steps("done", "active", "todo", "todo")})
+	// Arrêt entre deux étapes (commit noté, étape 3 pas encore active) : reprise à l'étape 3.
+	js.add(&Job{ID: "entre-deux", App: "e", Steps: steps("done", "done", "todo", "todo"), Dispatched: true})
 
 	again := &Jobs{m: map[string]*Job{}, path: path}
 	running := again.load()
-	want := map[string]int{"deploie": 2, "commit-envoye": 1, "commit-pas-envoye": 0}
+	want := map[string]int{"deploie": 2, "commit-envoye": 1, "commit-pas-envoye": 0, "entre-deux": 2}
 	if len(running) != len(want) {
 		t.Fatalf("%d demandes à reprendre, attendu %d", len(running), len(want))
 	}
@@ -383,5 +386,195 @@ func TestJobsPruneKeepsRunning(t *testing.T) {
 	}
 	if js.get("finie") != nil {
 		t.Errorf("demande finie depuis 5 h gardée")
+	}
+}
+
+// Les pages et fragments des sites se rendent sans erreur (un champ mal nommé dans un template ne
+// casse plus une page en silence) : racine, environnement, nouveau site, aperçus, suivi, liste.
+func TestSitesTemplates(t *testing.T) {
+	s, snap, e := withEnvs(t)
+	s.jobs = &Jobs{m: map[string]*Job{}}
+	ctx := context.Background()
+	render := func(name string, data any) string {
+		t.Helper()
+		var buf bytes.Buffer
+		if err := s.tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+			t.Errorf("%s : %v", name, err)
+		}
+		return buf.String()
+	}
+	for _, env := range []string{"", "preview", "staging"} {
+		f := s.formVMFor(ctx, "myetf", e, env, false, "Nchpg/myetf", []string{"myetf"}, snap)
+		f.Preview = s.previewOf("myetf", &e, snap, false, "", nil)
+		page := render("editor", map[string]any{"Nav": "sites", "PageTitle": "myetf", "F": f})
+		if strings.Count(page, `id="delete-form"`) > 1 || (env == "" && !strings.Contains(page, `id="delete-form"`)) {
+			t.Errorf("%q : formulaire de suppression absent ou en double", env)
+		}
+		// Le formulaire refait (#editor-body) emporte le formulaire de suppression : jamais en double.
+		if form := render("form", f); env == "" && !strings.Contains(form, `id="delete-form"`) {
+			t.Errorf("formulaire de suppression hors de #editor-body")
+		}
+	}
+	n := e
+	n.Environments = nil
+	nf := s.formVM(ctx, "nouveau", n, true, "Nchpg/nouveau", []string{"myetf"}, snap)
+	nf.Preview = s.previewOf("nouveau", &n, snap, true, "", nil)
+	if html := render("newform", map[string]any{"F": nf, "Notes": []string{"une note"}}); !strings.Contains(html, `placeholder="nouveau"`) {
+		t.Errorf("nouveau site : sous-domaine pré-rempli au lieu d'être vide")
+	}
+	render("newform", map[string]any{"Error": "pas d'image"})
+	render("new", map[string]any{"Nav": "sites", "PageTitle": "Nouveau site", "Repos": []RepoOpt{{FullName: "Nchpg/myetf", Images: []string{"myetf"}, Private: true, Live: "myetf"}}})
+	render("new", map[string]any{"Nav": "sites", "Error": "packages illisibles"})
+
+	changed := cloneEntry(e)
+	changed.SSO = !changed.SSO
+	dirty := s.previewOf("myetf", &changed, snap, false, "", []string{"une erreur"})
+	if !dirty.Auto || !strings.Contains(render("preview", dirty), `name="msg_auto"`) {
+		t.Errorf("message proposé sans msg_auto")
+	}
+	if html := render("preview", PreviewVM{Errors: []string{"main injoignable"}}); strings.Contains(html, "à jour") {
+		t.Errorf("une erreur seule montrée « à jour »")
+	}
+
+	steps := func(states ...string) []Step {
+		var out []Step
+		for _, st := range states {
+			out = append(out, Step{Label: "x", Sub: "y", State: st, Detail: "d"})
+		}
+		return out
+	}
+	for _, j := range []JobView{
+		{ID: "a", App: "myetf", Page: "/sites/myetf?env=preview", Steps: steps("done", "active", "todo", "todo")},
+		{ID: "b", App: "myetf", Page: "/sites/myetf", Done: true, Failed: true, Steps: steps("done", "failed", "todo", "todo")},
+		{ID: "c", App: "myetf", Page: "/sites/myetf", Done: true, Domain: "etf.x", Steps: steps("done", "done", "done", "done")},
+		{ID: "d", App: "myetf", Delete: true, Done: true, Steps: steps("done", "done", "done", "done")},
+		{ID: "e", App: "neuf", New: true, Done: true, Failed: true, Steps: steps("failed", "todo", "todo", "todo")},
+	} {
+		html := render("job", j)
+		render("job-page", map[string]any{"Nav": "sites", "Job": j})
+		if j.ID == "e" && !strings.Contains(html, `href="/sites/new"`) {
+			t.Errorf("nouveau site en échec : pas de retour au choix du dépôt")
+		}
+		if j.ID == "c" && !strings.Contains(html, `data-reload-to="/sites/myetf"`) {
+			t.Errorf("fin d'une demande : retour ailleurs que sur la page du site")
+		}
+	}
+	running := JobView{ID: "a", App: "myetf", Steps: steps("done", "active", "todo", "todo")}
+	f := s.formVMFor(ctx, "myetf", e, "", false, "", []string{"myetf"}, snap)
+	f.Running = &running
+	f.Failed = &JobBadge{Detail: "x"}
+	render("editor", map[string]any{"Nav": "sites", "F": f})
+
+	for _, st := range []string{"", "running", "busy", "done", "failed"} {
+		render("recopy", map[string]any{"URL": "/sites/myetf/env/preview/recopy", "Path": "web:/app/data", "ID": "recopy-web-app-data", "R": &RecopyVM{State: st, Text: "t"}})
+	}
+
+	data := s.sitesData(ctx, snap)
+	data["State"] = stateCardOf("A", "B", "main", &DeployStatus{Checked: time.Now().Unix(), Head: "B", Deployed: "A", State: "attente"}, nil)
+	data["Activity"] = Activity{Days: []ActivityDay{{Label: "hier", Items: []ActivityItem{describeCommit("feat(myetf): make public", true)}}}, More: true}
+	render("sites", data)
+	data["OOB"] = true
+	if html := render("cards-refresh", data); !strings.Contains(html, `id="online" hx-swap-oob="true"`) {
+		t.Errorf("cartes sans le compteur « En ligne » à remplacer")
+	}
+	render("site-status", map[string]any{"App": "myetf", "Env": "preview", "Up": true, "Probed": true})
+}
+
+// Le run d'une demande se retrouve par son nom (run-name d'apps.yml), jamais celui d'une autre.
+func TestRunFor(t *testing.T) {
+	runs := []Run{
+		{ID: 1, DisplayTitle: "pin  []"},
+		{ID: 2, DisplayTitle: "edit myetf [0123456789abcdef]"},
+		{ID: 3, DisplayTitle: "access gram [fedcba9876543210]"},
+		{ID: 4, DisplayTitle: "apps"},
+	}
+	if r := runFor(runs, "fedcba9876543210"); r == nil || r.ID != 3 {
+		t.Errorf("runFor : %+v", r)
+	}
+	if runFor(runs, "") != nil || runFor(runs, "0000000000000000") != nil {
+		t.Error("runFor : run d'une autre demande")
+	}
+	if runs[0].Request() != "" || runs[3].Request() != "" {
+		t.Error("Request : identifiant trouvé dans un run qui n'en a pas")
+	}
+}
+
+// Cache de l'API : une seule lecture pour des demandes simultanées, une erreur gardée un moment, mais
+// pas une demande abandonnée.
+func TestGitHubCached(t *testing.T) {
+	g := newGitHub(&Config{})
+	var calls atomic.Int32
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 5 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			v, err := g.cached("k", time.Minute, func() (any, error) {
+				calls.Add(1)
+				<-release
+				return "v", nil
+			})
+			if err != nil || v != "v" {
+				t.Errorf("%v %v", v, err)
+			}
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	if n := calls.Load(); n != 1 {
+		t.Errorf("%d lectures pour une clé, attendu 1", n)
+	}
+	fails := 0
+	for range 3 {
+		_, _ = g.cached("bad", time.Hour, func() (any, error) { fails++; return nil, errors.New("quota") })
+	}
+	if fails != 1 {
+		t.Errorf("erreur relue %d fois, attendu 1 (gardée errTTL)", fails)
+	}
+	cancels := 0
+	for range 2 {
+		_, _ = g.cached("ctx", time.Hour, func() (any, error) { cancels++; return nil, context.Canceled })
+	}
+	if cancels != 2 {
+		t.Errorf("demande abandonnée gardée en cache")
+	}
+}
+
+// Écritures simultanées du fichier des demandes : toujours un JSON entier, avec le dernier état.
+func TestJobsSaveConcurrent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "jobs.json")
+	js := &Jobs{m: map[string]*Job{}, path: path}
+	var jobs []*Job
+	for i := range 8 {
+		j := &Job{ID: fmt.Sprint(i), App: fmt.Sprint("app", i), Steps: []Step{{State: "active"}, {State: "todo"}}, Dispatched: true}
+		js.add(j)
+		jobs = append(jobs, j)
+	}
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 20 {
+				j.set(0, "done", "", "")
+			}
+			j.set(1, "active", "", "")
+		}()
+	}
+	wg.Wait()
+	again := &Jobs{m: map[string]*Job{}, path: path}
+	running := again.load()
+	if len(running) != len(jobs) {
+		t.Fatalf("%d demandes relues, attendu %d", len(running), len(jobs))
+	}
+	for _, j := range running {
+		if resumeStep(j) != 1 {
+			t.Errorf("%s : état ancien écrit en dernier (%+v)", j.ID, j.Steps)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(filepath.Dir(path), "*.tmp")); len(left) > 0 {
+		t.Errorf("fichiers temporaires restés : %v", left)
 	}
 }

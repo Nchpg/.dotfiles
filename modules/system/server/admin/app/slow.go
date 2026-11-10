@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -58,21 +60,29 @@ func (c *slowCache) get(key string, build func(context.Context) any) any {
 	return it.val
 }
 
-// load : une lecture en arrière-plan (sous c.mu).
+// load : une lecture en arrière-plan (sous c.mu). Une panique de `build` (ligne inattendue de Loki…)
+// est rattrapée : l'ancienne valeur reste, et ceux qui attendent sont toujours libérés.
 func (c *slowCache) load(key string, it *slowItem, build func(context.Context) any) {
 	it.loading = make(chan struct{})
 	go func() {
+		var v any
+		defer func() {
+			if p := recover(); p != nil {
+				log.Printf("lecture %s : panique : %v\n%s", key, p, debug.Stack())
+				v = nil
+			}
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			if v != nil {
+				it.val, it.at = v, time.Now()
+			} else if it.val == nil {
+				delete(c.m, key)
+			}
+			close(it.loading)
+			it.loading = nil
+		}()
 		ctx, cancel := context.WithTimeout(context.Background(), slowLimit)
 		defer cancel()
-		v := build(ctx)
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		if v != nil {
-			it.val, it.at = v, time.Now()
-		} else if it.val == nil {
-			delete(c.m, key)
-		}
-		close(it.loading)
-		it.loading = nil
+		v = build(ctx)
 	}()
 }

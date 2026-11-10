@@ -1,53 +1,63 @@
 {{define "editor"}}{{template "top" .}}
 {{with .F}}
 <header class="topbar">
-  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><a href="/sites">Sites</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Name}}</strong></nav>
-  <a class="btn" href="https://{{.Domain}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir {{.EnvLabel}}</a>
+  {{template "crumbs" (args "Title" "Sites" "Link" "/sites" "Sub" .Name)}}
+  <a class="btn" href="https://{{.Domain}}">{{icon "external"}}Ouvrir {{.EnvLabel}}</a>
 </header>
 <main class="page">
-  <div class="line hero">
-    <div class="stack tight">
-      <div class="line"><h1>{{.Name}}</h1>{{template "site-status" (status .Name .Up .Probed)}}</div>
-      <span class="line hero-sub"><span class="mono muted">{{.Domain}}</span>{{if .Repo}}<a class="repo-link" href="https://github.com/{{.Repo}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.Repo}}</a>{{end}}</span>
+  {{/* En-tête : nom et adresse du déploiement affiché ; à droite, son voyant (sondé sur cette adresse),
+       le dépôt, et « non indexé » pour un environnement public. */}}
+  <div class="page-head">
+    {{template "page-title" (args "Title" .Name "Sub" .Domain)}}
+    <div class="page-actions">
+      {{template "site-status" (status .Name .Env .Up .Probed)}}
+      {{if .Noindex}}<span class="chip" title="Environnement public : les moteurs de recherche sont priés de ne pas l'indexer (noindex).">non indexé</span>{{end}}
+      {{if .Repo}}<a class="repo-link small" href="https://github.com/{{.Repo}}">{{icon "github"}}{{.Repo}}</a>{{end}}
     </div>
   </div>
-  {{with .Running}}<div class="alert alert-blue"><p><strong>Modification en cours.</strong>{{range .Steps}}{{if and (eq .State "active") .Detail}} En attente : {{.Detail}}{{end}}{{end}}</p></div>{{end}}
-  {{with .Failed}}<div class="alert alert-red"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
+  {{with .Running}}<div class="alert alert-blue" role="status"><p><strong>Modification en cours.</strong>{{range .Steps}}{{if and (eq .State "active") .Detail}} En attente : {{.Detail}}{{end}}{{end}}</p></div>{{end}}
+  {{with .Failed}}<div class="alert alert-red" role="alert"><p><strong>La dernière modification a échoué.</strong> {{.Detail}}</p></div>{{end}}
 
   <nav class="envs" aria-label="Environnements">
     <div class="env-tabs">
       {{range .Tabs}}
       <a href="{{.URL}}" {{if .Current}}aria-current="page"{{end}}>
         <span>{{.Label}}</span>
-        <span class="env-branch mono"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg>{{.Branch}}</span>
+        <span class="env-branch mono">{{icon "branch"}}{{.Branch}}</span>
         {{if .New}}<span class="chip amber">nouveau</span>{{end}}
       </a>
       {{end}}
     </div>
     {{if not .EnvNew}}
     <details class="add-env" {{if .AddError}}open{{end}} {{if .Running}}inert{{end}}>
-      <summary class="add-env-btn" aria-label="Ajouter un environnement"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="add-env-word">Environnement</span></summary>
+      <summary class="add-env-btn" aria-label="Ajouter un environnement">{{icon "plus"}}<span class="add-env-word">Environnement</span></summary>
       <form method="get" action="/sites/{{.Name}}" class="card add-env-form">
         <input type="hidden" name="new" value="1">
         <label class="field"><span>Nom</span><input name="env" value="{{.AddName}}" placeholder="staging" class="mono" required pattern="[a-z][a-z0-9\-]{0,15}"></label>
         <div class="field"><span>Branche</span>{{template "dd" (args "D" .AddBranch)}}</div>
         <div class="field"><span>Hérite de</span>{{template "dd" (args "D" .AddFrom)}}</div>
         <button class="btn btn-primary">Créer</button>
-        {{with .AddError}}<p class="small bad grow-all">{{.}}</p>{{end}}
+        {{with .AddError}}<p class="small bad grow-all" role="alert">{{.}}</p>{{end}}
       </form>
     </details>
     {{end}}
   </nav>
   {{/* Brouillon rejoué au rechargement (app.js) : montré tant qu'il diffère de main. */}}
-  <div id="draft-bar" class="alert alert-amber draft-bar" hidden><p>Tes modifications ne sont pas encore appliquées.</p><button type="button" class="btn btn-sm" data-draft-drop>Abandonner</button></div>
+  <div id="draft-bar" class="alert alert-amber draft-bar" role="status" hidden><p>Tes modifications ne sont pas encore appliquées.</p><button type="button" class="btn btn-sm" data-draft-drop>Abandonner</button></div>
   {{template "form" .}}
+  {{/* Téléphone : le formulaire passe au-dessus de l'aperçu ; cette barre, recopiée de #preview à
+       chaque aperçu (app.js), dit s'il y a des changements et mène à l'aperçu ou à Appliquer. */}}
+  <div id="edit-dock" class="dock" role="status" hidden>
+    <span class="mono small" data-dock-sum></span>
+    <span class="line"><button type="button" class="btn btn-sm btn-dark" data-dock-show>Voir</button><button type="button" class="btn btn-sm btn-primary" data-dock-apply>Appliquer</button></span>
+  </div>
 </main>
 {{end}}
 {{template "bottom" .}}{{end}}
 
 {{/* Liste déroulante maison : .D (DD), .URL (formulaire refait si structurelle), .Form (champ hors du formulaire). */}}
 {{define "dd"}}
-<div class="dd{{if .D.Locked}} dd-locked{{end}}" data-dd {{if and .D.Structural .URL}}data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change"{{end}}>
+<div class="dd{{if .D.Locked}} dd-locked{{end}}" data-dd {{if and .D.Structural .URL}}data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change" hx-sync="#site-form:replace"{{end}}>
   <input type="hidden" name="{{.D.Name}}" value="{{.D.Value}}" {{with .Form}}form="{{.}}"{{end}}>
   <button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="{{.D.Aria}}" {{if .D.Locked}}disabled{{end}}>
     <span class="dd-ic" style="--tint: {{.D.Tint}}; --ink: {{.D.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.D.Icon}}"/></svg></span>
@@ -68,7 +78,7 @@
 
 {{/* Section héritée ou propre (environnement) : radios qui refont le formulaire. */}}
 {{define "own"}}
-<div class="seg-own" role="radiogroup" aria-label="{{.Aria}}" data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
+<div class="seg-own" role="radiogroup" aria-label="{{.Aria}}" data-structural hx-post="{{.URL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace" hx-trigger="change">
   <label><input type="radio" name="{{.Name}}" value="0" {{if not .Own}}checked{{end}}><span>hérité</span></label>
   <label><input type="radio" name="{{.Name}}" value="1" {{if .Own}}checked{{end}}><span>propre</span></label>
 </div>
@@ -97,7 +107,7 @@
       </div>
       {{end}}
       <label class="field"><span>Sous-domaine</span>
-        <span class="affix"><input name="sub" value="{{.Sub}}" class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
+        <span class="affix"><input name="sub" value="{{.Sub}}" {{if .New}}placeholder="{{.Name}}"{{end}} class="mono"><span class="mono" data-suffix data-public="{{.SuffixPublic}}" data-vpn="{{.SuffixVPN}}">{{.Suffix}}</span></span></label>
     </div>
   </section>
 
@@ -148,7 +158,7 @@
           <span class="line"><strong class="mono">{{.Name}}</strong>{{if .Info}}<small class="mono muted">{{.Info}}</small>{{end}}</span>
           <span class="line">
             {{if $f.Multi}}<label class="line small"><input type="radio" name="entry" value="{{.Name}}" {{if .Entry}}checked{{end}} {{if .Locked}}disabled{{end}}>Reçoit le trafic</label>{{end}}
-            {{if and $f.Multi (not .Locked)}}<button type="button" class="btn btn-sm btn-ghost-bad" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"rmctr": "{{.Name}}"}' hx-target="#editor-body" hx-swap="outerHTML">Retirer</button>{{end}}
+            {{if and $f.Multi (not .Locked)}}<button type="button" class="btn btn-sm btn-ghost-bad" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"rmctr": "{{.Name}}"}' hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace">Retirer</button>{{end}}
           </span>
         </div>
         <div class="fields">
@@ -165,7 +175,7 @@
           {{else}}<small class="muted">Aucune</small>{{end}}
           {{if not .Locked}}<details class="data-adder" data-structural>
             <summary class="link-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un dossier</summary>
-            <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Dossier du conteneur à garder (plusieurs : séparés par des espaces)" data-enter-click><button type="button" class="btn btn-sm" hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML">Ajouter</button></span>
+            <span class="line"><input name="newdata_{{.Name}}" placeholder="/data" class="mono input-sm" aria-label="Dossier du conteneur à garder (plusieurs : séparés par des espaces)" data-enter-click><button type="button" class="btn btn-sm" hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace">Ajouter</button></span>
           </details>{{end}}
         </div>
         <div class="stack tight">
@@ -174,16 +184,16 @@
           <ol class="secret-list">{{range .Secrets}}
             <li><input type="hidden" name="sec_{{$c}}" value="{{.Value}}" {{if $locked}}disabled{{end}}><span class="mono small grow">{{.Value}}</span>{{with .Note}}<small class="bad">{{.}}</small>{{end}}
               {{if not $locked}}<span class="secret-actions">
-                <button type="button" class="icon-btn" aria-label="Monter {{.Value}}" {{if .First}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|up"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
-                <button type="button" class="icon-btn" aria-label="Descendre {{.Value}}" {{if .Last}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|down"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
-                <button type="button" class="icon-btn" aria-label="Retirer {{.Value}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secrm": "{{$c}}|{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+                <button type="button" class="icon-btn" aria-label="Monter {{.Value}}" {{if .First}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|up"}' hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+                <button type="button" class="icon-btn" aria-label="Descendre {{.Value}}" {{if .Last}}disabled{{end}} data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secmove": "{{$c}}|{{.Value}}|down"}' hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></button>
+                <button type="button" class="icon-btn" aria-label="Retirer {{.Value}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"secrm": "{{$c}}|{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
               </span>{{end}}
             </li>{{end}}
           </ol>
           {{if gt (len .Secrets) 1}}<small class="muted">Une variable dans deux secrets : celui du dessous l'emporte.</small>{{end}}
           {{else}}<small class="muted">Aucun.</small>{{end}}
           {{if not $locked}}
-          {{if .SecretsFree}}<div class="pills" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">{{range .SecretsFree}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}"><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
+          {{if .SecretsFree}}<div class="pills" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace" hx-trigger="change">{{range .SecretsFree}}<label class="pill"><input type="checkbox" name="sec_{{$c}}" value="{{.Value}}"><span class="mono">{{.Label}}</span></label>{{end}}</div>{{end}}
           <small class="muted">Nouveau : <code>secrets edit {{.NewSecret}}</code>, proposé ici au prochain rebuild. Le conteneur reçoit les lignes NOM=valeur du fichier.</small>
           {{end}}
         </div>
@@ -192,7 +202,7 @@
       {{range .NewImages}}
       <div class="new-image">
         <span class="small">Nouvelle image <span class="mono">{{.Label}}</span></span>
-        <button type="button" class="btn btn-primary btn-sm" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"addctr": "{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML">Ajouter</button>
+        <button type="button" class="btn btn-primary btn-sm" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-vals='{"addctr": "{{.Value}}"}' hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace">Ajouter</button>
       </div>
       {{end}}
       {{if not .OwnContainers}}<p class="inherited"><span>{{.CtrsFrom}}</span></p>{{end}}
@@ -212,7 +222,7 @@
         <span class="line"><strong class="mono small">{{.Ctr}}</strong><span class="mono small">{{.Path}}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span class="mono small muted data-host" title="{{.Host}}">{{.Host}}</span></span>
         {{/* Structurant : le chemin suit le mode choisi. */}}
         <div class="data-opts">
-          <div class="seg-own seg-data" role="radiogroup" aria-label="Données de {{.Ctr}} {{.Path}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-trigger="change">
+          <div class="seg-own seg-data" role="radiogroup" aria-label="Données de {{.Ctr}} {{.Path}}" data-structural hx-post="{{$f.FormURL}}" hx-include="#site-form" hx-target="#editor-body" hx-swap="outerHTML" hx-sync="#site-form:replace" hx-trigger="change">
             <label title="Vides au départ."><input type="radio" name="{{.ModeField}}" value="separate" {{if eq .Mode "separate"}}checked{{end}}><span>séparées</span></label>
             <label title="Celles de {{$f.DataFrom}} au premier démarrage, puis indépendantes ; « Recopier » les remet à jour."><input type="radio" name="{{.ModeField}}" value="copy" {{if eq .Mode "copy"}}checked{{end}}><span>copie de {{$f.DataFrom}}</span></label>
             <label title="Le même dossier que {{$f.DataFrom}}."><input type="radio" name="{{.ModeField}}" value="shared" {{if eq .Mode "shared"}}checked{{end}}><span>partagées</span></label>
@@ -247,7 +257,7 @@
 
   {{if and .Exists (not .Child)}}
   <section class="sec sec-danger">
-    <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Les données restent sur think.</small></span>
+    <span class="stack tight grow"><strong class="bad">Supprimer le site</strong><small class="muted">Les données restent sur {{machine}}.</small></span>
     <details><summary class="btn btn-danger-ghost"><span class="if-closed">Supprimer…</span><span class="if-open">Annuler</span></summary>
       <div class="confirm">
         <input name="confirm" class="mono" form="delete-form" required placeholder="tape {{.Name}}" aria-label="Tape {{.Name}} pour confirmer">
@@ -258,11 +268,11 @@
   {{end}}
   {{if .RemoveEnvURL}}
   <section class="sec sec-danger">
-    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} {{if eq (len .Children) 1}}héritera{{else}}hériteront{{end}} de son parent. {{end}}Les données restent sur think.</small></span>
+    <span class="stack tight grow"><strong class="bad">Retirer {{.EnvLabel}}</strong><small class="muted">{{if .Children}}{{join .Children ", "}} {{if eq (len .Children) 1}}héritera{{else}}hériteront{{end}} de son parent. {{end}}Les données restent sur {{machine}}.</small></span>
     <details><summary class="btn btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary>
       <div class="confirm">
         <span class="small">Retirer {{.EnvLabel}} ?</span>
-        <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML">Retirer</button>
+        <button type="button" class="btn btn-danger" hx-post="{{.RemoveEnvURL}}" hx-include="#site-form" hx-target="#preview" hx-swap="outerHTML" hx-sync="#site-form:replace">Retirer</button>
       </div>
     </details>
   </section>
@@ -279,14 +289,19 @@
   {{end}}
   {{if .Running}}{{template "job" .Running}}{{else}}{{template "preview" .Preview}}{{end}}
 </aside>
+{{/* Hors de #site-form (pas de formulaire dans un formulaire) mais dans #editor-body : refait avec lui,
+     jamais en double. */}}
+{{if and .Exists (not .Child)}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hx-sync="#site-form:replace" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
 </div>
-{{if and .Exists (not .Child)}}<form id="delete-form" hx-post="{{.DeleteURL}}" hx-target="#preview" hx-swap="outerHTML" hidden><input type="hidden" name="base" value="{{.Base}}"></form>{{end}}
 {{end}}
 
 {{define "recopy"}}
-{{/* Recopie d'un dossier en copie : demandée ici, faite par admin-recopy (root), suivie toutes les 3 s. */}}
-<span id="{{.ID}}" class="recopy" {{if eq .R.State "running"}}hx-get="{{.URL}}?path={{.Path}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
-  <button type="button" class="btn btn-sm" hx-post="{{.URL}}" hx-vals='{"path": "{{.Path}}"}' hx-target="#{{.ID}}" hx-swap="outerHTML" title="{{.R.Text}}" {{if or (eq .R.State "running") (eq .R.State "busy")}}disabled{{end}}>{{if eq .R.State "running"}}Recopie…{{else}}Recopier{{end}}</button>
-  {{if or (eq .R.State "done") (eq .R.State "failed")}}<small class="{{if eq .R.State "failed"}}bad{{else}}muted{{end}}">{{.R.Text}}</small>{{end}}
+{{/* Recopie d'un dossier en copie : demandée ici, faite par admin-recopy (root), suivie toutes les 3 s
+     tant qu'elle court (ou qu'un autre dossier se recopie). Les mêmes états que le suivi d'une demande,
+     texte toujours visible : en cours, occupé, fait, échec (refus compris). */}}
+{{$live := or (eq .R.State "running") (eq .R.State "busy")}}
+<span id="{{.ID}}" class="recopy" {{if $live}}hx-get="{{.URL}}?path={{.Path}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
+  <button type="button" class="btn btn-sm" hx-post="{{.URL}}" hx-vals='{"path": "{{.Path}}"}' hx-target="#{{.ID}}" hx-swap="outerHTML" {{if $live}}disabled{{end}}>{{if eq .R.State "running"}}<span class="spin" aria-hidden="true"></span>Recopie…{{else}}Recopier{{end}}</button>
+  <small class="{{if eq .R.State "failed"}}bad{{else if eq .R.State "running"}}accent{{else}}muted{{end}}" role="status">{{.R.Text}}</small>
 </span>
 {{end}}

@@ -1,21 +1,37 @@
-{{/* Pages VPN, SSH et Comptes : même forme que Sites (titre, blocs, tableaux). */}}
+{{/* Pages VPN, SSH et Authelia : même forme que Sites (titre, blocs, tableaux). Pages de liste :
+     topbar (fil d'Ariane + « Ajouter »), titre, voyant, messages, bandeau, blocs. Formulaires : un
+     jeton caché (token) contre le double envoi, Enregistrer puis Annuler côte à côte. */}}
 
-{{define "crumbs"}}<nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>{{if .Link}}<a href="{{.Link}}">{{.Title}}</a><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>{{.Sub}}</strong>{{else}}<strong>{{.Title}}</strong>{{end}}</nav>{{end}}
+{{/* Messages d'une page de liste : action échouée (?erreur=, rouge), information (?info=, bleu), main
+     illisible (orange). Les deux premiers ne sont montrés qu'une fois (retirés de l'adresse). */}}
+{{define "list-alerts"}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" . "Flash" "erreur")}}{{end}}
+  {{with .Notice}}{{template "alert" (args "Kind" "blue" "Text" . "Flash" "info")}}{{end}}
+  {{with .MainError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
+{{end}}
+
+{{/* Cellule « Accès » d'un appareil ou d'un compte (.Services, .Sites). */}}
+{{define "access-cell"}}<span class="stack tight access-cell">
+  {{with .Services}}<span><span class="muted">Services</span> {{join . ", "}}</span>{{end}}
+  {{with .Sites}}<span><span class="muted">Sites</span> {{join . ", "}}</span>{{end}}
+  {{if not (or .Services .Sites)}}<span class="muted">aucun</span>{{end}}
+</span>{{end}}
 
 {{define "vpn"}}{{template "top" .}}
 <header class="topbar">
   {{template "crumbs" (args "Title" "VPN")}}
-  <a class="btn btn-primary" href="/vpn/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un appareil</a>
+  <a class="btn btn-primary" href="/vpn/new">{{icon "plus"}}Ajouter un appareil</a>
 </header>
 <main class="page">
-  <h1>VPN</h1>
+  {{template "page-head" (args "Title" "VPN")}}
   {{with .Track}}{{template "track" .}}{{end}}
-  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  {{template "list-alerts" .}}
+  {{if not .MetricsOK}}{{template "alert" (args "Kind" "amber" "Text" "Prometheus injoignable : état et trafic des appareils indisponibles.")}}{{end}}
   <div class="overview">
     <section class="strip" aria-label="État du VPN">
       <div class="strip-cell">
         <span class="strip-label">Connectés</span>
-        <span class="strip-value line"><span class="sq" style="background: {{if .Connected}}#22C55E{{else}}#C4C9D2{{end}}"></span>{{.Connected}} sur {{.Total}}</span>
+        <span class="strip-value line">{{if not .MetricsOK}}—{{else}}<span class="sq {{if .Connected}}up{{else}}idle{{end}}"></span>{{.Connected}} sur {{.Total}}{{end}}</span>
         <span class="mono small muted">poignée de main de moins de 3 min</span>
       </div>
       <div class="strip-cell">
@@ -30,29 +46,26 @@
       </div>
     </section>
     <section class="block" aria-labelledby="devices-title">
-      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" "Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur think. Accès réservés : les services de think qui se déclarent pour le VPN et les sites en VPN, choisis appareil par appareil (« Gérer »). Un service public (tunnel Cloudflare, comme Grafana) n'y figure pas : on l'atteint par internet, pas par le VPN.")}}</h2></div>
+      <div class="block-head"><h2 id="devices-title" class="line">Appareils{{template "info" (args "ID" "info-devices" "Text" (printf "D'où : l'IP publique de la dernière poignée de main. Trafic : ↑ envoyé et ↓ reçu par l'appareil, depuis la dernière mise en route du tunnel sur %s. Accès réservés : les services de %s qui se déclarent pour le VPN et les sites en VPN, choisis appareil par appareil (« Gérer »). Un service public (tunnel Cloudflare, comme Grafana) n'y figure pas : on l'atteint par internet, pas par le VPN." machine machine))}}</h2></div>
       <section class="card table-card" aria-label="Liste des appareils">
         <table class="list">
-          <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">Connecté depuis</th><th scope="col">Trafic</th><th scope="col">Accès réservés</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Appareil</th><th scope="col">IP du tunnel</th><th scope="col">État</th><th scope="col">D'où</th><th scope="col">Trafic</th><th scope="col">Accès réservés</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
-              <td><span class="stack tight">{{.Name}}<small class="mono muted">{{slice .PublicKey 0 10}}…</small></span></td>
+              <td><span class="stack tight">{{.Name}}<small class="mono muted" title="{{.PublicKey}}">{{abbrev .PublicKey 10}}</small></span></td>
               <td class="mono small">{{.Address}}</td>
               <td class="nowrap">{{if .Pending}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="warn-ink">en attente : secret puis rebuild</span></span>
+                {{else if not $.MetricsOK}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">—</span></span>
                 {{else if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connecté</span>
                 {{else if .Seen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vu {{.LastSeen}}</span></span>
                 {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">jamais vu</span></span>{{end}}</td>
-              <td class="mono small muted">{{if .RemoteIP}}{{.RemoteIP}}{{else}}—{{end}}</td>
-              <td class="mono small muted nowrap" title="Depuis la dernière mise en route du tunnel sur think, vu de l'appareil">{{if .Seen}}↑ {{.Received}} ↓ {{.Sent}}{{else}}—{{end}}</td>
-              <td><span class="stack tight access-cell">
-                {{with .Services}}<span><span class="muted">Services</span> {{join . ", "}}</span>{{end}}
-                {{with .Sites}}<span><span class="muted">Sites</span> {{join . ", "}}</span>{{end}}
-                {{if not (or .Services .Sites)}}<span class="muted">aucun</span>{{end}}
-              </span></td>
+              <td class="mono small muted" title="IP publique de la dernière poignée de main">{{if .RemoteIP}}{{.RemoteIP}}{{else}}—{{end}}</td>
+              <td class="mono small muted nowrap" title="Depuis la dernière mise en route du tunnel sur {{machine}}, vu de l'appareil">{{if .Seen}}↑ {{.Received}} ↓ {{.Sent}}{{else}}—{{end}}</td>
+              <td>{{template "access-cell" .}}</td>
               <td class="end">{{if .Added}}<a class="btn btn-sm" href="/vpn/{{.Name}}/access">Gérer</a>{{end}}</td>
             </tr>
-            {{else}}<tr><td colspan="7" class="muted">Aucun appareil.</td></tr>{{end}}
+            {{else}}{{template "empty-row" (args "Cols" 7 "Text" "Aucun appareil inscrit.")}}{{end}}
           </tbody>
         </table>
       </section>
@@ -62,28 +75,37 @@
 {{template "bottom" .}}{{end}}
 
 {{define "vpn-new"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" "Nouvel appareil")}}</header>
+{{template "topbar" (args "Title" "VPN" "Link" "/vpn" "Sub" "Nouvel appareil")}}
 <main class="page">
-  <h1>Nouvel appareil</h1>
-  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  {{template "page-head" (args "Title" "Nouvel appareil")}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" .)}}{{end}}
+  {{with .MainError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
   <form method="post" action="/vpn/new" class="card stack gap narrow">
+    <input type="hidden" name="token" value="{{.Token}}">
     <label class="field"><span>Nom de l'appareil</span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9_]{1,24}" placeholder="pixel_9" autofocus></label>
     <label class="field"><span>IP dans le tunnel <small class="muted">({{.Subnet}}, la première libre est proposée)</small></span><input name="address" value="{{.Address}}" class="mono" required inputmode="decimal"></label>
     {{template "service-checks" .}}
     {{template "site-checks" .}}
-    <button class="btn btn-primary">Créer l'appareil</button>
+    <div class="line"><button class="btn btn-primary">Créer l'appareil</button><a class="btn" href="/vpn">Annuler</a></div>
     <small class="muted">Les clés sont créées ici et ne sont gardées nulle part : la page suivante est la seule à les montrer.</small>
   </form>
 </main>
 {{template "bottom" .}}{{end}}
 
+{{/* Page unique (clés montrées une fois). Replay : le formulaire avait déjà servi (double clic, F5),
+     rien n'a été relancé et les clés ne reviennent pas. */}}
 {{define "vpn-added"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" .Name)}}</header>
+{{template "topbar" (args "Title" "VPN" "Link" "/vpn" "Sub" .Name)}}
 <main class="page">
-  <h1>{{.Name}}</h1>
+  {{template "page-head" (args "Title" .Name "Sub" .Address)}}
   {{with .Track}}{{template "track" .}}{{end}}
-  <div class="alert alert-amber"><p><strong>Page unique.</strong> Les clés ne sont gardées nulle part : enregistre la configuration sur l'appareil avant de quitter.</p></div>
-  <div class="overview">
+  {{if .Replay}}
+  <div class="alert alert-amber" role="status"><p><strong>Déjà envoyé.</strong> Ce formulaire avait déjà inscrit {{.Name}} : rien n'est relancé, et ses clés ne se montrent qu'une fois. Si sa configuration n'a pas été enregistrée sur l'appareil, retire-le (« Gérer ») puis recommence.</p><a class="btn btn-sm" href="/vpn">Retour au VPN</a></div>
+  {{else}}
+  <div class="alert alert-amber" role="status"><p><strong>Page unique.</strong> Les clés ne sont gardées nulle part : enregistre la configuration sur l'appareil avant de quitter.</p></div>
+  {{/* Quitter la page demande confirmation (app.js) : ni la configuration ni la clé pré-partagée ne
+       se remontrent. */}}
+  <div class="overview" data-leave-warn="Les clés de {{.Name}} ne seront plus jamais affichées. Configuration enregistrée sur l'appareil et clé pré-partagée copiée ?">
     <section class="block" aria-labelledby="conf-title">
       <div class="block-head"><h2 id="conf-title">1. Sur l'appareil</h2><a class="btn btn-sm" href="{{.Download}}" download="{{.Name}}.conf">Télécharger {{.Name}}.conf</a></div>
       <div class="card vpn-conf">
@@ -95,7 +117,7 @@
       </div>
     </section>
     <section class="block" aria-labelledby="steps-title">
-      <div class="block-head"><h2 id="steps-title">2. Sur think, dans ~/.dotfiles</h2></div>
+      <div class="block-head"><h2 id="steps-title">2. Sur {{machine}}, dans ~/.dotfiles</h2></div>
       <div class="card stack gap">
         <p class="small">L'appareil est inscrit dans <span class="mono">vpn-peers.json</span> (commit sur main dans la minute), mais il n'est autorisé qu'avec sa clé pré-partagée, puis un rebuild :</p>
         <ol class="steps-list">
@@ -107,47 +129,54 @@
       </div>
     </section>
   </div>
+  {{end}}
 </main>
 {{template "bottom" .}}{{end}}
 
-{{/* Cases des services de think réservés au VPN (.Services, .Checked). */}}
+{{/* Cases des services de la machine (.Services, .Checked). .Lock : le service qui ne peut pas être
+     retiré d'ici (le dashboard, depuis l'appareil ou le compte qui s'en sert) : coché, grisé, et
+     envoyé quand même (champ caché). */}}
 {{define "service-checks"}}
 <fieldset class="checks">
-  <legend>Services de think</legend>
-  {{range .Services}}<label class="row-toggle"><span class="stack tight"><strong>{{.Label}}</strong><small class="mono muted">{{.Host}}</small></span><input type="checkbox" name="service" value="{{.Name}}" {{if index $.Checked .Name}}checked{{end}}></label>{{end}}
+  <legend>Services de {{machine}}</legend>
+  {{range .Services}}{{$locked := and $.Lock (eq $.Lock .Name)}}<label class="row-toggle{{if $locked}} disabled{{end}}"><span class="stack tight"><strong>{{.Label}}</strong><small class="mono muted">{{.Host}}</small></span><input type="checkbox" name="service" value="{{.Name}}" {{if or $locked (index $.Checked .Name)}}checked{{end}} {{if $locked}}disabled{{end}}></label>{{if $locked}}<input type="hidden" name="service" value="{{.Name}}">{{end}}{{end}}
 </fieldset>
 {{end}}
 
 {{/* Cases des sites (.Sites : en VPN, ou avec Authelia si .SSO) ; un environnement qui reprend
-     l'accès de son parent est grisé. */}}
+     l'accès de son parent est grisé. .MainError : main illisible, la liste peut manquer. */}}
 {{define "site-checks"}}
 <fieldset class="checks">
   <legend>{{if .SSO}}Sites avec Authelia{{else}}Sites en VPN{{end}}</legend>
   {{range .Sites}}<label class="row-toggle{{if .Inherited}} disabled{{end}}"><span class="stack tight"><strong>{{.App}}</strong><small class="mono muted">{{.Domain}}{{if .Inherited}}, accès repris de {{.From}}{{end}}</small></span><input type="checkbox" name="site" value="{{.App}}" {{if .On}}checked{{end}} {{if .Inherited}}disabled{{end}}></label>
-  {{else}}<p class="small muted">{{if .SSO}}Aucun site avec Authelia.{{else}}Aucun site en VPN.{{end}}</p>{{end}}
+  {{else}}<p class="small muted">{{if .MainError}}Sites illisibles tant que main ne se lit pas.{{else if .SSO}}Aucun site avec Authelia.{{else}}Aucun site en VPN.{{end}}</p>{{end}}
 </fieldset>
 {{end}}
 
 {{define "vpn-access"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "VPN" "Link" "/vpn" "Sub" .Peer.Name)}}</header>
+{{template "topbar" (args "Title" "VPN" "Link" "/vpn" "Sub" .Peer.Name)}}
 <main class="page">
-  <div class="stack tight"><h1>{{.Peer.Name}}</h1><span class="mono muted">{{.Peer.Address}}</span></div>
-  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  {{template "page-head" (args "Title" .Peer.Name "Sub" .Peer.Address "Badge" (or (and .Pending "en attente") ""))}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" .)}}{{end}}
+  {{with .MainError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
   <form method="post" action="/vpn/{{.Peer.Name}}/access" class="stack gap-lg narrow">
+    <input type="hidden" name="token" value="{{.Token}}">
     <section class="card stack gap">
       {{template "service-checks" .}}
-      {{if .Self}}<small class="warn-ink">Tu es connecté depuis cet appareil : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
-      <small class="muted">Appliqué seul dans la minute, comme les sites.</small>
+      {{if .Lock}}<small class="warn-ink">Tu es connecté depuis cet appareil : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
+      <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     </section>
     <section class="card stack gap">
       {{template "site-checks" .}}
       <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     </section>
+    {{if .Pending}}<small class="warn-ink">Appareil pas encore actif : ces accès s'ouvriront avec lui (secret, puis rebuild).</small>{{end}}
     <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/vpn">Annuler</a></div>
   </form>
   {{if not .Self}}
   <form method="post" action="/vpn/{{.Peer.Name}}/remove" class="card sec-danger narrow">
-    <span class="stack tight grow"><strong class="bad">Retirer {{.Peer.Name}}</strong><small class="muted">Il perd le VPN au prochain rebuild, et quitte les listes des sites.</small></span>
+    <input type="hidden" name="token" value="{{.Token}}-retrait">
+    <span class="stack tight grow"><strong class="bad">Retirer {{.Peer.Name}}</strong><small class="muted">{{if .Pending}}Il n'est pas encore actif : il quitte simplement la liste, et celles des sites.{{else}}Il perd le VPN au prochain rebuild, et quitte les listes des sites.{{end}}</small></span>
     <details><summary class="btn btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary>
       <div class="confirm"><button class="btn btn-danger">Retirer</button></div>
     </details>
@@ -159,36 +188,36 @@
 {{define "ssh"}}{{template "top" .}}
 <header class="topbar">
   {{template "crumbs" (args "Title" "SSH")}}
-  <a class="btn btn-primary" href="/ssh/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter une clé</a>
+  <a class="btn btn-primary" href="/ssh/new">{{icon "plus"}}Ajouter une clé</a>
 </header>
 <main class="page">
-  <h1>SSH</h1>
+  {{template "page-head" (args "Title" "SSH")}}
   {{with .Track}}{{template "track" .}}{{end}}
-  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  {{template "list-alerts" .}}
   <div class="overview">
     <section class="strip" aria-label="Activité SSH">
       <div class="strip-cell">
         <span class="strip-label">Sessions ouvertes</span>
-        <span class="strip-value line"><span class="sq" style="background: {{if .Sessions}}#22C55E{{else}}#C4C9D2{{end}}"></span>{{.Sessions}}</span>
+        <span class="strip-value line"><span class="sq {{if .Sessions}}up{{else}}idle{{end}}"></span>{{.Sessions}}</span>
         <span class="mono small muted">en ce moment</span>
       </div>
       <div class="strip-cell">
         <span class="strip-label">Connexions acceptées</span>
-        <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq" style="background: {{if .Accepted}}#22C55E{{else}}#C4C9D2{{end}}"></span>{{.Accepted}}{{if .Truncated}}+{{end}}{{end}}</span>
+        <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq {{if .Accepted}}up{{else}}idle{{end}}"></span>{{.Accepted}}{{if .Truncated}}+{{end}}{{end}}</span>
         <span class="mono small muted">sur {{.Window}}</span>
       </div>
       <div class="strip-cell">
         <span class="strip-label">Tentatives refusées</span>
-        <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq" style="background: {{if .Refused}}#EF4444{{else}}#C4C9D2{{end}}"></span>{{.Refused}}{{if .Truncated}}+{{end}}{{end}}</span>
+        <span class="strip-value line">{{if not .LogsOK}}—{{else}}<span class="sq {{if .Refused}}down{{else}}idle{{end}}"></span>{{.Refused}}{{if .Truncated}}+{{end}}{{end}}</span>
         <span class="mono small muted">sur {{.Window}}</span>
       </div>
     </section>
-    {{if not .LogsOK}}<div class="alert alert-amber"><p>Journal de sshd illisible (Loki absent ou injoignable) : dernières connexions et tentatives refusées indisponibles.</p></div>{{end}}
+    {{if not .LogsOK}}{{template "alert" (args "Kind" "amber" "Text" "Journal de sshd illisible (Loki absent ou injoignable) : dernières connexions et tentatives refusées indisponibles.")}}{{end}}
     <section class="block" aria-labelledby="keys-title">
-      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" "Clés qui ouvrent une session sur think : celles de ssh-keys.json, ajoutées ou retirées d'ici par un commit sur main, et celles du code Nix (systemSettings.users). Rien ne s'active seul : git pull, puis rebuild, qui montre chaque clé et demande confirmation. Activité : tirée du journal de sshd, qui note à chaque connexion l'empreinte de la clé (affichée au survol de la clé, comme ssh-keygen -l la donne).")}}</h2></div>
+      <div class="block-head"><h2 id="keys-title" class="line">Clés autorisées{{template "info" (args "ID" "info-ssh" "Text" (printf "Clés qui ouvrent une session sur %s : celles de ssh-keys.json, ajoutées ou retirées d'ici par un commit sur main, et celles du code Nix (systemSettings.users). Rien ne s'active seul : git pull, puis rebuild, qui montre chaque clé et demande confirmation. Activité : tirée du journal de sshd, qui note à chaque connexion l'empreinte de la clé (affichée au survol de la clé, comme ssh-keygen -l la donne). D'où : l'appareil VPN (ou l'IP) de la session ouverte, sinon de la dernière connexion." machine))}}</h2></div>
       <section class="card table-card" aria-label="Liste des clés">
         <table class="list">
-          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">État</th><th scope="col">Depuis</th><th scope="col">Connexions {{.Window}}</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <thead><tr><th scope="col">Compte</th><th scope="col">Clé</th><th scope="col">État</th><th scope="col">D'où</th><th scope="col">Connexions {{.Window}}</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
@@ -201,16 +230,17 @@
               {{end}}
               <td class="nowrap">{{if .Connected}}<span class="line"><span class="dot up" aria-hidden="true"></span>connectée{{with .ConnectedSince}} depuis {{.}}{{end}}</span>
                 {{else if .LastSeen}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">vue {{.LastSeen}}</span></span>
+                {{else if not $.LogsOK}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">—</span></span>
                 {{else}}<span class="line"><span class="dot unknown" aria-hidden="true"></span><span class="muted">pas vue sur {{$.Window}}</span></span>{{end}}</td>
               <td class="mono small muted nowrap">{{if .From}}{{.From}}{{else}}—{{end}}</td>
-              <td class="muted">{{if .Count}}{{.Count}}{{else}}0{{end}}</td>
+              <td class="muted">{{if not $.LogsOK}}—{{else if .Count}}{{.Count}}{{else}}0{{end}}</td>
               <td class="end"><span class="line end-line">
                 {{if .Key}}<button type="button" class="btn btn-sm" data-copy="{{.Key}}">Copier</button>{{end}}
-                {{if and .InFile (not .Adding)}}<form method="post" action="/ssh/remove" class="row-remove"><input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="key" value="{{.Key}}">
+                {{if and .InFile (not .Adding)}}<form method="post" action="/ssh/remove" class="row-remove"><input type="hidden" name="token" value="{{$.Token}}-{{.Fingerprint}}"><input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="key" value="{{.Key}}">
                   <details><summary class="btn btn-sm btn-danger-ghost"><span class="if-closed">Retirer…</span><span class="if-open">Annuler</span></summary><button class="btn btn-sm btn-danger">Retirer</button></details></form>{{end}}
               </span></td>
             </tr>
-            {{else}}<tr><td colspan="6" class="muted">Aucune clé.</td></tr>{{end}}
+            {{else}}{{template "empty-row" (args "Cols" 6 "Text" "Aucune clé autorisée.")}}{{end}}
           </tbody>
         </table>
       </section>
@@ -233,7 +263,7 @@
               <td><span class="bad">{{.Count}}</span></td>
               <td class="muted">{{.Last}}</td>
             </tr>
-            {{else}}<tr><td colspan="4" class="muted">Aucune.</td></tr>{{end}}
+            {{else}}{{template "empty-row" (args "Cols" 4 "Text" (printf "Aucune tentative sur %s." $.Window))}}{{end}}
           </tbody>
         </table>
       </section>
@@ -246,33 +276,37 @@
 {{define "accounts"}}{{template "top" .}}
 <header class="topbar">
   {{template "crumbs" (args "Title" "Authelia")}}
-  <a class="btn btn-primary" href="/accounts/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un compte</a>
+  <a class="btn btn-primary" href="/accounts/new">{{icon "plus"}}Ajouter un compte</a>
 </header>
 <main class="page">
-  <h1>Authelia</h1>
+  {{template "page-head" (args "Title" "Authelia")}}
   {{with .Track}}{{template "track" .}}{{end}}
-  {{with .Error}}<div class="alert alert-amber"><p>{{.}}</p></div>{{end}}
+  {{template "list-alerts" .}}
+  {{with .SummaryError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
   <div class="overview">
     <section class="block" aria-labelledby="accounts-title">
-      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de think et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché.")}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" (printf "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de %s et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché. En attente : ses accès sont sur main, le compte lui-même n'existe qu'après le secret et le rebuild." machine))}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
           <thead><tr><th scope="col">Compte</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
           <tbody>
             {{range .Rows}}
             <tr>
+              {{if .Pending}}
+              <td><span class="stack tight"><span class="line">{{.Name}}</span><span class="line small"><span class="dot unknown" aria-hidden="true"></span><span class="warn-ink">en attente : secret puis rebuild</span></span></span></td>
+              <td class="muted">—</td>
+              <td class="muted">—</td>
+              <td class="muted">—</td>
+              {{else}}
               <td><span class="stack tight"><span class="line">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Name}}{{end}}{{if .Disabled}}<span class="chip">désactivé</span>{{end}}</span><small class="muted">{{.Name}}{{with .Email}}, {{.}}{{end}}</small></span></td>
               <td>{{if or .TOTP .SecurityKeys}}<span class="line"><span class="dot up" aria-hidden="true"></span>{{if .TOTP}}code{{end}}{{if and .TOTP .SecurityKeys}}, {{end}}{{if .SecurityKeys}}{{.SecurityKeys}} clé{{if gt .SecurityKeys 1}}s{{end}}{{end}}</span>{{else}}<span class="line"><span class="dot down" aria-hidden="true"></span><span class="bad">aucune</span></span>{{end}}</td>
               <td class="muted">{{.Last}}</td>
               <td>{{if .Failures24h}}<span class="bad">{{.Failures24h}}</span>{{else}}<span class="muted">0</span>{{end}}</td>
-              <td><span class="stack tight access-cell">
-                {{with .Services}}<span><span class="muted">Services</span> {{join . ", "}}</span>{{end}}
-                {{with .Sites}}<span><span class="muted">Sites</span> {{join . ", "}}</span>{{end}}
-                {{if not (or .Services .Sites)}}<span class="muted">aucun</span>{{end}}
-              </span></td>
+              {{end}}
+              <td>{{template "access-cell" .}}</td>
               <td class="end"><a class="btn btn-sm" href="/accounts/{{.Name}}/access">Gérer</a></td>
             </tr>
-            {{else}}<tr><td colspan="6" class="muted">Aucun compte lu.</td></tr>{{end}}
+            {{else}}{{template "empty-row" (args "Cols" 6 "Text" "Aucun compte dans le résumé.")}}{{end}}
           </tbody>
         </table>
       </section>
@@ -282,23 +316,27 @@
 {{template "bottom" .}}{{end}}
 
 {{define "account-access"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}</header>
+{{template "topbar" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}
 <main class="page">
-  <h1>{{.Name}}</h1>
-  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  {{template "page-head" (args "Title" .Name)}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" .)}}{{end}}
+  {{with .MainError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
   <form method="post" action="/accounts/{{.Name}}/access" class="stack gap-lg narrow">
+    <input type="hidden" name="token" value="{{.Token}}">
     <section class="card stack gap">
       {{template "service-checks" .}}
-      {{if .Self}}<small class="warn-ink">Tu es connecté avec ce compte : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
+      {{if .Lock}}<small class="warn-ink">Tu es connecté avec ce compte : le dashboard ne peut pas lui être retiré d'ici.</small>{{end}}
+      <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     </section>
     <section class="card stack gap">
-      {{template "site-checks" (args "SSO" true "Sites" .Sites)}}
+      {{template "site-checks" (args "SSO" true "Sites" .Sites "MainError" .MainError)}}
+      <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     </section>
-    <small class="muted">Appliqué seul dans la minute (sauf si un rebuild est déjà en attente).</small>
     <div class="line"><button class="btn btn-primary">Enregistrer</button><a class="btn" href="/accounts">Annuler</a></div>
   </form>
   {{if not .Self}}
   <form method="post" action="/accounts/{{.Name}}/remove" class="card sec-danger narrow">
+    <input type="hidden" name="token" value="{{.Token}}-retrait">
     <span class="stack tight grow"><strong class="bad">Supprimer {{.Name}}</strong><small class="muted">Il perd tous ses accès dans la minute ; le compte lui-même se supprime ensuite dans le secret.</small></span>
     <details><summary class="btn btn-danger-ghost"><span class="if-closed">Supprimer…</span><span class="if-open">Annuler</span></summary>
       <div class="confirm"><button class="btn btn-danger">Supprimer</button></div>
@@ -308,22 +346,23 @@
 </main>
 {{template "bottom" .}}{{end}}
 
-{{/* Pages « Ajouter » : un formulaire (GET), puis les commandes à taper, rien n'est écrit d'ici. */}}
+{{/* Pages « Ajouter » : un formulaire, puis (adresse à relire, ?fait= / ?suivi=) les commandes à taper. */}}
 {{define "account-new"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" "Nouveau compte")}}</header>
+{{template "topbar" (args "Title" "Authelia" "Link" "/accounts" "Sub" (or (and .Snippet .Name) "Nouveau compte"))}}
 <main class="page">
-  <h1>{{if .Snippet}}{{.Name}}{{else}}Nouveau compte{{end}}</h1>
+  {{template "page-head" (args "Title" (or (and .Snippet .Name) "Nouveau compte"))}}
   {{with .Track}}{{template "track" .}}{{end}}
-  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" .)}}{{end}}
+  {{with .MainError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
   <div class="overview">
     {{if .Snippet}}
     <section class="card" aria-label="Étapes">
       <ol class="howto">
         <li><div class="howto-title">Ses accès</div>
           <p>{{if .Granted}}{{with .GrantedServices}}Services : {{join . ", "}}. {{end}}{{with .GrantedSites}}Sites : {{join . ", "}}.{{end}}{{else}}Aucun : il n'ouvrira rien tant que tu ne coches rien dans « Gérer ».{{end}}</p></li>
-        <li><div class="howto-title">Ajouter le compte aux secrets<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+        <li><div class="howto-title">Ajouter le compte aux secrets<span class="howto-where">sur {{machine}}, dans ~/.dotfiles</span></div>
           {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" .Secret))}}
-          <p>Coller à côté des comptes existants, au même retrait. Sans mot de passe : think en tire un au hasard.</p>
+          <p>Coller à côté des comptes existants, au même retrait. Sans mot de passe : {{machine}} en tire un au hasard.</p>
           {{template "cmd" (args "Text" .Snippet)}}</li>
         <li><div class="howto-title">Appliquer</div>
           {{if .Granted}}{{template "cmd" (args "Sh" true "Text" "git pull")}}{{end}}
@@ -335,6 +374,7 @@
     </section>
     {{else}}
     <form method="post" action="/accounts/new" class="stack gap-lg narrow">
+      <input type="hidden" name="token" value="{{.Token}}">
       <section class="card stack gap">
         <label class="field"><span>Identifiant <small class="muted">(pour se connecter)</small></span><input name="name" value="{{.Name}}" class="mono" required pattern="[a-z0-9][a-z0-9._\-]{0,31}" placeholder="marie" autofocus></label>
         <label class="field"><span>Nom affiché</span><input name="displayname" value="{{.DisplayName}}" required maxlength="64" placeholder="Marie"></label>
@@ -342,25 +382,25 @@
       </section>
       <section class="card stack gap">{{template "service-checks" .}}</section>
       <section class="card stack gap">{{template "site-checks" .}}</section>
-      <div class="line"><button class="btn btn-primary">Créer le compte</button><small class="muted">Les accès partent par un commit ; la page donne ensuite les commandes.</small></div>
+      <div class="line"><button class="btn btn-primary">Créer le compte</button><a class="btn" href="/accounts">Annuler</a></div>
+      <small class="muted">Les accès partent par un commit ; la page donne ensuite les commandes.</small>
     </form>
     {{end}}
   </div>
 </main>
 {{template "bottom" .}}{{end}}
 
-
 {{define "ssh-new"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "SSH" "Link" "/ssh" "Sub" "Nouvelle clé")}}</header>
+{{template "topbar" (args "Title" "SSH" "Link" "/ssh" "Sub" (or (and .Added .Comment) "Nouvelle clé"))}}
 <main class="page">
-  <h1>Nouvelle clé</h1>
-  {{with .Error}}<div class="alert alert-red"><p>{{.}}</p></div>{{end}}
+  {{template "page-head" (args "Title" (or (and .Added .Comment) "Nouvelle clé"))}}
+  {{with .Error}}{{template "alert" (args "Kind" "red" "Text" .)}}{{end}}
   <div class="overview">
     {{if .Added}}
     {{with .Track}}{{template "track" .}}{{end}}
     <section class="card" aria-label="Étapes">
       <ol class="howto">
-        <li><div class="howto-title">Récupérer le commit<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+        <li><div class="howto-title">Récupérer le commit<span class="howto-where">sur {{machine}}, dans ~/.dotfiles</span></div>
           {{template "cmd" (args "Sh" true "Text" "git pull")}}</li>
         <li><div class="howto-title">Appliquer</div>
           {{template "cmd" (args "Sh" true "Text" "rebuild")}}
@@ -371,14 +411,15 @@
     </section>
     {{else}}
     <form method="get" action="/ssh/new" class="card stack gap narrow">
-      {{if gt (len .Users) 1}}<label class="field"><span>Compte sur think</span><input name="user" value="{{.User}}" class="mono" list="users" required><datalist id="users">{{range .Users}}<option value="{{.}}">{{end}}</datalist></label>
+      {{if gt (len .Users) 1}}<label class="field"><span>Compte sur {{machine}}</span><input name="user" value="{{.User}}" class="mono" list="users" required><datalist id="users">{{range .Users}}<option value="{{.}}">{{end}}</datalist></label>
       {{else}}<input type="hidden" name="user" value="{{.User}}">{{end}}
       <label class="field"><span>Appareil <small class="muted">(nom dans le commentaire de la clé)</small></span><input name="device" value="{{.Device}}" class="mono" required pattern="[A-Za-z0-9._\-]{1,32}" placeholder="pixel-9" {{if not .Ready}}autofocus{{end}}></label>
       <label class="field"><span>Clé publique <small class="muted">(vide : la commande pour la créer)</small></span><textarea name="key" rows="3" class="mono small" placeholder="ssh-ed25519 AAAA…">{{.Key}}</textarea></label>
-      <button class="btn">Vérifier</button>
+      <div class="line"><button class="btn">Vérifier</button><a class="btn" href="/ssh">Annuler</a></div>
     </form>
     {{if .Ready}}{{if .Line}}
     <form method="post" action="/ssh/new" class="card stack gap">
+      <input type="hidden" name="token" value="{{.Token}}">
       <input type="hidden" name="user" value="{{.User}}"><input type="hidden" name="device" value="{{.Device}}"><input type="hidden" name="key" value="{{.Key}}">
       <div class="stack tight"><strong>{{.Comment}}</strong><small class="mono muted">{{.Fingerprint}}</small></div>
       <pre class="conf mono small">{{.Line}}</pre>
@@ -403,30 +444,30 @@
 {{/* Bloc de commande (.Text ; .Sh : une commande, précédée de « $ ») avec un bouton Copier. */}}
 {{define "cmd"}}<div class="cmd{{if .Sh}} sh{{end}}"><pre>{{.Text}}</pre><button type="button" class="cmd-copy" data-copy>Copier</button></div>{{end}}
 
-{{/* Voyant d'une demande à apps.yml : orange tant qu'elle court (htmx le relit), vert une fois
-     commitée (ou appliquée sur think, pour ce qu'il applique seul), rouge si refusée. Sur une page de
-     liste (.Reload), chaque changement d'état relit aussi le contenu (app.js). */}}
+{{/* Voyant d'une demande à apps.yml : accent tant qu'elle court (htmx le relit), vert une fois
+     commitée (ou appliquée sur la machine, pour ce qu'elle applique seule), rouge si refusée. Sur une
+     page de liste (.Reload), chaque changement d'état relit aussi le contenu (app.js). */}}
 {{define "track"}}{{$live := or (eq .State "running") (eq .State "deploying")}}<div class="track track-{{if eq .State "deploying"}}running{{else}}{{.State}}{{end}}" role="status" data-state="{{.State}}"{{if .Reload}} data-reload{{end}}{{if $live}} hx-get="/track/{{.ID}}{{if .Reload}}?reload=1{{end}}" hx-trigger="every 2s" hx-swap="outerHTML"{{end}}>
   <span class="track-dot" aria-hidden="true"></span>
-  <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "deploying"}}commité sur main (<span class="mono">{{.SHA}}</span>), application sur think…{{with .Detail}} <span class="warn-ink">{{.}}</span>{{end}}{{else if eq .State "done"}}{{if .Auto}}appliqué sur think (<span class="mono">{{.SHA}}</span>).{{else}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{end}}{{else}}{{.Detail}}{{end}}</span>
+  <span class="grow"><strong>{{.Label}}</strong> : {{if eq .State "running"}}commit en cours sur main (GitHub Actions)…{{else if eq .State "deploying"}}commité sur main (<span class="mono">{{.SHA}}</span>), application sur {{machine}}…{{with .Detail}} <span class="warn-ink">{{.}}</span>{{end}}{{else if eq .State "done"}}{{if .Auto}}appliqué sur {{machine}} (<span class="mono">{{.SHA}}</span>).{{else}}commité sur main{{with .SHA}} (<span class="mono">{{.}}</span>){{end}}. {{.Next}}{{end}}{{else}}{{.Detail}}{{end}}</span>
   {{with .Link}}<a class="small" href="{{.}}" target="_blank" rel="noopener">{{if $.SHA}}voir le commit{{else}}voir le run{{end}}</a>{{end}}
 </div>{{end}}
 
 {{define "account-removed"}}{{template "top" .}}
-<header class="topbar">{{template "crumbs" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}</header>
+{{template "topbar" (args "Title" "Authelia" "Link" "/accounts" "Sub" .Name)}}
 <main class="page">
-  <h1>{{.Name}}</h1>
+  {{template "page-head" (args "Title" .Name "Badge" "supprimé")}}
   {{with .Track}}{{template "track" .}}{{end}}
   <div class="overview">
     <section class="card" aria-label="Étapes">
       <ol class="howto">
-        <li><div class="howto-title">Retirer le compte du secret<span class="howto-where">sur think, dans ~/.dotfiles</span></div>
+        <li><div class="howto-title">Retirer le compte du secret<span class="howto-where">sur {{machine}}, dans ~/.dotfiles</span></div>
           {{template "cmd" (args "Sh" true "Text" (printf "secrets edit %s" .Secret))}}
           <p>Effacer le bloc <code>{{.Name}}:</code> et ses lignes.</p></li>
         <li><div class="howto-title">Appliquer</div>
           {{template "cmd" (args "Sh" true "Text" "git pull")}}
           {{template "cmd" (args "Sh" true "Text" "rebuild")}}
-          <p>think le retire de son fichier d'utilisateurs, avec son second facteur : il ne peut plus se connecter.</p></li>
+          <p>{{machine}} le retire de son fichier d'utilisateurs, avec son second facteur : il ne peut plus se connecter.</p></li>
       </ol>
     </section>
   </div>
@@ -443,7 +484,7 @@
       {{range .Items}}
       <li>
         <span class="time mono small muted">{{.Time}}</span>
-        <span class="kind" style="color: var(--ok)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2"/></svg></span>
+        <span class="kind ok">{{icon "key"}}</span>
         <span class="stack tight">
           <span><strong>{{if .Device}}{{.Device}}{{else}}{{.IP}}{{end}}</strong>{{if .Device}} <span class="what mono small">{{.IP}}</span>{{end}}</span>
           <small class="muted">user : <span class="what">{{.User}}</span> · clé : <span class="what" title="{{.Fingerprint}}">{{if .Unknown}}<span class="warn-ink">hors liste</span>{{else}}{{.Key}}{{end}}</span></small>

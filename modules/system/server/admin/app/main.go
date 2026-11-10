@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -10,7 +13,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
+	"reflect"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -103,12 +109,16 @@ func main() {
 	}
 	metricsReady = cfg.MetricsURL != ""
 	machineName = cfg.Machine
+	repoName = cfg.Repo
+	if b, err := os.ReadFile(cfg.Htmx); err == nil {
+		assetVer["htmx.min.js"] = shortHash(b)
+	}
 
 	if s.reg != nil {
-		go s.warm(context.Background())
+		safeGo("warm", func() { s.warm(context.Background()) })
 	}
 	// Ce que `update` changerait : chaque jour, avec un récapitulatif sur Discord.
-	go s.updatesLoop(context.Background())
+	safeGo("updatesLoop", func() { s.updatesLoop(context.Background()) })
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
@@ -120,9 +130,24 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-// guard : un POST ne vient que de la page elle-même (CSRF), et reste petit.
+// guard : un POST ne vient que de la page elle-même (CSRF), et reste petit. Une panique dans un
+// handler est rattrapée : journalisée avec sa pile, et montrée comme une erreur (pas une page coupée).
 func (s *Server) guard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		w := &watchWriter{ResponseWriter: rw}
+		defer func() {
+			p := recover()
+			if p == nil {
+				return
+			}
+			if p == http.ErrAbortHandler {
+				panic(p)
+			}
+			log.Printf("%s %s : panique : %v\n%s", r.Method, r.URL.Path, p, debug.Stack())
+			if !w.wrote {
+				s.httpError(w, r, http.StatusInternalServerError, "", "Erreur interne : la demande a échoué (détail dans le journal du dashboard).")
+			}
+		}()
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -133,7 +158,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			}
 			u, err := url.Parse(origin)
 			if err != nil || u.Host != s.cfg.Host {
-				http.Error(w, "origine refusée", http.StatusForbidden)
+				s.httpError(w, r, http.StatusForbidden, "", "Origine refusée : la demande ne vient pas du dashboard. Recharge la page puis réessaie.")
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
@@ -142,49 +167,313 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	if err := s.tmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template %s : %v", name, err)
+// watchWriter : sait si la réponse a commencé (après une panique, on ne peut plus rien envoyer).
+type watchWriter struct {
+	http.ResponseWriter
+	wrote bool
+}
+
+func (w *watchWriter) WriteHeader(code int) { w.wrote = true; w.ResponseWriter.WriteHeader(code) }
+func (w *watchWriter) Write(b []byte) (int, error) {
+	w.wrote = true
+	return w.ResponseWriter.Write(b)
+}
+func (w *watchWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
+// safeGo : une goroutine de fond qui ne fait pas tomber le serveur en paniquant (journalisée avec sa
+// pile). Pour une boucle, rattraper plutôt chaque tour (defer recoverLog) : elle continue ensuite.
+func safeGo(name string, fn func()) {
+	go func() {
+		defer recoverLog(name)
+		fn()
+	}()
+}
+
+// recoverLog : à différer en tête d'une fonction de fond ; journalise une panique au lieu de planter.
+func recoverLog(name string) {
+	if p := recover(); p != nil {
+		log.Printf("%s : panique : %v\n%s", name, p, debug.Stack())
 	}
 }
 
-func (s *Server) fail(w http.ResponseWriter, err error) {
-	log.Print(err)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusBadGateway)
-	s.render(w, "error", map[string]any{"Nav": "sites", "Error": err.Error()})
+// Rendu : le template entier dans un tampon, puis envoyé d'un bloc. Une erreur à mi-chemin ne laisse
+// plus partir une page coupée en 200 : la page d'erreur la remplace (500), dans le menu.
+var bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}
+
+func (s *Server) render(w http.ResponseWriter, name string, data any) {
+	s.renderStatus(w, http.StatusOK, name, data)
 }
 
+// renderStatus : comme render, avec un autre code (en-têtes posés avant le code, sinon perdus).
+func (s *Server) renderStatus(w http.ResponseWriter, code int, name string, data any) {
+	buf := bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer func() {
+		if buf.Cap() <= 1<<20 {
+			bufPool.Put(buf)
+		}
+	}()
+	if err := s.tmpl.ExecuteTemplate(buf, name, data); err != nil {
+		log.Printf("template %s : %v", name, err)
+		buf.Reset()
+		code = http.StatusInternalServerError
+		msg := "La page n'a pas pu être affichée : " + err.Error()
+		page := "error"
+		if strings.HasPrefix(name, "error") {
+			page = "" // la page d'erreur elle-même : du texte seul
+		}
+		if page == "" || s.tmpl.ExecuteTemplate(buf, page, map[string]any{"Nav": dataField(data, "Nav"), "PageTitle": "Erreur", "Error": msg, "Code": code}) != nil {
+			http.Error(w, msg, code)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+	w.WriteHeader(code)
+	_, _ = w.Write(buf.Bytes())
+}
+
+// isHtmx : une requête faite par htmx (fragment, navigation hx-boost, HX-Location).
+func isHtmx(r *http.Request) bool { return r != nil && r.Header.Get("HX-Request") == "true" }
+
+// isFragment : une requête htmx qui attend un morceau de page, pas une page entière (ni navigation
+// hx-boost, ni restauration de l'historique).
+func isFragment(r *http.Request) bool {
+	return isHtmx(r) && r.Header.Get("HX-Boosted") != "true" && r.Header.Get("HX-History-Restore-Request") != "true"
+}
+
+// httpError : une erreur montrée là où on la cherche. Page ou navigation (hx-boost) : la page d'erreur,
+// dans le menu (`nav` : l'entrée active, "" pour aucune) ; fragment htmx : un message court, qu'app.js
+// affiche en bandeau sans rien remplacer dans la page. `msg` : une phrase en français, pour l'utilisateur.
+func (s *Server) httpError(w http.ResponseWriter, r *http.Request, code int, nav, msg string) {
+	if isFragment(r) {
+		s.renderStatus(w, code, "error-fragment", map[string]any{"Error": msg, "Code": code})
+		return
+	}
+	s.renderStatus(w, code, "error", map[string]any{"Nav": nav, "PageTitle": "Erreur", "Error": msg, "Code": code})
+}
+
+// notFound : la ressource n'existe pas (ou plus) ; msg vide : un message générique.
+func (s *Server) notFound(w http.ResponseWriter, r *http.Request, nav, msg string) {
+	if msg == "" {
+		msg = "Cette page n'existe pas (ou plus)."
+	}
+	s.httpError(w, r, http.StatusNotFound, nav, msg)
+}
+
+// badRequest : une demande invalide (paramètre, formulaire), avec ce qui ne va pas.
+func (s *Server) badRequest(w http.ResponseWriter, r *http.Request, nav, msg string) {
+	s.httpError(w, r, http.StatusBadRequest, nav, msg)
+}
+
+// failAt : une source (GitHub, Loki…) n'a pas répondu ; journalisé, et montré en 502.
+func (s *Server) failAt(w http.ResponseWriter, r *http.Request, nav string, err error) {
+	log.Print(err)
+	s.httpError(w, r, http.StatusBadGateway, nav, err.Error())
+}
+
+// fail : failAt sans la requête (page entière, menu sur Sites). Préférer failAt.
+func (s *Server) fail(w http.ResponseWriter, err error) { s.failAt(w, nil, "sites", err) }
+
+// redirect : après une action. Requête htmx (hx-post) : HX-Location, la page suivante arrive comme une
+// navigation du menu (contenu seul, adresse dans l'historique) ; sinon un 303 classique.
+func (s *Server) redirect(w http.ResponseWriter, r *http.Request, to string) {
+	if isFragment(r) {
+		loc, _ := json.Marshal(map[string]string{"path": to, "target": ".content", "select": ".content", "swap": "outerHTML"})
+		w.Header().Set("HX-Location", string(loc))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// dataField : le champ `name` des données d'une page (map ou struct), "" sinon.
+func dataField(data any, name string) string {
+	switch d := data.(type) {
+	case map[string]any:
+		s, _ := d[name].(string)
+		return s
+	case nil:
+		return ""
+	}
+	v := reflect.ValueOf(data)
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return ""
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return ""
+	}
+	if f := v.FieldByName(name); f.IsValid() && f.Kind() == reflect.String {
+		return f.String()
+	}
+	return ""
+}
+
+// Titre de l'onglet par entrée du menu, quand la page ne donne pas le sien (PageTitle).
+var navTitles = map[string]string{
+	"sites": "Sites", "vpn": "VPN", "ssh": "SSH", "accounts": "Authelia", "traffic": "Trafic",
+	"updates": "Mises à jour", "metrics": "Métriques",
+}
+
+// Fichiers statiques : contenu, type, et empreinte (ETag, et ?v= des adresses versionnées).
+type staticFile struct {
+	data  []byte
+	ctype string
+	etag  string
+}
+
+var (
+	staticFiles = map[string]staticFile{}
+	assetVer    = map[string]string{} // fichier → empreinte courte
+)
+
+func shortHash(b []byte) string {
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:6])
+}
+
+func init() {
+	// Les fonctions communes rejoignent funcs (les tests analysent les templates avec funcs seul).
+	for k, v := range uiFuncs {
+		funcs[k] = v
+	}
+	types := map[string]string{
+		".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8",
+		".png": "image/png", ".svg": "image/svg+xml",
+	}
+	entries, _ := fs.ReadDir(assets, "static")
+	for _, e := range entries {
+		b, err := fs.ReadFile(assets, "static/"+e.Name())
+		if err != nil {
+			continue
+		}
+		v := shortHash(b)
+		staticFiles[e.Name()] = staticFile{data: b, ctype: types[filepath.Ext(e.Name())], etag: `"` + v + `"`}
+		assetVer[e.Name()] = v
+	}
+}
+
+// uiFuncs : fonctions des templates pour la mise en page commune (ajoutées à funcs par init).
+var uiFuncs = template.FuncMap{
+	// asset : l'adresse versionnée d'un fichier statique (`{{asset "style.css"}}`), gardée en cache
+	// tant que le fichier ne change pas.
+	"asset": func(file string) string {
+		if v := assetVer[file]; v != "" {
+			return "/static/" + file + "?v=" + v
+		}
+		return "/static/" + file
+	},
+	// pageTitle : le titre de l'onglet (PageTitle des données, sinon l'entrée du menu).
+	"pageTitle": func(data any) string {
+		if t := dataField(data, "PageTitle"); t != "" {
+			return t
+		}
+		return navTitles[dataField(data, "Nav")]
+	},
+	// errorLabel : le sous-titre de la page d'erreur, d'après le code HTTP.
+	"errorLabel": func(code any) string {
+		c, _ := code.(int)
+		switch c {
+		case 0:
+			return ""
+		case http.StatusBadRequest:
+			return "Demande invalide (400)"
+		case http.StatusForbidden:
+			return "Refusé (403)"
+		case http.StatusNotFound:
+			return "Introuvable (404)"
+		case http.StatusConflict:
+			return "Déjà en cours (409)"
+		case http.StatusBadGateway:
+			return "Source injoignable (502)"
+		case http.StatusInternalServerError:
+			return "Erreur interne (500)"
+		}
+		return "Code " + itoa(c)
+	},
+	// repo : le dépôt de la configuration (owner/nom), pour les liens GitHub.
+	"repo": func() string { return repoName },
+	// repoOwner : le propriétaire du dépôt (celui du template d'application, owner/app-template).
+	"repoOwner": func() string { o, _, _ := strings.Cut(repoName, "/"); return o },
+	// icon : une icône commune (`{{icon "plus"}}`), même trait que les autres.
+	"icon": func(name string) template.HTML {
+		d, ok := icons[name]
+		if !ok {
+			return ""
+		}
+		cls := ""
+		if name == "github" {
+			cls = ` class="fill"`
+		}
+		return template.HTML(`<svg viewBox="0 0 24 24" aria-hidden="true"` + cls + `><path d="` + d + `"/></svg>`)
+	},
+}
+
+// repoName : le dépôt de la configuration (cfg.Repo).
+var repoName = ""
+
+// icons : les tracés répétés dans les templates (24×24, trait).
+var icons = map[string]string{
+	"chevron":      "M9 6l6 6-6 6",
+	"chevron-down": "M6 9l6 6 6-6",
+	"back":         "M19 12H5M11 6l-6 6 6 6",
+	"plus":         "M12 5v14M5 12h14",
+	"minus":        "M5 12h14",
+	"check":        "M5 12l5 5L20 7",
+	"x":            "M6 6l12 12M18 6L6 18",
+	"external":     "M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5",
+	"globe":        "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18",
+	"lock":         "M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4",
+	"user":         "M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4",
+	"shield":       "M12 3l8 3v6c0 5-3.5 8-8 9c-4.5-1-8-4-8-9V6zM9 12l2 2 4-4",
+	"key":          "M4 15a4 4 0 1 0 8 0a4 4 0 1 0-8 0M10.8 12.2L20 3M16 7l3 3M14 9l2 2",
+	"branch":       "M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9",
+	"package":      "M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8",
+	"refresh":      "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5",
+	"clock":        "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2",
+	"alert":        "M12 3l9.5 17h-19zM12 10v4M12 17h.01",
+	"github":       githubPath,
+}
+
+const githubPath = "M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.5-2.6-.3-5.2-1.3-5.2-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3 .7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.1v3.2c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.7 18.3.5 12 .5z"
+
+// static : fichiers embarqués avec ETag (une revalidation coûte un 304). Adresse versionnée (?v= de
+// `asset`) : en cache pour de bon, la version suivante a une autre adresse.
 func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	file := r.PathValue("file")
+	versioned := r.URL.Query().Get("v") != "" && r.URL.Query().Get("v") == assetVer[file]
 	if file == "htmx.min.js" && s.cfg.Htmx != "" {
-		w.Header().Set("Cache-Control", "public, max-age=86400")
+		if versioned {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+		}
 		http.ServeFile(w, r, s.cfg.Htmx)
 		return
 	}
-	b, err := fs.ReadFile(assets, "static/"+file)
-	if err != nil {
+	f, ok := staticFiles[file]
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	switch filepath.Ext(file) {
-	case ".css":
-		w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	case ".js":
-		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	case ".png":
-		w.Header().Set("Content-Type", "image/png")
-	case ".svg":
-		// La carte du Trafic : lourde, et ne change qu'avec une nouvelle version.
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Header().Set("Cache-Control", "public, max-age=86400")
-		_, _ = w.Write(b)
-		return
+	if f.ctype != "" {
+		w.Header().Set("Content-Type", f.ctype)
 	}
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(b)
+	w.Header().Set("ETag", f.etag)
+	switch {
+	case versioned:
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	case filepath.Ext(file) == ".svg":
+		// La carte du Trafic : lourde, et ne change qu'avec une nouvelle version.
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+	default:
+		w.Header().Set("Cache-Control", "no-cache")
+	}
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(f.data))
 }
 
 // manifest : de quoi installer le dashboard comme une application (téléphone, ordinateur). Pas de
@@ -274,31 +563,37 @@ func itoa(n int) string { return strconv.Itoa(n) }
 // images, packages, dépôts des sites, changements) : un clic n'attend plus GitHub ni ghcr.
 func (s *Server) warm(ctx context.Context) {
 	for {
-		if _, err := s.gh.Head(ctx); err == nil {
-			if snap, err := s.snapshot(ctx); err == nil {
-				seen := map[string]bool{}
-				for _, name := range snap.Apps.Names() {
-					_ = s.sourceRepo(ctx, snap.Apps.Entries[name])
-					for _, d := range snap.Apps.Entries[name].Deploys(name) {
-						for _, c := range d.Ctrs.Containers {
-							if ref := s.cfg.ref(untag(c.Image)); !seen[ref] {
-								seen[ref] = true
-								_, _ = s.reg.FetchTags(ctx, ref)
-							}
-						}
-					}
-				}
-			}
-		}
-		_, _ = s.gh.Packages(ctx)
-		s.activity(ctx, activityStep)
-		// Les pages lentes les plus ouvertes, prêtes avant qu'on les demande.
-		_ = s.trafficPage("")
-		_ = s.sshActivityOf()
+		s.warmOnce(ctx)
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(20 * time.Second):
 		}
 	}
+}
+
+// warmOnce : un tour de warm ; une panique (réponse inattendue d'une source) n'arrête pas la boucle.
+func (s *Server) warmOnce(ctx context.Context) {
+	defer recoverLog("warm")
+	if _, err := s.gh.Head(ctx); err == nil {
+		if snap, err := s.snapshot(ctx); err == nil {
+			seen := map[string]bool{}
+			for _, name := range snap.Apps.Names() {
+				_ = s.sourceRepo(ctx, snap.Apps.Entries[name])
+				for _, d := range snap.Apps.Entries[name].Deploys(name) {
+					for _, c := range d.Ctrs.Containers {
+						if ref := s.cfg.ref(untag(c.Image)); !seen[ref] {
+							seen[ref] = true
+							_, _ = s.reg.FetchTags(ctx, ref)
+						}
+					}
+				}
+			}
+		}
+	}
+	_, _ = s.gh.Packages(ctx)
+	s.activity(ctx, activityStep)
+	// Les pages lentes les plus ouvertes, prêtes avant qu'on les demande.
+	_ = s.trafficPage("")
+	_ = s.sshActivityOf()
 }

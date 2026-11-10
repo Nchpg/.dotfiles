@@ -270,10 +270,6 @@ func servedDomain(app, sub string, vpn bool, base string) string {
 	return sub + "." + parent
 }
 
-func domainOf(name string, e Entry, base string) string {
-	return servedDomain(name, e.Subdomain, e.VPN(), base)
-}
-
 // Port de bouclage dérivé du nom, comme `hashedPort` du module apps.
 func hostPort(name string) int {
 	sum := sha256.Sum256([]byte(name))

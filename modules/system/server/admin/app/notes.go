@@ -39,17 +39,12 @@ func fixedVersions(s string) []string {
 }
 
 // tagPrefix : ce qui précède la version dans un tag (« v », « release- », « helm-loki- », rien).
-func tagPrefix(tag string) string {
-	if i := strings.IndexFunc(tag, func(r rune) bool { return r >= '0' && r <= '9' }); i >= 0 {
-		return tag[:i]
-	}
-	return tag
-}
+func tagPrefix(tag string) string { p, _ := splitTag(tag); return p }
 
 // filterReleases : les releases qui sont des versions du logiciel, de la plus ancienne à la plus
-// récente : ni préversion ni brouillon, et seulement les tags au préfixe de ses versions (un dépôt
-// publie aussi d'autres choses : loki ses chartes Helm, « helm-loki-6.1.0 »). Le préfixe : celui du tag
-// d'une version connue (`refs`), sinon le plus fréquent.
+// récente : ni préversion (marquée, ou à son tag : « 2.0.0-rc1 ») ni brouillon, et seulement les
+// tags au préfixe de ses versions (un dépôt publie aussi d'autres choses : loki ses chartes Helm,
+// « helm-loki-6.1.0 »). Le préfixe : celui du tag d'une version connue (`refs`), sinon le plus fréquent.
 func filterReleases(rels []Release, refs ...string) []Release {
 	prefixes := map[string]bool{}
 	for _, ref := range refs {
@@ -75,7 +70,7 @@ func filterReleases(rels []Release, refs ...string) []Release {
 	}
 	var out []Release
 	for _, r := range rels {
-		if !r.Prerelease && !r.Draft && prefixes[tagPrefix(r.Tag)] && len(versionParts(r.Tag)) > 0 {
+		if !r.Prerelease && !r.Draft && !isPrerelease(r.Tag) && prefixes[tagPrefix(r.Tag)] && len(versionParts(r.Tag)) > 0 {
 			out = append(out, r)
 		}
 	}

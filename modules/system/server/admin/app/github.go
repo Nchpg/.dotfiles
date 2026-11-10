@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,15 +21,25 @@ type GitHub struct {
 	cfg  *Config
 	http *http.Client
 
-	mu    sync.Mutex
-	raw   map[string][]byte    // fichier par commit (immuable)
-	cache map[string]cacheItem // réponses d'API, durée limitée
-	head  cacheItem            // dernière tête de main lue (Head)
+	mu       sync.Mutex
+	raw      map[string][]byte        // fichier par commit (immuable)
+	rawKeys  []string                 // ordre d'arrivée dans raw : les plus vieux partent au-delà de rawMax
+	cache    map[string]cacheItem     // réponses d'API, durée limitée
+	ttls     map[string]time.Duration // durée de chaque entrée du cache (ménage)
+	failed   map[string]cacheItem     // dernière erreur par clé (val : l'erreur), gardée errTTL
+	inflight map[string]chan struct{} // lectures en cours, partagées par ceux qui attendent la même clé
+	swept    time.Time                // dernier ménage du cache
+	head     cacheItem                // dernière tête de main lue (Head)
 }
 
 // headTTL : âge maximal de la tête de main pour afficher une page. Les demandes la relisent
 // toujours (Head) avant d'agir, et la boucle `warm` la rafraîchit en continu.
 const headTTL = 30 * time.Second
+
+const (
+	errTTL = time.Minute // une erreur (quota, panne) est gardée : pas une requête par page tant qu'elle dure
+	rawMax = 300         // fichiers gardés par commit (apps.json, lock, pairs… des derniers commits)
+)
 
 type cacheItem struct {
 	at  time.Time
@@ -39,21 +50,78 @@ func newGitHub(cfg *Config) *GitHub {
 	return &GitHub{cfg: cfg, http: &http.Client{Timeout: 20 * time.Second}, raw: map[string][]byte{}, cache: map[string]cacheItem{}}
 }
 
+// cached : la valeur de `key`, lue par `fetch` une seule fois à la fois (les autres demandes de la
+// même clé attendent cette lecture), gardée `ttl`. Une erreur est gardée errTTL (au plus `ttl`) :
+// pendant un quota épuisé, ni chaque page ni chaque tour de warm ne relance l'API. Sauf une
+// demande abandonnée (contexte annulé) : la suivante relit.
 func (g *GitHub) cached(key string, ttl time.Duration, fetch func() (any, error)) (any, error) {
-	g.mu.Lock()
-	if it, ok := g.cache[key]; ok && time.Since(it.at) < ttl {
+	for {
+		g.mu.Lock()
+		if it, ok := g.cache[key]; ok && time.Since(it.at) < ttl {
+			g.mu.Unlock()
+			return it.val, nil
+		}
+		if it, ok := g.failed[key]; ok && time.Since(it.at) < min(errTTL, ttl) {
+			g.mu.Unlock()
+			return nil, it.val.(error)
+		}
+		if ch, ok := g.inflight[key]; ok {
+			g.mu.Unlock()
+			<-ch
+			continue
+		}
+		if g.inflight == nil {
+			g.inflight, g.ttls, g.failed = map[string]chan struct{}{}, map[string]time.Duration{}, map[string]cacheItem{}
+		}
+		ch := make(chan struct{})
+		g.inflight[key] = ch
+		g.sweep()
 		g.mu.Unlock()
-		return it.val, nil
+		return g.fill(key, ttl, ch, fetch)
 	}
-	g.mu.Unlock()
+}
+
+// fill : une lecture de cached ; ceux qui l'attendent sont libérés même si fetch panique.
+func (g *GitHub) fill(key string, ttl time.Duration, ch chan struct{}, fetch func() (any, error)) (any, error) {
+	defer func() {
+		g.mu.Lock()
+		delete(g.inflight, key)
+		close(ch)
+		g.mu.Unlock()
+	}()
 	v, err := fetch()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	switch {
+	case err == nil:
+		g.cache[key], g.ttls[key] = cacheItem{time.Now(), v}, ttl
+		delete(g.failed, key)
+	case !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded):
+		g.failed[key] = cacheItem{time.Now(), err}
+	}
 	if err != nil {
 		return nil, err
 	}
-	g.mu.Lock()
-	g.cache[key] = cacheItem{time.Now(), v}
-	g.mu.Unlock()
 	return v, nil
+}
+
+// sweep : toutes les 10 minutes, les entrées périmées quittent le cache (sous g.mu).
+func (g *GitHub) sweep() {
+	if time.Since(g.swept) < 10*time.Minute {
+		return
+	}
+	g.swept = time.Now()
+	for k, ttl := range g.ttls {
+		if time.Since(g.cache[k].at) >= ttl {
+			delete(g.cache, k)
+			delete(g.ttls, k)
+		}
+	}
+	for k, it := range g.failed {
+		if time.Since(it.at) >= errTTL {
+			delete(g.failed, k)
+		}
+	}
 }
 
 // Head : dernier commit de la branche, par git (sans quota d'API).
@@ -116,7 +184,15 @@ func (g *GitHub) File(ctx context.Context, sha, path string) ([]byte, error) {
 		return nil, err
 	}
 	g.mu.Lock()
-	g.raw[key] = b
+	if _, ok := g.raw[key]; !ok {
+		g.raw[key] = b
+		g.rawKeys = append(g.rawKeys, key)
+		// Seuls les commits récents resservent : les plus vieux fichiers partent.
+		for len(g.rawKeys) > rawMax {
+			delete(g.raw, g.rawKeys[0])
+			g.rawKeys = g.rawKeys[1:]
+		}
+	}
 	g.mu.Unlock()
 	return b, nil
 }
@@ -159,22 +235,57 @@ func (g *GitHub) api(ctx context.Context, method, url, token string, body any, o
 	return resp.StatusCode, nil
 }
 
-// Dispatch lance apps.yml ; les entrées sont revérifiées là-bas.
-func (g *GitHub) Dispatch(ctx context.Context, inputs map[string]string) error {
+// Dispatch lance apps.yml ; les entrées sont revérifiées là-bas. `request` (identifiant de la
+// demande) nomme le run (run-name d'apps.yml) : waitCommit et follow le retrouvent par là. Un
+// apps.yml plus ancien, sans cette entrée, refuse l'appel (422) : il est refait sans, et le run
+// se retrouve alors à l'heure (requested : false).
+func (g *GitHub) Dispatch(ctx context.Context, inputs map[string]string, request string) (requested bool, err error) {
 	if g.cfg.DispatchToken == "" {
-		return errors.New("jeton github/dispatch_token absent")
+		return false, errors.New("jeton github/dispatch_token absent")
 	}
-	_, err := g.api(ctx, "POST", "https://api.github.com/repos/"+g.cfg.Repo+"/actions/workflows/apps.yml/dispatches",
-		g.cfg.DispatchToken, map[string]any{"ref": g.cfg.Branch, "inputs": inputs}, nil)
-	return err
+	url := "https://api.github.com/repos/" + g.cfg.Repo + "/actions/workflows/apps.yml/dispatches"
+	if request != "" {
+		with := map[string]string{"request": request}
+		for k, v := range inputs {
+			with[k] = v
+		}
+		code, err := g.api(ctx, "POST", url, g.cfg.DispatchToken, map[string]any{"ref": g.cfg.Branch, "inputs": with}, nil)
+		if err == nil || code != http.StatusUnprocessableEntity || !strings.Contains(err.Error(), "request") {
+			return err == nil, err
+		}
+	}
+	_, err = g.api(ctx, "POST", url, g.cfg.DispatchToken, map[string]any{"ref": g.cfg.Branch, "inputs": inputs}, nil)
+	return false, err
 }
 
 type Run struct {
-	ID         int64     `json:"id"`
-	Status     string    `json:"status"`
-	Conclusion string    `json:"conclusion"`
-	HTMLURL    string    `json:"html_url"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID           int64     `json:"id"`
+	Status       string    `json:"status"`
+	Conclusion   string    `json:"conclusion"`
+	HTMLURL      string    `json:"html_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	DisplayTitle string    `json:"display_title"` // run-name d'apps.yml : « edit myetf [<demande>] »
+}
+
+var reRunRequest = regexp.MustCompile(`\[([0-9a-f]{8,32})\]\s*$`)
+
+// Request : l'identifiant de la demande qui a lancé le run ("" : run sans identifiant, apps-watch
+// ou apps.yml d'avant run-name).
+func (r Run) Request() string {
+	if m := reRunRequest.FindStringSubmatch(r.DisplayTitle); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// runFor : le run de la demande `request` parmi `runs` (nil s'il n'a pas encore paru).
+func runFor(runs []Run, request string) *Run {
+	for i := range runs {
+		if request != "" && runs[i].Request() == request {
+			return &runs[i]
+		}
+	}
+	return nil
 }
 
 // Runs récents d'apps.yml lancés par dispatch.
@@ -182,9 +293,18 @@ func (g *GitHub) Runs(ctx context.Context) ([]Run, error) {
 	var out struct {
 		WorkflowRuns []Run `json:"workflow_runs"`
 	}
-	_, err := g.api(ctx, "GET", "https://api.github.com/repos/"+g.cfg.Repo+"/actions/workflows/apps.yml/runs?event=workflow_dispatch&per_page=10",
+	_, err := g.api(ctx, "GET", "https://api.github.com/repos/"+g.cfg.Repo+"/actions/workflows/apps.yml/runs?event=workflow_dispatch&per_page=20",
 		g.cfg.DispatchToken, nil, &out)
 	return out.WorkflowRuns, err
+}
+
+// runFailure : le détail d'un run d'apps.yml qui n'a pas abouti. Annulé : une demande plus récente
+// l'a remplacé dans la file d'apps.yml (un seul run en attente à la fois), rien n'a été refusé.
+func runFailure(r Run) string {
+	if r.Conclusion == "cancelled" {
+		return "annulée par une demande plus récente dans la file d'apps.yml : relance-la."
+	}
+	return "apps.yml a refusé la demande (" + r.Conclusion + ") : le détail est dans le run."
 }
 
 type Commit struct {
@@ -271,10 +391,14 @@ func (g *GitHub) CompareCount(ctx context.Context, owner, repo, base, head strin
 const compareMaxPages = 50
 
 // CompareTitles : le titre de chaque commit de base à head, du plus ancien au plus récent (celui de
-// la PR pour un merge de PR ; les merges de branches, sans contenu propre, sautent).
+// la PR pour un merge de PR ; les merges de branches, sans contenu propre, sautent). Gardés un jour :
+// une fois l'analyse enregistrée (ai.json), ils ne servent plus, et chaque mise à jour de nixpkgs
+// en apporte de nouveaux (quelques milliers de titres).
 func (g *GitHub) CompareTitles(ctx context.Context, owner, repo, base, head string) ([]string, error) {
-	v, err := g.cached("titles:"+owner+"/"+repo+":"+base+"..."+head, 30*24*time.Hour, func() (any, error) {
+	v, err := g.cached("titles:"+owner+"/"+repo+":"+base+"..."+head, 24*time.Hour, func() (any, error) {
 		var titles []string
+		// Comme CompareCount : le jeton d'abord ; refusé, en anonyme pour la suite.
+		token := g.cfg.DispatchToken
 		for page := 1; page <= compareMaxPages; page++ {
 			var out struct {
 				Commits []struct {
@@ -284,7 +408,12 @@ func (g *GitHub) CompareTitles(ctx context.Context, owner, repo, base, head stri
 				} `json:"commits"`
 			}
 			url := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s?per_page=100&page=%d", owner, repo, base, head, page)
-			if _, err := g.api(ctx, "GET", url, g.cfg.DispatchToken, nil, &out); err != nil {
+			_, err := g.api(ctx, "GET", url, token, nil, &out)
+			if err != nil && token != "" {
+				token = ""
+				_, err = g.api(ctx, "GET", url, "", nil, &out)
+			}
+			if err != nil {
 				return nil, err
 			}
 			for _, c := range out.Commits {

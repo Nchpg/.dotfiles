@@ -63,11 +63,11 @@ func (s *Server) newSite(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	snap, err := s.snapshot(ctx)
 	if err != nil {
-		s.fail(w, err)
+		s.failAt(w, r, "sites", err)
 		return
 	}
 	repos, err := s.repos(ctx, snap)
-	data := map[string]any{"Nav": "sites", "Repos": repos}
+	data := map[string]any{"Nav": "sites", "PageTitle": "Nouveau site", "Repos": repos}
 	if err != nil {
 		data["Error"] = "Liste des packages ghcr illisible : " + err.Error()
 	}
@@ -111,7 +111,8 @@ func (s *Server) newSiteForm(w http.ResponseWriter, r *http.Request) {
 	repo := r.URL.Query().Get("repo")
 	snap, err := s.snapshot(ctx)
 	if err != nil {
-		s.renderError(w, err)
+		// Même forme que les autres refus de ce formulaire (pas le bloc sombre de l'aperçu).
+		s.render(w, "newform", map[string]any{"Error": "main est injoignable, réessaie : " + err.Error()})
 		return
 	}
 	images := s.repoImages(ctx, repo)

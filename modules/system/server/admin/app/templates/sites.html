@@ -1,15 +1,17 @@
 {{define "sites"}}{{template "top" .}}
 <header class="topbar">
-  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Sites</strong></nav>
-  <a class="btn btn-primary" href="/sites/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Ajouter un site</a>
+  {{template "crumbs" (args "Title" "Sites")}}
+  <a class="btn btn-primary" href="/sites/new">{{icon "plus"}}Ajouter un site</a>
 </header>
 <main class="page">
-  <div class="line between">
-    <h1>Sites</h1>
-    <div class="tabs-line" role="group" aria-label="Filtrer">
-      <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.CountAll}}</span></button>
-      <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.CountPublic}}</span></button>
-      <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.CountVPN}}</span></button>
+  <div class="page-head">
+    {{template "page-title" (args "Title" "Sites")}}
+    <div class="page-actions">
+      <div class="seg" role="group" aria-label="Filtrer">
+        <button type="button" data-filter="all" aria-pressed="true">Tous<span class="count">{{.CountAll}}</span></button>
+        <button type="button" data-filter="public" aria-pressed="false">Publics<span class="count">{{.CountPublic}}</span></button>
+        <button type="button" data-filter="vpn" aria-pressed="false">VPN<span class="count">{{.CountVPN}}</span></button>
+      </div>
     </div>
   </div>
 
@@ -27,13 +29,13 @@
     <section class="block" aria-labelledby="changes">
       <div class="block-head">
         <h2 id="changes">Changements</h2>
-        <a class="gh-link small" href="https://github.com/Nchpg/.dotfiles/commits/main/profiles/server"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>Historique</a>
+        <a class="btn btn-sm" href="https://github.com/{{repo}}/commits/main/profiles/server">{{icon "github"}}Historique</a>
       </div>
       {{template "activity" .Activity}}
     </section>
     {{if .Services}}
     <section class="block" aria-labelledby="services-title">
-      <div class="block-head"><h2 id="services-title" class="line">Services de think{{template "info" (args "ID" "info-services" "Text" "Les autres services servis par think (Nextcloud, Vaultwarden, Grafana, Authelia, ce dashboard). Ils se règlent dans le code Nix, puis un rebuild : rien à modifier ici.")}}</h2></div>
+      <div class="block-head"><h2 id="services-title" class="line">Services de {{machine}}{{template "info" (args "ID" "info-services" "Text" (printf "Les autres services servis par %s (Nextcloud, Vaultwarden, Grafana, Authelia, ce dashboard). Ils se règlent dans le code Nix, puis un rebuild : rien à modifier ici." machine))}}</h2></div>
       {{template "services" .}}
     </section>
     {{end}}
@@ -41,24 +43,28 @@
 </main>
 {{template "bottom" .}}{{end}}
 
-{{/* Blocs rafraîchis seuls (GET /fragments/<nom>) : chacun se redemande à intervalle fixe. */}}
+{{/* Blocs rafraîchis seuls (GET /fragments/<nom>) : l'état se redemande toutes les 10 s, les cartes à
+     leur rythme (5 s pendant une demande, 30 s sinon) en amenant « En ligne » et les services
+     (hx-swap-oob, .OOB) : un seul calcul, des chiffres d'accord avec le tableau. */}}
+{{define "cards-refresh"}}{{template "site-cards" .}}{{template "online" .}}{{if .Services}}{{template "services" .}}{{end}}{{end}}
 
-{{/* État de think : deux cases du bandeau (think, ~/.dotfiles), plus une ligne d'explication s'il y a lieu. */}}
+{{/* État de la machine : deux cases du bandeau (machine, ~/.dotfiles), plus une ligne d'explication s'il y a lieu.
+     Tone (ok, warn, bad, busy, idle) donne les classes du carré (.Sq) et du texte (.Ink). */}}
 {{define "state-card"}}
-<div class="strip-part" id="state" aria-label="État de think" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
+<div class="strip-part" id="state" aria-label="État de {{machine}}" aria-live="polite" hx-get="/fragments/state" hx-trigger="every 10s" hx-swap="outerHTML">
   <div class="strip-cell">
-    <span class="strip-label line">think{{template "info" (args "ID" "info-think" "Text" "La version qui tourne sur think (celle du dernier rebuild, commits locaux compris), comparée au dernier commit poussé sur main (GitHub). Chaque minute, apps-deploy applique seul les changements de sites (apps.json et lock des images) ; tout autre changement attend un rebuild à la main.")}}</span>
-    <span class="strip-value line"><span class="sq{{if .Busy}} busy{{end}}" style="background: {{.Ink}}"></span>{{.Chip}}</span>
+    <span class="strip-label line">{{machine}}{{template "info" (args "ID" "info-think" "Text" (printf "La version qui tourne sur %s (celle du dernier rebuild, commits locaux compris), comparée au dernier commit poussé sur main (GitHub). Chaque minute, apps-deploy applique seul les changements de sites (apps.json et lock des images) ; tout autre changement attend un rebuild à la main." machine))}}</span>
+    <span class="strip-value line"><span class="sq {{.Sq}}"></span>{{.Chip}}</span>
     <span class="mono small muted">{{.Think}}{{if ne .Think .Main}} → {{.Main}}{{end}}</span>
   </div>
   <div class="strip-cell">
-    <span class="strip-label line">~/.dotfiles{{template "info" (args "ID" "info-checkout" "Text" "Le clone du dépôt sur think, d'où part un rebuild : commits pas encore poussés, fichiers modifiés, retard sur main. Après un déploiement de sites, apps-deploy l'avance seul.")}}</span>
-    {{if .CheckoutBusy}}<span class="strip-value line" style="color: {{.CheckoutInk}}"><span class="spin" aria-hidden="true"></span><span class="dots">{{.Checkout}}</span></span>{{else if .Checkout}}<span class="strip-value" style="color: {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
-    <span class="mono small muted">dépôt de think</span>
+    <span class="strip-label line">~/.dotfiles{{template "info" (args "ID" "info-checkout" "Text" (printf "Le clone du dépôt sur %s, d'où part un rebuild : commits pas encore poussés, fichiers modifiés, retard sur main. Après un déploiement de sites, apps-deploy l'avance seul." machine))}}</span>
+    {{if .CheckoutBusy}}<span class="strip-value line {{.CheckoutInk}}"><span class="spin" aria-hidden="true"></span><span class="dots">{{.Checkout}}</span></span>{{else if .Checkout}}<span class="strip-value {{.CheckoutInk}}">{{.Checkout}}</span>{{else}}<span class="strip-value muted">inconnu</span>{{end}}
+    <span class="mono small muted">dépôt de {{machine}}</span>
   </div>
   {{if or .Text .Pending}}
   <div class="strip-note">
-    {{if .Text}}<span style="color: {{.Ink}}">{{.Title}} : {{.Text}}</span>{{else}}<span style="color: {{.Ink}}">{{.Title}}</span>{{end}}
+    <span class="{{.Ink}}">{{.Title}}{{with .Text}} : {{.}}{{end}}</span>
     {{range .Pending}}<span class="mono small">{{.}}</span>{{end}}
   </div>
   {{end}}
@@ -68,10 +74,11 @@
 {{/* Petit « i » : une explication au clic. hx-preserve la garde ouverte quand la case se rafraîchit. */}}
 {{define "info"}}<details class="info" id="{{.ID}}" hx-preserve="true"><summary aria-label="Explication"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v5M12 8h.01"/></svg></summary><p class="info-pop">{{.Text}}</p></details>{{end}}
 
+{{/* « En ligne » : OnlineState (up : tout répond, down : au moins une adresse muette, idle : rien de sondé). */}}
 {{define "online"}}
-<div class="strip-cell" id="online" hx-get="/fragments/online" hx-trigger="every 30s" hx-swap="outerHTML">
-  <span class="strip-label line">En ligne{{template "info" (args "ID" "info-online" "Text" "Adresses qui répondent aux sondes de Prometheus, passées chaque minute sur chaque environnement des sites et sur chaque service de think. Vert : tout répond ; rouge : au moins une adresse ne répond pas.")}}</span>
-  <span class="strip-value line"><span class="sq" style="background: {{.OnlineInk}}"></span>{{.UpCount}} sur {{.ProbedCount}}</span>
+<div class="strip-cell" id="online" {{if .OOB}}hx-swap-oob="true"{{end}}>
+  <span class="strip-label line">En ligne{{template "info" (args "ID" "info-online" "Text" (printf "Adresses qui répondent aux sondes de Prometheus, passées chaque minute sur chaque environnement des sites et sur chaque service de %s. Vert : tout répond ; rouge : au moins une adresse ne répond pas." machine))}}</span>
+  <span class="strip-value line"><span class="sq {{.OnlineState}}"></span>{{.UpCount}} sur {{.ProbedCount}}</span>
   <span class="mono small muted">{{.Online}}/{{.ProbedSites}} sites, {{.ServicesUp}}/{{.ProbedServices}} services</span>
 </div>
 {{end}}
@@ -94,25 +101,31 @@
         <td rowspan="{{.Span}}" class="site-td">
           <span class="stack tight">
             <a class="go strong" href="/sites/{{.Name}}">{{.Name}}</a>
-            {{with .Repo}}<a class="repo-link small" href="https://github.com/{{.}}"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>{{.}}</a>{{end}}
+            {{with .Repo}}<a class="repo-link small" href="https://github.com/{{.}}">{{icon "github"}}{{.}}</a>{{end}}
             {{with .SiteJob}}{{template "job-badge" .}}{{end}}
           </span>
         </td>
         {{end}}
-        <td class="env-td"><span class="env-cell"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v12M18 9a3 3 0 1 0 0-6a3 3 0 1 0 0 6M6 21a3 3 0 1 0 0-6a3 3 0 1 0 0 6M18 9a9 9 0 0 1-9 9"/></svg><span class="stack tight"><a class="go" href="{{.EditURL}}">{{.Label}}</a><small class="mono muted">{{.Branch}}{{if .Frozen}} <span class="warn-ink">figé {{.Frozen}}</span>{{end}}</small>{{with .Job}}<span class="row-job">{{template "job-badge" .}}</span>{{end}}</span></span></td>
-        <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
+        {{/* Sous la branche : le commit de l'image qui tourne et la mémoire permise (conteneur d'entrée). */}}
+        <td class="env-td"><span class="env-cell">{{icon "branch"}}<span class="stack tight"><a class="go" href="{{.EditURL}}">{{.Label}}</a><small class="mono muted">{{.Branch}}{{if .Frozen}} <span class="warn-ink">figé {{.Frozen}}</span>{{end}}</small><small class="mono muted" title="Commit de l'image et mémoire du conteneur d'entrée">{{with .Rev}}{{.}} · {{end}}{{.Memory}}</small>{{with .Job}}<span class="row-job">{{template "job-badge" .}}</span>{{end}}</span></span></td>
+        <td class="addr-td"><span class="line nowrap">{{template "probe-dot" .}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
         <td class="acc-td">
-          {{if .VPN}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{if .NoTunnel}}<span class="acc acc-warn" title="Servi en VPN, mais ce nom ne pointe pas sur think dans le tunnel : les appareils ne l'atteignent pas par le VPN. Vérifie son DNS.">hors tunnel</span>{{end}}
-          {{else}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>{{end}}
-          {{if .SSO}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
+          {{if .VPN}}{{template "acc-vpn" .}}{{else}}{{template "acc-public"}}{{end}}
+          {{if .SSO}}{{template "acc-sso"}}{{end}}
         </td>
       </tr>
       {{end}}
     </tbody>
-    {{else}}<tbody><tr><td colspan="4" class="muted">Aucun site pour l'instant.</td></tr></tbody>{{end}}
+    {{else}}{{if not .Adding}}<tbody>{{template "empty-row" (args "Cols" 4 "Text" "Aucun site pour l'instant : « Ajouter un site » en publie un.")}}</tbody>{{end}}{{end}}
   </table>
 </section>
 {{end}}
+
+{{/* Briques des tableaux de sites et de services : voyant de la sonde, accès. */}}
+{{define "probe-dot"}}{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}{{end}}
+{{define "acc-vpn"}}<span class="acc acc-vpn">{{icon "lock"}}VPN</span>{{if .NoTunnel}}<span class="acc acc-warn" title="Servi en VPN, mais ce nom ne pointe pas sur {{machine}} dans le tunnel : les appareils ne l'atteignent pas par le VPN. Vérifie son DNS.">hors tunnel</span>{{end}}{{end}}
+{{define "acc-public"}}<span class="acc acc-public">{{icon "globe"}}Public</span>{{end}}
+{{define "acc-sso"}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)">{{icon "user"}}Authelia</span>{{end}}
 
 {{define "activity"}}
 <section class="activity" id="activity" aria-label="Changements récents" hx-get="/fragments/activity?n={{.N}}" hx-trigger="every 60s" hx-swap="outerHTML">
@@ -123,7 +136,7 @@
       {{range .Items}}
       <li>
         <span class="time mono small muted">{{.Time}}</span>
-        <span class="kind" style="color: {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
+        <span class="kind {{.Ink}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="{{.Icon}}"/></svg></span>
         <span class="stack tight">
           <span>{{if .Name}}<strong>{{.Name}}</strong> {{end}}<span class="what">{{.What}}</span></span>
           <small class="muted">{{.Kind}}</small>
@@ -133,36 +146,36 @@
       {{end}}
     </ol>
   </div>
-  {{else}}<p class="muted small day-empty">Historique indisponible.</p>{{end}}
-  {{if .More}}<button type="button" class="more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML" hx-disabled-elt="this"><span class="spin" aria-hidden="true"></span><span class="more-label">Voir plus</span><span class="more-busy">Chargement</span></button>{{end}}
+  {{else}}<p class="muted small day-empty">Historique indisponible (GitHub injoignable ?) : nouvel essai dans la minute.</p>{{end}}
+  {{if .More}}<button type="button" class="more" hx-get="/fragments/activity?n={{.Next}}" hx-target="#activity" hx-swap="outerHTML" hx-disabled-elt="this" data-no-busy><span class="spin" aria-hidden="true"></span><span class="more-label">Voir plus</span><span class="more-busy">Chargement</span></button>{{end}}
 </section>
 {{end}}
 
-
+{{/* Voyant de l'éditeur : la sonde de l'adresse du déploiement affiché (Env : "" pour la racine). */}}
 {{define "site-status"}}
-<span id="site-status" hx-get="/fragments/status?app={{.App}}" hx-trigger="every 30s" hx-swap="outerHTML">{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}</span>
+<span id="site-status" hx-get="/fragments/status?app={{.App}}{{with .Env}}&amp;env={{.}}{{end}}" hx-trigger="every 30s" hx-swap="outerHTML">{{if .Probed}}{{if .Up}}<span class="status up">en ligne</span>{{else}}<span class="status down">hors ligne</span>{{end}}{{else}}<span class="status unknown">non sondé</span>{{end}}</span>
 {{end}}
 
 {{define "job-badge"}}<a class="chip job job-{{.Kind}}" href="/sites/{{.App}}" title="{{.Detail}}"><span class="pulse"></span>{{.Label}}</a>{{end}}
 
-{{/* Services de think hors apps.json (cloud, coffre, métriques…) : lecture seule, état des sondes. */}}
+{{/* Services de la machine hors apps.json (cloud, coffre, métriques…) : lecture seule, état des sondes.
+     Rafraîchis avec les cartes (hx-swap-oob). */}}
 {{define "services"}}
-<section aria-label="Liste des services" id="services" class="card table-card" hx-get="/fragments/services" hx-trigger="every 30s" hx-swap="outerHTML">
+<section aria-label="Liste des services" id="services" class="card table-card" {{if .OOB}}hx-swap-oob="true"{{end}}>
   <table class="sites services">
     <thead><tr><th scope="col">Service</th><th scope="col">Adresse</th><th scope="col">Accès</th></tr></thead>
-      {{range .Services}}
+    {{range .Services}}
     <tbody data-vpn="{{not .Public}}" data-public="{{.Public}}">
       <tr>
         <td class="site-td">{{.Name}}</td>
-        <td class="addr-td"><span class="line nowrap">{{if .Probed}}{{if .Up}}<span class="dot up" role="img" aria-label="en ligne"></span>{{else}}<span class="dot down" role="img" aria-label="hors ligne"></span>{{end}}{{else}}<span class="dot unknown" role="img" aria-label="non sondé"></span>{{end}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
+        <td class="addr-td"><span class="line nowrap">{{template "probe-dot" .}}<a class="mono small ellipsis" href="{{.URL}}" title="{{.Domain}}">{{.Domain}}</a></span></td>
         <td class="acc-td">
-          {{if .Public}}<span class="acc acc-public"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg>Public</span>
-          {{else}}<span class="acc acc-vpn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4"/></svg>VPN</span>{{if .NoTunnel}}<span class="acc acc-warn" title="Servi en VPN, mais ce nom ne pointe pas sur think dans le tunnel : les appareils ne l'atteignent pas par le VPN. Vérifie son DNS.">hors tunnel</span>{{end}}{{end}}
-          {{if .Authelia}}<span class="acc acc-sso" title="Connexion Authelia exigée (compte et 2FA)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21c1-4 3.5-6 7-6s6 2 7 6M16 11l2 2 4-4"/></svg>Authelia</span>{{end}}
+          {{if .Public}}{{template "acc-public"}}{{else}}{{template "acc-vpn" .}}{{end}}
+          {{if .Authelia}}{{template "acc-sso"}}{{end}}
         </td>
       </tr>
     </tbody>
-      {{end}}
+    {{end}}
   </table>
 </section>
 {{end}}

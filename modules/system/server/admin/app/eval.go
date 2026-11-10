@@ -10,17 +10,54 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Evaluator évalue la config de think avec un apps.json candidat, avant tout envoi : une
 // erreur que la config sait détecter (adresse prise, appareil inconnu…) ne part jamais sur main.
 type Evaluator struct {
-	cfg *Config
-	mu  sync.Mutex // une évaluation à la fois : elle coûte de la mémoire
+	cfg  *Config
+	mu   sync.Mutex // la copie des vérifications de site (eval/)
+	upMu sync.Mutex // la copie des mises à jour (eval-updates/), à part : elle ne retient pas Check
+	// slot : une évaluation nix à la fois, tous usages confondus (elle coûte de la mémoire, sous
+	// MemoryMax) ; un canal plutôt qu'un mutex : l'attente s'abandonne avec le contexte.
+	slotOnce sync.Once
+	slot     chan struct{}
+	holder   atomic.Value // string : qui tient le créneau, pour dire pourquoi on attend
 }
 
 func (ev *Evaluator) dir() string { return filepath.Join(ev.cfg.StateDir, "eval") }
+
+// updatesDir : la copie des mises à jour : nix flake update et les update.sh (réseau, plusieurs
+// minutes) s'y font hors du créneau d'évaluation, sans retenir la vérification d'un site.
+func (ev *Evaluator) updatesDir() string { return filepath.Join(ev.cfg.StateDir, "eval-updates") }
+
+// acquire : le créneau d'évaluation, au nom de `who` ; `onWait` appelé une fois s'il faut attendre
+// (avec qui le tient). L'attente s'abandonne avec ctx.
+func (ev *Evaluator) acquire(ctx context.Context, who string, onWait func(holder string)) (release func(), err error) {
+	ev.slotOnce.Do(func() { ev.slot = make(chan struct{}, 1) })
+	select {
+	case ev.slot <- struct{}{}:
+	default:
+		if onWait != nil {
+			onWait(ev.Busy())
+		}
+		select {
+		case ev.slot <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	ev.holder.Store(who)
+	return func() { ev.holder.Store(""); <-ev.slot }, nil
+}
+
+// Busy : qui évalue en ce moment ("" : personne).
+func (ev *Evaluator) Busy() string {
+	s, _ := ev.holder.Load().(string)
+	return s
+}
 
 func (ev *Evaluator) run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -46,13 +83,25 @@ func (ev *Evaluator) env() []string {
 
 // Check : nil si la config de think s'évalue avec ces deux fichiers posés sur `head`.
 func (ev *Evaluator) Check(ctx context.Context, head string, apps, lock []byte) error {
+	return ev.CheckWaiting(ctx, head, apps, lock, nil)
+}
+
+// CheckWaiting : Check, avec `onWait` appelé si une autre évaluation tient le créneau (celle des
+// mises à jour) : de quoi dire pourquoi la demande attend. Les 6 minutes comptent une fois le
+// créneau obtenu.
+func (ev *Evaluator) CheckWaiting(ctx context.Context, head string, apps, lock []byte, onWait func(holder string)) error {
 	ev.mu.Lock()
 	defer ev.mu.Unlock()
+	release, err := ev.acquire(ctx, "la vérification d'un site", onWait)
+	if err != nil {
+		return err
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(ctx, 6*time.Minute)
 	defer cancel()
 
 	dir := ev.dir()
-	if err := ev.checkout(ctx, head); err != nil {
+	if err := ev.checkout(ctx, dir, head); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "profiles/server/apps.json"), apps, 0o644); err != nil {
@@ -75,9 +124,8 @@ func (ev *Evaluator) Check(ctx context.Context, head string, apps, lock []byte) 
 	return nil
 }
 
-// checkout : la copie d'évaluation sur `head`, propre (à appeler sous ev.mu).
-func (ev *Evaluator) checkout(ctx context.Context, head string) error {
-	dir := ev.dir()
+// checkout : la copie d'évaluation `dir` sur `head`, propre (à appeler sous le mutex de la copie).
+func (ev *Evaluator) checkout(ctx context.Context, dir, head string) error {
 	if _, err := os.Stat(filepath.Join(dir, ".git")); err != nil {
 		_ = os.RemoveAll(dir)
 		if out, err := ev.run(ctx, "git", "clone", "--quiet", ev.cfg.GitURL, dir); err != nil {

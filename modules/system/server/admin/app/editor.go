@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,8 +139,6 @@ type FormVM struct {
 	Branch       DD
 	Frozen       bool
 	Up, Probed   bool
-	Initial      string
-	Tint, Ink    string
 	Preview      PreviewVM
 	// Demande en cours (étapes à la place de l'aperçu, formulaire grisé) ou échec récent.
 	Running *JobView
@@ -172,6 +172,7 @@ type PreviewVM struct {
 	Errors   []string
 	Dirty    bool
 	Message  string
+	Auto     bool // Message proposé par le dashboard (pas écrit à la main) : recalculé à chaque aperçu
 	New      bool
 	// Adresse avant / après, quand elle change (sous-domaine, exposition).
 	From, To string
@@ -200,7 +201,7 @@ func (s *Server) repoImages(ctx context.Context, repo string) []string {
 
 // sourceRepo : dépôt GitHub d'un site (package ghcr de son image, sinon label de l'image), gardé
 // 10 minutes : les pages le demandent à chaque rafraîchissement, il ne change pas. Sans dépôt
-// trouvé pendant une panne de l'API des packages, la réponse n'est pas gardée.
+// trouvé pendant une panne de l'API des packages, la réponse n'est pas gardée (relue après une minute).
 func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 	if s.gh == nil || s.reg == nil {
 		return ""
@@ -213,7 +214,7 @@ func (s *Server) sourceRepo(ctx context.Context, e Entry) string {
 		return repo, err
 	})
 	if err != nil {
-		return repo // panne : valeur du moment, non gardée
+		return repo // panne : valeur du moment (vide pour ceux qui attendaient la même lecture)
 	}
 	return v.(string)
 }
@@ -371,12 +372,11 @@ func (s *Server) formVMFor(ctx context.Context, name string, e Entry, env string
 	f := FormVM{
 		New: isNew, Exists: !isNew, Name: name, Repo: repo, Env: env, Child: d.Child, EnvLabel: d.Label,
 		VPN: d.VPN(), SSO: d.Access.SSO, Internet: d.Options.Internet, Probe: d.Options.Probe,
-		Multi: len(d.Ctrs.Containers) > 1, Initial: initialOf(name),
-		OwnAccess: true, OwnContainers: true, OwnOptions: true,
+		Multi: len(d.Ctrs.Containers) > 1, OwnAccess: true, OwnContainers: true, OwnOptions: true,
 	}
-	f.Tint, f.Ink = colorsOf(name)
+	// Sous-domaine : vide pour un nouveau site (son nom, même renommé ensuite), sinon celui servi.
 	f.Sub = d.Subdomain
-	if f.Sub == "" {
+	if f.Sub == "" && !isNew {
 		f.Sub = d.App
 	}
 	f.Label = d.Label
@@ -628,7 +628,6 @@ func (e Entry) labelOf(id string) string {
 	return id
 }
 
-// recopyState : dernier résultat d'admin-recopy pour cette app, ou demande en attente.
 var reNotAlnum = regexp.MustCompile(`[^A-Za-z0-9]+`)
 
 // recopyID : l'identifiant de la ligne de recopie d'un dossier (`web:/app/data` -> `recopy-web-app-data`).
@@ -636,37 +635,76 @@ func recopyID(key string) string {
 	return "recopy-" + strings.Trim(reNotAlnum.ReplaceAllString(key, "-"), "-")
 }
 
+// Recopie restée sans nouvelles : une demande que personne ne prend (admin-recopy arrêté), ou une
+// copie notée « en cours » par un admin-recopy tué en route. Au-delà, elle compte comme échouée (et
+// peut être redemandée) au lieu de bloquer le bouton pour toujours.
+const (
+	recopyPickup = 10 * time.Minute
+	recopyMax    = 30 * time.Minute
+)
+
+// recopyFiles : la demande déposée pour `app` (dossiers, heure ; nil sans demande) et le dernier
+// résultat d'admin-recopy.
+type recopyFiles struct {
+	Want   []string
+	WantAt time.Time
+	State  string   `json:"state"`
+	Detail string   `json:"detail"`
+	At     int64    `json:"at"`
+	Paths  []string `json:"paths"`
+}
+
+func (s *Server) readRecopy(app string) recopyFiles {
+	var st recopyFiles
+	want := filepath.Join(s.cfg.StateDir, "recopy", app+".want")
+	if b, err := os.ReadFile(want); err == nil {
+		st.Want = strings.Fields(string(b))
+		if fi, err := os.Stat(want); err == nil {
+			st.WantAt = fi.ModTime()
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(s.cfg.RecopyStatus, app+".json")); err == nil {
+		_ = json.Unmarshal(b, &st)
+	}
+	return st
+}
+
+// active : une recopie est demandée ou en cours pour cette app (pas restée sans nouvelles).
+func (st recopyFiles) active() bool {
+	return (st.Want != nil && time.Since(st.WantAt) < recopyPickup) || (st.State == "running" && time.Since(time.Unix(st.At, 0)) < recopyMax)
+}
+
 // recopyState : la recopie d'un dossier (`target`, son emplacement) d'un environnement en copie, d'après
 // la demande déposée et le dernier résultat d'admin-recopy (root), qui note les dossiers recopiés.
 func (s *Server) recopyState(app, target string) *RecopyVM {
 	vm := &RecopyVM{Text: "Remplace ce dossier par celui du parent ; l'environnement est arrêté pendant la copie."}
-	if b, err := os.ReadFile(filepath.Join(s.cfg.StateDir, "recopy", app+".want")); err == nil {
-		if slices.Contains(strings.Fields(string(b)), target) {
+	st := s.readRecopy(app)
+	if st.Want != nil {
+		switch {
+		case time.Since(st.WantAt) >= recopyPickup:
+			vm.State, vm.Text = "failed", "Demande pas prise en charge (admin-recopy arrêté ? journalctl -u admin-recopy) : redemande-la."
+		case slices.Contains(st.Want, target):
 			vm.State, vm.Text = "running", "Recopie demandée…"
-		} else {
-			vm.State, vm.Text = "busy", "Un autre dossier se recopie."
+		default:
+			vm.State, vm.Text = "busy", "Un autre dossier se recopie : attends la fin."
 		}
 		return vm
 	}
-	var st struct {
-		State  string   `json:"state"`
-		Detail string   `json:"detail"`
-		At     int64    `json:"at"`
-		Paths  []string `json:"paths"`
-	}
-	if b, err := os.ReadFile(filepath.Join(s.cfg.RecopyStatus, app+".json")); err == nil && json.Unmarshal(b, &st) == nil {
-		mine := len(st.Paths) == 0 || slices.Contains(st.Paths, target)
-		when := time.Unix(st.At, 0).Local().Format("02/01 15:04")
-		switch {
-		case st.State == "running" && mine:
-			vm.State, vm.Text = "running", "Recopie en cours (depuis "+when+")…"
-		case st.State == "running":
-			vm.State, vm.Text = "busy", "Un autre dossier se recopie."
-		case st.State == "done" && mine:
-			vm.State, vm.Text = "done", "Recopié le "+when+"."
-		case st.State == "failed" && mine:
-			vm.State, vm.Text = "failed", "La recopie du "+when+" a échoué : "+st.Detail
-		}
+	mine := len(st.Paths) == 0 || slices.Contains(st.Paths, target)
+	when := time.Unix(st.At, 0).Local().Format("02/01 15:04")
+	stale := time.Since(time.Unix(st.At, 0)) >= recopyMax
+	switch {
+	case st.State == "running" && stale && mine:
+		vm.State, vm.Text = "failed", "La recopie du "+when+" a été interrompue (journalctl -u admin-recopy) : redemande-la."
+	case st.State == "running" && stale:
+	case st.State == "running" && mine:
+		vm.State, vm.Text = "running", "Recopie en cours (depuis "+when+")…"
+	case st.State == "running":
+		vm.State, vm.Text = "busy", "Un autre dossier se recopie : attends la fin."
+	case st.State == "done" && mine:
+		vm.State, vm.Text = "done", "Recopié le "+when+"."
+	case st.State == "failed" && mine:
+		vm.State, vm.Text = "failed", "La recopie du "+when+" a échoué : "+st.Detail
 	}
 	return vm
 }
@@ -1013,7 +1051,7 @@ func (s *Server) previewOf(name string, e *Entry, snap *Snapshot, isNew bool, ms
 	p.Dirty = p.Adds+p.Dels > 0
 	p.Message = msg
 	if p.Message == "" && p.Dirty {
-		p.Message = s.summary(name, snap, e, isNew)
+		p.Message, p.Auto = s.summary(name, snap, e, isNew), true
 	}
 	return p
 }
@@ -1177,17 +1215,18 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("app")
 	snap, err := s.snapshot(ctx)
 	if err != nil {
-		s.fail(w, err)
+		s.failAt(w, r, "sites", err)
 		return
 	}
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
-		// Site en cours d'ajout : pas encore dans apps.json, on montre sa demande.
-		if j := s.jobs.latest(name); j != nil {
-			s.render(w, "job-page", map[string]any{"Nav": "sites", "Job": j.Snapshot()})
+		// Site en cours d'ajout : pas encore dans apps.json, on montre sa demande (en cours, ou finie
+		// depuis peu : un échec reste visible 30 minutes, comme dans la liste, puis la page disparaît).
+		if j := s.jobs.latest(name); j != nil && badgeOf(j.Snapshot()) != nil {
+			s.render(w, "job-page", map[string]any{"Nav": "sites", "PageTitle": name, "Job": j.Snapshot()})
 			return
 		}
-		http.NotFound(w, r)
+		s.notFound(w, r, "sites", name+" n'existe pas (ou plus) sur main.")
 		return
 	}
 	q := r.URL.Query()
@@ -1242,8 +1281,11 @@ func (s *Server) editor(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, "editor", map[string]any{"Nav": "sites", "F": f})
+	s.render(w, "editor", map[string]any{"Nav": "sites", "PageTitle": name, "F": f})
 }
+
+// errSiteGone : le site de la page n'est plus sur main (supprimé d'ailleurs entre-temps).
+var errSiteGone = errors.New("n'existe plus sur main")
 
 // formRequest : nom, entrée de départ, images permises et dépôt de la requête.
 func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapshot) (name string, current Entry, allowed []string, repo string, isNew bool, err error) {
@@ -1257,7 +1299,7 @@ func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapsho
 	}
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
-		return "", Entry{}, nil, "", false, fmt.Errorf("%s n'existe plus sur main", name)
+		return "", Entry{}, nil, "", false, fmt.Errorf("%s %w", name, errSiteGone)
 	}
 	repo = s.sourceRepo(ctx, e)
 	allowed = s.repoImages(ctx, repo)
@@ -1269,11 +1311,14 @@ func (s *Server) formRequest(ctx context.Context, r *http.Request, snap *Snapsho
 	return name, e, allowed, repo, false, nil
 }
 
+// errBadForm : le corps de la requête est illisible (trop gros, coupé) : rien n'est fait.
+var errBadForm = errors.New("formulaire illisible (trop gros ou coupé) : rien n'a été changé")
+
 // requestEntry : entrée et erreurs d'une soumission du formulaire.
 func (s *Server) requestEntry(r *http.Request) (string, string, *Entry, *Snapshot, PreviewVM, bool, error) {
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
-		return "", "", nil, nil, PreviewVM{}, false, err
+		return "", "", nil, nil, PreviewVM{}, false, errBadForm
 	}
 	snap, err := s.snapshot(ctx)
 	if err != nil {
@@ -1300,7 +1345,13 @@ func (s *Server) requestEntry(r *http.Request) (string, string, *Entry, *Snapsho
 		e.Environments = nil
 	}
 	errs = append(errs, validate(s.cfg, name, e, snap.Apps.Entries)...)
-	p := s.previewOf(name, &e, snap, isNew, strings.TrimSpace(r.FormValue("msg")), errs)
+	// Message proposé (msg_auto) renvoyé tel quel : recalculé d'après ce qui change maintenant ; un
+	// message écrit à la main reste.
+	msg := strings.TrimSpace(r.FormValue("msg"))
+	if msg == r.FormValue("msg_auto") {
+		msg = ""
+	}
+	p := s.previewOf(name, &e, snap, isNew, msg, errs)
 	return name, env, &e, snap, p, isNew, nil
 }
 
@@ -1328,12 +1379,14 @@ func (s *Server) preview(w http.ResponseWriter, r *http.Request) {
 }
 
 // reform : le formulaire refait à partir de ce qui est saisi (section propre ou héritée, conteneur
-// ajouté ou retiré, parent ou branche changés) : la page ne calcule rien elle-même.
+// ajouté ou retiré, parent ou branche changés) : la page ne calcule rien elle-même. Une erreur (main
+// injoignable, site supprimé) ne remplace pas le formulaire : un bandeau la dit (app.js), et le
+// brouillon rejoué au chargement est oublié.
 func (s *Server) reform(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name, env, e, snap, p, isNew, err := s.requestEntry(r)
 	if err != nil {
-		s.renderError(w, err)
+		s.reformError(w, r, err)
 		return
 	}
 	if !isNew && s.busy(w, name) {
@@ -1352,25 +1405,43 @@ func (s *Server) reform(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "form", f)
 }
 
+// reformError : l'erreur d'un formulaire à refaire, avec le code qui va (app.js l'affiche en bandeau).
+func (s *Server) reformError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, errBadForm):
+		s.badRequest(w, r, "sites", "Formulaire illisible (trop gros ou coupé) : rien n'a été changé.")
+	case errors.Is(err, errSiteGone):
+		s.httpError(w, r, http.StatusConflict, "sites", err.Error()+" : recharge la page.")
+	default:
+		s.failAt(w, r, "sites", err)
+	}
+}
+
 func (s *Server) apply(w http.ResponseWriter, r *http.Request) {
-	name, _, e, snap, p, isNew, err := s.requestEntry(r)
+	name, env, e, snap, p, isNew, err := s.requestEntry(r)
 	if err != nil {
 		s.renderError(w, err)
 		return
 	}
-	s.startApply(w, r, name, e, snap, p, isNew)
+	s.startApply(w, r, Request{App: name, Env: env, Entry: e}, snap, p, isNew)
 }
 
 // Une ligne de 100 caractères au plus, accents compris ; pas de caractère de contrôle.
 var reCommitMessage = regexp.MustCompile(`^[^\p{Cc}\p{Cf}]{1,100}$`)
 
 // startApply : lance la demande si l'aperçu est propre et que la page est à jour. Le verrou rend atomique
-// « aucune demande en cours » puis « lancer » : deux envois simultanés ne partent pas ensemble.
-func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string, e *Entry, snap *Snapshot, p PreviewVM, isNew bool) {
+// « aucune demande en cours » puis « lancer » : deux envois simultanés ne partent pas ensemble. La
+// page suit ensuite la demande : celle du site (ou de l'environnement), formulaire grisé et étapes à
+// droite ; pour un nouveau site, sa page de suivi (le formulaire de création ne reste pas modifiable
+// sous les étapes).
+func (s *Server) startApply(w http.ResponseWriter, r *http.Request, req Request, snap *Snapshot, p PreviewVM, isNew bool) {
 	s.applyMu.Lock()
 	defer s.applyMu.Unlock()
+	name := req.App
 	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
 		p.Errors = append(p.Errors, "Une modification de "+name+" est déjà en cours : attends qu'elle se termine.")
+	} else if !isNew && s.recopyRunning(name, snap) {
+		p.Errors = append(p.Errors, "Une recopie de données de "+name+" est en cours : attends qu'elle se termine.")
 	}
 	if len(p.Errors) > 0 || !p.Dirty {
 		s.render(w, "preview", p)
@@ -1385,22 +1456,28 @@ func (s *Server) startApply(w http.ResponseWriter, r *http.Request, name string,
 		s.render(w, "preview", p)
 		return
 	}
-	msg := p.Message
-	if !reCommitMessage.MatchString(msg) {
+	if !reCommitMessage.MatchString(p.Message) {
 		p.Errors = append(p.Errors, "Message de commit : une ligne de 100 caractères au plus.")
 		s.render(w, "preview", p)
 		return
 	}
-	var old *Entry
 	if o, ok := snap.Apps.Entries[name]; ok {
-		old = &o
+		req.Old = &o
 	}
-	j := s.startJob(Request{App: name, Entry: e, Old: old, Base: base, Message: msg})
-	if !isNew {
-		// La page se recharge : bandeau « en cours », formulaire grisé, suivi à droite.
-		w.Header().Set("HX-Refresh", "true")
+	req.Base, req.Message = base, p.Message
+	s.startJob(req)
+	s.redirect(w, r, req.page())
+}
+
+// recopyRunning : une recopie de données est demandée ou en cours pour un environnement du site
+// (elle arrête ses conteneurs : pas de modification en même temps).
+func (s *Server) recopyRunning(name string, snap *Snapshot) bool {
+	for id := range snap.Apps.Entries[name].Environments {
+		if s.readRecopy(name + "-" + id).active() {
+			return true
+		}
 	}
-	s.render(w, "job", j.Snapshot())
+	return false
 }
 
 // removeEnv : retire un environnement (ceux qui en héritaient passent à son parent).
@@ -1408,7 +1485,7 @@ func (s *Server) removeEnv(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name, id := r.PathValue("app"), r.PathValue("env")
 	if err := r.ParseForm(); err != nil {
-		s.renderError(w, err)
+		s.renderError(w, errBadForm)
 		return
 	}
 	snap, err := s.snapshot(ctx)
@@ -1426,10 +1503,9 @@ func (s *Server) removeEnv(w http.ResponseWriter, r *http.Request) {
 		e.Environments = nil
 	}
 	p := s.previewOf(name, &e, snap, false, "feat("+name+"): remove "+id+" environment", validate(s.cfg, name, e, snap.Apps.Entries))
-	s.startApply(w, r, name, &e, snap, p, false)
+	s.startApply(w, r, Request{App: name, Entry: &e}, snap, p, false)
 }
 
-// recopy : demande à admin-recopy (root) de recopier les données du parent.
 // recopyTarget : le dossier (`<conteneur>:<chemin>`, champ `path`) d'un environnement, s'il est en copie
 // sur main ; son emplacement sur think.
 func (s *Server) recopyTarget(r *http.Request) (app, key, target string, ok bool) {
@@ -1448,21 +1524,33 @@ func (s *Server) recopyTarget(r *http.Request) (app, key, target string, ok bool
 	return name + "-" + id, key, e.DataHost(name, id, ctr, path), true
 }
 
-// recopy : demande la recopie d'un dossier en copie (admin-recopy, root, le fait).
+// recopy : demande la recopie d'un dossier en copie (admin-recopy, root, le fait). Un refus revient
+// dans la ligne elle-même (état « échec », texte visible), comme le résultat d'une recopie. Sous le
+// verrou des demandes : une modification du site et une recopie ne partent pas ensemble.
 func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
-	_ = r.ParseForm()
-	app, key, target, ok := s.recopyTarget(r)
-	if !ok {
-		http.Error(w, "dossier inconnu ou pas en copie", http.StatusBadRequest)
+	perr := r.ParseForm()
+	key := r.FormValue("path")
+	refuse := func(msg string) {
+		s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "Path": key, "ID": recopyID(key), "R": &RecopyVM{State: "failed", Text: msg}})
+	}
+	if perr != nil {
+		refuse("Formulaire illisible : rien n'a été demandé.")
 		return
 	}
+	app, _, target, ok := s.recopyTarget(r)
+	if !ok {
+		refuse("Ce dossier n'est plus en copie sur main (ou main est injoignable) : recharge la page.")
+		return
+	}
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
 	// Pas pendant une modification du site : la recopie arrête ses conteneurs et remplace ses données.
 	if j := s.jobs.latest(r.PathValue("app")); j != nil && !j.Snapshot().Done {
-		http.Error(w, "une modification du site est en cours : recopie après", http.StatusConflict)
+		refuse("Une modification du site est en cours : recopie une fois finie.")
 		return
 	}
 	if st := s.recopyState(app, target); st.State == "running" || st.State == "busy" {
-		http.Error(w, "une recopie est déjà en cours", http.StatusConflict)
+		s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "Path": key, "ID": recopyID(key), "R": st})
 		return
 	}
 	dir := filepath.Join(s.cfg.StateDir, "recopy")
@@ -1471,7 +1559,8 @@ func (s *Server) recopy(w http.ResponseWriter, r *http.Request) {
 		err = os.WriteFile(filepath.Join(dir, app+".want"), []byte(target+"\n"), 0o644)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("recopie %s : %v", app, err)
+		refuse("Demande pas déposée : " + err.Error())
 		return
 	}
 	s.render(w, "recopy", map[string]any{"URL": r.URL.Path, "Path": key, "ID": recopyID(key), "R": s.recopyState(app, target)})
@@ -1483,7 +1572,7 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("app")
 	if err := r.ParseForm(); err != nil {
-		s.renderError(w, err)
+		s.renderError(w, errBadForm)
 		return
 	}
 	snap, err := s.snapshot(ctx)
@@ -1493,11 +1582,15 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 	}
 	e, ok := snap.Apps.Entries[name]
 	if !ok {
-		s.renderError(w, fmt.Errorf("%s n'existe plus sur main", name))
+		s.renderError(w, fmt.Errorf("%s %w", name, errSiteGone))
 		return
 	}
 	if j := s.jobs.latest(name); j != nil && !j.Snapshot().Done {
 		s.renderError(w, fmt.Errorf("une modification de %s est déjà en cours : attends qu'elle se termine", name))
+		return
+	}
+	if s.recopyRunning(name, snap) {
+		s.renderError(w, fmt.Errorf("une recopie de données de %s est en cours : attends qu'elle se termine", name))
 		return
 	}
 	if r.FormValue("confirm") != name {
@@ -1509,10 +1602,12 @@ func (s *Server) remove(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, fmt.Errorf("%s a changé sur main depuis l'ouverture de la page : recharge-la", name))
 		return
 	}
-	j := s.startJob(Request{App: name, Entry: nil, Old: &e, Base: base, Message: "feat(" + name + "): remove site"})
-	s.render(w, "job", j.Snapshot())
+	// Comme une modification : la page du site, verrouillée, suit la suppression.
+	s.startJob(Request{App: name, Entry: nil, Old: &e, Base: base, Message: "feat(" + name + "): remove site"})
+	s.redirect(w, r, "/sites/"+name)
 }
 
+// renderError : une erreur de la demande, dans l'aperçu (là où l'on regarde après avoir cliqué).
 func (s *Server) renderError(w http.ResponseWriter, err error) {
 	s.render(w, "preview", PreviewVM{Errors: []string{err.Error()}})
 }
@@ -1520,7 +1615,7 @@ func (s *Server) renderError(w http.ResponseWriter, err error) {
 func (s *Server) job(w http.ResponseWriter, r *http.Request) {
 	j := s.jobs.get(r.PathValue("id"))
 	if j == nil {
-		http.NotFound(w, r)
+		s.notFound(w, r, "sites", "Cette demande n'est plus suivie (terminée depuis longtemps) : recharge la page.")
 		return
 	}
 	s.render(w, "job", j.Snapshot())

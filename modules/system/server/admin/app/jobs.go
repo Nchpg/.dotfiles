@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,6 +51,7 @@ type Job struct {
 	Head       string
 	T0         time.Time
 	Dispatched bool
+	Request    string // identifiant porté par le nom du run d'apps.yml ; vide : run retrouvé à l'heure
 
 	store *Jobs
 }
@@ -58,6 +60,7 @@ type Job struct {
 // qui le touche) ne perd ni leurs étapes ni le verrou du formulaire, et celles en cours reprennent.
 type Jobs struct {
 	mu       sync.Mutex
+	saveMu   sync.Mutex // une écriture du fichier à la fois
 	m        map[string]*Job
 	verified map[string]time.Time // domaine → dernière réponse vue par une demande (étape 4)
 	path     string
@@ -109,11 +112,15 @@ func (js *Jobs) add(j *Job) {
 	js.save()
 }
 
-// save : toutes les demandes, écrites d'un coup (fichier temporaire puis renommage).
+// save : toutes les demandes, écrites d'un coup (fichier temporaire puis renommage). Deux demandes
+// qui avancent ensemble écrivent l'une après l'autre, chacune avec l'état lu sous ce verrou : ni
+// fichier coupé, ni état plus ancien écrit en dernier.
 func (js *Jobs) save() {
 	if js.path == "" {
 		return
 	}
+	js.saveMu.Lock()
+	defer js.saveMu.Unlock()
 	js.mu.Lock()
 	list := make([]*Job, 0, len(js.m))
 	for _, j := range js.m {
@@ -125,7 +132,7 @@ func (js *Jobs) save() {
 		j.mu.Lock()
 		c := &Job{ID: j.ID, App: j.App, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...),
 			Done: j.Done, Failed: j.Failed, Created: j.Created, Finished: j.Finished, Domain: j.Domain, New: j.New,
-			Apps: j.Apps, Req: j.Req, Head: j.Head, T0: j.T0, Dispatched: j.Dispatched}
+			Apps: j.Apps, Req: j.Req, Head: j.Head, T0: j.T0, Dispatched: j.Dispatched, Request: j.Request}
 		j.mu.Unlock()
 		copies = append(copies, c)
 	}
@@ -134,14 +141,36 @@ func (js *Jobs) save() {
 		log.Printf("demandes : %v", err)
 		return
 	}
-	tmp := js.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		log.Printf("demandes : %v", err)
-		return
-	}
-	if err := os.Rename(tmp, js.path); err != nil {
+	if err := writeFileAtomic(js.path, b, 0o600); err != nil {
 		log.Printf("demandes : %v", err)
 	}
+}
+
+// writeFileAtomic : `path` remplacé d'un coup (fichier temporaire du même dossier, écrit, synchronisé,
+// puis renommé) : un lecteur, ou un redémarrage, ne voit jamais un fichier à moitié écrit.
+func writeFileAtomic(path string, b []byte, perm os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = f.Write(b)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, perm)
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // load : les demandes gardées ; celles qui n'étaient pas finies sont rendues pour reprise.
@@ -171,6 +200,7 @@ func (js *Jobs) load() []*Job {
 // JobView : copie d'une demande, lisible sans verrou (templates, badges).
 type JobView struct {
 	ID, App, Message, Domain  string
+	Page                      string // où revenir une fois finie (Request.page)
 	Apps                      []string
 	Delete, New, Done, Failed bool
 	Steps                     []Step
@@ -181,7 +211,7 @@ type JobView struct {
 func (j *Job) Snapshot() JobView {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return JobView{ID: j.ID, App: j.App, Apps: j.Apps, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain, New: j.New, Created: j.Created, Finished: j.Finished}
+	return JobView{ID: j.ID, App: j.App, Apps: j.Apps, Delete: j.Delete, Message: j.Message, Steps: append([]Step(nil), j.Steps...), Done: j.Done, Failed: j.Failed, Domain: j.Domain, New: j.New, Created: j.Created, Finished: j.Finished, Page: j.Req.page()}
 }
 
 func (j *Job) set(i int, state, detail, link string) {
@@ -245,6 +275,18 @@ type Request struct {
 	Old     *Entry // entrée lue sur main (nil : nouveau site)
 	Base    string // empreinte lue par la page
 	Message string
+	Env     string // environnement modifié depuis la page ("" : la racine)
+}
+
+// page : la page qui suit la demande, et où revenir une fois finie : le site, sur l'onglet de
+// l'environnement modifié.
+func (req Request) page() string {
+	if req.Entry != nil && req.Env != "" {
+		if _, ok := req.Entry.Environments[req.Env]; ok {
+			return "/sites/" + req.App + "?env=" + req.Env
+		}
+	}
+	return "/sites/" + req.App
 }
 
 func fingerprintOf(e *Entry) string {
@@ -424,12 +466,15 @@ func (s *Server) resumeJobs() {
 	}
 }
 
-// resumeStep : l'étape où reprendre une demande interrompue (celle qui était en cours).
+// resumeStep : l'étape où reprendre une demande interrompue : la première pas encore faite (celle
+// qui était en cours, ou la suivante si l'arrêt est tombé entre deux étapes).
 func resumeStep(j *Job) int {
-	from := 0
-	for i, st := range j.Snapshot().Steps {
-		if st.State == "active" {
+	steps := j.Snapshot().Steps
+	from := max(len(steps)-1, 0) // toutes faites, la fin pas notée : la dernière est revue
+	for i, st := range steps {
+		if st.State != "done" {
 			from = i
+			break
 		}
 	}
 	// Envoi à apps.yml pas encore fait (ou pas noté) : tout est refait, rien n'est parti.
@@ -467,9 +512,9 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request, from int) erro
 	}
 	if from <= 1 {
 		j.mu.Lock()
-		head, t0 := j.Head, j.T0
+		head, t0, request := j.Head, j.T0, j.Request
 		j.mu.Unlock()
-		commit, err := s.waitCommit(ctx, j, req.App, want, head, t0)
+		commit, err := s.waitCommit(ctx, j, req.App, want, head, t0, request)
 		if err != nil {
 			return err
 		}
@@ -514,7 +559,9 @@ func (s *Server) evalAndDispatch(ctx context.Context, j *Job, req Request) error
 		j.set(0, "failed", err.Error(), "")
 		return err
 	}
-	if err := s.eval.Check(ctx, head, candApps, candLock); err != nil {
+	if err := s.eval.CheckWaiting(ctx, head, candApps, candLock, func(holder string) {
+		j.set(0, "active", "en attente : "+holder+" évalue la config", "")
+	}); err != nil {
 		j.set(0, "failed", err.Error(), "")
 		return err
 	}
@@ -532,15 +579,19 @@ func (s *Server) evalAndDispatch(ctx context.Context, j *Job, req Request) error
 		imagesJSON = []byte("[]")
 	}
 	t0 := time.Now().Add(-10 * time.Second)
-	if err := s.gh.Dispatch(ctx, map[string]string{
+	requested, err := s.gh.Dispatch(ctx, map[string]string{
 		"action": "edit", "app": req.App, "entry": entry, "base": req.Base,
 		"images": string(imagesJSON), "message": req.Message, "source": "dashboard",
-	}); err != nil {
+	}, j.ID)
+	if err != nil {
 		j.set(1, "failed", err.Error(), "")
 		return err
 	}
 	j.mu.Lock()
 	j.Head, j.T0, j.Dispatched = head, t0, true
+	if requested {
+		j.Request = j.ID
+	}
 	j.mu.Unlock()
 	j.persist()
 	return nil
@@ -601,10 +652,14 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// waitCommit : le premier commit de main où l'entrée est celle demandée ; échec si apps.yml a refusé.
-func (s *Server) waitCommit(ctx context.Context, j *Job, app, want, start string, t0 time.Time) (string, error) {
+// waitCommit : le premier commit de main où l'entrée est celle demandée ; échec si le run d'apps.yml
+// de cette demande n'aboutit pas. Il est retrouvé par son nom (`request`) ; sans identifiant
+// (apps.yml d'avant run-name, demande reprise d'avant), par l'heure : le premier run sans
+// identifiant, ni déjà suivi par un voyant, lancé depuis t0.
+func (s *Server) waitCommit(ctx context.Context, j *Job, app, want, start string, t0 time.Time, request string) (string, error) {
 	deadline := time.Now().Add(5 * time.Minute)
 	last := start
+	var claimed int64 // sans identifiant : le run attribué à cette demande
 	for {
 		if !sleep(ctx, 4*time.Second) {
 			return "", ctx.Err()
@@ -618,11 +673,19 @@ func (s *Server) waitCommit(ctx context.Context, j *Job, app, want, start string
 			}
 		}
 		if runs, err := s.gh.Runs(ctx); err == nil {
-			for _, r := range runs {
-				if r.CreatedAt.Before(t0) || r.Status != "completed" || r.Conclusion == "success" {
-					continue
+			var r *Run
+			switch {
+			case request != "":
+				r = runFor(runs, request)
+			case claimed == 0:
+				if r = claimRun(runs, t0); r != nil {
+					claimed = r.ID
 				}
-				j.set(1, "failed", "apps.yml a refusé la demande ("+r.Conclusion+") : le détail est dans le run.", r.HTMLURL)
+			default:
+				r = runByID(runs, claimed)
+			}
+			if r != nil && r.Status == "completed" && r.Conclusion != "success" {
+				j.set(1, "failed", runFailure(*r), r.HTMLURL)
 				return "", errors.New("apps.yml")
 			}
 		}
@@ -633,6 +696,20 @@ func (s *Server) waitCommit(ctx context.Context, j *Job, app, want, start string
 	}
 }
 
+// deployWaits : pourquoi think n'applique pas (encore) un commit de main, par état d'apps-deploy :
+// rien d'un échec, la demande attend (suivi des sites et voyants des autres pages).
+var deployWaits = map[string]string{
+	"local":      "think tourne une version locale non commitée : il n'applique rien seul. `rebuild` à la main.",
+	"non_pousse": "think tourne des commits pas encore poussés et main a avancé : `git pull --rebase`, `git push`, puis `rebuild`.",
+	"en_avance":  "think tourne des commits pas encore poussés : `git push`.",
+	"diverge":    "main n'est plus dans la lignée de la version de think : `rebuild` à la main.",
+	"attente":    "main contient aussi d'autres changements que des sites : `rebuild` à la main pour tout appliquer.",
+	"github":     "think n'arrive pas à joindre GitHub (quota d'API ou réseau) : nouvel essai chaque minute.",
+}
+
+// deployBuildFailed : le texte d'un build d'apps-deploy en échec.
+const deployBuildFailed = "le build a échoué sur think : journalctl -u apps-deploy. La version d'avant tourne toujours."
+
 // waitDeployed : la génération active contient l'entrée demandée ; sinon, pourquoi think attend.
 // Un `rebuild` à faire à la main n'est pas un échec : l'étape attend (2 h au plus) et repart seule
 // dès que think tourne une version qui contient l'entrée.
@@ -640,14 +717,7 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 	deadline := time.Now().Add(10 * time.Minute)
 	manual := time.Now().Add(2 * time.Hour)
 	blocked := ""
-	reasons := map[string]string{
-		"local":      "think tourne une version locale non commitée : il n'applique rien seul. `rebuild` à la main.",
-		"non_pousse": "think tourne des commits pas encore poussés et main a avancé : `git pull --rebase`, `git push`, puis `rebuild`.",
-		"en_avance":  "think tourne des commits pas encore poussés : `git push`.",
-		"diverge":    "main n'est plus dans la lignée de la version de think : `rebuild` à la main.",
-		"attente":    "main contient aussi d'autres changements que des sites : `rebuild` à la main pour tout appliquer.",
-		"github":     "think n'arrive pas à joindre GitHub (quota d'API ou réseau) : nouvel essai chaque minute.",
-	}
+	reasons := deployWaits
 	for {
 		rev := deployedRevision(ctx)
 		if rev != "" && !strings.HasSuffix(rev, "-dirty") {
@@ -671,7 +741,7 @@ func (s *Server) waitDeployed(ctx context.Context, j *Job, app, want string) err
 				blocked = ""
 			}
 			if st.State == "echec" || (st.State == "deploiement" && deployFailed(ctx)) {
-				j.set(2, "failed", "le build a échoué sur think : journalctl -u apps-deploy. La version d'avant tourne toujours.", "")
+				j.set(2, "failed", deployBuildFailed, "")
 				return errors.New("echec")
 			}
 		}

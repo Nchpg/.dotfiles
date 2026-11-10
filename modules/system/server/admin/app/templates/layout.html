@@ -1,8 +1,33 @@
+{{/* Mise en page commune et briques partagées par toutes les pages.
+
+  En-tête d'une page (toujours dans cet ordre) :
+    {{template "top" .}}
+    <header class="topbar">
+      {{template "crumbs" (args "Title" "VPN")}}                        une entrée du menu
+      {{template "crumbs" (args "Link" "/vpn" "Title" "VPN" "Sub" .Name)}} une page sous elle
+      <a class="btn btn-primary" href="…">{{icon "plus"}}Ajouter …</a>   au plus une action (ou .topbar-actions)
+    </header>
+    ou, sans action : {{template "topbar" (args "Title" … "Link" … "Sub" …)}}
+    <main class="page">
+      {{template "page-head" (args "Title" "VPN" "Sub" .Address)}}       h1 + sous-titre (mono, discret)
+      ou, avec badge / contrôles de vue à droite :
+      <div class="page-head">{{template "page-title" (args "Title" .Name "Sub" .Domain)}}
+        <div class="page-actions">… .seg (période, filtre) …</div></div>
+      … contenu …
+    </main>
+    {{template "bottom" .}}
+  Titre de l'onglet : PageTitle des données (sinon l'entrée du menu, d'après Nav).
+
+  Autres briques : "empty-row" (ligne vide d'un tableau), "alert" (message d'une couleur), "error"
+  (page d'erreur, dans le menu) et "error-fragment" (message court d'une requête htmx, affiché en
+  bandeau par app.js). Icônes : {{icon "plus"}} (liste dans main.go). Classes : en tête de style.css. */}}
+
 {{define "top"}}<!doctype html>
 <html lang="fr">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
 {{/* Installable comme une application (manifeste servi par le dashboard) ; iPhone : balises Apple. */}}
 <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 <meta name="theme-color" content="#0C0F15">
@@ -12,17 +37,22 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{machine}}">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="htmx-config" content='{"scrollIntoViewOnBoost": false}'>
-<title>{{block "title" .}}admin {{machine}}{{end}}</title>
-<link rel="stylesheet" href="/static/style.css">
-<script src="/static/htmx.min.js" defer></script>
-<script src="/static/app.js" defer></script>
+{{/* Pas d'historique gardé par htmx (instantanés de pages, adresses IP et comptes compris, dans le
+     navigateur) : le retour arrière recharge la page, telle qu'elle est maintenant. */}}
+<meta name="htmx-config" content='{"scrollIntoViewOnBoost": false, "historyCacheSize": 0, "refreshOnHistoryMiss": true}'>
+<title>{{with pageTitle .}}{{.}} · {{end}}admin {{machine}}</title>
+<link rel="stylesheet" href="{{asset "style.css"}}">
+<script src="{{asset "htmx.min.js"}}" defer></script>
+<script src="{{asset "app.js"}}" defer></script>
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 <div class="shell">
 {{/* Navigation sans rechargement (hx-boost) : seul le contenu change (et le menu, pour la page
-     active), pas de page blanche entre deux ; le calque Grafana, hors du contenu, reste en vie. */}}
-<aside class="side" hx-boost="true" hx-target=".content" hx-select=".content" hx-select-oob="#main-nav" hx-swap="outerHTML">
+     active), pas de page blanche entre deux ; le calque Grafana, hors du contenu, reste en vie.
+     hx-sync : un nouveau clic annule la page encore en route (la plus lente ne gagne plus). Les
+     liens du contenu passent aussi par là (hx-boost sur .content, réglages dans app.js). */}}
+<aside class="side" hx-boost="true" hx-target=".content" hx-select=".content" hx-select-oob="#main-nav" hx-swap="outerHTML" hx-sync="closest .shell:replace">
   <a class="brand" href="/sites">
     <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v7H4zM4 13h16v7H4zM8 7.5h.01M8 16.5h.01"/></svg></span>
     <span class="brand-text"><strong>{{machine}}</strong><small>admin.vpn</small></span>
@@ -37,14 +67,14 @@
     <a href="/updates" {{if eq .Nav "updates"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg><span class="nav-long">Mises à jour</span><span class="nav-short" aria-hidden="true">Màj</span></a>
     <a href="/metrics" {{if eq .Nav "metrics"}}aria-current="page"{{end}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>Métriques{{if not metricsReady}}<small>bientôt</small>{{end}}</a>
   </nav>
-  <nav aria-label="Liens" class="nav-links">
+  {{with repo}}<nav aria-label="Liens" class="nav-links">
     <span class="nav-title">Ailleurs</span>
-    <a href="https://github.com/Nchpg/.dotfiles"><svg viewBox="0 0 24 24" aria-hidden="true" class="fill"><path d="{{githubMark}}"/></svg>Nchpg/.dotfiles</a>
-  </nav>
+    <a href="https://github.com/{{.}}">{{icon "github"}}{{.}}</a>
+  </nav>{{end}}
 </aside>
-<div class="content">
+<div class="content" id="main" tabindex="-1" hx-boost="true">
 {{/* Un rebuild a installé un autre noyau que celui démarré : visible sur toutes les pages. */}}
-{{with reboot}}<div class="reboot-banner" role="status"><span class="track-dot" aria-hidden="true"></span><span class="grow"><strong>Redémarrage nécessaire</strong> : noyau {{.Current}} installé, {{.Booted}} encore chargé. Il ne s'appliquera qu'au prochain démarrage.</span><code>sudo reboot</code></div>{{end}}
+{{with reboot}}<div class="reboot-banner" role="status"><span class="track-dot" aria-hidden="true"></span><span class="grow"><strong>Redémarrage nécessaire</strong> : {{.Text}}</span><code>sudo reboot</code></div>{{end}}
 {{end}}
 
 {{define "bottom"}}
@@ -52,15 +82,38 @@
 {{/* Grafana de la page Métriques : posé par app.js au-dessus de sa place, gardé ouvert ensuite. */}}
 <div id="grafana-pane" class="grafana-pane" hidden></div>
 </div>
+{{/* Bandeaux d'app.js (erreur d'une requête, connexion perdue) : hors du contenu, ils survivent à la navigation. */}}
+<div id="toasts" class="toasts"></div>
 </body>
 </html>
 {{end}}
 
+{{/* Fil d'Ariane : « Serveur › Title », ou « Serveur › Title (lien vers Link) › Sub ». */}}
+{{define "crumbs"}}<nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span>{{icon "chevron"}}{{if .Link}}<a href="{{.Link}}">{{.Title}}</a>{{icon "chevron"}}<strong aria-current="page">{{.Sub}}</strong>{{else}}<strong aria-current="page">{{.Title}}</strong>{{end}}</nav>{{end}}
+
+{{/* Barre du haut sans action : le fil d'Ariane seul (mêmes paramètres que "crumbs"). */}}
+{{define "topbar"}}<header class="topbar">{{template "crumbs" .}}</header>{{end}}
+
+{{/* Titre de page : h1 (+ Badge : un texte en .chip), sous-titre en mono discret (Sub). */}}
+{{define "page-title"}}<div class="page-title"><h1>{{.Title}}{{with .Badge}} <span class="chip">{{.}}</span>{{end}}</h1>{{with .Sub}}<p class="page-sub">{{.}}</p>{{end}}</div>{{end}}
+
+{{/* En-tête de page sans contrôles : "page-title" seul dans .page-head. */}}
+{{define "page-head"}}<div class="page-head">{{template "page-title" .}}</div>{{end}}
+
+{{/* Ligne vide d'un tableau : (args "Cols" 4 "Text" "Aucun appareil inscrit."). */}}
+{{define "empty-row"}}<tr class="empty-row"><td colspan="{{.Cols}}">{{.Text}}</td></tr>{{end}}
+
+{{/* Message de page : (args "Kind" "red|amber|blue" "Text" …) ; red = action échouée ou refusée,
+     amber = données dégradées / avertissement, blue = en cours / information. Flash : le paramètre
+     d'adresse qui l'a amené (ex. "erreur"), retiré de l'adresse par app.js (pas revu au rechargement). */}}
+{{define "alert"}}<div class="alert alert-{{.Kind}}" role="{{if eq .Kind "red"}}alert{{else}}status{{end}}"{{with .Flash}} data-flash="{{.}}"{{end}}><p>{{.Text}}</p></div>{{end}}
+
 {{define "soon"}}{{template "top" .}}
+{{template "topbar" (args "Title" .Title)}}
 <main class="page">
-  <h1>{{.Title}}</h1>
+  {{template "page-head" (args "Title" .Title)}}
   <div class="empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2"/></svg>
+    {{icon "clock"}}
     <strong>Bientôt</strong>
     <p>{{.Text}}</p>
   </div>
@@ -69,16 +122,23 @@
 
 {{define "metrics"}}{{template "top" .}}
 <header class="topbar">
-  <nav class="crumbs" aria-label="Fil d'Ariane"><span>Serveur</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg><strong>Métriques</strong></nav>
-  <a class="btn" href="{{.URL}}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Ouvrir dans Grafana</a>
+  {{template "crumbs" (args "Title" "Métriques")}}
+  <a class="btn" href="{{.URL}}">{{icon "external"}}Ouvrir dans Grafana</a>
 </header>
-<div class="grafana-slot" data-grafana-src="{{.Embed}}" title="Tableau de bord Grafana de think"></div>
-{{template "bottom" .}}{{end}}
-
-{{define "error"}}{{template "top" .}}
-<main class="page">
-  <h1>Erreur</h1>
-  <div class="alert alert-red"><p>{{.Error}}</p></div>
-  <p><a href="">Réessayer</a></p>
+<main class="page-full"><h1 class="sr-only">Métriques</h1>
+<div class="grafana-slot" data-grafana-src="{{.Embed}}" title="Tableau de bord Grafana de {{machine}}"></div>
 </main>
 {{template "bottom" .}}{{end}}
+
+{{/* Page d'erreur, dans le menu : Error (une phrase), Code (statut HTTP, facultatif). */}}
+{{define "error"}}{{template "top" .}}
+{{template "topbar" (args "Title" "Erreur")}}
+<main class="page">
+  {{template "page-head" (args "Title" "Erreur" "Sub" (errorLabel .Code))}}
+  <div class="alert alert-red" role="alert" data-error><p>{{.Error}}</p></div>
+  <div class="line"><a class="btn" href="">{{icon "refresh"}}Réessayer</a><a class="btn" href="/sites">Retour aux sites</a></div>
+</main>
+{{template "bottom" .}}{{end}}
+
+{{/* Erreur d'une requête htmx (fragment) : app.js en lit le texte et l'affiche en bandeau. */}}
+{{define "error-fragment"}}<div class="alert alert-red" role="alert" data-error><p>{{.Error}}</p></div>{{end}}

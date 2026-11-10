@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -92,46 +94,39 @@ func accountsFromForm(checked, choices []string) []string {
 	return out
 }
 
-// accountServices : services de chaque compte sur main (repli : la génération active).
-func (s *Server) accountServices(ctx context.Context) map[string][]string {
-	if head, err := s.gh.HeadCached(ctx); err == nil {
-		if b, err := s.gh.File(ctx, head, autheliaAccountsPath); err == nil {
-			var file map[string]struct {
-				Services []string `json:"services"`
-			}
-			if json.Unmarshal(b, &file) == nil {
-				out := map[string][]string{}
-				for n, a := range file {
-					out[n] = a.Services
-				}
-				return out
-			}
-		}
+// accountServicesErr : services de chaque compte sur main ; illisible : ceux de la génération
+// active, et pourquoi.
+func (s *Server) accountServicesErr(ctx context.Context) (map[string][]string, error) {
+	head, err := s.gh.HeadCached(ctx)
+	if err != nil {
+		return s.cfg.Authelia.Accounts, err
 	}
-	return s.cfg.Authelia.Accounts
+	b, err := s.gh.File(ctx, head, autheliaAccountsPath)
+	if err != nil {
+		return s.cfg.Authelia.Accounts, err
+	}
+	var file map[string]struct {
+		Services []string `json:"services"`
+	}
+	if err := json.Unmarshal(b, &file); err != nil {
+		return s.cfg.Authelia.Accounts, fmt.Errorf("%s illisible : %w", autheliaAccountsPath, err)
+	}
+	out := map[string][]string{}
+	for n, a := range file {
+		out[n] = a.Services
+	}
+	return out, nil
+}
+
+// accountServices : accountServicesErr sans l'erreur.
+func (s *Server) accountServices(ctx context.Context) map[string][]string {
+	m, _ := s.accountServicesErr(ctx)
+	return m
 }
 
 // ssoSites : les sites (et environnements) avec Authelia sur main, et si le compte y entre.
 func (s *Server) ssoSites(ctx context.Context, account string) ([]AccessSite, error) {
-	snap, err := s.snapshot(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []AccessSite
-	for _, site := range snap.Apps.Names() {
-		e := snap.Apps.Entries[site]
-		for _, d := range e.Deploys(site) {
-			if !d.Access.SSO {
-				continue
-			}
-			a := AccessSite{Site: site, Env: d.ID, App: d.App, Domain: d.Domain(s.cfg.Domain), On: slices.Contains(d.Access.Accounts, account)}
-			if d.ID != "" && !e.Environments[d.ID].OwnAccess() {
-				a.Inherited, a.From = true, e.labelOf(e.Environments[d.ID].From)
-			}
-			out = append(out, a)
-		}
-	}
-	return out, nil
+	return s.deploySites(ctx, ssoDeploy, accountsOf, account)
 }
 
 // AccountRow : un compte, sa dernière connexion lisible et ses accès.
@@ -139,34 +134,32 @@ type AccountRow struct {
 	Account
 	Last            string
 	Services, Sites []string
+	Pending         bool // nommé sur main, pas encore dans le résumé (secret + rebuild à faire)
 }
 
 func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	data := map[string]any{"Nav": "accounts", "Error": r.URL.Query().Get("erreur"), "Track": listTrack(r)}
+	q := r.URL.Query()
+	data := map[string]any{"Nav": "accounts", "Error": q.Get("erreur"), "Notice": q.Get("info"), "Track": listTrack(r)}
 	list, err := s.readAccounts()
 	if err != nil {
-		data["Error"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
+		// À part : le message d'une action échouée (?erreur=) reste visible.
+		data["SummaryError"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
 	}
 	if st, e := os.Stat(s.cfg.AccountsFile); e == nil {
 		data["Updated"] = ago(time.Since(st.ModTime()))
 	}
-	services := s.accountServices(ctx)
+	services, servicesErr := s.accountServicesErr(ctx)
 	sitesOf := map[string][]string{}
-	if snap, err := s.snapshot(ctx); err == nil {
-		for _, site := range snap.Apps.Names() {
-			for _, d := range snap.Apps.Entries[site].Deploys(site) {
-				if !d.Access.SSO {
-					continue
-				}
-				for _, a := range d.Access.Accounts {
-					sitesOf[a] = append(sitesOf[a], d.App)
-				}
-			}
-		}
+	snap, snapErr := s.snapshot(ctx)
+	if snapErr == nil {
+		sitesOf = sitesByMember(snap, ssoDeploy, accountsOf)
 	}
+	data["MainError"] = mainError(firstErr(servicesErr, snapErr))
 	var rows []AccountRow
+	inSummary := map[string]bool{}
 	for _, a := range list {
+		inSummary[a.Name] = true
 		row := AccountRow{Account: a, Last: "jamais", Services: services[a.Name], Sites: sitesOf[a.Name]}
 		if a.LastLogin != nil {
 			if t, ok := parseSQLiteTime(*a.LastLogin); ok {
@@ -174,6 +167,14 @@ func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		rows = append(rows, row)
+	}
+	// Comptes créés d'ici (accès sur main) que le résumé ne montre pas encore.
+	if err == nil {
+		for _, n := range slices.Sorted(maps.Keys(services)) {
+			if !inSummary[n] {
+				rows = append(rows, AccountRow{Account: Account{Name: n}, Pending: true, Services: services[n], Sites: sitesOf[n]})
+			}
+		}
 	}
 	data["Rows"] = rows
 	s.render(w, "accounts", data)
@@ -188,90 +189,112 @@ func (s *Server) knownAccount(ctx context.Context, name string) bool {
 	return named || slices.Contains(s.accountChoices(nil), name)
 }
 
+const unknownAccount = "Compte inconnu : ni dans le résumé d'Authelia, ni dans " + autheliaAccountsPath + "."
+
+// accountAccessPage : la page Accès d'un compte (cases d'après `checked` et `sites`).
+func (s *Server) accountAccessPage(w http.ResponseWriter, r *http.Request, name string, checked map[string]bool, sites []AccessSite, mainErr error, msg string) {
+	self := name == r.Header.Get("Remote-User")
+	lock := ""
+	if self && checked["admin"] {
+		lock = "admin" // le dashboard ne se retire pas au compte qui s'en sert
+	}
+	s.render(w, "account-access", map[string]any{"Nav": "accounts", "PageTitle": name, "Name": name, "Services": s.cfg.Authelia.Services,
+		"Checked": checked, "Sites": sites, "Error": msg, "MainError": mainError(mainErr), "Self": self, "Lock": lock, "Token": formToken()})
+}
+
 func (s *Server) accountAccess(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
+	// Après une suppression (POST, puis cette adresse) : les commandes pour finir.
+	if q := r.URL.Query(); q.Has("supprime") && reAccount.MatchString(name) {
+		s.render(w, "account-removed", map[string]any{"Nav": "accounts", "PageTitle": name, "Name": name, "Secret": s.cfg.Authelia.UsersSecret, "Track": trackOf(q.Get("supprime"))})
+		return
+	}
 	if !s.knownAccount(ctx, name) {
-		http.NotFound(w, r)
+		s.notFound(w, r, "accounts", unknownAccount)
 		return
 	}
 	sites, err := s.ssoSites(ctx, name)
-	checked := map[string]bool{}
-	for _, sv := range s.accountServices(ctx)[name] {
-		checked[sv] = true
-	}
-	s.render(w, "account-access", map[string]any{"Nav": "accounts", "Name": name, "Services": s.cfg.Authelia.Services,
-		"Checked": checked, "Sites": sites, "Error": errString(err), "Self": name == r.Header.Get("Remote-User")})
+	services, servicesErr := s.accountServicesErr(ctx)
+	s.accountAccessPage(w, r, name, checkedOf(services[name]), sites, firstErr(err, servicesErr), "")
 }
 
-// accountAccessSave : services et sites cochés, en un commit (apps.yml, action `account`).
+// accountAccessSave : services et sites cochés, en un commit (apps.yml, action `account`). Refusé :
+// la page revient avec les cases telles qu'envoyées.
 func (s *Server) accountAccessSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 	if !s.knownAccount(ctx, name) {
-		http.NotFound(w, r)
+		s.notFound(w, r, "accounts", unknownAccount)
 		return
 	}
-	back := func(msg string) {
-		http.Redirect(w, r, "/accounts?erreur="+url.QueryEscape(msg), http.StatusSeeOther)
-	}
-	_ = r.ParseForm()
-	services := []string{}
-	for _, sv := range s.cfg.Authelia.Services {
-		if slices.Contains(r.Form["service"], sv.Name) {
-			services = append(services, sv.Name)
-		}
-	}
-	before := s.accountServices(ctx)
-	if slices.Contains(before[name], "admin") && !slices.Contains(services, "admin") {
-		if name == r.Header.Get("Remote-User") {
-			back("Tu es connecté avec " + name + " : lui retirer le dashboard te fermerait la page. Fais-le avec un autre compte.")
-			return
-		}
-	}
-	sites, err := s.ssoSites(ctx, name)
-	if err != nil {
-		back("Sites illisibles : " + err.Error())
+	if s.unreadableForm(w, r, "accounts") {
 		return
 	}
-	changes := []siteAccess{}
-	for _, a := range sites {
-		on := slices.Contains(r.Form["site"], a.App)
-		if !a.Inherited && on != a.On {
-			changes = append(changes, siteAccess{a.Site, a.Env, on})
-		}
+	token := r.FormValue("token")
+	if id, seen := formSeen(token); seen {
+		tracked(w, r, "/accounts", id)
+		return
+	}
+	services, checked := checkedServices(r.Form["service"], s.cfg.Authelia.Services)
+	before, beforeErr := s.accountServicesErr(ctx)
+	sites, sitesErr := s.ssoSites(ctx, name)
+	again := func(msg string) {
+		s.accountAccessPage(w, r, name, checked, formSites(r, sites), firstErr(sitesErr, beforeErr), msg)
+	}
+	if slices.Contains(before[name], "admin") && !slices.Contains(services, "admin") && name == r.Header.Get("Remote-User") {
+		again("Tu es connecté avec " + name + " : lui retirer le dashboard te fermerait la page. Fais-le avec un autre compte.")
+		return
+	}
+	if sitesErr != nil {
+		again("Sites illisibles (" + sitesErr.Error() + ") : rien n'a été changé, réessaie dans un instant.")
+		return
+	}
+	changes := siteChanges(r.Form["site"], sites)
+	if beforeErr == nil && sameSet(services, before[name]) && len(changes) == 0 {
+		s.listInfo(w, r, "/accounts", "Accès de "+name+" : rien à changer.")
+		return
 	}
 	entry, _ := json.Marshal(map[string]any{"services": services, "sites": changes})
-	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"},
+	id, _, err := s.dispatchForm(ctx, token, map[string]string{"action": "account", "app": name, "entry": string(entry), "source": "dashboard"},
 		"Accès de "+name, "")
 	if err != nil {
-		back("Changement impossible (apps.yml) : " + err.Error())
+		again("Changement impossible (apps.yml) : " + err.Error())
 		return
 	}
 	tracked(w, r, "/accounts", id)
 }
 
 // accountRemove : le compte perd tous ses accès (commit, appliqué seul par think) ; la page donne
-// ensuite les commandes pour le supprimer lui-même (secret, puis rebuild).
+// ensuite les commandes pour le supprimer lui-même (secret, puis rebuild). Après le POST, une adresse
+// à relire (un F5 ne relance rien).
 func (s *Server) accountRemove(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 	if !s.knownAccount(ctx, name) {
-		http.NotFound(w, r)
+		s.notFound(w, r, "accounts", unknownAccount)
 		return
 	}
-	back := func(msg string) {
-		http.Redirect(w, r, "/accounts?erreur="+url.QueryEscape(msg), http.StatusSeeOther)
+	if s.unreadableForm(w, r, "accounts") {
+		return
+	}
+	done := func(id string) {
+		s.redirect(w, r, "/accounts/"+url.PathEscape(name)+"/access?supprime="+url.QueryEscape(id))
+	}
+	token := r.FormValue("token")
+	if id, seen := formSeen(token); seen {
+		done(id)
+		return
 	}
 	if name == r.Header.Get("Remote-User") {
-		back("Tu es connecté avec " + name + " : supprime-le avec un autre compte.")
+		s.listError(w, r, "/accounts", "Tu es connecté avec "+name+" : supprime-le avec un autre compte.")
 		return
 	}
-	id, err := s.dispatch(ctx, map[string]string{"action": "account", "app": name, "entry": "null", "source": "dashboard"},
+	id, _, err := s.dispatchForm(ctx, token, map[string]string{"action": "account", "app": name, "entry": "null", "source": "dashboard"},
 		"Accès de "+name+" retirés", "")
 	if err != nil {
-		back("Suppression impossible (apps.yml) : " + err.Error())
+		s.listError(w, r, "/accounts", "Suppression impossible (apps.yml) : "+err.Error())
 		return
 	}
-	s.render(w, "account-removed", map[string]any{"Nav": "accounts", "Name": name, "Secret": s.cfg.Authelia.UsersSecret, "Track": trackOf(id)})
+	done(id)
 }

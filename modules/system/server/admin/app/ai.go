@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -91,8 +92,10 @@ func (s *Server) aiFile() string { return filepath.Join(s.cfg.StateDir, "ai.json
 
 // analyses : les analyses, leur niveau recalculé d'après la note de leurs CVE (rateUrgency) ; ce que
 // l'IA disait reste dans ModelUrgency.
-func (s *Server) analyses() map[string]Analysis {
-	infos := s.cveInfos()
+func (s *Server) analyses() map[string]Analysis { return s.analysesWith(s.cveInfos()) }
+
+// analysesWith : analyses, avec les notes déjà lues (une seule lecture par page).
+func (s *Server) analysesWith(infos map[string]CVEInfo) map[string]Analysis {
 	out := s.rawAnalyses()
 	for k, a := range out {
 		a.ModelUrgency = a.Urgency
@@ -116,15 +119,41 @@ func (s *Server) rawAnalyses() map[string]Analysis {
 	defer aiCache.Unlock()
 	if aiCache.m == nil {
 		aiCache.m = map[string]Analysis{}
-		if b, err := os.ReadFile(s.aiFile()); err == nil {
-			_ = json.Unmarshal(b, &aiCache.m)
-		}
+		loadJSONState(s.aiFile(), &aiCache.m)
 	}
 	out := make(map[string]Analysis, len(aiCache.m))
 	for k, v := range aiCache.m {
 		out[k] = v
 	}
 	return out
+}
+
+// loadJSONState : un fichier d'état (ai.json, cves.json) dans `v`. Illisible (écriture coupée d'une
+// ancienne version) : mis de côté en .bad, journalisé, et `v` reste vide ; rien n'est écrasé sans trace.
+func loadJSONState[T any](path string, v *map[string]T) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("%s : %v", path, err)
+		}
+		return
+	}
+	if err := json.Unmarshal(b, v); err != nil {
+		log.Printf("%s illisible, mis de côté en .bad : %v", path, err)
+		_ = os.Rename(path, path+".bad")
+		*v = map[string]T{}
+	}
+}
+
+// saveJSONState : un fichier d'état, remplacé d'un coup (writeFileAtomic).
+func saveJSONState(path string, v any) {
+	b, err := json.Marshal(v)
+	if err == nil {
+		err = writeFileAtomic(path, b, 0o644)
+	}
+	if err != nil {
+		log.Printf("%s : %v", path, err)
+	}
 }
 
 func (s *Server) saveAnalyses(add map[string]Analysis) {
@@ -134,8 +163,26 @@ func (s *Server) saveAnalyses(add map[string]Analysis) {
 	for k, v := range add {
 		aiCache.m[k] = v
 	}
-	if b, err := json.Marshal(aiCache.m); err == nil {
-		_ = os.WriteFile(s.aiFile(), b, 0o644)
+	saveJSONState(s.aiFile(), aiCache.m)
+}
+
+// keepAnalyses : une analyse qui ne sert plus (la version en service ou la plus récente a changé)
+// est gardée ce temps-là, puis retirée (une analyse retirée serait refaite si elle resservait).
+const keepAnalyses = 90 * 24 * time.Hour
+
+// pruneAnalyses : retire les analyses hors de `keep` plus vieilles que maxAge.
+func (s *Server) pruneAnalyses(keep map[string]bool, maxAge time.Duration) {
+	s.rawAnalyses()
+	aiCache.Lock()
+	defer aiCache.Unlock()
+	n := len(aiCache.m)
+	for k, a := range aiCache.m {
+		if !keep[k] && time.Since(a.At) > maxAge {
+			delete(aiCache.m, k)
+		}
+	}
+	if len(aiCache.m) != n {
+		saveJSONState(s.aiFile(), aiCache.m)
 	}
 }
 
@@ -151,18 +198,57 @@ func repoOf(urls ...string) (string, string) {
 	return "", ""
 }
 
-// versionParts : les nombres d'une version (« v4.39.28 » → 4 39 28).
+// rePre : le début d'une préversion, juste après un chiffre (« 2.0.0-rc1 », « 3.1beta2 », « 1.0~pre »,
+// « 2.0.0.dev3 ») ; une lettre de correctif (« 10.6p1 », « 1.1.1w ») n'en est pas une.
+var rePre = regexp.MustCompile(`(?i)\d[-._~]?(?:alpha|beta|rc|pre|dev)`)
+
+// splitPre : une version, et sa marque de préversion (« 2.0.0-rc1 » → « 2.0.0 », « -rc1 »).
+func splitPre(v string) (core, pre string) {
+	if loc := rePre.FindStringIndex(v); loc != nil {
+		return v[:loc[0]+1], v[loc[0]+1:]
+	}
+	return v, ""
+}
+
+// isPrerelease : un tag de préversion, même publié comme une release ordinaire.
+func isPrerelease(tag string) bool { return rePre.MatchString(tag) }
+
+// versionParts : les nombres d'une version (« v4.39.28 » → 4 39 28), sans ceux d'une préversion
+// (« 2.0.0-rc1 » → 2 0 0).
 func versionParts(v string) []int {
+	core, _ := splitPre(v)
+	return numbers(core, 4)
+}
+
+func numbers(s string, n int) []int {
 	var out []int
-	for _, p := range reVersionPart.FindAllString(v, 4) {
-		n, _ := strconv.Atoi(p)
-		out = append(out, n)
+	for _, p := range reVersionPart.FindAllString(s, n) {
+		k, _ := strconv.Atoi(p)
+		out = append(out, k)
 	}
 	return out
 }
 
+// cmpVersions : -1, 0 ou 1. À nombres égaux, une préversion passe avant la version (2.0.0-rc1 <
+// 2.0.0), et deux préversions se comparent par leur numéro (rc1 < rc2).
 func cmpVersions(a, b string) int {
-	pa, pb := versionParts(a), versionParts(b)
+	if c := cmpParts(versionParts(a), versionParts(b)); c != 0 {
+		return c
+	}
+	_, pa := splitPre(a)
+	_, pb := splitPre(b)
+	switch {
+	case pa == pb:
+		return 0
+	case pa == "":
+		return 1
+	case pb == "":
+		return -1
+	}
+	return cmpParts(numbers(pa, 2), numbers(pb, 2))
+}
+
+func cmpParts(pa, pb []int) int {
 	for i := 0; i < max(len(pa), len(pb)); i++ {
 		x, y := 0, 0
 		if i < len(pa) {
@@ -303,13 +389,17 @@ func releaseOf(rels []Release, version string) string {
 	return ""
 }
 
-// tagVersion : la version d'un tag (« v1.2.3 », « release-1.2.3 » → « 1.2.3 »).
-func tagVersion(tag string) string {
+// splitTag : un tag en préfixe et version (« release-1.2.3 » → « release- », « 1.2.3 ») ; sans
+// chiffre, tout le tag (préfixe et version).
+func splitTag(tag string) (prefix, version string) {
 	if i := strings.IndexFunc(tag, func(r rune) bool { return r >= '0' && r <= '9' }); i >= 0 {
-		return tag[i:]
+		return tag[:i], tag[i:]
 	}
-	return tag
+	return tag, tag
 }
+
+// tagVersion : la version d'un tag (« v1.2.3 », « release-1.2.3 » → « 1.2.3 »).
+func tagVersion(tag string) string { _, v := splitTag(tag); return v }
 
 // major : le premier nombre d'une version (la série : 17 pour 17.11, 2026 pour 2026.10.4).
 func major(v string) int {
@@ -324,6 +414,9 @@ func major(v string) int {
 func (s *Server) latestVersions(ctx context.Context, rows []UpdateRow) map[string]LatestInfo {
 	out := map[string]LatestInfo{}
 	for _, r := range rows {
+		if ctx.Err() != nil {
+			break // délai de la vérification dépassé : le reste à la suivante
+		}
 		if r.Current == "" {
 			continue
 		}
@@ -363,7 +456,7 @@ func (s *Server) releaseLinks(ctx context.Context, rows []UpdateRow) map[string]
 	links := map[string]string{}
 	for _, r := range rows {
 		owner, repo := repoOf(r.Changelog, r.Homepage, r.Src, r.EOL.Repo)
-		if owner == "" {
+		if owner == "" || ctx.Err() != nil {
 			continue
 		}
 		rels, err := s.projectReleases(ctx, owner, repo, r.Current, r.Next)
@@ -482,7 +575,11 @@ func (s *Server) gemini(ctx context.Context, prompt string) ([]byte, error) {
 			Error struct{ Message string } `json:"error"`
 		}
 		_ = json.Unmarshal(b, &e)
-		return nil, fmt.Errorf("%s : HTTP %d %s", model, resp.StatusCode, firstOf(e.Error.Message, resp.Status))
+		err := fmt.Errorf("%s : HTTP %d %s", model, resp.StatusCode, firstOf(e.Error.Message, resp.Status))
+		if resp.StatusCode == http.StatusTooManyRequests || strings.Contains(string(b), "RESOURCE_EXHAUSTED") {
+			return nil, quotaError{err}
+		}
+		return nil, err
 	}
 	var out struct {
 		Candidates []struct {
@@ -495,6 +592,23 @@ func (s *Server) gemini(ctx context.Context, prompt string) ([]byte, error) {
 		return nil, fmt.Errorf("%s : réponse vide", model)
 	}
 	return []byte(out.Candidates[0].Content.Parts[0].Text), nil
+}
+
+// quotaError : le quota du modèle est atteint (HTTP 429) : inutile d'envoyer les lots suivants.
+type quotaError struct{ error }
+
+func (e quotaError) Unwrap() error { return e.error }
+
+// aiStop : l'analyse s'arrête là (quota atteint, ou délai de la vérification dépassé) ; avec ce
+// qu'il faut en dire, une seule fois.
+func aiStop(ctx context.Context, err error) (string, bool) {
+	if errors.As(err, new(quotaError)) {
+		return err.Error() + " (quota atteint, reprise à la prochaine vérification)", true
+	}
+	if ctx.Err() != nil {
+		return "analyse interrompue (délai de la vérification dépassé)", true
+	}
+	return "", false
 }
 
 // aiAnswer : un élément de la réponse du modèle (aiSchema).
@@ -546,12 +660,14 @@ func mergeFound(n notesResult, model []AICVE, infos map[string]CVEInfo) []AICVE 
 // aiBatch : paquets analysés par requête (quelques requêtes par jour, loin des quotas gratuits).
 const aiBatch = 5
 
-// analyze : les montées de version pas encore analysées, par lots ; l'erreur, s'il y en a une.
+// analyze : les montées de version pas encore analysées, par lots ; l'erreur, s'il y en a une. Un
+// paquet sans réponse du modèle est signalé (et redemandé à la vérification suivante) ; un quota
+// atteint arrête les lots suivants.
 func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 	if s.cfg.GeminiKey == "" {
 		return nil
 	}
-	done := s.analyses()
+	done := s.rawAnalyses()
 	var todo []UpdateRow
 	for _, r := range rows {
 		// Ce que la mise à jour change, ou ce que le projet a publié au-delà du canal.
@@ -562,7 +678,13 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		}
 	}
 	var errs []string
+	batches := (len(todo) + aiBatch - 1) / aiBatch
 	for start := 0; start < len(todo); start += aiBatch {
+		if msg, stop := aiStop(ctx, nil); stop {
+			errs = append(errs, msg)
+			break
+		}
+		setPhase("analyse par l'IA : paquets, lot %d/%d", start/aiBatch+1, batches)
 		batch := todo[start:min(start+aiBatch, len(todo))]
 		var p strings.Builder
 		p.WriteString(aiPrompt)
@@ -583,6 +705,10 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 		}
 		raw, err := s.gemini(ctx, p.String())
 		if err != nil {
+			if msg, stop := aiStop(ctx, err); stop {
+				errs = append(errs, msg)
+				break
+			}
 			errs = append(errs, err.Error())
 			continue
 		}
@@ -591,15 +717,26 @@ func (s *Server) analyze(ctx context.Context, rows []UpdateRow) error {
 			errs = append(errs, s.cfg.AIModel+" : réponse illisible")
 			continue
 		}
+		infos := s.cveInfos()
 		add := map[string]Analysis{}
-		for _, a := range answers {
-			for _, r := range batch {
-				if r.ID == a.ID {
-					n := notes[r.ID]
-					add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: mergeFound(n, a.CVEs, s.cveInfos()),
-						Fixed: n.Fixed, Depth: n.Depth, Basis: firstOf(strings.Join(n.Basis, ", "), "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
+		var missing []string
+		for _, r := range batch {
+			found := false
+			for _, a := range answers {
+				if r.ID != a.ID {
+					continue
 				}
+				found = true
+				n := notes[r.ID]
+				add[r.analysisKey()] = Analysis{Urgency: a.Urgency, Summary: a.Summary, CVEs: mergeFound(n, a.CVEs, infos),
+					Fixed: n.Fixed, Depth: n.Depth, Basis: firstOf(strings.Join(n.Basis, ", "), "rien à lire"), Model: s.cfg.AIModel, At: time.Now()}
 			}
+			if !found {
+				missing = append(missing, r.Name)
+			}
+		}
+		if len(missing) > 0 {
+			errs = append(errs, s.cfg.AIModel+" : pas de réponse pour "+strings.Join(missing, ", "))
 		}
 		s.saveAnalyses(add)
 	}
@@ -717,12 +854,16 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 			own[strings.ToLower(r.Name)] = true
 		}
 	}
-	done := s.analyses()
+	done := s.rawAnalyses()
 	var closure map[string]bool
 	var errs []string
 	for _, in := range inputs {
 		if !in.Changed() || in.Owner == "" {
 			continue
+		}
+		if msg, stop := aiStop(ctx, nil); stop {
+			errs = append(errs, msg)
+			break
 		}
 		from := firstOf(in.ServiceRev, in.MainRev)
 		key := analysisKey(inputKey(in.Name), from, in.NextRev)
@@ -753,8 +894,13 @@ func (s *Server) analyzeInputs(ctx context.Context, inputs []InputRow, rows []Up
 		}
 		prompt := fmt.Sprintf(aiInputPrompt, in.Name, in.Owner, in.Repo, len(titles), len(all), firstOf(strings.Join(mine, ", "), "aucun service suivi à part, mais ce qu'elle fournit (outil, module) est bien installé sur ce serveur"), in.Name) +
 			strings.Join(titles, "\n")
+		setPhase("analyse par l'IA : source %s", in.Name)
 		raw, err := s.gemini(ctx, prompt)
 		if err != nil {
+			if msg, stop := aiStop(ctx, err); stop {
+				errs = append(errs, in.Name+" : "+msg)
+				break
+			}
 			errs = append(errs, in.Name+" : "+err.Error())
 			continue
 		}
