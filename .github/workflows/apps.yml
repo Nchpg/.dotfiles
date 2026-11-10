@@ -15,6 +15,11 @@ name: apps
 # Pas d'évaluation Nix ici (elle demanderait le dépôt de secrets) : le dashboard évalue avant
 # d'appeler, et apps.sh vérifie chaque entrée.
 # Runner GitHub et non self-hosted : il doit passer même machine éteinte.
+
+# Nom de chaque run : l'action, le site ou l'appareil, et l'identifiant de la demande du dashboard
+# (`request`) : il y retrouve son run parmi ceux d'apps-watch et des autres demandes.
+run-name: "${{ inputs.action }} ${{ inputs.app }} [${{ inputs.request }}]"
+
 on:
   workflow_dispatch:
     inputs:
@@ -52,6 +57,10 @@ on:
         type: string
       source:
         description: Origine de la demande (think, dashboard)
+        required: false
+        type: string
+      request:
+        description: "dashboard : identifiant de la demande, repris dans le nom du run"
         required: false
         type: string
 
