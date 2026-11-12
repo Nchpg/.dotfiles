@@ -23,13 +23,27 @@ require_flake() {
 }
 
 # sudo : une fois le mot de passe donné, le ticket est rafraîchi chaque minute (`sudo -n -v`) tant que
-# le script tourne. Les sudo suivants (après un long passage dans l'éditeur, par exemple) ne le
-# redemandent pas ; le ticket reste celui du terminal, et expire normalement après la fin du script.
+# le script tourne. Les sudo suivants ne le redemandent pas ; le ticket reste celui du terminal, et
+# expire normalement après la fin du script.
+# La boucle part AVANT la commande : un éditeur ou un nixos-rebuild long lancé sous sudo ne doit pas
+# laisser expirer le ticket (daté du début) pour le sudo d'après.
 sudo() {
-    local rc=0 lock="${XDG_RUNTIME_DIR:-/tmp}/dots-sudo.$$"
-    command sudo "$@" || rc=$?
+    local lock="${XDG_RUNTIME_DIR:-/tmp}/dots-sudo.$$" prompt=() i=1
+    if [ ! -d "$lock" ]; then
+        # Options en tête seulement : `-n` = jamais de demande, `-p` = message à reprendre pour `-v`.
+        while [ "$i" -le "$#" ]; do
+            case "${!i}" in
+                -n | --non-interactive) command sudo "$@"; return ;;
+                -p) i=$((i + 1)); prompt=(-p "${!i}") ;;
+                -*) ;;
+                *) break ;;
+            esac
+            i=$((i + 1))
+        done
+        command sudo ${prompt[@]+"${prompt[@]}"} -v || return
+    fi
     # Une seule boucle par script, même lancée depuis un $(…) : le verrou est un dossier.
-    if [ "$rc" = 0 ] && mkdir "$lock" 2> /dev/null; then
+    if mkdir "$lock" 2> /dev/null; then
         # Descripteurs fermés : un sudo dans un $(…) n'attend pas la fin de la boucle.
         (
             trap 'rmdir "$lock"' EXIT
@@ -38,5 +52,5 @@ sudo() {
             done
         ) < /dev/null > /dev/null 2>&1 &
     fi
-    return "$rc"
+    command sudo "$@"
 }
