@@ -76,7 +76,12 @@
           screenshots.enable = true;
           playwright.enable = true;
           ponytail.enable = true;
-          settings.preferredNotifChannel = "notifications_disabled";
+          settings = {
+            preferredNotifChannel = "notifications_disabled";
+            # Ultracode off par défaut, activé pour un seul prompt par le mot « ultracode ».
+            enableWorkflows = true;
+            workflowKeywordTriggerEnabled = true;
+          };
         };
 
         kimiCode.enable = true;
