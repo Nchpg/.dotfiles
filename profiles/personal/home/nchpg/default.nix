@@ -75,6 +75,7 @@
           statusline.enable = true;
           screenshots.enable = true;
           playwright.enable = true;
+          ponytail.enable = true;
           settings.preferredNotifChannel = "notifications_disabled";
         };
 

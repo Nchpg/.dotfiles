@@ -23,6 +23,8 @@ in
 
     playwright.enable = lib.mkEnableOption "serveur MCP Playwright (navigateur headless)";
 
+    ponytail.enable = lib.mkEnableOption "plugin ponytail (YAGNI, la solution la plus courte qui marche)";
+
     pkgs = myLib.mkPkgsOption { inherit lib config; };
 
     settings = lib.mkOption {
@@ -119,6 +121,60 @@ in
           }
         );
       })
+
+      # Plugin épinglé dans le store : installed_plugins.json pointe dessus, la marketplace
+      # est déclarée pour que Claude Code ne le considère pas orphelin. Les hooks lancent `node`.
+      (lib.mkIf cfg.ponytail.enable (
+        let
+          pinned = builtins.fromJSON (builtins.readFile ./ponytail/pinned.json);
+          upstream = cfg.pkgs.fetchFromGitHub {
+            owner = "DietrichGebert";
+            repo = "ponytail";
+            inherit (pinned) rev hash;
+          };
+          # Sans la barre sous le prompt (mode, coût, boutons) ni son journal CSV : on retire
+          # claude-band.json des hooks. jq échoue si l'entrée a disparu en amont.
+          src = cfg.pkgs.runCommand "ponytail-${pinned.version}" { nativeBuildInputs = [ cfg.pkgs.jq ]; } ''
+            cp -r ${upstream} $out
+            chmod -R u+w $out
+            jq -e '.hooks | index("./hooks/claude-band.json")' $out/.claude-plugin/plugin.json >/dev/null
+            jq '.hooks -= ["./hooks/claude-band.json"]' ${upstream}/.claude-plugin/plugin.json \
+              >$out/.claude-plugin/plugin.json
+          '';
+        in
+        {
+          home.packages = [ cfg.pkgs.nodejs-slim ];
+
+          home.activation.claudePonytailPlugin = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+            myLib.deepMergeJsonActivation {
+              inherit lib;
+              pkgs = cfg.pkgs;
+              targetPath = "${homeDirectory}/.claude/plugins/installed_plugins.json";
+              sourceFile = jsonFormat.generate "ponytail-claude-plugin.json" {
+                version = 2;
+                plugins."ponytail@ponytail" = [
+                  {
+                    scope = "user";
+                    installPath = "${src}";
+                    inherit (pinned) version;
+                    installedAt = pinned.pinnedAt;
+                    lastUpdated = pinned.pinnedAt;
+                  }
+                ];
+              };
+              label = "ponytail-claude-plugin";
+            }
+          );
+
+          userSettings.agents.claude.settings = {
+            extraKnownMarketplaces.ponytail.source = {
+              source = "github";
+              repo = "DietrichGebert/ponytail";
+            };
+            enabledPlugins."ponytail@ponytail" = true;
+          };
+        }
+      ))
 
       (lib.mkIf (cfg.settings != { }) {
         home.activation.claudeSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
