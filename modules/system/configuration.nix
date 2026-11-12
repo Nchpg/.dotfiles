@@ -14,9 +14,11 @@
       # Une clé de confiance autorise ce cache à servir n'importe quel chemin du store.
       extra-substituters = [
         "https://claude-code.cachix.org"
+        "https://ros.cachix.org"
       ];
       extra-trusted-public-keys = [
         "claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk="
+        "ros.cachix.org-1:dSyZxI8geDCJrwgvCOHDoAfOm5sV1wCPjBkKL+38Rvo="
       ];
     };
     channel.enable = false;
@@ -49,6 +51,13 @@
   hardware.enableRedistributableFirmware = true;
 
   networking.firewall.enable = true;
+  # ROS 2 / DDS (hackathon AgiBot) : découverte multicast + unicast UDP du domaine 0 à ~8.
+  networking.firewall.allowedUDPPortRanges = [
+    {
+      from = 7400;
+      to = 7600;
+    }
+  ];
 
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs-stable; [
