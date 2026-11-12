@@ -11,6 +11,26 @@ let
   c = config.lib.stylix.colors.withHashtag;
   font = config.stylix.fonts.sansSerif.name;
   fontSize = toString config.stylix.fonts.sizes.applications;
+
+  # Sans icône donnée, swaync retombe sur le logo de rofi (nom d'application de la notif). Pas de
+  # --app-name non plus : swaync en tire un second logo, en badge dans le coin.
+  iconError = myLib.desktop.notifyIcon config cfg.pkgs "status/dialog-error" (c: c.base08);
+
+  # Lance ce que rofi demande (run-command). Une commande introuvable, par exemple un nom d'appli
+  # mal tapé suivi de Entrée, devient une notification : sinon rofi ouvre une boîte « Failed to
+  # execute » modale, qui ignore tout le clavier sauf Entrée et Échap.
+  rofiRun = cfg.pkgs.writeShellApplication {
+    name = "rofi-run";
+    runtimeInputs = [ cfg.pkgs.libnotify ];
+    runtimeEnv.ICON_ERROR = iconError;
+    text = ''
+      if ! command -v "''${1:-}" >/dev/null 2>&1; then
+        notify-send -i "$ICON_ERROR" "Commande introuvable" "''${1:-}" || true
+        exit 127
+      fi
+      exec "$@"
+    '';
+  };
 in
 {
   options.userSettings.windowManager.sway.rofi = {
@@ -42,6 +62,7 @@ in
             display-drun = "  Apps";
             display-run = "  Run";
             sidebar-mode = false;
+            run-command = "${lib.getExe rofiRun} {cmd}";
           };
           theme =
             let
