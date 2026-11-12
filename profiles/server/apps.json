@@ -7,6 +7,22 @@
       }
     }
   },
+  "map": {
+    "containers": {
+      "web": {
+        "data": [
+          {
+            "path": "/data"
+          }
+        ],
+        "image": "garminmap:main",
+        "memory": "256m"
+      }
+    },
+    "internetAccess": true,
+    "probe": "/healthz",
+    "rateLimit": []
+  },
   "mnist": {
     "containers": {
       "web": {
