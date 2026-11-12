@@ -2,6 +2,10 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -259,5 +263,32 @@ func TestAccessLockAndTokens(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("absent : %s", want)
 		}
+	}
+}
+
+// État du tunnel lu à l'exportateur : format texte de Prometheus, étiquettes entre guillemets.
+func TestWireguardLive(t *testing.T) {
+	body := `# HELP wireguard_latest_handshake_seconds Seconds from the last handshake
+# TYPE wireguard_latest_handshake_seconds gauge
+wireguard_latest_handshake_seconds{interface="wg0",public_key="abc+/=",allowed_ips="10.8.0.2/32",friendly_name="tel \"pro\"",remote_ip="203.0.113.7",remote_port="51820"} 1794470000
+wireguard_received_bytes_total{interface="wg0",public_key="abc+/="} 1.5e+06
+wireguard_sent_bytes_total{interface="wg0",public_key="abc+/="} 42 1794470000000
+go_goroutines 9
+cassée{public_key="x
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+	defer srv.Close()
+	s := &Server{cfg: &Config{WGExporter: srv.URL, Prometheus: "http://127.0.0.1:1"}}
+	m, err := s.wireguard(context.Background())
+	if err != nil || m.Handshake["abc+/="] != 1794470000 || m.Remote["abc+/="] != "203.0.113.7" || m.Received["abc+/="] != 1.5e6 || m.Sent["abc+/="] != 42 {
+		t.Errorf("exportateur : %+v, %v", m, err)
+	}
+	if _, labels, _, ok := parseMetricLine(`m{a="x\"y",b="z"} 1`); !ok || labels["a"] != `x"y` || labels["b"] != "z" {
+		t.Errorf("étiquettes : %v", labels)
+	}
+	// Exportateur muet : Prometheus prend le relais (ici injoignable aussi : l'erreur remonte).
+	s.cfg.WGExporter = "http://127.0.0.1:1"
+	if _, err := s.wireguard(context.Background()); err == nil {
+		t.Error("ni exportateur ni Prometheus : une erreur attendue")
 	}
 }

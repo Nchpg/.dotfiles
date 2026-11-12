@@ -58,7 +58,7 @@ func validateAccounts(w string, sso bool, accounts []string) []string {
 	return nil
 }
 
-// readAccounts : le résumé des comptes écrit par admin-accounts (root, toutes les 5 minutes).
+// readAccounts : le résumé des comptes écrit par admin-accounts (root, toutes les 30 secondes).
 func (s *Server) readAccounts() ([]Account, error) {
 	var list []Account
 	b, err := os.ReadFile(s.cfg.AccountsFile)
@@ -144,7 +144,7 @@ func (s *Server) accounts(w http.ResponseWriter, r *http.Request) {
 	list, err := s.readAccounts()
 	if err != nil {
 		// À part : le message d'une action échouée (?erreur=) reste visible.
-		data["SummaryError"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 5 minutes)."
+		data["SummaryError"] = "Résumé des comptes pas encore produit (service admin-accounts, toutes les 30 secondes)."
 	}
 	if st, e := os.Stat(s.cfg.AccountsFile); e == nil {
 		data["Updated"] = ago(time.Since(st.ModTime()))

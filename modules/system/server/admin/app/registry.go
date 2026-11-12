@@ -123,7 +123,7 @@ func (r *Registry) Tags(ctx context.Context, name string) ([]string, error) {
 	return r.FetchTags(ctx, name)
 }
 
-const tagsTTL = 2 * time.Minute
+const tagsTTL = time.Minute
 
 // FetchTags : relit la liste des tags sur ghcr (toutes les pages) et la garde.
 func (r *Registry) FetchTags(ctx context.Context, name string) ([]string, error) {

@@ -346,6 +346,13 @@ in
         ADMIN_REGISTRY = images.registry;
         ADMIN_REGISTRY_USER = images.login.username;
         ADMIN_PROMETHEUS = "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.prometheus}";
+        # Page VPN : l'état du tunnel lu à l'exportateur lui-même (à l'instant), pas à Prometheus qui ne
+        # le relève qu'une fois par minute. Sans exportateur : Prometheus.
+        ADMIN_WG_EXPORTER = lib.optionalString (
+          config.systemSettings.monitoring.enable
+          && config.systemSettings.monitoring.apps.enable
+          && wireguard.enable
+        ) "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.wireguardExporter}";
         # Journal de sshd (page SSH : connexions par clé, tentatives refusées), vide sans monitoring.
         ADMIN_LOKI = lib.optionalString config.systemSettings.monitoring.enable "http://127.0.0.1:${toString config.systemSettings.monitoring.internal.ports.loki}";
         ADMIN_LOGS_RETENTION = config.systemSettings.monitoring.logs.retention;
@@ -450,7 +457,9 @@ in
       wantedBy = [ "timers.target" ];
       timerConfig = {
         OnBootSec = "2min";
-        OnUnitActiveSec = "5min";
+        # Quatre lectures SQLite : assez léger pour que la page Authelia suive à 30 s près.
+        OnUnitActiveSec = "30s";
+        AccuracySec = "5s";
       };
     };
 
@@ -475,7 +484,8 @@ in
           wantedBy = [ "timers.target" ];
           timerConfig = {
             OnBootSec = "2min";
-            OnUnitActiveSec = "5min";
+            OnUnitActiveSec = "1min";
+            AccuracySec = "5s";
           };
         };
 
@@ -483,6 +493,29 @@ in
     # par ligne ; vide : tous). Root ne traite qu'un environnement en données « copie » connu de la
     # config, ne garde de la demande que les dossiers que la config lui donne (elle ne fait que
     # filtrer), et écrit son résultat dans son propre dossier (pas de lien piégé à suivre).
+    # Réveil d'apps-deploy : dès que le dashboard voit sur main le commit qu'il attend, il dépose
+    # `deploy.want` (vide). Root l'efface et lance apps-deploy sans attendre son passage de la minute.
+    # Rien n'est lu dans le fichier, et apps-deploy décide seul d'après GitHub, comme à chaque passage :
+    # le dashboard n'y gagne aucun droit, seulement du temps. Déjà en route : sans effet, le minuteur
+    # suit.
+    systemd.paths.admin-deploy-wake = lib.mkIf images.deploy.enable {
+      wantedBy = [ "multi-user.target" ];
+      pathConfig.PathExists = "/var/lib/private/admin/deploy.want";
+    };
+    systemd.services.admin-deploy-wake = lib.mkIf images.deploy.enable {
+      description = "Réveille apps-deploy à la demande du dashboard";
+      path = [
+        pkgs-stable.coreutils
+        config.systemd.package
+      ];
+      serviceConfig.Type = "oneshot";
+      # Effacé d'abord, quoi que ce soit (sinon l'unité repartirait en boucle).
+      script = ''
+        rm -rf --one-file-system -- /var/lib/private/admin/deploy.want
+        systemctl start --no-block apps-deploy.service
+      '';
+    };
+
     systemd.paths.admin-recopy = {
       wantedBy = [ "multi-user.target" ];
       pathConfig.PathExistsGlob = "/var/lib/private/admin/recopy/*.want";

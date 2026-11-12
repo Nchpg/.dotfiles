@@ -34,6 +34,7 @@ type Config struct {
 	Registry     string // ghcr.io/nchpg
 	RegistryUser string
 	Prometheus   string
+	WGExporter   string // exportateur WireGuard (http://127.0.0.1:port) : l'état du tunnel à l'instant ; vide : Prometheus
 	Loki         string // journaux (vide : pas de monitoring, la page SSH s'en passe)
 	LogsWindow   time.Duration
 	SSHUnit      string
@@ -78,6 +79,7 @@ func loadConfig() (*Config, error) {
 		Registry:     env("ADMIN_REGISTRY", ""),
 		RegistryUser: env("ADMIN_REGISTRY_USER", ""),
 		Prometheus:   env("ADMIN_PROMETHEUS", "http://127.0.0.1:9090"),
+		WGExporter:   os.Getenv("ADMIN_WG_EXPORTER"),
 		Loki:         os.Getenv("ADMIN_LOKI"),
 		LogsWindow:   retention(env("ADMIN_LOGS_RETENTION", "30d")),
 		SSHUnit:      env("ADMIN_SSH_UNIT", "sshd.service"),

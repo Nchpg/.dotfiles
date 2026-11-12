@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -128,4 +130,17 @@ func (s *Server) probes(ctx context.Context) map[string]bool {
 		up[d] = true
 	}
 	return up
+}
+
+// wakeDeploy : le commit attendu est sur main ; apps-deploy est réveillé tout de suite au lieu
+// d'attendre son passage (chaque minute). Le dashboard dépose un fichier vide que root surveille
+// (admin-deploy-wake) : rien n'y est lu, et apps-deploy décide comme d'habitude, d'après GitHub.
+// Sans effet si rien ne le surveille : le passage de la minute suit.
+func (s *Server) wakeDeploy() {
+	if s.cfg.StateDir == "" {
+		return
+	}
+	if err := os.WriteFile(filepath.Join(s.cfg.StateDir, "deploy.want"), nil, 0o600); err != nil {
+		log.Printf("réveil d'apps-deploy : %v", err)
+	}
 }

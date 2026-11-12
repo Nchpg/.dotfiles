@@ -271,7 +271,7 @@
 
     {{if ne .Service.ID "authelia"}}
     <section class="block" aria-labelledby="apps-title">
-      <div class="block-head"><h2 id="apps-title" class="line">Applis connectées{{template "info" (args "ID" "info-apps" "Text" "Les appareils qui ont un accès en ce moment (jeton gardé), lus dans la base du service toutes les 5 minutes, sans aucun jeton.")}}</h2>{{with seenAgo .SummaryAt ""}}<small class="muted">relevé {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="apps-title" class="line">Applis connectées{{template "info" (args "ID" "info-apps" "Text" "Les appareils qui ont un accès en ce moment (jeton gardé), lus dans la base du service chaque minute, sans aucun jeton.")}}</h2>{{with seenAgo .SummaryAt ""}}<small class="muted">relevé {{.}}</small>{{end}}</div>
       {{template "count-table" (args "Title" "Applis connectées" "Heads" (list "Compte" "Appli" "Dernière activité") "Rows" .Connected "Mode" "apps" "Empty" "Aucune.")}}
     </section>
     {{end}}

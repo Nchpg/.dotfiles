@@ -113,16 +113,24 @@ func summarize(events []sshEvent, sessions []SSHSession) sshActivity {
 		a.Refusals = append(a.Refusals, r)
 	}
 	sort.Slice(a.Refusals, func(i, j int) bool { return a.Refusals[i].last.After(a.Refusals[j].last) })
+	a.Sessions = matchSessions(a.Logins, sessions)
+	return a
+}
+
+// matchSessions : chaque session ouverte, avec la clé de la connexion acceptée au même moment (même
+// IP, à 5 s près).
+func matchSessions(logins []sshEvent, sessions []SSHSession) []SSHSession {
+	var out []SSHSession
 	for _, s := range sessions {
-		for _, e := range events {
-			if d := e.At.Sub(s.Since); e.Accepted && e.IP == s.IP && d > -5*time.Second && d < 5*time.Second {
+		for _, e := range logins {
+			if d := e.At.Sub(s.Since); e.IP == s.IP && d > -5*time.Second && d < 5*time.Second {
 				s.Fingerprint = e.Fingerprint
 				break
 			}
 		}
-		a.Sessions = append(a.Sessions, s)
+		out = append(out, s)
 	}
-	return a
+	return out
 }
 
 // sshLog : les événements SSH de la fenêtre des journaux, les plus récents d'abord. Même lecteur que
@@ -190,6 +198,15 @@ func (s *Server) sshActivityOf() sshActivity {
 		a.Truncated, a.LogsOK = truncated, err == nil
 		return a
 	}).(sshActivity)
+}
+
+// sshActivityLive : sshActivityOf, avec les sessions ouvertes relues à l'instant (logind répond tout
+// de suite, lui) : une session ouverte ou fermée se voit sans attendre la relecture du journal. La clé
+// d'une session toute neuve apparaît avec le journal (une minute au plus).
+func (s *Server) sshActivityLive(ctx context.Context) sshActivity {
+	act := s.sshActivityOf()
+	act.Sessions = matchSessions(act.Logins, sshSessions(ctx))
+	return act
 }
 
 // vpnDevices : le nom de l'appareil VPN de chaque adresse du tunnel (actifs et en attente).

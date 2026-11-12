@@ -149,6 +149,7 @@ func (s *Server) follow(t *Track) {
 		t.committed = time.Now()
 		tracks.Unlock()
 		t.set("deploying", "", link, sha)
+		s.wakeDeploy()
 		s.followDeploy(t, head)
 		return
 	}

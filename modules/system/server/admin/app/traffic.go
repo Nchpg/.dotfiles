@@ -506,8 +506,8 @@ func (s *Server) readTrafficSummary() (trafficSummary, error) {
 	return t, err
 }
 
-// summaryStale : au-delà, le résumé (écrit toutes les 5 minutes) est en retard.
-const summaryStale = 15 * time.Minute
+// summaryStale : au-delà, le résumé (écrit chaque minute) est en retard.
+const summaryStale = 5 * time.Minute
 
 // summaryNote : l'alerte d'un résumé illisible ou en retard, ou rien. Une date, pas « il y a » : la
 // page reste en cache quelques minutes.
@@ -517,7 +517,7 @@ func summaryNote(sum trafficSummary, err error, now time.Time) string {
 	}
 	if sum.Updated > 0 {
 		if at := time.Unix(sum.Updated, 0); now.Sub(at) > summaryStale {
-			return "Relevé d'admin-traffic du " + at.Local().Format("02/01 à 15:04") + " (il passe toutes les 5 minutes) : Authelia, applis connectées et sessions ne sont plus à jour. Le service admin-traffic ne tourne plus ?"
+			return "Relevé d'admin-traffic du " + at.Local().Format("02/01 à 15:04") + " (il passe chaque minute) : Authelia, applis connectées et sessions ne sont plus à jour. Le service admin-traffic ne tourne plus ?"
 		}
 	}
 	return ""

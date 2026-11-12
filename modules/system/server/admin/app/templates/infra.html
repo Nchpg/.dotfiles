@@ -26,8 +26,9 @@
   {{template "page-head" (args "Title" "VPN")}}
   {{with .Track}}{{template "track" .}}{{end}}
   {{template "list-alerts" .}}
-  {{if not .MetricsOK}}{{template "alert" (args "Kind" "amber" "Text" "Prometheus injoignable : état et trafic des appareils indisponibles.")}}{{end}}
-  <div class="overview">
+  {{if not .MetricsOK}}{{template "alert" (args "Kind" "amber" "Text" "État du tunnel illisible (ni l'exportateur WireGuard ni Prometheus ne répondent) : état et trafic des appareils indisponibles.")}}{{end}}
+  {{/* Relu toutes les 30 s (sauf confirmation ouverte, saisie en cours ou liste dépliée) : l'état suit sans recharger. */}}
+  <div class="overview" hx-get="/vpn" hx-select=".overview" hx-target="this" hx-swap="outerHTML" hx-trigger="every 30s [!this.querySelector('details[open]:not(.info), :focus, [data-expanded]')]">
     <section class="strip" aria-label="État du VPN">
       <div class="strip-cell">
         <span class="strip-label">Connectés</span>
@@ -194,7 +195,8 @@
   {{template "page-head" (args "Title" "SSH")}}
   {{with .Track}}{{template "track" .}}{{end}}
   {{template "list-alerts" .}}
-  <div class="overview">
+  {{/* Relu toutes les 30 s (sauf confirmation ouverte, saisie en cours ou liste dépliée) : l'état suit sans recharger. */}}
+  <div class="overview" hx-get="/ssh" hx-select=".overview" hx-target="this" hx-swap="outerHTML" hx-trigger="every 30s [!this.querySelector('details[open]:not(.info), :focus, [data-expanded]')]">
     <section class="strip" aria-label="Activité SSH">
       <div class="strip-cell">
         <span class="strip-label">Sessions ouvertes</span>
@@ -283,9 +285,10 @@
   {{with .Track}}{{template "track" .}}{{end}}
   {{template "list-alerts" .}}
   {{with .SummaryError}}{{template "alert" (args "Kind" "amber" "Text" .)}}{{end}}
-  <div class="overview">
+  {{/* Relu toutes les 30 s (sauf confirmation ouverte, saisie en cours ou liste dépliée) : l'état suit sans recharger. */}}
+  <div class="overview" hx-get="/accounts" hx-select=".overview" hx-target="this" hx-swap="outerHTML" hx-trigger="every 30s [!this.querySelector('details[open]:not(.info), :focus, [data-expanded]')]">
     <section class="block" aria-labelledby="accounts-title">
-      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" (printf "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 5 minutes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de %s et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché. En attente : ses accès sont sur main, le compte lui-même n'existe qu'après le secret et le rebuild." machine))}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
+      <div class="block-head"><h2 id="accounts-title" class="line">Comptes{{template "info" (args "ID" "info-accounts" "Text" (printf "Les comptes qui se connectent par Authelia (portail auth.). Résumé relu toutes les 30 secondes, sans mot de passe ni secret. Un compte se crée dans les secrets (authelia/users) ; son mot de passe se change par « mot de passe oublié ». Accès : les services de %s et les sites avec Authelia ouverts au compte, choisis compte par compte (« Gérer »). Un compte créé plus tard n'a accès à rien tant qu'il n'est pas coché. En attente : ses accès sont sur main, le compte lui-même n'existe qu'après le secret et le rebuild." machine))}}</h2>{{with .Updated}}<small class="muted">relu {{.}}</small>{{end}}</div>
       <section class="card table-card" aria-label="Liste des comptes">
         <table class="list">
           <thead><tr><th scope="col">Compte</th><th scope="col">Double authentification</th><th scope="col">Dernière connexion</th><th scope="col">Échecs 24 h</th><th scope="col">Accès</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -476,7 +479,7 @@
 
 {{/* Connexions acceptées, une par ligne et par jour (comme l'historique des sites), « Voir plus ». */}}
 {{define "ssh-logins"}}
-<section class="activity with-time" id="ssh-logins" aria-label="Connexions acceptées">
+<section class="activity with-time" id="ssh-logins" aria-label="Connexions acceptées"{{if .Expanded}} data-expanded{{end}}>
   {{range .Days}}
   <div class="day">
     <div class="day-label">{{.Label}}</div>

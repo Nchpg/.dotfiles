@@ -120,7 +120,7 @@ func TestNextcloudClient(t *testing.T) {
 // Relevé d'admin-traffic : illisible ou en retard, une alerte ; à l'heure ou absent, rien.
 func TestSummaryNote(t *testing.T) {
 	now := time.Now()
-	if n := summaryNote(trafficSummary{Updated: now.Add(-6 * time.Minute).Unix()}, nil, now); n != "" {
+	if n := summaryNote(trafficSummary{Updated: now.Add(-2 * time.Minute).Unix()}, nil, now); n != "" {
 		t.Errorf("à l'heure : %q", n)
 	}
 	if n := summaryNote(trafficSummary{Updated: now.Add(-time.Hour).Unix()}, nil, now); !strings.Contains(n, "plus à jour") {

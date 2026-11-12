@@ -354,7 +354,7 @@ type Package struct {
 
 // Packages : les images de l'utilisateur sur ghcr, chacune avec son dépôt (jeton read:packages).
 func (g *GitHub) Packages(ctx context.Context) ([]Package, error) {
-	v, err := g.cached("packages", 5*time.Minute, func() (any, error) {
+	v, err := g.cached("packages", time.Minute, func() (any, error) {
 		var out []Package
 		_, err := g.api(ctx, "GET", "https://api.github.com/user/packages?package_type=container&per_page=100", g.cfg.RegistryToken, nil, &out)
 		return out, err

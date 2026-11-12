@@ -518,10 +518,11 @@ func (s *Server) runJob(ctx context.Context, j *Job, req Request, from int) erro
 		if err != nil {
 			return err
 		}
+		s.wakeDeploy()
 		j.set(1, "done", "commit "+commit[:7], "https://github.com/"+s.cfg.Repo+"/commit/"+commit)
 	}
 	if from <= 2 {
-		// 3. think applique (apps-deploy, chaque minute).
+		// 3. think applique (apps-deploy : réveillé au commit, sinon chaque minute).
 		j.set(2, "active", "", "")
 		if err := s.waitDeployed(ctx, j, req.App, want); err != nil {
 			return err

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -281,9 +282,16 @@ type wgMetrics struct {
 	Remote                    map[string]string // IP publique de la dernière poignée de main
 }
 
-// wireguard : poignées de main (et IP publiques), octets reçus et envoyés, en une seule requête.
+// wireguard : poignées de main (et IP publiques), octets reçus et envoyés. Lus à l'exportateur
+// lui-même quand il est connu (l'état du tunnel à l'instant) ; sinon, ou s'il ne répond pas, à
+// Prometheus, qui ne le relève qu'une fois par minute.
 func (s *Server) wireguard(ctx context.Context) (wgMetrics, error) {
-	m := wgMetrics{map[string]float64{}, map[string]float64{}, map[string]float64{}, map[string]string{}}
+	if s.cfg.WGExporter != "" {
+		if m, err := s.wireguardLive(ctx); err == nil {
+			return m, nil
+		}
+	}
+	m := newWGMetrics()
 	res, err := s.promSamples(ctx, `{__name__=~"wireguard_(latest_handshake_seconds|received_bytes_total|sent_bytes_total)"}`)
 	for _, r := range res {
 		v, _ := r.Value[1].(string)
@@ -291,20 +299,122 @@ func (s *Server) wireguard(ctx context.Context) (wgMetrics, error) {
 		if perr != nil {
 			continue
 		}
-		key := r.Metric["public_key"]
-		switch r.Metric["__name__"] {
-		case "wireguard_latest_handshake_seconds":
-			m.Handshake[key] = f
-			if ip := r.Metric["remote_ip"]; ip != "" {
-				m.Remote[key] = ip
-			}
-		case "wireguard_received_bytes_total":
-			m.Received[key] = f
-		case "wireguard_sent_bytes_total":
-			m.Sent[key] = f
-		}
+		m.add(r.Metric["__name__"], r.Metric, f)
 	}
 	return m, err
+}
+
+func newWGMetrics() wgMetrics {
+	return wgMetrics{map[string]float64{}, map[string]float64{}, map[string]float64{}, map[string]string{}}
+}
+
+func (m wgMetrics) add(name string, labels map[string]string, f float64) {
+	key := labels["public_key"]
+	switch name {
+	case "wireguard_latest_handshake_seconds":
+		m.Handshake[key] = f
+		if ip := labels["remote_ip"]; ip != "" {
+			m.Remote[key] = ip
+		}
+	case "wireguard_received_bytes_total":
+		m.Received[key] = f
+	case "wireguard_sent_bytes_total":
+		m.Sent[key] = f
+	}
+}
+
+// wireguardLive : les mêmes mesures, lues dans la page /metrics de l'exportateur (2 s au plus).
+func (s *Server) wireguardLive(ctx context.Context) (wgMetrics, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "GET", s.cfg.WGExporter+"/metrics", nil)
+	if err != nil {
+		return wgMetrics{}, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return wgMetrics{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return wgMetrics{}, fmt.Errorf("exportateur wireguard : %s", resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return wgMetrics{}, err
+	}
+	m := newWGMetrics()
+	for _, line := range strings.Split(string(b), "\n") {
+		if name, labels, f, ok := parseMetricLine(line); ok {
+			m.add(name, labels, f)
+		}
+	}
+	return m, nil
+}
+
+// parseMetricLine : une ligne du format texte de Prometheus, `nom{a="b",…} valeur [horodatage]`
+// (faux pour un commentaire, une ligne vide ou mal formée).
+func parseMetricLine(line string) (name string, labels map[string]string, value float64, ok bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || line[0] == '#' {
+		return "", nil, 0, false
+	}
+	labels = map[string]string{}
+	rest := ""
+	if i := strings.IndexByte(line, '{'); i >= 0 {
+		name = line[:i]
+		s := line[i+1:]
+		for {
+			s = strings.TrimLeft(s, ", ")
+			if strings.HasPrefix(s, "}") {
+				rest = s[1:]
+				break
+			}
+			eq := strings.Index(s, `="`)
+			if eq < 0 {
+				return "", nil, 0, false
+			}
+			key := s[:eq]
+			s = s[eq+2:]
+			var val strings.Builder
+			closed := false
+			for j := 0; j < len(s); j++ {
+				if s[j] == '\\' && j+1 < len(s) {
+					j++
+					if s[j] == 'n' {
+						val.WriteByte('\n')
+					} else {
+						val.WriteByte(s[j])
+					}
+					continue
+				}
+				if s[j] == '"' {
+					s, closed = s[j+1:], true
+					break
+				}
+				val.WriteByte(s[j])
+			}
+			if !closed {
+				return "", nil, 0, false
+			}
+			labels[key] = val.String()
+		}
+	} else {
+		var found bool
+		name, rest, found = strings.Cut(line, " ")
+		if !found {
+			return "", nil, 0, false
+		}
+	}
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return "", nil, 0, false
+	}
+	f, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "", nil, 0, false
+	}
+	return name, labels, f, true
 }
 
 // ago : « à l'instant », « il y a 5 min », « il y a 3 h », « il y a 2 j ».
@@ -937,7 +1047,7 @@ func (s *Server) ssh(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	act := s.sshActivityOf()
+	act := s.sshActivityLive(r.Context())
 	devices := s.vpnDevices(r.Context())
 	from := func(ip string) string {
 		if d := devices[ip]; d != "" {
@@ -996,10 +1106,11 @@ type SSHLoginDay struct {
 
 // SSHLogins : les `N` dernières connexions acceptées, par jour ; `More` s'il en reste.
 type SSHLogins struct {
-	Days    []SSHLoginDay
-	N, Next int
-	More    bool
-	Window  string
+	Days     []SSHLoginDay
+	N, Next  int
+	More     bool
+	Expanded bool // dépliée par « Voir plus » : la page ne se relit plus seule (elle la replierait)
+	Window   string
 }
 
 const sshLoginStep = 10
@@ -1007,7 +1118,7 @@ const sshLoginStep = 10
 // sshLogins : les `n` dernières connexions acceptées (journal de sshd), comme l'historique des sites.
 func (s *Server) sshLogins(ctx context.Context, n int) SSHLogins {
 	n = max(n, sshLoginStep)
-	act := s.sshActivityOf()
+	act := s.sshActivityLive(ctx)
 	devices := s.vpnDevices(ctx)
 	keys := map[string]string{}
 	for _, u := range s.cfg.SSH.Users {
@@ -1016,7 +1127,7 @@ func (s *Server) sshLogins(ctx context.Context, n int) SSHLogins {
 			keys[row.Fingerprint] = firstOf(row.Comment, row.Type)
 		}
 	}
-	out := SSHLogins{N: n, Next: n + sshLoginStep, More: len(act.Logins) > n, Window: windowLabel(s.cfg.LogsWindow)}
+	out := SSHLogins{N: n, Next: n + sshLoginStep, Expanded: n > sshLoginStep, More: len(act.Logins) > n, Window: windowLabel(s.cfg.LogsWindow)}
 	for _, e := range act.Logins[:min(n, len(act.Logins))] {
 		at := e.At.Local()
 		label := frenchDay(at)
