@@ -24,7 +24,10 @@
     },
     "internetAccess": true,
     "probe": "/healthz",
-    "rateLimit": []
+    "rateLimit": [
+      "/admin",
+      "/v1/admin"
+    ]
   },
   "mnist": {
     "containers": {
