@@ -1,8 +1,8 @@
 {
   "ghcr.io/nchpg/garminmap:main": {
-    "digest": "sha256:64d10e0f43f5adc083dde8692fb9affec8512c31f0d6169ddaa0c26fe5f0e0ef",
+    "digest": "sha256:aba3e742349793f32eeab56bcc2d854cc422e5f35ef17d75e8855a222d21d880",
     "port": 8000,
-    "revision": "3b86fec034fab867b4655a78349a086100d16bb1"
+    "revision": "2108a7949fadec10dc06c7d7b7cd69c97ab7bd6c"
   },
   "ghcr.io/nchpg/iseg-2017:main": {
     "digest": "sha256:ae848038130afa6277be463f3e562f8712f27f8a20f2a2f844ba54bcd0aba97c",
