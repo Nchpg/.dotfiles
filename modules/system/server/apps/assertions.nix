@@ -102,6 +102,10 @@ in
         message = "systemSettings.apps : `entrypoint` est requis dès qu'une application a plusieurs conteneurs — c'est celui que nginx sert.";
       }
       {
+        assertion = lib.all (a: !(a.containers.${a.entrypointName}.internal or false)) (lib.attrValues cfg);
+        message = "systemSettings.apps : le point d'entrée (servi par nginx) ne peut pas être `internal`.";
+      }
+      {
         assertion = lib.all (a: a.entrypoint == null || a.containers ? ${a.entrypoint}) (
           lib.attrValues cfg
         );

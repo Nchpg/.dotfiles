@@ -38,6 +38,9 @@ let
 
   registryOf = image: lib.head (lib.splitString "/" image);
 
+  # Une application dont un conteneur vit sur le réseau interne : ses autres conteneurs le rejoignent aussi.
+  hasInternal = app: lib.any (c: c.internal) (lib.attrValues app.containers);
+
   containerOptions = {
     image = lib.mkOption {
       type = lib.types.str;
@@ -126,6 +129,26 @@ let
       example = [ "backend" ];
       description = ''
         Conteneurs de la même application à démarrer avant celui-ci.
+      '';
+    };
+
+    internal = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Sur le seul réseau interne de l'application : il ne joint que les autres conteneurs de
+        l'application (qui rejoignent aussi ce réseau), jamais internet, même si l'application a
+        `internetAccess` (pas de route, et le DNS ne répond qu'aux noms des conteneurs). Pour un
+        conteneur qui garde des secrets et ne doit rien pouvoir envoyer dehors.
+      '';
+    };
+
+    readOnly = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Système de fichiers de l'image en lecture seule (`--read-only`, /tmp et /run en mémoire) :
+        seuls ses montages restent inscriptibles.
       '';
     };
 
@@ -276,7 +299,11 @@ in
           # Boucle locale seulement : un bind plus large contournerait le pare-feu NixOS.
           ports = lib.optional c.isEntrypoint "127.0.0.1:${toString c.app.hostPortEffective}:${toString c.port}";
 
-          networks = lib.singleton c.app.network;
+          networks =
+            if c.container.internal then
+              [ c.app.internalNetwork ]
+            else
+              [ c.app.network ] ++ lib.optional (hasInternal c.app) c.app.internalNetwork;
 
           dependsOn = map (n: containerKey c.appName n) c.container.dependsOn;
 
@@ -294,6 +321,7 @@ in
             "--pids-limit=${toString c.container.pidsLimit}"
           ]
           ++ lib.optional (c.container.memory != null) "--memory=${c.container.memory}"
+          ++ lib.optional c.container.readOnly "--read-only"
           ++ lib.optional (c.port != null && c.port < 1024) "--cap-add=NET_BIND_SERVICE"
           ++ map (cap: "--cap-add=${cap}") c.container.capabilities
           ++ lib.optionals (c.container.healthcheck.command != null) [
@@ -322,36 +350,42 @@ in
             RemainAfterExit = true;
           };
 
-          # `isolate=true` : netavark ne bloque le trafic inter-réseaux que sur demande.
+          # `isolate=true` : netavark ne bloque le trafic inter-réseaux que sur demande. `--internal` (réseau
+          # interne) : ni route vers l'extérieur, ni DNS au-delà des noms des conteneurs.
           script =
             let
-              net = lib.escapeShellArg app.network;
-              bridge = lib.escapeShellArg app.bridge;
-              opts = lib.escapeShellArgs [
-                "--opt"
-                "com.docker.network.bridge.name=${app.bridge}"
-                "--opt"
-                "isolate=true"
-              ];
+              ensure =
+                net: bridge: extra:
+                let
+                  n = lib.escapeShellArg net;
+                  b = lib.escapeShellArg bridge;
+                  opts = lib.escapeShellArgs (
+                    [
+                      "--opt"
+                      "com.docker.network.bridge.name=${bridge}"
+                      "--opt"
+                      "isolate=true"
+                    ]
+                    ++ extra
+                  );
+                in
+                ''
+                  if ! ${podmanBin} network exists ${n}; then
+                    ${podmanBin} network create ${opts} ${n}
+                  else
+                    actual=$(${podmanBin} network inspect ${n} --format '{{.NetworkInterface}}' 2> /dev/null || true)
+                    if [ "$actual" != ${b} ]; then
+                      echo "réseau ${net} : pont « $actual » au lieu de « ${bridge} », recréation" >&2
+                      ${podmanBin} network rm -f ${n}
+                      ${podmanBin} network create ${opts} ${n}
+                    fi
+                  fi
+                '';
             in
-            ''
-              create() {
-                ${podmanBin} network create ${opts} ${net}
-              }
-
-              if ! ${podmanBin} network exists ${net}; then
-                create
-                exit 0
-              fi
-
-              actual=$(${podmanBin} network inspect ${net} --format '{{.NetworkInterface}}' 2> /dev/null || true)
-
-              if [ "$actual" != ${bridge} ]; then
-                echo "réseau ${app.network} : pont « $actual » au lieu de « ${app.bridge} », recréation" >&2
-                ${podmanBin} network rm -f ${net}
-                create
-              fi
-            '';
+            ensure app.network app.bridge [ ]
+            + lib.optionalString (hasInternal app) (
+              ensure app.internalNetwork app.internalBridge [ "--internal" ]
+            );
         };
       }) cfg)
 

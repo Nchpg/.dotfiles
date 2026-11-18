@@ -30,6 +30,14 @@ let
 
   fail = where: msg: throw "${toString file} : ${where} : ${msg}";
 
+  # Clé booléenne facultative (`false` par défaut).
+  flag =
+    where: key: c:
+    let
+      v = c.${key} or false;
+    in
+    if lib.isBool v then v else fail where "`${key}` : true ou false";
+
   accessKeys = [
     "expose"
     "devices"
@@ -75,6 +83,8 @@ let
     "dependsOn"
     "data"
     "secrets"
+    "internal"
+    "readOnly"
   ];
 
   pick = keys: attrs: lib.filterAttrs (k: _: lib.elem k keys) attrs;
@@ -227,6 +237,8 @@ let
                 image = if id == null then c.image else "${untag c.image}:${tag}";
                 memory = c.memory or null;
                 dependsOn = c.dependsOn or [ ];
+                internal = flag where "internal" c;
+                readOnly = flag where "readOnly" c;
                 secrets = c.secrets or [ ];
                 data = map (
                   d0:
@@ -303,7 +315,13 @@ let
         map (
           c:
           lib.nameValuePair c.name {
-            inherit (c) image memory dependsOn;
+            inherit (c)
+              image
+              memory
+              dependsOn
+              internal
+              readOnly
+              ;
             volumes = map (x: {
               inherit (x) source;
               target = x.path;

@@ -239,6 +239,27 @@ in
               description = "Réseau podman de l'application.";
             };
 
+            internalNetwork = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              internal = true;
+              default = "app-${name}-int";
+              description = "Réseau podman interne de l'application (conteneurs `internal`).";
+            };
+
+            internalBridge = lib.mkOption {
+              type = lib.types.str;
+              readOnly = true;
+              internal = true;
+              # IFNAMSIZ (15), comme `bridge`.
+              default =
+                if lib.stringLength name <= 12 then
+                  "bi-${name}"
+                else
+                  "bi-${lib.substring 0 12 (builtins.hashString "sha256" name)}";
+              description = "Pont du réseau interne, pour les règles de pare-feu.";
+            };
+
             networkUnit = lib.mkOption {
               type = lib.types.str;
               readOnly = true;

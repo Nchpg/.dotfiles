@@ -126,6 +126,8 @@ le tunnel WireGuard.
 | `containers.<c>.dependsOn` | | conteneurs du même site à démarrer avant |
 | `containers.<c>.data` | | `[{"path": "/data"}]` : dossier gardé entre deux versions, dans `/var/lib/apps/<site>/<conteneur>/data`, donné à l'utilisateur de l'image. `"on"` choisit l'emplacement : `/var/lib/<site>…` ou un volume podman `<site>-…` |
 | `containers.<c>.secrets` | | secrets sops rangés sous `<site>/` (lignes `NOM=valeur`, une par ligne, sans guillemets), donnés en variables d'environnement dans l'ordre de la liste : une variable en double, le dernier l'emporte |
+| `containers.<c>.internal` | `false` | sur le seul réseau interne du site, cf. « Plusieurs conteneurs » ; jamais l'`entrypoint` |
+| `containers.<c>.readOnly` | `false` | système de fichiers de l'image en lecture seule (`/tmp` et `/run` en mémoire) : seuls ses dossiers `data` restent inscriptibles |
 
 Une clé inconnue fait échouer l'évaluation. Ce que le format ne couvre pas
 (healthcheck, commande, capacités) se complète en Nix dans `apps.nix`, sur la
@@ -216,6 +218,14 @@ Chaque site a son réseau ; ses conteneurs s'y joignent par leur nom
 (`http://backend:8000`). `entrypoint` désigne celui que nginx sert, `dependsOn`
 fixe l'ordre de démarrage. Les migrations de schéma restent du ressort de l'app,
 et un retour en arrière ne restaure pas les données.
+
+Un conteneur `internal` vit sur un second réseau du site, interne (`--internal`,
+pont `bi-<site>`) : il n'y joint que les autres conteneurs du site, qui rejoignent
+aussi ce réseau, et rien dehors, même avec `internetAccess` (pas de route, pare-feu
+sans règle de sortie, DNS limité aux noms des conteneurs). Pour un conteneur qui garde
+des secrets. S'il doit joindre un service précis, un conteneur relais du site, sur les
+deux réseaux, filtre ce qui passe : c'est le cas du coffre Garmin de `map` et de son
+relais `egress`, qui ne laisse passer que les adresses de Garmin.
 
 ## Ce qui se déploie seul, et ce qui attend
 
