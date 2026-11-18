@@ -13,6 +13,7 @@ in
     ./nextcloud.nix
     ./vaultwarden.nix
     ./apps.nix
+    ./garminmap-backup.nix
     ./admin.nix
     ./pgweb.nix
   ];
