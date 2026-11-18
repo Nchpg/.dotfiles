@@ -16,10 +16,7 @@
           }
         ],
         "image": "garminmap:main",
-        "memory": "256m",
-        "secrets": [
-          "map/env"
-        ]
+        "memory": "256m"
       },
       "vault": {
         "data": [
