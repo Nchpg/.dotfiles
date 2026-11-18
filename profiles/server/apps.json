@@ -20,14 +20,36 @@
         "secrets": [
           "map/env"
         ]
+      },
+      "vault": {
+        "data": [
+          {
+            "path": "/data"
+          }
+        ],
+        "image": "garminmap-vault:main",
+        "internal": true,
+        "memory": "256m",
+        "readOnly": true,
+        "secrets": [
+          "map/vault"
+        ]
+      },
+      "egress": {
+        "image": "garminmap-egress:main",
+        "memory": "64m",
+        "readOnly": true
       }
     },
     "internetAccess": true,
     "probe": "/healthz",
     "rateLimit": [
       "/admin",
-      "/v1/admin"
-    ]
+      "/v1/admin",
+      "/v1/auth",
+      "/v1/garmin"
+    ],
+    "entrypoint": "web"
   },
   "mnist": {
     "containers": {

@@ -13,7 +13,10 @@
     repository = "s3:https://s3.eu-central-003.backblazeb2.com/garminmap-sauvegarde";
     passwordFile = config.sops.secrets."map/restic-password".path;
     environmentFile = config.sops.secrets."map/backup".path;
-    paths = [ "/var/lib/apps/map/web/data" ];
+    paths = [
+      "/var/lib/apps/map/web/data"
+      "/var/lib/apps/map/vault/data" # coffres Garmin, chiffrés : inutiles sans les tickets des appareils
+    ];
     exclude = [ "/var/lib/apps/map/web/data/tiles" ];
     # Toutes les heures : plus souvent, les lectures de restic dépasseraient le quota gratuit quotidien de B2.
     timerConfig = {
