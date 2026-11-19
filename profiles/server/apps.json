@@ -39,7 +39,7 @@
       }
     },
     "internetAccess": true,
-    "probe": "/healthz",
+    "probe": "/healthz/alerts",
     "rateLimit": [
       "/admin",
       "/v1/admin",
