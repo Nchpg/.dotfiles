@@ -16,7 +16,8 @@
           }
         ],
         "image": "garminmap:main",
-        "memory": "256m"
+        "memory": "256m",
+        "readOnly": true
       },
       "vault": {
         "data": [
