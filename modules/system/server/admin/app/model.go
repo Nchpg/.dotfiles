@@ -26,6 +26,10 @@ type Container struct {
 	DependsOn []string `json:"dependsOn,omitempty"`
 	Data      []Data   `json:"data,omitempty"`
 	Secrets   []string `json:"secrets,omitempty"`
+	// Réglés à la main dans apps.json (apps-file.nix), absents du formulaire : réseau interne seul, système de
+	// fichiers en lecture seule.
+	Internal bool `json:"internal,omitempty"`
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
 
 type Entry struct {

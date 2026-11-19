@@ -732,6 +732,7 @@ func (s *Server) containersFromForm(r *http.Request, prev map[string]Container, 
 		var c Container
 		if p, ok := prev[n]; ok {
 			c.Image = p.Image
+			c.Internal, c.ReadOnly = p.Internal, p.ReadOnly // pas dans le formulaire : gardés tels quels
 		}
 		img := r.FormValue("img_" + n)
 		if n == added {
