@@ -351,7 +351,7 @@ func (s *Server) secretsFor(name string) []string {
 	return out
 }
 
-var memories = [][2]string{{"", "Sans limite"}, {"128m", "128 Mo"}, {"256m", "256 Mo"}, {"512m", "512 Mo"}, {"1g", "1 Go"}, {"2g", "2 Go"}}
+var memories = [][2]string{{"", "Sans limite"}, {"64m", "64 Mo"}, {"128m", "128 Mo"}, {"256m", "256 Mo"}, {"512m", "512 Mo"}, {"1g", "1 Go"}, {"2g", "2 Go"}}
 
 // formVM : le formulaire d'un nouveau site, ou de la racine d'un site.
 func (s *Server) formVM(ctx context.Context, name string, e Entry, isNew bool, repo string, images []string, snap *Snapshot) FormVM {
