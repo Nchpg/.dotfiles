@@ -24,8 +24,11 @@ let
 
       # Le cookie de session Authelia (domaine parent) n'a rien à faire chez l'appli : compromise,
       # elle pourrait le rejouer sur les autres services. `auth_request` le lit avant, intact.
+      # CF-Connecting-IP réécrit avec l'adresse vue par nginx (celle de Cloudflare derrière le tunnel, sinon la
+      # connexion) : un client du réseau local ne peut pas en choisir une pour contourner les limites de l'appli.
       upstream = ''
         proxy_set_header Cookie $authelia_stripped_cookie;
+        proxy_set_header CF-Connecting-IP $real_client_ip;
       ''
       + timeout;
 
