@@ -1,14 +1,4 @@
 {
-  "ghcr.io/nchpg/garminmap-egress:main": {
-    "digest": "sha256:3b5f5e8d951773fb07a47fdd418db30322b60133c5cf480cb66b6e575799c53d",
-    "port": 3128,
-    "revision": "0e5aa2a0f36a5b67ad0337956a98b35e1a547960"
-  },
-  "ghcr.io/nchpg/garminmap-vault:main": {
-    "digest": "sha256:a8621d6d042fd77db0fbcd0c66fe76ed4be269ab1f874d2cbba89825567aa339",
-    "port": 8001,
-    "revision": "0e5aa2a0f36a5b67ad0337956a98b35e1a547960"
-  },
   "ghcr.io/nchpg/garminmap:main": {
     "digest": "sha256:a4756124f75efcce2c8b829545e25b1c776981e82760c11b23d7707a5eea019a",
     "port": 8000,
