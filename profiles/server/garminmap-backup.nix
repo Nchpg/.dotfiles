@@ -1,7 +1,7 @@
 { config, ... }:
 
 {
-  # Sauvegarde chiffrée de GarminMap (restic) vers Backblaze B2, région Europe : parcours, jetons Garmin,
+  # Sauvegarde chiffrée de GarminMap (restic) vers Backblaze B2, région Europe : comptes, parcours,
   # réglages. Les tuiles se refont, elles ne partent pas. Procédure et restauration : deploy/README.md du
   # dépôt garminmap. Le mot de passe restic a aussi une copie hors de think : sans lui, la sauvegarde est
   # illisible.
@@ -13,10 +13,7 @@
     repository = "s3:https://s3.eu-central-003.backblazeb2.com/garminmap-sauvegarde";
     passwordFile = config.sops.secrets."map/restic-password".path;
     environmentFile = config.sops.secrets."map/backup".path;
-    paths = [
-      "/var/lib/apps/map/web/data"
-      "/var/lib/apps/map/vault/data" # coffres Garmin, chiffrés : inutiles sans les tickets des appareils
-    ];
+    paths = [ "/var/lib/apps/map/web/data" ];
     exclude = [ "/var/lib/apps/map/web/data/tiles" ];
     # Toutes les heures : plus souvent, les lectures de restic dépasseraient le quota gratuit quotidien de B2.
     timerConfig = {
