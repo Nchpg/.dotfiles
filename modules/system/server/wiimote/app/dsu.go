@@ -68,8 +68,9 @@ type server struct {
 	id    uint32
 	start time.Time
 
-	mu      sync.Mutex
-	used    [slots]bool
+	mu sync.Mutex
+	// Téléphone de chaque slot (nil : libre), cf. players.go.
+	seats   [slots]*player
 	pads    [slots]padState
 	counter [slots]uint32
 	subs    map[string]*subscriber
@@ -176,7 +177,7 @@ func (s *server) handleRequest(pkt []byte, from net.Addr) {
 			slot := int(pkt[24+i])
 			if slot < slots {
 				s.mu.Lock()
-				connected := s.used[slot]
+				connected := s.seats[slot] != nil
 				s.mu.Unlock()
 				s.conn.WriteTo(s.portInfo(slot, connected), from)
 			}
@@ -218,14 +219,13 @@ func (s *server) subscribe(from net.Addr, flags, slot byte, addr []byte) {
 	sub.until = now.Add(subscriptionTTL)
 }
 
-func (s *server) update(slot int, st padState) {
+// Enregistre l'état d'un slot et prépare son paquet pour les clients abonnés. Sous s.mu ; envoyer ensuite
+// avec `broadcast`, hors du verrou.
+func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.Addr) {
 	now := time.Now()
-	var targets []net.Addr
-
-	s.mu.Lock()
 	s.pads[slot] = st
 	s.counter[slot]++
-	pkt := s.padData(slot, st, s.counter[slot])
+	pkt = s.padData(slot, st, s.counter[slot])
 	for key, sub := range s.subs {
 		if now.After(sub.until) {
 			delete(s.subs, key)
@@ -233,40 +233,13 @@ func (s *server) update(slot int, st padState) {
 			targets = append(targets, sub.addr)
 		}
 	}
-	s.mu.Unlock()
+	return pkt, targets
+}
 
+func (s *server) broadcast(pkt []byte, targets []net.Addr) {
 	for _, addr := range targets {
 		s.conn.WriteTo(pkt, addr)
 	}
-}
-
-// Toujours le premier slot libre : Dolphin lit les slots 0, 1… pour les Wii Remote 1, 2…, un trou laisserait
-// une manette sans Wii Remote. Un téléphone qui se reconnecte retrouve sa place une fois l'ancienne libérée.
-func (s *server) claim() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range slots {
-		if !s.used[i] {
-			s.used[i] = true
-			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
-			s.pads[i] = padState{pointer: [2]byte{128, 128}}
-			return i
-		}
-	}
-	return -1
-}
-
-// Relâche les boutons avant de libérer : sans ça, Dolphin garderait « 2 » enfoncé jusqu'à la disparition du périphérique.
-func (s *server) release(slot int) {
-	s.mu.Lock()
-	st := s.pads[slot]
-	s.mu.Unlock()
-	st.buttons = 0
-	s.update(slot, st)
-
-	s.mu.Lock()
-	s.used[slot] = false
-	s.mu.Unlock()
 }
 
 func decode(msg []byte) (padState, bool) {

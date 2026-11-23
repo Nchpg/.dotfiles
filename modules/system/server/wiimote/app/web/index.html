@@ -220,7 +220,21 @@
     transform: none;
   }
   .overlay .start:active { transform: scale(.96); }
-  .overlay .start[hidden], .overlay video[hidden] { display: none; }
+  .overlay .start[hidden], .overlay video[hidden], .overlay .name[hidden] { display: none; }
+  .overlay .name {
+    justify-self: center;
+    width: min(100%, 15rem);
+    padding: .8rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--paper-ink);
+    font: 500 1.05rem "Bricolage", system-ui, sans-serif;
+    text-align: center;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .overlay .name:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
   .overlay video {
     justify-self: center;
     width: min(70vmin, 22rem);
@@ -268,6 +282,7 @@
     <h1>Wiimote<i>.</i></h1>
     <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
     <video id="camera" playsinline muted hidden></video>
+    <input id="name" class="name" maxlength="24" placeholder="Ton prénom" autocomplete="nickname" enterkeyhint="go" aria-label="Ton prénom, affiché à l'hôte" hidden>
     <button class="start" id="start">Connecter</button>
     <button class="start" id="scan" hidden>Scanner le QR code</button>
   </div>

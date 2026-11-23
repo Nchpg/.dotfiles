@@ -6,6 +6,7 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/subtle"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -82,6 +83,30 @@ func (s *server) routes(dsuHost, dsuPort string) http.Handler {
 		s.newInvite()
 		http.Redirect(w, r, "/dolphin", http.StatusSeeOther)
 	})
+	mux.HandleFunc("GET /dolphin/players", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		json.NewEncoder(w).Encode(s.players())
+	})
+	mux.HandleFunc("POST /dolphin/players/swap", func(w http.ResponseWriter, r *http.Request) {
+		a, errA := strconv.Atoi(r.FormValue("a"))
+		b, errB := strconv.Atoi(r.FormValue("b"))
+		if errA != nil || errB != nil || a < 0 || b < 0 || a >= slots || b >= slots || a == b {
+			http.Error(w, "places invalides", http.StatusBadRequest)
+			return
+		}
+		s.swap(a, b)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /dolphin/players/{slot}/kick", func(w http.ResponseWriter, r *http.Request) {
+		slot, err := strconv.Atoi(r.PathValue("slot"))
+		if err != nil || slot < 0 || slot >= slots {
+			http.Error(w, "place invalide", http.StatusBadRequest)
+			return
+		}
+		s.kick(slot)
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("GET /dolphin/{player}", func(w http.ResponseWriter, r *http.Request) {
 		player, err := strconv.Atoi(r.PathValue("player"))
 		if err != nil || player < 1 || player > slots {
@@ -122,9 +147,10 @@ func (s *server) invited(token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(s.currentInvite())) == 1
 }
 
-// Premier message du téléphone : le jeton d'invitation.
+// Premier message du téléphone : le jeton d'invitation et le prénom du joueur.
 type hello struct {
 	Invite string `json:"invite"`
+	Name   string `json:"name"`
 }
 
 func (s *server) phone(ws *websocket.Conn) {
@@ -138,12 +164,15 @@ func (s *server) phone(ws *websocket.Conn) {
 		websocket.JSON.Send(ws, map[string]any{"error": "Lien d'invitation invalide ou remplacé : scanne le QR code de l'hôte.", "retry": false})
 		return
 	}
-	slot := s.claim()
-	if slot < 0 {
+	p := s.claim(h.Name, ws)
+	if p == nil {
 		websocket.JSON.Send(ws, map[string]any{"error": "Déjà 4 manettes connectées.", "retry": true})
 		return
 	}
-	defer s.release(slot)
+	defer s.release(p)
+	s.mu.Lock()
+	slot := p.slot
+	s.mu.Unlock()
 	if websocket.JSON.Send(ws, map[string]int{"slot": slot}) != nil {
 		return
 	}
@@ -155,7 +184,7 @@ func (s *server) phone(ws *websocket.Conn) {
 			return
 		}
 		if st, ok := decode(msg); ok {
-			s.update(slot, st)
+			s.push(p, st)
 		}
 	}
 }

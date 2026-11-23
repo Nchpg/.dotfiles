@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"hash/crc32"
 	"math"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -114,6 +116,97 @@ func TestHostPages(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), own)
 	if s.currentInvite() == old {
 		t.Fatal("lien non renouvelé")
+	}
+}
+
+// L'hôte voit les joueurs, échange leurs places et en retire depuis /dolphin.
+func TestHostManagesPlayers(t *testing.T) {
+	s := newServer(nil)
+	web := httptest.NewServer(s.routes("10.8.0.1", "26760"))
+	defer web.Close()
+	wsURL := "ws" + strings.TrimPrefix(web.URL, "http") + "/ws"
+
+	type message struct {
+		Slot  int
+		Error string
+		Retry bool
+	}
+	next := func(ws *websocket.Conn) message {
+		t.Helper()
+		var m message
+		ws.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if err := websocket.JSON.Receive(ws, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	join := func(name string) *websocket.Conn {
+		t.Helper()
+		ws, err := websocket.Dial(wsURL, "", web.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		websocket.JSON.Send(ws, hello{Invite: s.currentInvite(), Name: name})
+		next(ws)
+		return ws
+	}
+	list := func() []*seatInfo {
+		t.Helper()
+		resp, err := http.Get(web.URL + "/dolphin/players")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var seats []*seatInfo
+		json.NewDecoder(resp.Body).Decode(&seats)
+		return seats
+	}
+	post := func(path, body string) int {
+		t.Helper()
+		resp, err := http.Post(web.URL+path, "application/x-www-form-urlencoded", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	alice := join(" Alice\x07 ")
+	bob := join(strings.Repeat("é", 40))
+	if seats := list(); seats[0].Name != "Alice" || len([]rune(seats[1].Name)) != maxNameLength || seats[2] != nil {
+		t.Fatalf("places : %+v %+v %+v", seats[0], seats[1], seats[2])
+	}
+
+	// Échange : chacun apprend son nouveau numéro.
+	if code := post("/dolphin/players/swap", "a=0&b=1"); code != http.StatusNoContent {
+		t.Fatalf("échange refusé : %d", code)
+	}
+	if a, b := next(alice), next(bob); a.Slot != 1 || b.Slot != 0 {
+		t.Fatalf("après échange : Alice %d, Bob %d", a.Slot, b.Slot)
+	}
+	if seats := list(); seats[1].Name != "Alice" {
+		t.Fatal("liste non mise à jour après l'échange")
+	}
+	// Vers une place vide.
+	post("/dolphin/players/swap", "a=1&b=3")
+	if next(alice).Slot != 3 || list()[1] != nil {
+		t.Fatal("déplacement vers une place vide raté")
+	}
+
+	// Retrait : prévenu, sans reconnexion automatique, place libérée.
+	post("/dolphin/players/0/kick", "")
+	if m := next(bob); m.Error == "" || m.Retry {
+		t.Fatalf("retrait mal signalé : %+v", m)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if list()[0] != nil {
+		t.Fatal("place toujours occupée après le retrait")
+	}
+
+	for _, bad := range []string{"a=0&b=0", "a=0&b=9", "a=x&b=1"} {
+		if code := post("/dolphin/players/swap", bad); code != http.StatusBadRequest {
+			t.Fatalf("%s accepté (%d)", bad, code)
+		}
 	}
 }
 

@@ -112,6 +112,37 @@
   .renew button:hover { text-decoration-color: currentColor; }
   button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
+  .players { margin-bottom: clamp(2.5rem, 6vw, 4rem); }
+  .players-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .8rem; }
+  .players-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
+  .players-head span { color: var(--muted); font-size: .85rem; }
+  .seats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin: 0; padding: 0; list-style: none; }
+  .seat {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: .5rem;
+    min-height: 8.5rem;
+    padding: .95rem 1rem 1rem;
+    border-radius: 12px;
+    background: var(--field);
+  }
+  .seat .n { display: flex; align-items: center; gap: .45rem; color: var(--muted); font: .78rem ui-monospace, "SF Mono", monospace; }
+  .seat.on .n::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); }
+  .seat .who { font-size: 1.3rem; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .seat.free .who { color: var(--muted); font-weight: 400; }
+  .seat .act { display: flex; gap: .35rem; }
+  .seat .act button {
+    padding: .35rem .65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+    font-size: .85rem;
+    font-weight: 600;
+  }
+  .seat .act button:hover:not(:disabled) { border-color: var(--ink); }
+  .seat .act button:disabled { opacity: .35; cursor: default; }
+  .seat .act .kick { margin-left: auto; }
+
   details { border-top: 1px solid var(--line); }
   details:last-of-type { border-bottom: 1px solid var(--line); }
   summary {
@@ -165,6 +196,7 @@
     .invite { grid-template-columns: minmax(0, 1fr); align-items: start; }
     .qr { order: 2; max-width: 22rem; }
     .steps { padding-left: 0; }
+    .seats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     summary { grid-template-columns: 2.4rem 1fr auto; }
   }
 </style>
@@ -187,6 +219,11 @@
         <span>l’actuel cessera de marcher, les manettes connectées restent</span>
       </form>
     </div>
+  </section>
+
+  <section class="players" aria-live="polite">
+    <div class="players-head"><h2>Manettes</h2><span>← → change la Wii Remote du joueur</span></div>
+    <ol class="seats" id="seats"></ol>
   </section>
 
   <details>
@@ -226,7 +263,7 @@
     <summary><span class="num">02</span><span>Comment jouer</span></summary>
     <div class="steps">
       <ul>
-        <li>Premier téléphone connecté : joueur 1 (première diode), puis 2, 3, 4.</li>
+        <li>Chaque joueur entre son prénom avant « Connecter » : il apparaît dans Manettes, où l’hôte change l’ordre ou retire quelqu’un.</li>
         <li><b>Horizontale</b>, haut du téléphone à gauche : Mario Kart. Volant, 2 accélérer, 1 freiner, B déraper, croix objet.</li>
         <li><b>Verticale</b> (⟲ en haut à droite) : pointer l’écran. ⌖, viser le coin haut gauche et appuyer, puis le coin bas droit et appuyer.</li>
       </ul>
@@ -245,6 +282,71 @@
     }
     setTimeout(() => (copy.textContent = 'Copier le lien'), 1600);
   });
+
+  // Manettes : rafraîchies régulièrement, redessinées seulement quand elles changent (le focus reste).
+  const seats = document.getElementById('seats');
+  let shown = '';
+
+  async function refreshSeats() {
+    const res = await fetch('/dolphin/players', { cache: 'no-store' }).catch(() => null);
+    if (!res?.ok) return;
+    const text = await res.text();
+    if (text === shown) return;
+    shown = text;
+    const players = JSON.parse(text);
+    seats.replaceChildren(...players.map((p, i) => seat(p, i, players.length)));
+  }
+
+  function seat(player, i, count) {
+    const li = document.createElement('li');
+    li.className = 'seat ' + (player ? 'on' : 'free');
+    const n = document.createElement('span');
+    n.className = 'n';
+    n.textContent = `Wii Remote ${i + 1}`;
+    const who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = player ? player.name || 'Sans nom' : 'Libre';
+    li.append(n, who);
+    if (player) {
+      const act = document.createElement('span');
+      act.className = 'act';
+      const name = who.textContent;
+      act.append(
+        action('←', `${name} en Wii Remote ${i}`, i > 0, () => post('/dolphin/players/swap', `a=${i}&b=${i - 1}`)),
+        action('→', `${name} en Wii Remote ${i + 2}`, i < count - 1, () => post('/dolphin/players/swap', `a=${i}&b=${i + 1}`)),
+        action('Retirer', `Retirer ${name}`, true, () => post(`/dolphin/players/${i}/kick`, '')),
+      );
+      act.lastChild.classList.add('kick');
+      li.append(act);
+    }
+    return li;
+  }
+
+  function action(label, title, enabled, run) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.disabled = !enabled;
+    button.addEventListener('click', run);
+    return button;
+  }
+
+  async function post(path, body) {
+    await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    }).catch(() => {});
+    shown = '';
+    refreshSeats();
+    // Un retrait libère la place une fraction de seconde plus tard.
+    setTimeout(refreshSeats, 400);
+  }
+
+  refreshSeats();
+  setInterval(refreshSeats, 1500);
 </script>
 </body>
 </html>

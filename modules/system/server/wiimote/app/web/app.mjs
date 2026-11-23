@@ -15,6 +15,7 @@ const status = document.getElementById('status');
 const startButton = document.getElementById('start');
 const modeButton = document.getElementById('mode');
 const aimButton = document.getElementById('aim');
+const nameInput = document.getElementById('name');
 const leds = [...document.querySelectorAll('.leds i')];
 
 const pointers = new Map();
@@ -213,7 +214,7 @@ let retry = true;
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${scheme}://${location.host}/ws`);
-  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '' }));
+  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', name: nameInput.value.trim() }));
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return;
     const msg = JSON.parse(e.data);
@@ -258,6 +259,7 @@ function idle(message) {
         : `Scanne le QR code affiché sur la page de l'hôte${canScan ? '' : " avec l'appareil photo du téléphone"}.`),
   );
   startButton.hidden = !invited;
+  nameInput.hidden = !invited;
   scanButton.hidden = invited || !canScan;
 }
 
@@ -307,8 +309,15 @@ async function keepAwake() {
 }
 document.addEventListener('visibilitychange', keepAwake);
 
+// Prénom affiché à l'hôte sur /dolphin, gardé pour les prochaines fois.
+nameInput.value = store('name') ?? '';
+nameInput.addEventListener('input', () => store('name', nameInput.value));
+nameInput.addEventListener('keydown', (e) => e.key === 'Enter' && startButton.click());
+
 startButton.addEventListener('click', async () => {
   startButton.hidden = true;
+  nameInput.hidden = true;
+  nameInput.blur();
   say('Connexion…');
   // Tout dans le geste de l'utilisateur : iOS n'accorde les capteurs et Android le plein écran qu'ainsi.
   if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) {
