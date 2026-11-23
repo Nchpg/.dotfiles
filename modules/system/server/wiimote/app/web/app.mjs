@@ -195,13 +195,31 @@ function showPlayer(slot) {
   leds.forEach((led, i) => led.classList.toggle('on', i === slot));
 }
 
+// Lien d'invitation de l'hôte : le jeton est après « # », gardé pour les reconnexions puis retiré de l'adresse.
+// Aussi sur `hashchange` : ouvert dans un onglet déjà sur la page, le lien ne la recharge pas.
+function readInvite() {
+  if (location.hash.length <= 1) return;
+  store('invite', location.hash.slice(1));
+  history.replaceState(null, '', location.pathname);
+}
+readInvite();
+addEventListener('hashchange', () => {
+  readInvite();
+  if (ws?.readyState !== WebSocket.OPEN) idle();
+});
+
+let retry = true;
+
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${scheme}://${location.host}/ws?slot=${store('slot') ?? ''}`);
+  ws = new WebSocket(`${scheme}://${location.host}/ws`);
+  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', slot: Number(store('slot') ?? -1) }));
   ws.onmessage = (e) => {
+    if (typeof e.data !== 'string') return;
     const msg = JSON.parse(e.data);
     if (msg.error) {
       lastError = msg.error;
+      retry = msg.retry;
       return;
     }
     lastError = '';
@@ -213,10 +231,75 @@ function connect() {
   };
   ws.onclose = () => {
     showPlayer(-1);
-    say(lastError || 'Connexion perdue, nouvelle tentative…');
-    setTimeout(connect, 1000);
+    if (retry) {
+      say(lastError || 'Connexion perdue, nouvelle tentative…');
+      setTimeout(connect, 1000);
+      return;
+    }
+    // Lien remplacé par l'hôte : on oublie l'ancien et on propose de scanner le nouveau.
+    store('invite', '');
+    retry = true;
+    idle(lastError);
   };
 }
+
+// Sans invitation : scanner le QR code de l'hôte. Le détecteur du navigateur suffit (Chrome sur Android) ;
+// ailleurs, l'appareil photo du téléphone ouvre le lien tout aussi bien.
+const scanButton = document.getElementById('scan');
+const camera = document.getElementById('camera');
+const canScan = 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
+
+function idle(message) {
+  const invited = Boolean(store('invite'));
+  say(
+    message ??
+      (invited
+        ? 'Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale.'
+        : `Scanne le QR code affiché sur la page de l'hôte${canScan ? '' : " avec l'appareil photo du téléphone"}.`),
+  );
+  startButton.hidden = !invited;
+  scanButton.hidden = invited || !canScan;
+}
+
+function stopCamera() {
+  camera.srcObject?.getTracks().forEach((track) => track.stop());
+  camera.srcObject = null;
+  camera.hidden = true;
+  scanButton.textContent = 'Scanner le QR code';
+}
+
+scanButton.addEventListener('click', async () => {
+  if (!camera.hidden) {
+    stopCamera();
+    return;
+  }
+  try {
+    camera.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch {
+    idle("Caméra refusée : scanne le QR code avec l'appareil photo du téléphone.");
+    return;
+  }
+  camera.hidden = false;
+  scanButton.textContent = 'Annuler';
+  await camera.play().catch(() => {});
+  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  while (!camera.hidden) {
+    for (const { rawValue } of await detector.detect(camera).catch(() => [])) {
+      const url = URL.canParse(rawValue) ? new URL(rawValue) : null;
+      // Seulement un lien d'invitation de ce site : un autre QR code est ignoré.
+      if (url?.origin === location.origin && url.hash.length > 1) {
+        store('invite', url.hash.slice(1));
+        stopCamera();
+        navigator.vibrate?.(30);
+        idle('Invitation reçue. Appuie sur Connecter.');
+        return;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+});
+
+idle();
 
 async function keepAwake() {
   if (document.visibilityState !== 'visible' || !navigator.wakeLock) return;

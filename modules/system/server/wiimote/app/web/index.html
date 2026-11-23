@@ -11,6 +11,13 @@
 <link rel="apple-touch-icon" href="icon-512.png">
 <title>Wiimote</title>
 <style>
+  @font-face {
+    font-family: "Bricolage";
+    src: url("/fonts/bricolage.woff2") format("woff2");
+    font-weight: 200 800;
+    font-display: swap;
+  }
+
   :root {
     --bg: #1d1f22;
     --body: #f7f7f4;
@@ -22,8 +29,11 @@
     --home: #2f8ad8;
     --led: #36a3ff;
     --led-off: #cfd6dc;
-    --overlay: rgb(15 16 18 / .88);
-    --overlay-ink: #f2f2ef;
+    /* Écran de connexion : mêmes couleurs que la page de l'hôte. */
+    --paper: #f4f3ef;
+    --paper-ink: #121314;
+    --paper-soft: #6b6c70;
+    --accent: #c6f135;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -35,11 +45,15 @@
       --btn-on: #45454a;
       --ink: #9a9a9e;
       --led-off: #2a3138;
+      --paper: #0f1012;
+      --paper-ink: #f1f0eb;
+      --paper-soft: #8d8e93;
     }
   }
   :root[data-theme="dark"] {
     --bg: #000; --body: #1c1c1e; --body-edge: #2c2c2f; --btn: #2e2e31;
     --btn-edge: #121214; --btn-on: #45454a; --ink: #9a9a9e; --led-off: #2a3138;
+    --paper: #0f1012; --paper-ink: #f1f0eb; --paper-soft: #8d8e93;
   }
 
   * { box-sizing: border-box; }
@@ -184,24 +198,44 @@
     gap: 1.2rem;
     padding: 1.5rem;
     text-align: center;
-    background: var(--overlay);
-    color: var(--overlay-ink);
+    background: var(--paper);
+    font-family: "Bricolage", system-ui, sans-serif;
+    color: var(--paper-ink);
     touch-action: manipulation;
   }
   .overlay[hidden] { display: none; }
-  .overlay h1 { margin: 0; font-size: 1.8rem; }
-  .overlay p { margin: 0; max-width: 22rem; font-weight: 400; line-height: 1.45; }
+  .overlay h1 { margin: 0; font-size: 2.6rem; font-weight: 760; line-height: .95; letter-spacing: -.04em; }
+  .overlay h1 i { font-style: normal; color: var(--accent); }
+  .overlay p { margin: 0; max-width: 22rem; color: var(--paper-soft); font-weight: 400; line-height: 1.5; }
   .overlay .start {
     justify-self: center;
-    padding: .9rem 2.2rem;
-    border-radius: 999px;
-    background: var(--led);
-    color: #fff;
+    min-width: 13rem;
+    padding: .95rem 2rem;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #121314;
     box-shadow: none;
-    font-size: 1.1rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    transform: none;
   }
-  .overlay .start[hidden] { display: none; }
-  .overlay a { color: var(--overlay-ink); opacity: .7; font-weight: 400; }
+  .overlay .start:active { transform: scale(.96); }
+  .overlay .start[hidden], .overlay video[hidden] { display: none; }
+  .overlay video {
+    justify-self: center;
+    width: min(70vmin, 22rem);
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 16px;
+    background: #000;
+  }
+  /* À l'horizontale, la hauteur manque : la caméra passe à gauche du texte. */
+  .sideways .overlay:has(> video:not([hidden])) {
+    grid-template-columns: auto minmax(0, 22rem);
+    column-gap: 2rem;
+    align-items: center;
+  }
+  .sideways .overlay video { grid-column: 1; grid-row: 1 / span 3; width: min(62vmin, 22rem); }
 </style>
 <script type="module" src="app.mjs"></script>
 </head>
@@ -231,10 +265,11 @@
   </main>
 
   <div class="overlay" id="overlay">
-    <h1>Wiimote</h1>
+    <h1>Wiimote<i>.</i></h1>
     <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
+    <video id="camera" playsinline muted hidden></video>
     <button class="start" id="start">Connecter</button>
-    <a href="/dolphin">Configurer Dolphin sur le PC</a>
+    <button class="start" id="scan" hidden>Scanner le QR code</button>
   </div>
 </div>
 </body>

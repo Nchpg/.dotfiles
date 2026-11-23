@@ -73,10 +73,14 @@ type server struct {
 	pads    [slots]padState
 	counter [slots]uint32
 	subs    map[string]*subscriber
+	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
+	invite string
 }
 
 func newServer(conn net.PacketConn) *server {
-	return &server{conn: conn, id: rand.Uint32(), start: time.Now(), subs: map[string]*subscriber{}}
+	s := &server{conn: conn, id: rand.Uint32(), start: time.Now(), subs: map[string]*subscriber{}}
+	s.newInvite()
+	return s
 }
 
 // Adresse localement administrée, stable par slot : Dolphin compare les MAC pour repérer un changement de manette.

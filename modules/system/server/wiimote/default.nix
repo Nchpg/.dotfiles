@@ -12,6 +12,7 @@
 let
   cfg = config.systemSettings.wiimote;
   wireguard = config.systemSettings.vpn.wireguard;
+  authelia = config.systemSettings.authelia;
 
   host = "${cfg.subdomain}.${config.systemSettings.proxy.domain}";
 
@@ -19,7 +20,7 @@ let
     pname = "wiimote";
     version = "0.1.0";
     src = ./app;
-    vendorHash = "sha256-LIYnmXs6gbwuVDr0Utny5GY0FCgPKgwjwOzYirQ0MFM=";
+    vendorHash = "sha256-HEY9Vr7nOO8YKOYjHKlVcdl3MlF0DTcIxqHGt8bQIIM=";
     env.CGO_ENABLED = 0;
     meta.mainProgram = "wiimote";
   };
@@ -53,10 +54,17 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.systemSettings.proxy.enable && wireguard.enable;
-        message = "systemSettings.wiimote exige le proxy (PWA) et le VPN (DSU vers Dolphin).";
+        assertion = config.systemSettings.proxy.enable && wireguard.enable && authelia.enable;
+        message = "systemSettings.wiimote exige le proxy (PWA), le VPN (DSU vers Dolphin) et Authelia (page de l'hôte).";
       }
     ];
+
+    # Page de l'hôte (/dolphin : invitation, profils, adresse du DSU), ouverte compte par compte.
+    systemSettings.authelia.services.wiimote = {
+      label = "Wiimote (page de l'hôte)";
+      inherit host;
+    };
+    systemSettings.authelia.rules = [ (authelia.ruleFor "wiimote") ];
 
     systemSettings.vpn.wireguard.services.wiimote = {
       label = "Wiimote (Dolphin)";
@@ -99,10 +107,20 @@ in
       };
     };
 
+    # La manette reste ouverte sans compte : l'application exige le jeton du lien d'invitation.
     services.nginx.virtualHosts.${host} = myLib.server.mkTlsVhost {
-      locations."/" = {
-        proxyPass = "http://127.0.0.1:${toString cfg.port}";
-        proxyWebsockets = true;
+      locations = authelia.nginxProtect.locations // {
+        "/" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.port}";
+          proxyWebsockets = true;
+        };
+        # L'application n'a pas l'usage du cookie de session Authelia : il ne lui est pas transmis.
+        "/dolphin" = {
+          proxyPass = "http://127.0.0.1:${toString cfg.port}";
+          extraConfig = authelia.nginxProtect.extraConfig + ''
+            proxy_set_header Cookie "";
+          '';
+        };
       };
     };
 

@@ -3,61 +3,248 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Configurer Dolphin</title>
+<meta name="color-scheme" content="light dark">
+<title>Wiimote, page de l’hôte</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
 <style>
-  :root { --bg: #f6f6f3; --ink: #1d1f22; --muted: #5d6066; --card: #fff; --line: #dcdcd6; --accent: #1f7fd1; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #16171a; --ink: #ececea; --muted: #a2a5ab; --card: #1f2024; --line: #33353a; --accent: #5cb0ff; }
+  @font-face {
+    font-family: "Bricolage";
+    src: url("/fonts/bricolage.woff2") format("woff2");
+    font-weight: 200 800;
+    font-display: swap;
   }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, sans-serif; }
-  main { max-width: 44rem; margin: 0 auto; padding: 2rem 1rem 3rem; }
-  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
-  h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
-  p, li { color: var(--muted); }
-  strong, code { color: var(--ink); }
-  code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: .05rem .35rem; font-size: .92em; overflow-wrap: anywhere; }
-  a { color: var(--accent); }
-  .files { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; }
-  .files a { display: inline-block; padding: .45rem .9rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); text-decoration: none; }
+
+  :root {
+    --bg: #f4f3ef;
+    --ink: #121314;
+    --muted: #6b6c70;
+    --line: #dddcd5;
+    --field: #ebeae4;
+    --accent: #c6f135;
+    --accent-ink: #121314;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1012;
+      --ink: #f1f0eb;
+      --muted: #8d8e93;
+      --line: #25272b;
+      --field: #17181b;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.55 "Bricolage", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 68rem; margin: 0 auto; padding: 1.5rem clamp(1rem, 4vw, 3rem) 5rem; }
+
+  .top {
+    display: flex;
+    justify-content: space-between;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: .85rem;
+    color: var(--muted);
+  }
+  .top b { color: var(--ink); font-weight: 700; letter-spacing: -.01em; }
+
+  .invite {
+    display: grid;
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: clamp(2rem, 6vw, 5.5rem);
+    align-items: end;
+    padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3rem, 7vw, 5rem);
+  }
+  .qr {
+    margin: 0;
+    padding: 1.1rem;
+    border-radius: 6px;
+    background: #fff; /* noir sur blanc pour l'appareil photo, même en sombre */
+    outline: 1px solid var(--line);
+    animation: rise .6s cubic-bezier(.2, .8, .2, 1) both;
+  }
+  .qr img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(3.2rem, 8.5vw, 6.6rem);
+    font-weight: 760;
+    line-height: .9;
+    letter-spacing: -.045em;
+  }
+  h1 span { display: block; animation: rise .6s cubic-bezier(.2, .8, .2, 1) both; }
+  h1 span + span { animation-delay: .08s; }
+  h1 i { font-style: normal; color: var(--accent); }
+  .lede { max-width: 26rem; margin: 1.4rem 0 2rem; color: var(--muted); font-size: 1.05rem; }
+
+  .link { display: flex; gap: .6rem; max-width: 34rem; }
+  .link output {
+    flex: 1;
+    min-width: 0;
+    padding: .8rem 1rem;
+    overflow: hidden;
+    border-radius: 10px;
+    background: var(--field);
+    font: .85rem/1.4 ui-monospace, "SF Mono", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .copy {
+    flex: none;
+    min-width: 8.5rem;
+    padding: .8rem 1.2rem;
+    border: 0;
+    border-radius: 10px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+    transition: transform .1s;
+  }
+  .copy:active { transform: scale(.97); }
+  .renew { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: baseline; margin: 1rem 0 0; color: var(--muted); font-size: .88rem; }
+  .renew button { padding: 0; border: 0; background: none; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
+  .renew button:hover { text-decoration-color: currentColor; }
+  button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  details { border-top: 1px solid var(--line); }
+  details:last-of-type { border-bottom: 1px solid var(--line); }
+  summary {
+    display: grid;
+    grid-template-columns: 3rem 1fr auto;
+    align-items: baseline;
+    padding: 1.3rem 0;
+    font-size: clamp(1.15rem, 2.4vw, 1.45rem);
+    font-weight: 650;
+    letter-spacing: -.02em;
+    cursor: pointer;
+    list-style: none;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary .num { color: var(--muted); font: .8rem ui-monospace, monospace; letter-spacing: 0; }
+  summary .hint { color: var(--muted); font-size: .85rem; font-weight: 400; letter-spacing: 0; }
+  summary::after { content: "+"; grid-column: 3; color: var(--muted); font-weight: 300; transition: transform .2s; }
+  details[open] summary::after { transform: rotate(45deg); }
+
+  .steps { display: grid; gap: 1.6rem; padding: 0 0 2rem 3rem; }
+  .steps h2 { margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
+  .steps p, .steps li { margin: .2rem 0; color: var(--muted); }
+  .steps ol, .steps ul { margin: 0; padding-left: 1.1rem; }
+  .steps b { color: var(--ink); font-weight: 650; }
+  code {
+    padding: .1rem .4rem;
+    border-radius: 5px;
+    background: var(--field);
+    color: var(--ink);
+    font: .84em ui-monospace, "SF Mono", monospace;
+    overflow-wrap: anywhere;
+  }
+  .files { display: flex; flex-wrap: wrap; gap: .5rem; margin: .2rem 0 .8rem; padding: 0; list-style: none; }
+  .files a {
+    display: inline-block;
+    padding: .45rem .9rem;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink);
+    font-size: .9rem;
+    font-weight: 650;
+    text-decoration: none;
+  }
+  .files a:hover { border-color: var(--ink); }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .qr, h1 span { animation: none; }
+  }
+  @media (max-width: 720px) {
+    .invite { grid-template-columns: minmax(0, 1fr); align-items: start; }
+    .qr { order: 2; max-width: 22rem; }
+    .steps { padding-left: 0; }
+    summary { grid-template-columns: 2.4rem 1fr auto; }
+  }
 </style>
 </head>
 <body>
 <main>
-  <h1>Configurer Dolphin</h1>
-  <p>À faire une fois sur chaque PC qui lance Dolphin (Windows, macOS ou Linux). Les téléphones ouvrent ensuite simplement la page de la manette, de n'importe quel réseau.</p>
-  <p>Le PC, lui, doit être <strong>connecté au VPN</strong> avec le service <strong>Wiimote</strong> (page VPN du dashboard) : c'est par le tunnel que Dolphin reçoit la manette.</p>
+  <header class="top"><b>Wiimote</b><span>Page de l’hôte</span></header>
 
-  <h2>1. Déclarer le serveur</h2>
-  <ol>
-    <li>Dolphin › <strong>Options › Configuration des manettes</strong> › <strong>Sources d'entrée alternatives</strong>.</li>
-    <li>Cocher <strong>Activer</strong>, puis <strong>Ajouter…</strong> avec&nbsp;: description <code>{{.Name}}</code>, adresse <code>{{.Host}}</code>, port <code>{{.Port}}</code>.</li>
-  </ol>
-  <p>La description doit être exactement <code>{{.Name}}</code> : les profils ci-dessous la cherchent sous ce nom.</p>
+  <section class="invite">
+    <figure class="qr"><img src="/dolphin/qr.png" alt="QR code du lien d'invitation" width="300" height="300"></figure>
+    <div>
+      <h1><span>Scanne</span><span>pour jouer<i>.</i></span></h1>
+      <p class="lede">Avec l’appareil photo du téléphone, ou le bouton Scanner de la manette. Aucun compte à créer.</p>
+      <div class="link">
+        <output id="link">{{.Invite}}</output>
+        <button class="copy" id="copy" type="button">Copier le lien</button>
+      </div>
+      <form class="renew" method="post" action="/dolphin/invite">
+        <button>Nouveau lien</button>
+        <span>l’actuel cessera de marcher, les manettes connectées restent</span>
+      </form>
+    </div>
+  </section>
 
-  <h2>2. Installer les profils</h2>
-  <ul class="files">
-    {{range .Players}}<li><a href="/dolphin/{{.}}" download>Joueur {{.}}</a></li>{{end}}
-  </ul>
-  <p>Les copier dans le dossier <code>Profiles/Wiimote</code> de Dolphin&nbsp;:</p>
-  <ul>
-    <li>Windows : <code>%APPDATA%\Dolphin Emulator\Config\Profiles\Wiimote</code> (anciennes installations : <code>Documents\Dolphin Emulator\Config\Profiles\Wiimote</code>)</li>
-    <li>macOS : <code>~/Library/Application Support/Dolphin/Config/Profiles/Wiimote</code></li>
-    <li>Linux : <code>~/.config/dolphin-emu/Profiles/Wiimote</code> (Flatpak : <code>~/.var/app/org.DolphinEmu.dolphin-emu/config/dolphin-emu/Profiles/Wiimote</code>)</li>
-  </ul>
+  <details>
+    <summary><span class="num">01</span><span>Configurer Dolphin <span class="hint">une fois par PC</span></span></summary>
+    <div class="steps">
+      <p>Le PC doit être sur le VPN, avec le service <b>Wiimote</b> (page VPN du dashboard).</p>
+      <section>
+        <h2>Le serveur</h2>
+        <ol>
+          <li><b>Options › Controllers › Alternate Input Sources</b></li>
+          <li><b>Enable</b>, puis <b>Add</b> : <code>{{.Name}}</code>, <code>{{.Host}}</code>, port <code>{{.Port}}</code></li>
+        </ol>
+      </section>
+      <section>
+        <h2>Les profils</h2>
+        <ul class="files">
+          {{range .Players}}<li><a href="/dolphin/{{.}}" download>Joueur {{.}}</a></li>{{end}}
+        </ul>
+        <ul>
+          <li>Linux : <code>~/.config/dolphin-emu/Profiles/Wiimote</code></li>
+          <li>Windows : <code>%APPDATA%\Dolphin Emulator\Config\Profiles\Wiimote</code></li>
+          <li>macOS : <code>~/Library/Application Support/Dolphin/Config/Profiles/Wiimote</code></li>
+        </ul>
+      </section>
+      <section>
+        <h2>Les Wiimotes</h2>
+        <ol>
+          <li><b>Wii Remote 1</b> › <b>Emulated Wii Remote</b> › <b>Configure</b></li>
+          <li><b>Profile</b> <code>{{.Name}} J1</code> › <b>Load</b> (J2 pour la Wii Remote 2, etc.)</li>
+          <li>Cocher <b>Background Input</b>, sinon Dolphin ignore la manette hors de sa fenêtre.</li>
+        </ol>
+      </section>
+    </div>
+  </details>
 
-  <h2>3. Brancher les Wiimotes</h2>
-  <ol>
-    <li>Dans <strong>Wii Remotes</strong>, choisir <strong>Wii Remote émulée</strong> pour chaque joueur, puis <strong>Configurer</strong>.</li>
-    <li>Profil <code>{{.Name}} J1</code> pour le joueur 1 (J2 pour le 2…), <strong>Charger</strong>, fermer.</li>
-  </ol>
-  <p>Le numéro de joueur s'allume sur les diodes en bas de la manette du téléphone.</p>
-
-  <h2>Jouer</h2>
-  <ul>
-    <li><strong>Tenue horizontale</strong> (par défaut), haut du téléphone à gauche : Wiimote tenue de côté, pour Mario Kart (tourner comme un volant ; 2 accélérer, 1 freiner, B déraper, croix objet).</li>
-    <li><strong>Tenue verticale</strong> (bouton ⟲ en haut à droite) : Wiimote pointée vers l'écran. Pour caler le pointeur : appuyer sur ⌖, viser le coin <strong>haut gauche</strong> de l'écran et appuyer, puis le coin <strong>bas droit</strong> et appuyer. À refaire si le pointeur se décale.</li>
-    <li>L'interface ne suit pas la rotation de l'écran : elle reste fixe dans la main, même quand on braque.</li>
-  </ul>
+  <details>
+    <summary><span class="num">02</span><span>Comment jouer</span></summary>
+    <div class="steps">
+      <ul>
+        <li>Premier téléphone connecté : joueur 1 (première diode), puis 2, 3, 4.</li>
+        <li><b>Horizontale</b>, haut du téléphone à gauche : Mario Kart. Volant, 2 accélérer, 1 freiner, B déraper, croix objet.</li>
+        <li><b>Verticale</b> (⟲ en haut à droite) : pointer l’écran. ⌖, viser le coin haut gauche et appuyer, puis le coin bas droit et appuyer.</li>
+      </ul>
+    </div>
+  </details>
 </main>
+
+<script>
+  const copy = document.getElementById('copy');
+  copy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(document.getElementById('link').textContent);
+      copy.textContent = 'Copié';
+    } catch {
+      copy.textContent = 'Sélectionne le lien';
+    }
+    setTimeout(() => (copy.textContent = 'Copier le lien'), 1600);
+  });
+</script>
 </body>
 </html>

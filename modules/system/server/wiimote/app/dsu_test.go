@@ -84,6 +84,39 @@ func TestProfile(t *testing.T) {
 	}
 }
 
+func TestHostPages(t *testing.T) {
+	s := newServer(nil)
+	h := s.routes("10.8.0.1", "26760")
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "https://wii.example"+path, nil))
+		return w
+	}
+
+	if body := get("/dolphin").Body.String(); !strings.Contains(body, "https://wii.example/#"+s.currentInvite()) ||
+		!strings.Contains(body, "10.8.0.1") {
+		t.Fatal("page de l'hôte sans lien d'invitation ou sans adresse DSU")
+	}
+	if png := get("/dolphin/qr.png").Body.Bytes(); len(png) < 8 || string(png[1:4]) != "PNG" {
+		t.Fatal("QR code absent")
+	}
+
+	// Révocation depuis un autre site : refusée ; depuis la page : nouveau jeton.
+	old := s.currentInvite()
+	forged := httptest.NewRequest("POST", "https://wii.example/dolphin/invite", nil)
+	forged.Header.Set("Sec-Fetch-Site", "cross-site")
+	h.ServeHTTP(httptest.NewRecorder(), forged)
+	if s.currentInvite() != old {
+		t.Fatal("lien révoqué par un site tiers")
+	}
+	own := httptest.NewRequest("POST", "https://wii.example/dolphin/invite", nil)
+	own.Header.Set("Sec-Fetch-Site", "same-origin")
+	h.ServeHTTP(httptest.NewRecorder(), own)
+	if s.currentInvite() == old {
+		t.Fatal("lien non renouvelé")
+	}
+}
+
 // Téléphone (WebSocket) → serveur → client DSU (UDP), comme Dolphin.
 func TestPhoneToDolphin(t *testing.T) {
 	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -120,17 +153,45 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("slots occupés sans téléphone : %v", got)
 	}
 
-	wsURL := "ws" + strings.TrimPrefix(web.URL, "http") + "/ws?slot=1"
+	wsURL := "ws" + strings.TrimPrefix(web.URL, "http") + "/ws"
 	if _, err := websocket.Dial(wsURL, "", "http://ailleurs.example"); err == nil {
 		t.Fatal("origine étrangère acceptée")
 	}
-	phone, err := websocket.Dial(wsURL, "", web.URL)
-	if err != nil {
-		t.Fatal(err)
+	var answer struct {
+		Slot  int
+		Error string
+		Retry bool
 	}
-	var hello struct{ Slot int }
-	if err := websocket.JSON.Receive(phone, &hello); err != nil || hello.Slot != 1 {
-		t.Fatalf("slot %d attribué au lieu de 1 (%v)", hello.Slot, err)
+	connect := func(invite string) *websocket.Conn {
+		t.Helper()
+		phone, err := websocket.Dial(wsURL, "", web.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		websocket.JSON.Send(phone, hello{Invite: invite, Slot: 1})
+		answer.Error = ""
+		if err := websocket.JSON.Receive(phone, &answer); err != nil {
+			t.Fatal(err)
+		}
+		return phone
+	}
+
+	// Sans le jeton du lien d'invitation : refusé, sans nouvelle tentative.
+	connect("devine").Close()
+	if answer.Error == "" || answer.Retry {
+		t.Fatalf("jeton faux accepté : %+v", answer)
+	}
+	// Ancien jeton révoqué par un nouveau lien.
+	old := s.currentInvite()
+	s.newInvite()
+	connect(old).Close()
+	if answer.Error == "" {
+		t.Fatal("jeton révoqué accepté")
+	}
+
+	phone := connect(s.currentInvite())
+	if answer.Error != "" || answer.Slot != 1 {
+		t.Fatalf("slot %d attribué au lieu de 1 (%s)", answer.Slot, answer.Error)
 	}
 	if got := listPorts(); got[0] != 0 || got[1] != 2 {
 		t.Fatalf("états des slots : %v", got)
