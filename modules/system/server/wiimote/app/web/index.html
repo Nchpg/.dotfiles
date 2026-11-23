@@ -53,14 +53,24 @@
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
-    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
-             max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+
+  /* Scène tournée par app.mjs pour rester fixe par rapport au téléphone, quelle que soit la rotation de l'écran. */
+  .stage {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 100vw;
+    height: 100vh;
+    padding: 3vmin;
+    transform: translate(-50%, -50%);
   }
 
   /* Wiimote debout : de haut en bas, dans l'ordre de la vraie. */
   .remote {
+    position: relative;
     height: 100%;
-    max-width: 62vh;
+    max-width: 62vmax;
     margin: 0 auto;
     border-radius: 9vmin;
     background: var(--body);
@@ -138,26 +148,36 @@
   .leds i { width: 3.6vmin; height: 2vmin; border-radius: .6vmin; background: var(--led-off); }
   .leds i.on { background: var(--led); box-shadow: 0 0 2vmin var(--led); }
 
+  /* Changement de tenue, dans le coin où le pouce ne passe pas. */
+  .mode {
+    position: absolute;
+    top: 3.5vmin;
+    right: 3.5vmin;
+    width: 10vmin;
+    height: 10vmin;
+    border-radius: 50%;
+  }
+  .mode svg { width: 5.5vmin; height: 5.5vmin; display: block; margin: auto; fill: currentColor; }
+
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 et 2 sous le pouce droit.
      Après les règles de base, qu'il remplace. */
-  @media (orientation: landscape) {
-    .remote {
-      max-width: none;
-      grid-template-columns: 1.7fr 1fr .7fr 1.2fr 1.2fr .3fr;
-      grid-template-rows: 1fr 1fr 1fr;
-      grid-template-areas:
-        "dpad a plus  one two leds"
-        "dpad a home  one two leds"
-        "b    b minus one two leds";
-    }
-    .recenter { display: none; }
-    .leds { flex-direction: column; }
-    .b { width: 88%; height: 70%; }
-    .one, .two { width: 32vmin; height: 32vmin; font-size: 11vmin; }
+  .sideways .remote {
+    max-width: none;
+    grid-template-columns: 1.7fr 1fr .7fr 1.2fr 1.2fr .3fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    grid-template-areas:
+      "dpad a plus  one two leds"
+      "dpad a home  one two leds"
+      "b    b minus one two leds";
   }
+  .sideways .recenter { display: none; }
+  .sideways .leds { flex-direction: column; }
+  .sideways .b { width: 88%; height: 70%; }
+  .sideways .one, .sideways .two { width: 32vmin; height: 32vmin; font-size: 11vmin; }
 
+  /* Dans la scène : tourne avec elle. */
   .overlay {
-    position: fixed;
+    position: absolute;
     inset: 0;
     display: grid;
     place-content: center;
@@ -186,7 +206,11 @@
 <script type="module" src="app.mjs"></script>
 </head>
 <body>
+<div class="stage" id="stage">
   <main class="remote">
+    <button class="mode" id="mode" aria-label="Passer de la tenue horizontale à la verticale">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+    </button>
     <div class="dpad" role="group" aria-label="Croix directionnelle">
       <button data-dir="up" aria-label="Haut"></button>
       <button data-dir="left" aria-label="Gauche"></button>
@@ -203,14 +227,15 @@
     <button class="one" data-btn="1">1</button>
     <button class="two" data-btn="2">2</button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
-    <button class="recenter" data-btn="Recenter" aria-label="Recentrer le pointeur">⌖</button>
+    <button class="recenter" id="aim" aria-label="Calibrer le pointeur sur les coins de l'écran">⌖</button>
   </main>
 
   <div class="overlay" id="overlay">
     <h1>Wiimote</h1>
-    <p id="status">À l'horizontale pour Mario Kart, à la verticale pour pointer l'écran.</p>
+    <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
     <button class="start" id="start">Connecter</button>
     <a href="/dolphin">Configurer Dolphin sur le PC</a>
   </div>
+</div>
 </body>
 </html>

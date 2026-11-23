@@ -27,6 +27,40 @@ export function toDSU(accel, rate, angle, landscape) {
   return [-aRight / G, -aUp / G, aForward / G, wRight, -wUp, wForward];
 }
 
+// Angle d'écran pour lequel l'interface est droite. Il suit l'écran quand celui-ci tourne dans le sens de
+// la tenue (téléphone retourné), et l'ignore sinon : braquer au volant fait basculer l'écran en portrait.
+export function holdAngle(hold, live, sideways) {
+  return (live % 180 !== 0) === sideways ? live : hold;
+}
+
+// Direction visée par la Wiimote debout (haut du téléphone), d'après alpha et beta de deviceorientation :
+// [cap, élévation] en degrés, le cap croissant vers la droite. Le roulis ne déplace pas le pointeur.
+export function aimAngles(alpha, beta, hold) {
+  const s = hold === 180 ? -1 : 1;
+  const a = alpha * RAD;
+  const b = beta * RAD;
+  const f = [-s * Math.sin(a) * Math.cos(b), s * Math.cos(a) * Math.cos(b), s * Math.sin(b)];
+  return [Math.atan2(f[0], f[1]) / RAD, Math.asin(f[2]) / RAD];
+}
+
+const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
+
+// Coins visés au calibrage trop proches : on garderait un pointeur affolé.
+export function validCorners(topLeft, bottomRight) {
+  return Math.abs(wrap(bottomRight[0] - topLeft[0])) > 2 && Math.abs(topLeft[1] - bottomRight[1]) > 1;
+}
+
+// Pointeur de -1 à 1 (y vers le haut) entre les coins haut gauche et bas droit visés au calibrage.
+export function aimPosition([h, e], topLeft, bottomRight) {
+  const halfYaw = wrap(bottomRight[0] - topLeft[0]) / 2;
+  const halfPitch = (topLeft[1] - bottomRight[1]) / 2;
+  const clamp = (v) => Math.max(-1, Math.min(1, v));
+  return [
+    clamp(wrap(h - topLeft[0] - halfYaw) / halfYaw),
+    clamp((e - (topLeft[1] + bottomRight[1]) / 2) / halfPitch),
+  ];
+}
+
 // Verticale (unitaire, vers le haut) dans le repère du téléphone, d'après beta et gamma de deviceorientation.
 export function upFromOrientation(beta, gamma) {
   const b = beta * RAD;

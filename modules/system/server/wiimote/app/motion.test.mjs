@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, toDSU, upFromOrientation } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -46,6 +46,31 @@ test('gyroscope : lacet, tangage et roulis dans le sens de Dolphin', () => {
   assert.equal(dolphin(toDSU([0, 0, G], [90, 0, 0], 0, false)).pitchUp, 90);
   // Paysage (angle 90) : l’avant est le haut du téléphone ; le côté droit qui descend = roulis à droite.
   near([dolphin(toDSU([0, 0, G], [0, 90, 0], 90, true)).rollRight], [90]);
+});
+
+test('la tenue ignore l’écran qui bascule quand on braque, mais suit un retournement', () => {
+  assert.equal(holdAngle(90, 0, true), 90); // horizontale, l'écran passe en portrait : on garde
+  assert.equal(holdAngle(90, 270, true), 270); // téléphone retourné : on suit
+  assert.equal(holdAngle(0, 90, false), 0); // verticale, l'écran passe en paysage : on garde
+  assert.equal(holdAngle(0, 180, false), 180);
+});
+
+test('visée : tourner à gauche baisse le cap, lever le bout monte, le roulis ne compte pas', () => {
+  near(aimAngles(0, 0, 0), [0, 0]);
+  near(aimAngles(30, 0, 0), [-30, 0]); // alpha croît en tournant à gauche (antihoraire vu d'au-dessus)
+  near(aimAngles(0, 10, 0), [0, 10]);
+});
+
+test('pointeur calé sur les coins visés, y compris à cheval sur ±180°', () => {
+  const tl = [-20, 10];
+  const br = [20, -10];
+  near(aimPosition([0, 0], tl, br), [0, 0]);
+  near(aimPosition([20, -10], tl, br), [1, -1]);
+  near(aimPosition([-10, 5], tl, br), [-0.5, 0.5]);
+  near(aimPosition([90, 40], tl, br), [1, 1]); // hors de l'écran : bloqué au bord
+  near(aimPosition([-175, 0], [170, 5], [-170, -5]), [0.5, 0]);
+  assert.ok(!validCorners([3, 2], [3.5, 1.8]));
+  assert.ok(validCorners(tl, br));
 });
 
 test('verticale tirée de l’orientation, dans le repère de la spec', () => {

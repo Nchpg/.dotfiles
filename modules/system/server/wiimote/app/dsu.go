@@ -21,8 +21,8 @@ const (
 	slots           = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
-	// Taille d'un message de la PWA : boutons (u16) puis 6 float32 déjà dans le repère DSU.
-	phoneMessageSize = 2 + 6*4
+	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u8).
+	phoneMessageSize = 2 + 6*4 + 2
 	// Nom du serveur saisi dans Dolphin : il fait partie du nom du périphérique (DSUClient/<slot>/<nom>).
 	dsuName = "Telephone"
 )
@@ -47,13 +47,14 @@ var buttons = [...]struct {
 	{"D-Pad/Down", "Pad S", 45, 36, 0x40},
 	{"D-Pad/Left", "Pad W", 44, 36, 0x80},
 	{"D-Pad/Right", "Pad E", 46, 36, 0x20},
-	{"IMUIR/Recenter", "L1", 53, 37, 0x04},
 }
 
 type padState struct {
 	buttons uint16
 	// accel x, y, z (g), gyro tangage, lacet, roulis (°/s), dans l'ordre du paquet.
 	motion [6]float32
+	// Pointeur calculé par le téléphone, sur le stick droit : x, y (y vers le haut), 128 au centre.
+	pointer [2]byte
 }
 
 type subscriber struct {
@@ -117,7 +118,8 @@ func (s *server) padData(slot int, st padState, counter uint32) []byte {
 	padInfo(buf, slot, true)
 	buf[31] = 1
 	le.PutUint32(buf[32:], counter)
-	buf[40], buf[41], buf[42], buf[43] = 128, 128, 128, 128 // sticks au centre
+	buf[40], buf[41] = 128, 128 // stick gauche inutilisé, au centre
+	buf[42], buf[43] = st.pointer[0], st.pointer[1]
 	for i, b := range buttons {
 		if st.buttons&(1<<i) == 0 {
 			continue
@@ -238,17 +240,23 @@ func (s *server) update(slot int, st padState) {
 func (s *server) claim(want int) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	slot := -1
 	if want >= 0 && want < slots && !s.used[want] {
-		s.used[want] = true
-		return want
-	}
-	for i := range slots {
-		if !s.used[i] {
-			s.used[i] = true
-			return i
+		slot = want
+	} else {
+		for i := range slots {
+			if !s.used[i] {
+				slot = i
+				break
+			}
 		}
 	}
-	return -1
+	if slot >= 0 {
+		s.used[slot] = true
+		// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
+		s.pads[slot] = padState{pointer: [2]byte{128, 128}}
+	}
+	return slot
 }
 
 // Relâche les boutons avant de libérer : sans ça, Dolphin garderait « 2 » enfoncé jusqu'à la disparition du périphérique.
@@ -277,5 +285,6 @@ func decode(msg []byte) (padState, bool) {
 		}
 		st.motion[i] = v
 	}
+	copy(st.pointer[:], msg[2+6*4:])
 	return st, true
 }

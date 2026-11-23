@@ -1,24 +1,30 @@
-import { G, toDSU, upFromOrientation } from './motion.mjs';
+import { G, aimAngles, aimPosition, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
-const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10, Recenter: 11 };
+const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
 
 // Flèche vue à l'écran → bouton de la Wiimote. De côté, son haut (côté capteur) est à gauche.
 const DPAD = {
-  portrait: { up: 'Up', down: 'Down', left: 'Left', right: 'Right' },
-  landscape: { left: 'Up', right: 'Down', up: 'Right', down: 'Left' },
+  vertical: { up: 'Up', down: 'Down', left: 'Left', right: 'Right' },
+  sideways: { left: 'Up', right: 'Down', up: 'Right', down: 'Left' },
 };
 
+const stage = document.getElementById('stage');
 const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
 const startButton = document.getElementById('start');
+const modeButton = document.getElementById('mode');
+const aimButton = document.getElementById('aim');
 const leds = [...document.querySelectorAll('.leds i')];
-const landscapeQuery = matchMedia('(orientation: landscape)');
 
 const pointers = new Map();
-const packet = new DataView(new ArrayBuffer(26));
+const packet = new DataView(new ArrayBuffer(28));
 let buttons = 0;
 let motion = [0, -1, 0, 0, 0, 0];
+// Pointeur envoyé sur le stick droit (128 : centre), calé par le calibrage du bouton ⌖.
+let aim = [128, 128];
+let corners;
+let firstCorner;
 let ws;
 let lastError = '';
 let wakeLock;
@@ -30,13 +36,6 @@ let orientation;
 let agreement = 0;
 let samples = 0;
 
-const angle = () => (((screen.orientation?.angle ?? window.orientation ?? 0) % 360) + 360) % 360;
-
-function say(text) {
-  status.textContent = text;
-  overlay.hidden = false;
-}
-
 function store(key, value) {
   try {
     if (value === undefined) return localStorage.getItem(key);
@@ -46,16 +45,88 @@ function store(key, value) {
   }
 }
 
+// Tenue choisie au bouton, jamais déduite de la rotation de l'écran.
+let mode = store('mode') === 'vertical' ? 'vertical' : 'sideways';
+// Angle d'écran pour lequel l'interface est droite (horizontale : haut du téléphone à gauche par défaut).
+let hold = mode === 'sideways' ? 90 : 0;
+
+const liveAngle = () => (((screen.orientation?.angle ?? window.orientation ?? 0) % 360) + 360) % 360;
+
+// Tourne la scène de l'écart entre la tenue et l'écran : l'interface reste fixe dans la main.
+function layout() {
+  const live = liveAngle();
+  hold = holdAngle(hold, live, mode === 'sideways');
+  const turned = (hold - live) % 180 !== 0;
+  stage.style.width = `${turned ? innerHeight : innerWidth}px`;
+  stage.style.height = `${turned ? innerWidth : innerHeight}px`;
+  stage.style.transform = `translate(-50%, -50%) rotate(${hold - live}deg)`;
+  document.body.classList.toggle('sideways', mode === 'sideways');
+}
+addEventListener('resize', layout);
+screen.orientation?.addEventListener('change', layout);
+layout();
+
+// Android, en plein écran ou installée : l'écran ne bascule même plus. Ailleurs, `layout` compense.
+function lockOrientation() {
+  screen.orientation?.lock?.(mode === 'sideways' ? 'landscape' : 'portrait')?.catch(() => {});
+}
+
+modeButton.addEventListener('click', () => {
+  mode = mode === 'sideways' ? 'vertical' : 'sideways';
+  hold = mode === 'sideways' ? 90 : 0;
+  store('mode', mode);
+  lockOrientation();
+  layout();
+});
+
+function say(text) {
+  status.textContent = text;
+  overlay.hidden = false;
+}
+
 function send() {
   if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   packet.setUint16(0, buttons, true);
   motion.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
+  packet.setUint8(26, aim[0]);
+  packet.setUint8(27, aim[1]);
   ws.send(packet.buffer);
 }
 
+const toByte = (v) => Math.round(128 + v * 127);
+
+// Le téléphone vise lui-même, d'après l'orientation que fusionne son système : rien ne s'accumule si le
+// réseau hoquette, contrairement au pointeur que Dolphin tirerait du gyroscope.
+function updateAim() {
+  if (mode !== 'vertical' || !corners || orientation?.alpha == null) {
+    aim = [128, 128];
+    return;
+  }
+  const [x, y] = aimPosition(aimAngles(orientation.alpha, orientation.beta, hold), ...corners);
+  aim = [toByte(x), toByte(y)];
+}
+
+// ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
+aimButton.addEventListener('click', () => {
+  if (orientation?.alpha == null) return;
+  const now = aimAngles(orientation.alpha, orientation.beta, hold);
+  if (aimButton.dataset.step === 'top-left') {
+    firstCorner = now;
+    aimButton.dataset.step = 'bottom-right';
+    aimButton.textContent = '↘ coin';
+    return;
+  }
+  if (aimButton.dataset.step === 'bottom-right' && validCorners(firstCorner, now)) {
+    corners = [firstCorner, now];
+    navigator.vibrate?.([20, 40, 20]);
+  }
+  const start = !aimButton.dataset.step;
+  aimButton.dataset.step = start ? 'top-left' : '';
+  aimButton.textContent = start ? '↖ coin' : '⌖';
+});
+
 // Recalculé à chaque contact : glisser d'un bouton à l'autre et appuyer à plusieurs doigts marchent.
 function refreshButtons() {
-  const mode = landscapeQuery.matches ? 'landscape' : 'portrait';
   const pressed = new Set();
   let next = 0;
   for (const { x, y } of pointers.values()) {
@@ -88,7 +159,9 @@ addEventListener('pointercancel', untrack);
 addEventListener('contextmenu', (e) => e.preventDefault());
 
 addEventListener('deviceorientation', (e) => {
-  if (e.beta !== null) orientation = e;
+  if (e.beta === null) return;
+  orientation = e;
+  updateAim();
 });
 
 addEventListener('devicemotion', (e) => {
@@ -105,11 +178,12 @@ addEventListener('devicemotion', (e) => {
     }
   }
 
+  // Repère de la tenue, pas de l'écran : il ne change pas quand l'écran bascule.
   motion = toDSU(
     [a.x * accelSign, a.y * accelSign, a.z * accelSign],
     [r?.beta ?? 0, r?.gamma ?? 0, r?.alpha ?? 0],
-    angle(),
-    landscapeQuery.matches,
+    hold,
+    mode === 'sideways',
   );
   send();
 });
@@ -154,8 +228,10 @@ startButton.addEventListener('click', async () => {
   startButton.hidden = true;
   say('Connexion…');
   // Tout dans le geste de l'utilisateur : iOS n'accorde les capteurs et Android le plein écran qu'ainsi.
-  if (!matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) {
-    document.documentElement.requestFullscreen?.().catch(() => {});
+  if (matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches) {
+    lockOrientation();
+  } else {
+    document.documentElement.requestFullscreen?.().then(lockOrientation, () => {});
   }
   const asks = [DeviceMotionEvent, DeviceOrientationEvent]
     .filter((E) => typeof E?.requestPermission === 'function')

@@ -124,5 +124,9 @@ func profile(slot int) string {
 	for _, axis := range []string{"Pitch Up", "Pitch Down", "Roll Left", "Roll Right", "Yaw Left", "Yaw Right"} {
 		fmt.Fprintf(&b, "IMUGyroscope/%s = `Gyro %s`\n", axis, axis)
 	}
+	// Pointeur calculé par le téléphone (stick droit). Celui que Dolphin tire du gyroscope s'y ajouterait :
+	// il intègre les vitesses reçues, et le moindre à-coup du réseau devient une dérive.
+	b.WriteString("IR/Up = `Right Y+`\nIR/Down = `Right Y-`\nIR/Left = `Right X-`\nIR/Right = `Right X+`\n")
+	b.WriteString("IMUIR/Enabled = False\n")
 	return b.String()
 }
