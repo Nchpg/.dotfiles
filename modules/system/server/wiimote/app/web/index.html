@@ -185,7 +185,8 @@
       "b    b minus one two leds";
   }
   .sideways .recenter { display: none; }
-  .sideways .leds { flex-direction: column; }
+  /* De côté (croix à gauche), le flanc gauche de la Wiimote debout, celui de la diode 1, passe en bas. */
+  .sideways .leds { flex-direction: column-reverse; }
   .sideways .b { width: 88%; height: 70%; }
   .sideways .one, .sideways .two { width: 32vmin; height: 32vmin; font-size: 11vmin; }
 
