@@ -1,16 +1,17 @@
 {
   config,
   lib,
-  myLib,
   pkgs-stable,
+  myLib,
   ...
 }:
 
-# Le téléphone comme Wiimote pour Dolphin : PWA sur <subdomain>.<domaine>, en LAN seulement, dont l'état
-# est rediffusé en DSU (UDP) à tout Dolphin du réseau. Rien à installer sur les PC (page /dolphin).
+# Le téléphone comme Wiimote pour Dolphin. La PWA est publique (<subdomain>.<domaine>, par le tunnel) :
+# les téléphones s'y connectent de n'importe où, sans VPN. Le DSU (UDP) vers Dolphin ne passe que par le
+# VPN, pour les PC qui ont le service « wiimote » (vpn-peers.json, page VPN). Jamais par le LAN.
 let
   cfg = config.systemSettings.wiimote;
-  static = config.systemSettings.network.staticIPv4;
+  wireguard = config.systemSettings.vpn.wireguard;
 
   host = "${cfg.subdomain}.${config.systemSettings.proxy.domain}";
 
@@ -22,6 +23,8 @@ let
     env.CGO_ENABLED = 0;
     meta.mainProgram = "wiimote";
   };
+
+  pcs = wireguard.sourcesFor "wiimote";
 in
 {
   options.systemSettings.wiimote = {
@@ -30,7 +33,7 @@ in
     subdomain = lib.mkOption {
       type = lib.types.str;
       default = "wii";
-      description = "Sous-domaine de la PWA, sous `proxy.domain`, résolu sur le LAN seulement.";
+      description = "Sous-domaine public de la PWA, sous `proxy.domain`.";
     };
 
     port = lib.mkOption {
@@ -43,69 +46,72 @@ in
       type = lib.types.port;
       # Port par défaut des serveurs DSU, celui que Dolphin propose.
       default = 26760;
-      description = "Port UDP du serveur DSU, ouvert sur le LAN.";
+      description = "Port UDP du serveur DSU, ouvert dans le tunnel aux PC qui ont le service.";
     };
   };
 
-  config = lib.mkIf cfg.enable (
-    lib.mkMerge [
-      (myLib.server.mkInternalPorts config { udp = [ cfg.dsuPort ]; })
-
+  config = lib.mkIf cfg.enable {
+    assertions = [
       {
-        assertions = [
-          {
-            assertion = config.systemSettings.proxy.enable && static != null;
-            message = "systemSettings.wiimote exige le proxy et une adresse statique (celle que Dolphin interroge).";
-          }
-        ];
-
-        systemd.services.wiimote = {
-          description = "Manette Wii sur téléphone (PWA et serveur DSU)";
-          wantedBy = [ "multi-user.target" ];
-          after = [ "network.target" ];
-          environment = {
-            WIIMOTE_LISTEN = "127.0.0.1:${toString cfg.port}";
-            WIIMOTE_DSU_PORT = toString cfg.dsuPort;
-            WIIMOTE_DSU_HOST = static.address;
-          };
-          serviceConfig = {
-            ExecStart = lib.getExe package;
-            DynamicUser = true;
-            Restart = "on-failure";
-            NoNewPrivileges = true;
-            ProtectSystem = "strict";
-            ProtectHome = true;
-            PrivateTmp = true;
-            PrivateDevices = true;
-            ProtectKernelTunables = true;
-            ProtectKernelModules = true;
-            ProtectControlGroups = true;
-            RestrictAddressFamilies = [
-              "AF_INET"
-              "AF_INET6"
-            ];
-            RestrictNamespaces = true;
-            SystemCallArchitectures = "native";
-            CapabilityBoundingSet = [ "" ];
-          };
-        };
-
-        services.nginx.virtualHosts.${host} = myLib.server.mkTlsVhost {
-          locations."/" = {
-            proxyPass = "http://127.0.0.1:${toString cfg.port}";
-            proxyWebsockets = true;
-          };
-        };
-
-        # Pas de route dans le tunnel : la latence de Cloudflare gênerait le jeu, et personne hors du LAN
-        # ne doit piloter la manette. Le résolveur local répond l'adresse du LAN.
-        systemSettings.proxy.sites.${host} = {
-          public = false;
-          lanShortcut = true;
-        };
-
-        systemSettings.notify.discord.units = [ "wiimote" ];
+        assertion = config.systemSettings.proxy.enable && wireguard.enable;
+        message = "systemSettings.wiimote exige le proxy (PWA) et le VPN (DSU vers Dolphin).";
       }
-    ]
-  );
+    ];
+
+    systemSettings.vpn.wireguard.services.wiimote = {
+      label = "Wiimote (Dolphin)";
+      host = "${wireguard.serverAddress}:${toString cfg.dsuPort} (UDP)";
+    };
+
+    # Pas `mkInternalPorts` : il ouvrirait aussi le LAN.
+    networking.firewall.extraInputRules = lib.optionalString (pcs != [ ]) ''
+      iifname "wg0" ip saddr { ${lib.concatStringsSep ", " pcs} } udp dport ${toString cfg.dsuPort} accept comment "DSU de la manette Wii"
+    '';
+
+    systemd.services.wiimote = {
+      description = "Manette Wii sur téléphone (PWA et serveur DSU)";
+      wantedBy = [ "multi-user.target" ];
+      after = [ "network.target" ];
+      environment = {
+        WIIMOTE_LISTEN = "127.0.0.1:${toString cfg.port}";
+        WIIMOTE_DSU_PORT = toString cfg.dsuPort;
+        WIIMOTE_DSU_HOST = wireguard.serverAddress;
+      };
+      serviceConfig = {
+        ExecStart = lib.getExe package;
+        DynamicUser = true;
+        Restart = "on-failure";
+        NoNewPrivileges = true;
+        ProtectSystem = "strict";
+        ProtectHome = true;
+        PrivateTmp = true;
+        PrivateDevices = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        RestrictAddressFamilies = [
+          "AF_INET"
+          "AF_INET6"
+        ];
+        RestrictNamespaces = true;
+        SystemCallArchitectures = "native";
+        CapabilityBoundingSet = [ "" ];
+      };
+    };
+
+    services.nginx.virtualHosts.${host} = myLib.server.mkTlsVhost {
+      locations."/" = {
+        proxyPass = "http://127.0.0.1:${toString cfg.port}";
+        proxyWebsockets = true;
+      };
+    };
+
+    # Pas de raccourci LAN : à la maison aussi, les téléphones passent par le tunnel.
+    systemSettings.proxy.sites.${host} = {
+      public = true;
+      lanShortcut = false;
+    };
+
+    systemSettings.notify.discord.units = [ "wiimote" ];
+  };
 }
