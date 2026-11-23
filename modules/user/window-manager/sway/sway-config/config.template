@@ -88,6 +88,7 @@ seat * keyboard_grouping none
     bindsym $mod+e layout toggle split
 
     bindsym $mod+f fullscreen
+    bindsym F11 fullscreen toggle
 
     bindsym $mod+Shift+space floating toggle
 
