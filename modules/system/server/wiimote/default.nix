@@ -125,9 +125,12 @@ in
     };
 
     # Pas de raccourci LAN : à la maison aussi, les téléphones passent par le tunnel.
+    # Sonde sur la page de la manette, publique (/dolphin, derrière Authelia, répondrait 302) ; son nom est
+    # aussi celui du service sur le dashboard.
     systemSettings.proxy.sites.${host} = {
       public = true;
       lanShortcut = false;
+      probes.wiimote = { };
     };
 
     systemSettings.notify.discord.units = [ "wiimote" ];
