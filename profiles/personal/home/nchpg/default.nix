@@ -140,6 +140,8 @@
         artcraft.enable = true;
 
         claudeDesktop.enable = true;
+
+        dolphinEmu.enable = true;
       };
 
       gui = {
