@@ -25,7 +25,8 @@
     "rateLimit": [
       "/admin",
       "/v1/admin",
-      "/v1/auth"
+      "/v1/auth",
+      "/v1/pair"
     ]
   },
   "mnist": {
