@@ -316,6 +316,12 @@ in
           loc = "$sent_http_location";
         };
 
+        # 30 jours sur le disque, comme dans Loki (NixOS : 26 semaines) : le journal des visites porte les IP.
+        services.logrotate.settings.nginx = {
+          frequency = "daily";
+          rotate = 30;
+        };
+
         services.nginx = {
           enable = true;
           recommendedTlsSettings = true;
@@ -351,8 +357,12 @@ in
             }
 
             log_format visits escape=json '{${visitsFormat}}';
+            # Comme `combined`, mais le chemin sans ses paramètres (`$uri`) : une position ou un jeton y passent.
+            log_format sans_parametres '$remote_addr - $remote_user [$time_local] '
+                                       '"$request_method $uri $server_protocol" $status $body_bytes_sent '
+                                       '"$http_referer" "$http_user_agent"';
             # Les deux au niveau http ; un vhost qui pose son access_log reprend `visits.directive`.
-            access_log /var/log/nginx/access.log combined;
+            access_log /var/log/nginx/access.log sans_parametres;
             ${cfg.visits.directive}
 
             # Posé ici une fois (doublon interdit).
