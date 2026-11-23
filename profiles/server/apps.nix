@@ -1,4 +1,4 @@
-{ ... }:
+{ config, ... }:
 
 # Applications web servies depuis des images de conteneurs (cf. docs/apps.md).
 # Les sites eux-mêmes sont dans apps.json, que le dashboard modifie ; ici, les réglages
@@ -28,6 +28,13 @@
     # Un message Discord par site mis à jour, modifié, ajouté ou supprimé.
     announce = true;
   };
+
+  # Navscape : les requêtes de la montre portent sa position (/v1/session?lat=…&lon=…), son journal d'accès ne
+  # garde que le chemin.
+  services.nginx.virtualHosts.${config.systemSettings.apps.map.domain}.extraConfig = ''
+    access_log /var/log/nginx/access.log sans_parametres;
+    ${config.systemSettings.proxy.visits.directive}
+  '';
 
   # 127.0.0.1 et pas localhost : le wget de busybox essaie ::1 d'abord et le serveur
   # n'écoute qu'en IPv4. À déplacer dans le Dockerfile de stage (HEALTHCHECK).

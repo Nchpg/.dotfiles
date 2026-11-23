@@ -357,12 +357,13 @@ in
             }
 
             log_format visits escape=json '{${visitsFormat}}';
-            # Comme `combined`, mais le chemin sans ses paramètres (`$uri`) : une position ou un jeton y passent.
+            # Comme `combined`, mais le chemin sans ses paramètres (`$uri`), pour un vhost dont les adresses portent
+            # des données personnelles (il le pose avec `visits.directive`).
             log_format sans_parametres '$remote_addr - $remote_user [$time_local] '
                                        '"$request_method $uri $server_protocol" $status $body_bytes_sent '
                                        '"$http_referer" "$http_user_agent"';
             # Les deux au niveau http ; un vhost qui pose son access_log reprend `visits.directive`.
-            access_log /var/log/nginx/access.log sans_parametres;
+            access_log /var/log/nginx/access.log combined;
             ${cfg.visits.directive}
 
             # Posé ici une fois (doublon interdit).
