@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirections, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -71,6 +71,18 @@ test('pointeur calé sur les coins visés, y compris à cheval sur ±180°', () 
   near(aimPosition([-175, 0], [170, 5], [-170, -5]), [0.5, 0]);
   assert.ok(!validCorners([3, 2], [3.5, 1.8]));
   assert.ok(validCorners(tl, br));
+});
+
+test('croix tactile : secteurs, diagonales, centre mort, portée et interface tournée', () => {
+  assert.deepEqual(dpadDirections(50, 0, 100, 0), ['right']);
+  assert.deepEqual(dpadDirections(0, -50, 100, 0), ['up']);
+  assert.deepEqual(dpadDirections(40, 40, 100, 0), ['right', 'down']);
+  assert.deepEqual(dpadDirections(-40, -40, 100, 0), ['left', 'up']);
+  assert.deepEqual(dpadDirections(5, 0, 100, 0), []); // pouce posé au centre
+  assert.deepEqual(dpadDirections(115, 0, 100, 0), ['right']); // un peu hors du dessin : toléré
+  assert.deepEqual(dpadDirections(130, 0, 100, 0), []); // trop loin
+  // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
+  assert.deepEqual(dpadDirections(0, 50, 100, 90), ['right']);
 });
 
 test('verticale tirée de l’orientation, dans le repère de la spec', () => {

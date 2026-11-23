@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirections, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
 const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
@@ -135,15 +135,32 @@ aimButton.addEventListener('click', () => {
   aimButton.textContent = start ? '↖ coin' : '⌖';
 });
 
+const dpad = document.querySelector('.dpad');
+
 // Recalculé à chaque contact : glisser d'un bouton à l'autre et appuyer à plusieurs doigts marchent.
+// La croix se lit à l'angle du doigt (diagonales comprises, zone plus large que son dessin) ; un autre bouton
+// sous le doigt garde la priorité.
 function refreshButtons() {
   const pressed = new Set();
   let next = 0;
+  const box = dpad.getBoundingClientRect();
   for (const { x, y } of pointers.values()) {
-    const el = document.elementFromPoint(x, y)?.closest('[data-btn], [data-dir]');
-    if (!el) continue;
-    pressed.add(el);
-    next |= 1 << BIT[el.dataset.btn ?? DPAD[mode][el.dataset.dir]];
+    const el = document.elementFromPoint(x, y)?.closest('[data-btn]');
+    if (el) {
+      pressed.add(el);
+      next |= 1 << BIT[el.dataset.btn];
+      continue;
+    }
+    const dirs = dpadDirections(
+      x - (box.left + box.width / 2),
+      y - (box.top + box.height / 2),
+      box.width / 2,
+      hold - liveAngle(),
+    );
+    for (const dir of dirs) {
+      pressed.add(dpad.querySelector(`[data-dir="${dir}"]`));
+      next |= 1 << BIT[DPAD[mode][dir]];
+    }
   }
   for (const el of document.querySelectorAll('[data-btn], [data-dir]')) {
     el.classList.toggle('on', pressed.has(el));
