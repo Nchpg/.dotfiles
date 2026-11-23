@@ -17,6 +17,7 @@ in
     ./admin.nix
     ./pgweb.nix
     ./wiimote.nix
+    ./garmin-mcp.nix
   ];
 
   config = {
