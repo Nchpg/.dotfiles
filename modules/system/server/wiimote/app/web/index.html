@@ -162,8 +162,8 @@
   .leds i { width: 3.6vmin; height: 2vmin; border-radius: .6vmin; background: var(--led-off); }
   .leds i.on { background: var(--led); box-shadow: 0 0 2vmin var(--led); }
 
-  /* Changement de tenue, dans le coin où le pouce ne passe pas. */
-  .mode {
+  /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
+  .mode, .theme {
     position: absolute;
     top: 3.5vmin;
     right: 3.5vmin;
@@ -171,7 +171,8 @@
     height: 10vmin;
     border-radius: 50%;
   }
-  .mode svg { width: 5.5vmin; height: 5.5vmin; display: block; margin: auto; fill: currentColor; }
+  .theme { right: 15.5vmin; }
+  .mode svg, .theme svg { width: 5.5vmin; height: 5.5vmin; display: block; margin: auto; fill: currentColor; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 et 2 sous le pouce droit.
      Après les règles de base, qu'il remplace. */
@@ -257,6 +258,9 @@
 <body>
 <div class="stage" id="stage">
   <main class="remote">
+    <button class="theme" id="theme" aria-label="Thème clair ou sombre">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2v14a7 7 0 0 1 0-14z"/></svg>
+    </button>
     <button class="mode" id="mode" aria-label="Passer de la tenue horizontale à la verticale">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
     </button>

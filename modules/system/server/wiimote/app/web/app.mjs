@@ -72,6 +72,15 @@ function lockOrientation() {
   screen.orientation?.lock?.(mode === 'sideways' ? 'landscape' : 'portrait')?.catch(() => {});
 }
 
+// Thème : celui du système au départ, puis celui choisi au bouton, mémorisé.
+let theme = store('theme') ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+document.documentElement.dataset.theme = theme;
+document.getElementById('theme').addEventListener('click', () => {
+  theme = theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  store('theme', theme);
+});
+
 modeButton.addEventListener('click', () => {
   mode = mode === 'sideways' ? 'vertical' : 'sideways';
   hold = mode === 'sideways' ? 90 : 0;

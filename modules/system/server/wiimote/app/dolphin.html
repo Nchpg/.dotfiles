@@ -38,236 +38,149 @@
     margin: 0;
     background: var(--bg);
     color: var(--ink);
-    font: 400 16px/1.55 "Bricolage", system-ui, sans-serif;
+    font: 400 16px/1.5 "Bricolage", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
-  main { max-width: 68rem; margin: 0 auto; padding: 1.5rem clamp(1rem, 4vw, 3rem) 5rem; }
-
-  .top {
-    display: flex;
-    justify-content: space-between;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--line);
-    font-size: .85rem;
-    color: var(--muted);
-  }
-  .top b { color: var(--ink); font-weight: 700; letter-spacing: -.01em; }
-
-  .invite {
+  main {
     display: grid;
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
-    gap: clamp(2rem, 6vw, 5.5rem);
-    align-items: end;
-    padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(3rem, 7vw, 5rem);
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    gap: 1.25rem;
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 6vw, 4rem) 1rem 2.5rem;
   }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
   .qr {
+    width: min(78vw, 18rem);
     margin: 0;
-    padding: 1.1rem;
-    border-radius: 6px;
+    padding: 1rem;
+    border-radius: 8px;
     background: #fff; /* noir sur blanc pour l'appareil photo, même en sombre */
     outline: 1px solid var(--line);
-    animation: rise .6s cubic-bezier(.2, .8, .2, 1) both;
   }
   .qr img { display: block; width: 100%; height: auto; image-rendering: pixelated; }
 
-  h1 {
-    margin: 0;
-    font-size: clamp(3.2rem, 8.5vw, 6.6rem);
-    font-weight: 760;
-    line-height: .9;
-    letter-spacing: -.045em;
-  }
-  h1 span { display: block; animation: rise .6s cubic-bezier(.2, .8, .2, 1) both; }
-  h1 span + span { animation-delay: .08s; }
-  h1 i { font-style: normal; color: var(--accent); }
-  .lede { max-width: 26rem; margin: 1.4rem 0 2rem; color: var(--muted); font-size: 1.05rem; }
-
-  .link { display: flex; gap: .6rem; max-width: 34rem; }
+  .link { display: flex; gap: .5rem; width: min(100%, 30rem); }
   .link output {
     flex: 1;
     min-width: 0;
-    padding: .8rem 1rem;
+    padding: .7rem .9rem;
     overflow: hidden;
     border-radius: 10px;
     background: var(--field);
-    font: .85rem/1.4 ui-monospace, "SF Mono", monospace;
+    font: .82rem/1.4 ui-monospace, "SF Mono", monospace;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  button { font: inherit; color: inherit; cursor: pointer; }
   .copy {
     flex: none;
-    min-width: 8.5rem;
-    padding: .8rem 1.2rem;
+    padding: .7rem 1.1rem;
     border: 0;
     border-radius: 10px;
     background: var(--accent);
     color: var(--accent-ink);
     font-weight: 700;
-    transition: transform .1s;
   }
-  .copy:active { transform: scale(.97); }
-  .renew { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: baseline; margin: 1rem 0 0; color: var(--muted); font-size: .88rem; }
-  .renew button { padding: 0; border: 0; background: none; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line); }
-  .renew button:hover { text-decoration-color: currentColor; }
-  button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .renew { margin: -.6rem 0 0; }
+  .renew button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: .82rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--line);
+  }
+  .renew button:hover { color: var(--ink); text-decoration-color: currentColor; }
 
-  .players { margin-bottom: clamp(2.5rem, 6vw, 4rem); }
-  .players-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .8rem; }
-  .players-head h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
-  .players-head span { color: var(--muted); font-size: .85rem; }
-  .seats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .6rem; margin: 0; padding: 0; list-style: none; }
+  .seats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .5rem;
+    width: 100%;
+    margin: 1.25rem 0 0;
+    padding: 0;
+    list-style: none;
+  }
   .seat {
     display: grid;
     grid-template-rows: auto 1fr auto;
-    gap: .5rem;
-    min-height: 8.5rem;
-    padding: .95rem 1rem 1rem;
+    gap: .4rem;
+    min-height: 7.5rem;
+    padding: .85rem .9rem .9rem;
     border-radius: 12px;
     background: var(--field);
   }
-  .seat .n { display: flex; align-items: center; gap: .45rem; color: var(--muted); font: .78rem ui-monospace, "SF Mono", monospace; }
-  .seat.on .n::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: var(--accent); }
-  .seat .who { font-size: 1.3rem; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .seat .n { display: flex; align-items: center; gap: .4rem; color: var(--muted); font: .75rem ui-monospace, "SF Mono", monospace; }
+  .seat.on .n::before { content: ""; width: .45rem; height: .45rem; border-radius: 50%; background: var(--accent); }
+  .seat .who { font-size: 1.2rem; font-weight: 700; line-height: 1.15; letter-spacing: -.02em; overflow-wrap: anywhere; }
   .seat.free .who { color: var(--muted); font-weight: 400; }
-  .seat .act { display: flex; gap: .35rem; }
-  .seat .act button {
-    padding: .35rem .65rem;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--bg);
-    font-size: .85rem;
-    font-weight: 600;
-  }
+  .seat .act { display: flex; gap: .3rem; }
+  .seat .act button { padding: .3rem .55rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: .82rem; font-weight: 600; }
   .seat .act button:hover:not(:disabled) { border-color: var(--ink); }
   .seat .act button:disabled { opacity: .35; cursor: default; }
   .seat .act .kick { margin-left: auto; }
 
-  details { border-top: 1px solid var(--line); }
-  details:last-of-type { border-bottom: 1px solid var(--line); }
-  summary {
-    display: grid;
-    grid-template-columns: 3rem 1fr auto;
-    align-items: baseline;
-    padding: 1.3rem 0;
-    font-size: clamp(1.15rem, 2.4vw, 1.45rem);
-    font-weight: 650;
-    letter-spacing: -.02em;
-    cursor: pointer;
-    list-style: none;
-  }
-  summary::-webkit-details-marker { display: none; }
-  summary .num { color: var(--muted); font: .8rem ui-monospace, monospace; letter-spacing: 0; }
-  summary .hint { color: var(--muted); font-size: .85rem; font-weight: 400; letter-spacing: 0; }
-  summary::after { content: "+"; grid-column: 3; color: var(--muted); font-weight: 300; transition: transform .2s; }
-  details[open] summary::after { transform: rotate(45deg); }
-
-  .steps { display: grid; gap: 1.6rem; padding: 0 0 2rem 3rem; }
-  .steps h2 { margin: 0 0 .4rem; font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
-  .steps p, .steps li { margin: .2rem 0; color: var(--muted); }
-  .steps ol, .steps ul { margin: 0; padding-left: 1.1rem; }
-  .steps b { color: var(--ink); font-weight: 650; }
-  code {
-    padding: .1rem .4rem;
-    border-radius: 5px;
-    background: var(--field);
-    color: var(--ink);
-    font: .84em ui-monospace, "SF Mono", monospace;
-    overflow-wrap: anywhere;
-  }
-  .files { display: flex; flex-wrap: wrap; gap: .5rem; margin: .2rem 0 .8rem; padding: 0; list-style: none; }
-  .files a {
-    display: inline-block;
-    padding: .45rem .9rem;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    color: var(--ink);
-    font-size: .9rem;
-    font-weight: 650;
-    text-decoration: none;
-  }
+  /* Installation de Dolphin : repliée, en bas, pour s'y reporter au besoin. */
+  details { width: 100%; margin-top: 2.5rem; color: var(--muted); font-size: .85rem; }
+  summary { width: max-content; margin: 0 auto; cursor: pointer; }
+  details[open] summary { margin-bottom: .8rem; }
+  details h2 { margin: 1rem 0 .3rem; color: var(--ink); font-size: .9rem; font-weight: 700; }
+  details ol, details ul { margin: 0; padding-left: 1.1rem; }
+  details li { margin: .15rem 0; }
+  details b { color: var(--ink); font-weight: 600; }
+  code { padding: .05rem .35rem; border-radius: 5px; background: var(--field); color: var(--ink); font: .85em ui-monospace, "SF Mono", monospace; overflow-wrap: anywhere; }
+  .files { display: flex; flex-wrap: wrap; gap: .4rem; margin: .4rem 0 .6rem; padding: 0; list-style: none; }
+  .files a { padding: .3rem .7rem; border: 1px solid var(--line); border-radius: 999px; color: var(--ink); font-weight: 600; text-decoration: none; }
   .files a:hover { border-color: var(--ink); }
 
-  @keyframes rise { from { opacity: 0; transform: translateY(14px); } }
-  @media (prefers-reduced-motion: reduce) {
-    .qr, h1 span { animation: none; }
-  }
-  @media (max-width: 720px) {
-    .invite { grid-template-columns: minmax(0, 1fr); align-items: start; }
-    .qr { order: 2; max-width: 22rem; }
-    .steps { padding-left: 0; }
+  @media (max-width: 640px) {
     .seats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    summary { grid-template-columns: 2.4rem 1fr auto; }
   }
 </style>
 </head>
 <body>
 <main>
-  <header class="top"><b>Wiimote</b><span>Page de l’hôte</span></header>
+  <figure class="qr"><img src="/dolphin/qr.png" alt="QR code du lien d'invitation des manettes" width="300" height="300"></figure>
 
-  <section class="invite">
-    <figure class="qr"><img src="/dolphin/qr.png" alt="QR code du lien d'invitation" width="300" height="300"></figure>
-    <div>
-      <h1><span>Scanne</span><span>pour jouer<i>.</i></span></h1>
-      <p class="lede">Avec l’appareil photo du téléphone, ou le bouton Scanner de la manette. Aucun compte à créer.</p>
-      <div class="link">
-        <output id="link">{{.Invite}}</output>
-        <button class="copy" id="copy" type="button">Copier le lien</button>
-      </div>
-      <form class="renew" method="post" action="/dolphin/invite">
-        <button>Nouveau lien</button>
-        <span>l’actuel cessera de marcher, les manettes connectées restent</span>
-      </form>
-    </div>
-  </section>
+  <div class="link">
+    <output id="link">{{.Invite}}</output>
+    <button class="copy" id="copy" type="button">Copier</button>
+  </div>
+  <form class="renew" method="post" action="/dolphin/invite">
+    <button title="L’ancien lien cessera de marcher ; les manettes connectées restent.">Nouveau lien</button>
+  </form>
 
-  <section class="players" aria-live="polite">
-    <div class="players-head"><h2>Manettes</h2><span>← → change la Wii Remote du joueur</span></div>
-    <ol class="seats" id="seats"></ol>
-  </section>
+  <ol class="seats" id="seats" aria-label="Manettes" aria-live="polite"></ol>
 
   <details>
-    <summary><span class="num">01</span><span>Configurer Dolphin <span class="hint">une fois par PC</span></span></summary>
-    <div class="steps">
-      <p>Le PC doit être sur le VPN, avec le service <b>Wiimote</b> (page VPN du dashboard).</p>
-      <section>
-        <h2>Le serveur</h2>
-        <ol>
-          <li><b>Options › Controllers › Alternate Input Sources</b></li>
-          <li><b>Enable</b>, puis <b>Add</b> : <code>{{.Name}}</code>, <code>{{.Host}}</code>, port <code>{{.Port}}</code></li>
-        </ol>
-      </section>
-      <section>
-        <h2>Les profils</h2>
-        <ul class="files">
-          {{range .Players}}<li><a href="/dolphin/{{.}}" download>Joueur {{.}}</a></li>{{end}}
-        </ul>
-        <ul>
-          <li>Linux : <code>~/.config/dolphin-emu/Profiles/Wiimote</code></li>
-          <li>Windows : <code>%APPDATA%\Dolphin Emulator\Config\Profiles\Wiimote</code></li>
-          <li>macOS : <code>~/Library/Application Support/Dolphin/Config/Profiles/Wiimote</code></li>
-        </ul>
-      </section>
-      <section>
-        <h2>Les Wiimotes</h2>
-        <ol>
-          <li><b>Wii Remote 1</b> › <b>Emulated Wii Remote</b> › <b>Configure</b></li>
-          <li><b>Profile</b> <code>{{.Name}} J1</code> › <b>Load</b> (J2 pour la Wii Remote 2, etc.)</li>
-          <li>Cocher <b>Background Input</b>, sinon Dolphin ignore la manette hors de sa fenêtre.</li>
-        </ol>
-      </section>
-    </div>
-  </details>
-
-  <details>
-    <summary><span class="num">02</span><span>Comment jouer</span></summary>
-    <div class="steps">
-      <ul>
-        <li>Chaque joueur entre son prénom avant « Connecter » : il apparaît dans Manettes, où l’hôte change l’ordre ou retire quelqu’un.</li>
-        <li><b>Horizontale</b>, haut du téléphone à gauche : Mario Kart. Volant, 2 accélérer, 1 freiner, B déraper, croix objet.</li>
-        <li><b>Verticale</b> (⟲ en haut à droite) : pointer l’écran. ⌖, viser le coin haut gauche et appuyer, puis le coin bas droit et appuyer.</li>
-      </ul>
-    </div>
+    <summary>Installer Dolphin sur un PC</summary>
+    <p>Le PC doit être sur le VPN, avec le service <b>Wiimote</b> (page VPN du dashboard).</p>
+    <h2>1. Le serveur</h2>
+    <ol>
+      <li><b>Options › Controllers › Alternate Input Sources</b></li>
+      <li><b>Enable</b>, puis <b>Add</b> : <code>{{.Name}}</code>, <code>{{.Host}}</code>, port <code>{{.Port}}</code></li>
+    </ol>
+    <h2>2. Les profils</h2>
+    <ul class="files">
+      {{range .Players}}<li><a href="/dolphin/{{.}}" download>Joueur {{.}}</a></li>{{end}}
+    </ul>
+    <ul>
+      <li>Linux : <code>~/.config/dolphin-emu/Profiles/Wiimote</code></li>
+      <li>Windows : <code>%APPDATA%\Dolphin Emulator\Config\Profiles\Wiimote</code></li>
+      <li>macOS : <code>~/Library/Application Support/Dolphin/Config/Profiles/Wiimote</code></li>
+    </ul>
+    <h2>3. Les Wiimotes</h2>
+    <ol>
+      <li><b>Wii Remote 1</b> › <b>Emulated Wii Remote</b> › <b>Configure</b></li>
+      <li><b>Profile</b> <code>{{.Name}} J1</code> › <b>Load</b> (J2 pour la Wii Remote 2, etc.)</li>
+      <li><b>Controllers</b> : cocher <b>Background Input</b>, décocher <b>Continuous Scanning</b>.</li>
+      <li><b>General</b> : cocher <b>Enable Dual Core</b>.</li>
+    </ol>
   </details>
 </main>
 
@@ -280,7 +193,7 @@
     } catch {
       copy.textContent = 'Sélectionne le lien';
     }
-    setTimeout(() => (copy.textContent = 'Copier le lien'), 1600);
+    setTimeout(() => (copy.textContent = 'Copier'), 1600);
   });
 
   // Manettes : rafraîchies régulièrement, redessinées seulement quand elles changent (le focus reste).
