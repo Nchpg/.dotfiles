@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Configurer Dolphin</title>
+<style>
+  :root { --bg: #f6f6f3; --ink: #1d1f22; --muted: #5d6066; --card: #fff; --line: #dcdcd6; --accent: #1f7fd1; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16171a; --ink: #ececea; --muted: #a2a5ab; --card: #1f2024; --line: #33353a; --accent: #5cb0ff; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 system-ui, sans-serif; }
+  main { max-width: 44rem; margin: 0 auto; padding: 2rem 1rem 3rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: 1.1rem; margin: 2rem 0 .5rem; }
+  p, li { color: var(--muted); }
+  strong, code { color: var(--ink); }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: .05rem .35rem; font-size: .92em; overflow-wrap: anywhere; }
+  a { color: var(--accent); }
+  .files { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; list-style: none; }
+  .files a { display: inline-block; padding: .45rem .9rem; border: 1px solid var(--line); border-radius: 6px; background: var(--card); text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Configurer Dolphin</h1>
+  <p>À faire une fois sur chaque PC qui lance Dolphin (Windows, macOS ou Linux). Les téléphones ouvrent ensuite simplement la page de la manette.</p>
+
+  <h2>1. Déclarer le serveur</h2>
+  <ol>
+    <li>Dolphin › <strong>Options › Configuration des manettes</strong> › <strong>Sources d'entrée alternatives</strong>.</li>
+    <li>Cocher <strong>Activer</strong>, puis <strong>Ajouter…</strong> avec&nbsp;: description <code>{{.Name}}</code>, adresse <code>{{.Host}}</code>, port <code>{{.Port}}</code>.</li>
+  </ol>
+  <p>La description doit être exactement <code>{{.Name}}</code> : les profils ci-dessous la cherchent sous ce nom.</p>
+
+  <h2>2. Installer les profils</h2>
+  <ul class="files">
+    {{range .Players}}<li><a href="/dolphin/{{.}}" download>Joueur {{.}}</a></li>{{end}}
+  </ul>
+  <p>Les copier dans le dossier <code>Profiles/Wiimote</code> de Dolphin&nbsp;:</p>
+  <ul>
+    <li>Windows : <code>%APPDATA%\Dolphin Emulator\Config\Profiles\Wiimote</code> (anciennes installations : <code>Documents\Dolphin Emulator\Config\Profiles\Wiimote</code>)</li>
+    <li>macOS : <code>~/Library/Application Support/Dolphin/Config/Profiles/Wiimote</code></li>
+    <li>Linux : <code>~/.config/dolphin-emu/Profiles/Wiimote</code> (Flatpak : <code>~/.var/app/org.DolphinEmu.dolphin-emu/config/dolphin-emu/Profiles/Wiimote</code>)</li>
+  </ul>
+
+  <h2>3. Brancher les Wiimotes</h2>
+  <ol>
+    <li>Dans <strong>Wii Remotes</strong>, choisir <strong>Wii Remote émulée</strong> pour chaque joueur, puis <strong>Configurer</strong>.</li>
+    <li>Profil <code>{{.Name}} J1</code> pour le joueur 1 (J2 pour le 2…), <strong>Charger</strong>, fermer.</li>
+  </ol>
+  <p>Le numéro de joueur s'allume sur les diodes en bas de la manette du téléphone.</p>
+
+  <h2>Jouer</h2>
+  <ul>
+    <li><strong>Téléphone à l'horizontale</strong>, croix à gauche : Wiimote tenue de côté, pour Mario Kart (tourner comme un volant ; 2 accélérer, 1 freiner, B déraper, croix objet).</li>
+    <li><strong>Téléphone à la verticale</strong> : Wiimote pointée vers l'écran. Le pointeur suit le gyroscope ; ⌖ le recentre.</li>
+  </ul>
+</main>
+</body>
+</html>

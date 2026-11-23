@@ -16,6 +16,7 @@ in
     ./garminmap-backup.nix
     ./admin.nix
     ./pgweb.nix
+    ./wiimote.nix
   ];
 
   config = {
