@@ -2,7 +2,12 @@
 
 {
   systemSettings.hardware = {
-    intelGraphics.enable = true;
+    intelGraphics = {
+      enable = true;
+      # 12 W d'origine (DPTF) : Dolphin plafonne à ~1,4 GHz et saccade. 20 W : 95 °C et bridage thermique.
+      # 16 W : cœur à ~3,3 GHz, 75-84 °C, sans bridage (mesuré en jeu, 2026-11-23).
+      powerLimit = 16;
+    };
     displaylink.enable = true;
 
     lgLaptop = {
