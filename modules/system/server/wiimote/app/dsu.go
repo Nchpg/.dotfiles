@@ -240,27 +240,20 @@ func (s *server) update(slot int, st padState) {
 	}
 }
 
-// Le slot voulu s'il est libre (un téléphone qui se reconnecte garde son numéro de joueur), sinon le premier libre.
-func (s *server) claim(want int) int {
+// Toujours le premier slot libre : Dolphin lit les slots 0, 1… pour les Wii Remote 1, 2…, un trou laisserait
+// une manette sans Wii Remote. Un téléphone qui se reconnecte retrouve sa place une fois l'ancienne libérée.
+func (s *server) claim() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	slot := -1
-	if want >= 0 && want < slots && !s.used[want] {
-		slot = want
-	} else {
-		for i := range slots {
-			if !s.used[i] {
-				slot = i
-				break
-			}
+	for i := range slots {
+		if !s.used[i] {
+			s.used[i] = true
+			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
+			s.pads[i] = padState{pointer: [2]byte{128, 128}}
+			return i
 		}
 	}
-	if slot >= 0 {
-		s.used[slot] = true
-		// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
-		s.pads[slot] = padState{pointer: [2]byte{128, 128}}
-	}
-	return slot
+	return -1
 }
 
 // Relâche les boutons avant de libérer : sans ça, Dolphin garderait « 2 » enfoncé jusqu'à la disparition du périphérique.

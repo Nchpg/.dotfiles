@@ -213,7 +213,7 @@ let retry = true;
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${scheme}://${location.host}/ws`);
-  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', slot: Number(store('slot') ?? -1) }));
+  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '' }));
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return;
     const msg = JSON.parse(e.data);
@@ -223,7 +223,6 @@ function connect() {
       return;
     }
     lastError = '';
-    store('slot', String(msg.slot));
     showPlayer(msg.slot);
     overlay.hidden = true;
     navigator.vibrate?.([30, 60, 30]);
@@ -233,7 +232,8 @@ function connect() {
     showPlayer(-1);
     if (retry) {
       say(lastError || 'Connexion perdue, nouvelle tentative…');
-      setTimeout(connect, 1000);
+      // Après le délai du serveur (2 s sans nouvelles) : l'ancienne place est libérée, on la retrouve.
+      setTimeout(connect, 2500);
       return;
     }
     // Lien remplacé par l'hôte : on oublie l'ancien et on propose de scanner le nouveau.

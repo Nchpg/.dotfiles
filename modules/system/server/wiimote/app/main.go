@@ -122,10 +122,9 @@ func (s *server) invited(token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(s.currentInvite())) == 1
 }
 
-// Premier message du téléphone : le jeton d'invitation et le slot qu'il avait.
+// Premier message du téléphone : le jeton d'invitation.
 type hello struct {
 	Invite string `json:"invite"`
-	Slot   int    `json:"slot"`
 }
 
 func (s *server) phone(ws *websocket.Conn) {
@@ -139,7 +138,7 @@ func (s *server) phone(ws *websocket.Conn) {
 		websocket.JSON.Send(ws, map[string]any{"error": "Lien d'invitation invalide ou remplacé : scanne le QR code de l'hôte.", "retry": false})
 		return
 	}
-	slot := s.claim(h.Slot)
+	slot := s.claim()
 	if slot < 0 {
 		websocket.JSON.Send(ws, map[string]any{"error": "Déjà 4 manettes connectées.", "retry": true})
 		return

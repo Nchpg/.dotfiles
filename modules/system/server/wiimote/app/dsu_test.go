@@ -168,7 +168,7 @@ func TestPhoneToDolphin(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		websocket.JSON.Send(phone, hello{Invite: invite, Slot: 1})
+		websocket.JSON.Send(phone, hello{Invite: invite})
 		answer.Error = ""
 		if err := websocket.JSON.Receive(phone, &answer); err != nil {
 			t.Fatal(err)
@@ -189,12 +189,25 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatal("jeton révoqué accepté")
 	}
 
+	// Deux téléphones : Wii Remote 1 et 2, dans l'ordre.
+	first := connect(s.currentInvite())
+	if answer.Error != "" || answer.Slot != 0 {
+		t.Fatalf("premier téléphone sur le slot %d (%s)", answer.Slot, answer.Error)
+	}
 	phone := connect(s.currentInvite())
 	if answer.Error != "" || answer.Slot != 1 {
-		t.Fatalf("slot %d attribué au lieu de 1 (%s)", answer.Slot, answer.Error)
+		t.Fatalf("second téléphone sur le slot %d (%s)", answer.Slot, answer.Error)
 	}
-	if got := listPorts(); got[0] != 0 || got[1] != 2 {
+	if got := listPorts(); got[0] != 2 || got[1] != 2 {
 		t.Fatalf("états des slots : %v", got)
+	}
+
+	// Le premier part puis revient : il reprend le slot 0, sans trou que Dolphin ne lirait pas.
+	first.Close()
+	time.Sleep(50 * time.Millisecond)
+	connect(s.currentInvite())
+	if answer.Slot != 0 {
+		t.Fatalf("retour sur le slot %d au lieu de 0", answer.Slot)
 	}
 
 	// Abonnement au slot 1 (drapeau « par numéro »), puis un état envoyé par le téléphone.
