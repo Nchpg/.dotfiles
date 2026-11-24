@@ -328,15 +328,30 @@ func TestPhoneToDolphin(t *testing.T) {
 }
 
 func TestServerPlaysShake(t *testing.T) {
-	// Haut, bas, haut, dans le sens de la mesure (à plat, haut = −y), puis la mesure réelle.
+	// À plat (haut = −y) : la secousse relevée, interpolée, puis la mesure réelle.
 	still := [6]float32{0, -1, 0}
 	for _, c := range []struct {
-		at time.Duration
-		y  float32
-	}{{0, -2.2}, {150 * time.Millisecond, 2.5}, {250 * time.Millisecond, -2.8}, {time.Second, -1}} {
-		if got := shaken(still, c.at)[1]; math.Abs(float64(got-c.y)) > 1e-6 {
-			t.Errorf("secousse à %v : %v, attendu %v", c.at, got, c.y)
+		at      time.Duration
+		x, y, z float32
+	}{
+		{0, -0.29, -1.13, 0.02},
+		{199 * time.Millisecond, -1.07, 2.51, -0.17},
+		{307 * time.Millisecond, 1.13, -2.74, -0.075}, // entre 298 et 315 ms
+		{time.Second, 0, -1, 0},
+	} {
+		got := shaken(still, c.at)
+		if d := math.Abs(float64(got[0]-c.x)) + math.Abs(float64(got[1]-c.y)) + math.Abs(float64(got[2]-c.z)); d > 0.02 {
+			t.Errorf("secousse à %v : %v, attendu %v %v %v", c.at, got[:3], c.x, c.y, c.z)
 		}
+	}
+	// Tenu en volant (gravité sur x) : la même secousse, le long de la mesure.
+	wheel := shaken([6]float32{1, 0, 0}, 199*time.Millisecond)
+	if math.Abs(float64(wheel[0])+2.51) > 0.01 || math.Abs(float64(wheel[1])+1.07) > 0.01 {
+		t.Errorf("secousse en volant : %v, attendu -2,51 le long de la gravité", wheel[:3])
+	}
+	// Retournée : demi-tour.
+	if flipped := shaken([6]float32{0, 1, 0}, 199*time.Millisecond); math.Abs(float64(flipped[1])+2.51) > 0.01 {
+		t.Errorf("secousse retournée : %v", flipped[:3])
 	}
 
 	// L'appui lance la secousse dès le paquet suivant ; le bouton tenu ne la relance pas ; aucune entrée DSU.
@@ -347,8 +362,8 @@ func TestServerPlaysShake(t *testing.T) {
 	s.stateLocked(0, padState{buttons: shakeBit, motion: still})
 	again := s.shakeStart[0]
 	s.mu.Unlock()
-	if y := math.Float32frombits(le.Uint32(pkt[80:])); y > -2.1 {
-		t.Fatalf("accélération y %v au début de la secousse, attendu -2,2", y)
+	if y := math.Float32frombits(le.Uint32(pkt[80:])); math.Abs(float64(y)+1.13) > 0.01 {
+		t.Fatalf("accélération y %v au début de la secousse, attendu -1,13", y)
 	}
 	if !first.Equal(again) {
 		t.Fatal("le bouton tenu a relancé la secousse")
