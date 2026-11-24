@@ -29,7 +29,7 @@ const (
 
 var le = binary.LittleEndian
 
-// Bouton de la Wiimote (bit i du message de la PWA) → entrée DSU que lit Dolphin, et contrôle du profil.
+// Bouton de la Wiimote (bit i du message de la PWA) → entrée DSU que lit Dolphin, et contrôle(s) du profil.
 // Dolphin lit les faces, la croix et L1 en analogique ; les bits numériques servent aux autres clients DSU.
 var buttons = [...]struct {
 	control, input      string
@@ -47,6 +47,9 @@ var buttons = [...]struct {
 	{"D-Pad/Down", "Pad S", 45, 36, 0x40},
 	{"D-Pad/Left", "Pad W", 44, 36, 0x80},
 	{"D-Pad/Right", "Pad E", 46, 36, 0x20},
+	// Secouer au bouton : les trois axes, comme le clic du milieu par défaut de Dolphin. Elle s'ajoute aux
+	// capteurs du téléphone.
+	{"Shake/X Shake/Y Shake/Z", "L1", 53, 37, 0x04},
 }
 
 type padState struct {

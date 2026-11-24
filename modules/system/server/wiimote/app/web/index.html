@@ -34,6 +34,9 @@
     --paper-ink: #121314;
     --paper-soft: #6b6c70;
     --accent: #c6f135;
+    /* Unité de la manette : le vmin d'un téléphone (écran d'environ 2,1:1 ou plus allongé). Sur un écran plus
+       carré (tablette), la longueur la borne aussi : sinon tout déborde en largeur. */
+    --u: min(1vmin, calc(1vmax / 2.1));
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -84,14 +87,14 @@
   .remote {
     position: relative;
     height: 100%;
-    max-width: 62vmax;
+    max-width: calc(100 * var(--u));
     margin: 0 auto;
-    border-radius: 9vmin;
+    border-radius: calc(9 * var(--u));
     background: var(--body);
-    box-shadow: inset 0 0 0 1px var(--body-edge), inset 0 -1.5vmin 3vmin rgb(0 0 0 / .08);
+    box-shadow: inset 0 0 0 1px var(--body-edge), inset 0 calc(-1.5 * var(--u)) calc(3 * var(--u)) rgb(0 0 0 / .08);
     display: grid;
-    gap: 2vmin;
-    padding: 5vmin 4vmin;
+    gap: calc(2 * var(--u));
+    padding: calc(5 * var(--u)) calc(4 * var(--u));
     grid-template-columns: 1fr 1fr 1fr;
     grid-template-rows: 3fr 1.6fr 1.3fr 1fr 1.4fr 1.4fr .4fr .7fr;
     grid-template-areas:
@@ -102,7 +105,7 @@
       "one   one  one"
       "two   two  two"
       "leds  leds leds"
-      "rec   rec  rec";
+      "shake .    rec";
   }
   button {
     font: inherit;
@@ -110,69 +113,76 @@
     border: 0;
     padding: 0;
     background: var(--btn);
-    box-shadow: 0 .6vmin 0 var(--btn-edge), 0 .8vmin 1.6vmin rgb(0 0 0 / .18);
+    box-shadow: 0 calc(.6 * var(--u)) 0 var(--btn-edge), 0 calc(.8 * var(--u)) calc(1.6 * var(--u)) rgb(0 0 0 / .18);
     place-self: center;
     transition: transform 40ms, box-shadow 40ms, background 40ms;
   }
   button.on {
     background: var(--btn-on);
-    transform: translateY(.5vmin);
-    box-shadow: 0 .1vmin 0 var(--btn-edge), 0 .2vmin .6vmin rgb(0 0 0 / .2);
+    transform: translateY(calc(.5 * var(--u)));
+    box-shadow: 0 calc(.1 * var(--u)) 0 var(--btn-edge), 0 calc(.2 * var(--u)) calc(.6 * var(--u)) rgb(0 0 0 / .2);
   }
 
   .dpad {
     grid-area: dpad;
     place-self: center;
     display: grid;
-    grid-template: repeat(3, 14vmin) / repeat(3, 14vmin);
+    grid-template: repeat(3, calc(14 * var(--u))) / repeat(3, calc(14 * var(--u)));
+    /* Une ombre pour toute la croix : celle de chaque flèche tombait sur le centre (trait sous le haut). */
+    filter: drop-shadow(0 calc(.6 * var(--u)) 0 var(--btn-edge));
   }
-  .dpad button { width: 100%; height: 100%; border-radius: 1.5vmin; box-shadow: 0 .6vmin 0 var(--btn-edge); }
-  .dpad::before { content: ""; grid-area: 2 / 2; background: var(--btn); }
-  .dpad [data-dir="up"] { grid-area: 1 / 2; border-radius: 1.5vmin 1.5vmin 0 0; }
-  .dpad [data-dir="left"] { grid-area: 2 / 1; border-radius: 1.5vmin 0 0 1.5vmin; }
-  .dpad [data-dir="right"] { grid-area: 2 / 3; border-radius: 0 1.5vmin 1.5vmin 0; }
-  .dpad [data-dir="down"] { grid-area: 3 / 2; border-radius: 0 0 1.5vmin 1.5vmin; }
-  .dpad button::after { content: ""; display: block; margin: auto; border: 2vmin solid transparent; width: 0; height: 0; }
-  .dpad [data-dir="up"]::after { border-bottom-color: var(--ink); margin-top: 2vmin; }
-  .dpad [data-dir="down"]::after { border-top-color: var(--ink); margin-bottom: 2vmin; }
-  .dpad [data-dir="left"]::after { border-right-color: var(--ink); margin-left: 2vmin; }
-  .dpad [data-dir="right"]::after { border-left-color: var(--ink); margin-right: 2vmin; }
+  .dpad button { width: 100%; height: 100%; border-radius: calc(1.5 * var(--u)); box-shadow: none; }
+  .dpad button.on { transform: none; box-shadow: none; }
+  /* Déborde sous les flèches : sans quoi un liseré du fond passe entre elles et le centre (pixels fractionnaires). */
+  .dpad::before { content: ""; grid-area: 2 / 2; margin: -1px; background: var(--btn); }
+  .dpad [data-dir="up"] { grid-area: 1 / 2; border-radius: calc(1.5 * var(--u)) calc(1.5 * var(--u)) 0 0; }
+  .dpad [data-dir="left"] { grid-area: 2 / 1; border-radius: calc(1.5 * var(--u)) 0 0 calc(1.5 * var(--u)); }
+  .dpad [data-dir="right"] { grid-area: 2 / 3; border-radius: 0 calc(1.5 * var(--u)) calc(1.5 * var(--u)) 0; }
+  .dpad [data-dir="down"] { grid-area: 3 / 2; border-radius: 0 0 calc(1.5 * var(--u)) calc(1.5 * var(--u)); }
+  .dpad button::after { content: ""; display: block; margin: auto; border: calc(2 * var(--u)) solid transparent; width: 0; height: 0; }
+  .dpad [data-dir="up"]::after { border-bottom-color: var(--ink); margin-top: calc(2 * var(--u)); }
+  .dpad [data-dir="down"]::after { border-top-color: var(--ink); margin-bottom: calc(2 * var(--u)); }
+  .dpad [data-dir="left"]::after { border-right-color: var(--ink); margin-left: calc(2 * var(--u)); }
+  .dpad [data-dir="right"]::after { border-left-color: var(--ink); margin-right: calc(2 * var(--u)); }
 
-  .a { grid-area: a; width: 25vmin; height: 25vmin; border-radius: 50%; font-size: 9vmin; }
+  .a { grid-area: a; width: calc(25 * var(--u)); height: calc(25 * var(--u)); border-radius: 50%; font-size: calc(9 * var(--u)); }
   .b {
     grid-area: b;
     width: 55%;
     height: 85%;
-    border-radius: 6vmin;
-    font-size: 8vmin;
+    border-radius: calc(6 * var(--u));
+    font-size: calc(8 * var(--u));
     background: color-mix(in srgb, var(--btn) 82%, #000);
   }
   .b.on { background: color-mix(in srgb, var(--btn) 68%, #000); }
-  .minus, .plus, .home { width: 12vmin; height: 12vmin; border-radius: 50%; font-size: 7vmin; }
+  .minus, .plus, .home { width: calc(12 * var(--u)); height: calc(12 * var(--u)); border-radius: 50%; font-size: calc(7 * var(--u)); }
   .minus { grid-area: minus; }
   .plus { grid-area: plus; }
   .home { grid-area: home; color: var(--home); }
-  .home svg { width: 6vmin; height: 6vmin; display: block; margin: auto; fill: currentColor; }
-  .one, .two { width: 24vmin; height: 24vmin; border-radius: 50%; font-size: 9vmin; }
+  .home svg { width: calc(6 * var(--u)); height: calc(6 * var(--u)); display: block; margin: auto; fill: currentColor; }
+  .one, .two { width: calc(24 * var(--u)); height: calc(24 * var(--u)); border-radius: 50%; font-size: calc(9 * var(--u)); }
   .one { grid-area: one; }
   .two { grid-area: two; }
-  .recenter { grid-area: rec; width: 30vmin; height: 9vmin; border-radius: 4.5vmin; font-size: 6vmin; }
+  .recenter, .shake { width: calc(24 * var(--u)); height: calc(9 * var(--u)); border-radius: calc(4.5 * var(--u)); font-size: calc(6 * var(--u)); }
+  .recenter { grid-area: rec; }
+  .shake { grid-area: shake; }
+  .shake svg { width: calc(6 * var(--u)); height: calc(6 * var(--u)); display: block; margin: auto; }
 
-  .leds { grid-area: leds; place-self: center; display: flex; gap: 2.4vmin; }
-  .leds i { width: 3.6vmin; height: 2vmin; border-radius: .6vmin; background: var(--led-off); }
-  .leds i.on { background: var(--led); box-shadow: 0 0 2vmin var(--led); }
+  .leds { grid-area: leds; place-self: center; display: flex; gap: calc(2.4 * var(--u)); }
+  .leds i { width: calc(3.6 * var(--u)); height: calc(2 * var(--u)); border-radius: calc(.6 * var(--u)); background: var(--led-off); }
+  .leds i.on { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); }
 
   /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
   .mode, .theme {
     position: absolute;
-    top: 3.5vmin;
-    right: 3.5vmin;
-    width: 10vmin;
-    height: 10vmin;
+    top: calc(3.5 * var(--u));
+    right: calc(3.5 * var(--u));
+    width: calc(10 * var(--u));
+    height: calc(10 * var(--u));
     border-radius: 50%;
   }
-  .theme { right: 15.5vmin; }
-  .mode svg, .theme svg { width: 5.5vmin; height: 5.5vmin; display: block; margin: auto; fill: currentColor; }
+  .theme { right: calc(15.5 * var(--u)); }
+  .mode svg, .theme svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 et 2 sous le pouce droit.
      Après les règles de base, qu'il remplace. */
@@ -181,17 +191,20 @@
     grid-template-columns: 1.7fr 1fr .7fr 1.2fr 1.2fr .3fr;
     grid-template-rows: 1fr 1fr 1fr;
     grid-template-areas:
-      "dpad a plus  one two leds"
-      "dpad a home  one two leds"
-      "b    b minus one two leds";
+      "dpad a     plus  one two leds"
+      "dpad shake home  one two leds"
+      "b    b     minus one two leds";
   }
   .sideways .recenter { display: none; }
   /* De côté (croix à gauche), le flanc gauche de la Wiimote debout, celui de la diode 1, passe en bas. */
   .sideways .leds { flex-direction: column-reverse; }
   .sideways .b { width: 88%; height: 70%; }
-  .sideways .one, .sideways .two { width: 32vmin; height: 32vmin; font-size: 11vmin; }
+  /* Secouer (figure, saut) : sous le pouce gauche, libre quand le droit tient 2 pour accélérer. */
+  .sideways .shake { width: calc(20 * var(--u)); height: calc(20 * var(--u)); border-radius: 50%; }
+  .sideways .shake svg { width: calc(9 * var(--u)); height: calc(9 * var(--u)); }
+  .sideways .one, .sideways .two { width: calc(32 * var(--u)); height: calc(32 * var(--u)); font-size: calc(11 * var(--u)); }
   /* Croix plus grande à l'horizontale, où elle sert à se déplacer (Mario). */
-  .sideways .dpad { grid-template: repeat(3, 17vmin) / repeat(3, 17vmin); }
+  .sideways .dpad { grid-template: repeat(3, calc(17 * var(--u))) / repeat(3, calc(17 * var(--u))); }
 
   /* Dans la scène : tourne avec elle. */
   .overlay {
@@ -281,6 +294,9 @@
     <button class="plus" data-btn="+" aria-label="Plus">+</button>
     <button class="one" data-btn="1">1</button>
     <button class="two" data-btn="2">2</button>
+    <button class="shake" data-btn="Shake" aria-label="Secouer">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l3-5 4 10 4-10 4 10 3-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
     <button class="recenter" id="aim" aria-label="Calibrer le pointeur sur les coins de l'écran">⌖</button>
   </main>

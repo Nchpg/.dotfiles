@@ -61,19 +61,18 @@ export function aimPosition([h, e], topLeft, bottomRight) {
   ];
 }
 
-const DIRECTIONS = [['right'], ['right', 'down'], ['down'], ['down', 'left'], ['left'], ['left', 'up'], ['up'], ['up', 'right']];
+const DIRECTIONS = ['right', 'down', 'left', 'up'];
 
-// Croix tactile : directions (telles que dessinées) pour un doigt à (dx, dy) du centre, en pixels d'écran, y
-// vers le bas. `radius` : demi-largeur de la croix ; `rotation` : rotation CSS de l'interface (°, horaire).
-// Huit secteurs de 45°, diagonales comprises ; rien au centre ni au-delà de 1,2 rayon.
-export function dpadDirections(dx, dy, radius, rotation) {
+// Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels
+// d'écran, y vers le bas. `radius` : demi-largeur de la croix ; `rotation` : rotation CSS de l'interface (°,
+// horaire). Une seule à la fois, pas de diagonale par mégarde ; rien au centre ni au-delà de 1,2 rayon.
+export function dpadDirection(dx, dy, radius, rotation) {
   const distance = Math.hypot(dx, dy);
-  if (distance < radius * 0.16 || distance > radius * 1.2) return [];
+  if (distance < radius * 0.16 || distance > radius * 1.2) return null;
   const a = rotation * RAD;
   const x = dx * Math.cos(a) + dy * Math.sin(a);
   const y = -dx * Math.sin(a) + dy * Math.cos(a);
-  const sector = Math.round(Math.atan2(y, x) / (Math.PI / 4));
-  return DIRECTIONS[(sector + 8) % 8];
+  return DIRECTIONS[(Math.round(Math.atan2(y, x) / (Math.PI / 2)) + 4) % 4];
 }
 
 // Verticale (unitaire, vers le haut) dans le repère du téléphone, d'après beta et gamma de deviceorientation.

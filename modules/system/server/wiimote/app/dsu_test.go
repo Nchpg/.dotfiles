@@ -77,7 +77,7 @@ func TestDecodeRejectsBadInput(t *testing.T) {
 
 func TestProfile(t *testing.T) {
 	p := profile(1)
-	for _, want := range []string{"Device = DSUClient/1/Telephone", "Buttons/2 = `Triangle`", "D-Pad/Up = `Pad N`",
+	for _, want := range []string{"Device = DSUClient/1/Telephone", "Buttons/2 = `Triangle`", "D-Pad/Up = `Pad N`", "Shake/X = `L1`", "Shake/Z = `L1`",
 		"IMUAccelerometer/Forward = `Accel Forward`", "IMUGyroscope/Yaw Right = `Gyro Yaw Right`",
 		"IR/Up = `Right Y+`", "IR/Left = `Right X-`", "IMUIR/Enabled = False"} {
 		if !strings.Contains(p, want) {

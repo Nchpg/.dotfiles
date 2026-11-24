@@ -1,7 +1,11 @@
-import { G, aimAngles, aimPosition, dpadDirections, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
-const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
+const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10, Shake: 11 };
+const SHAKE = 1 << BIT.Shake;
+// Une tape brève pourrait tomber entre deux lectures de Dolphin, ou ne pas suffire au jeu pour voir une
+// secousse : tenue au moins ce temps.
+const SHAKE_MIN_MS = 200;
 
 // Flèche vue à l'écran → bouton de la Wiimote. De côté, son haut (côté capteur) est à gauche.
 const DPAD = {
@@ -21,6 +25,7 @@ const leds = [...document.querySelectorAll('.leds i')];
 const pointers = new Map();
 const packet = new DataView(new ArrayBuffer(28));
 let buttons = 0;
+let shakeUntil = 0;
 let motion = [0, -1, 0, 0, 0, 0];
 // Pointeur envoyé sur le stick droit (128 : centre), calé par le calibrage du bouton ⌖.
 let aim = [128, 128];
@@ -138,8 +143,8 @@ aimButton.addEventListener('click', () => {
 const dpad = document.querySelector('.dpad');
 
 // Recalculé à chaque contact : glisser d'un bouton à l'autre et appuyer à plusieurs doigts marchent.
-// La croix se lit à l'angle du doigt (diagonales comprises, zone plus large que son dessin) ; un autre bouton
-// sous le doigt garde la priorité.
+// La croix se lit à l'angle du doigt (direction la plus proche, zone plus large que son dessin) ; un autre
+// bouton sous le doigt garde la priorité.
 function refreshButtons() {
   const pressed = new Set();
   let next = 0;
@@ -151,16 +156,22 @@ function refreshButtons() {
       next |= 1 << BIT[el.dataset.btn];
       continue;
     }
-    const dirs = dpadDirections(
+    const dir = dpadDirection(
       x - (box.left + box.width / 2),
       y - (box.top + box.height / 2),
       box.width / 2,
       hold - liveAngle(),
     );
-    for (const dir of dirs) {
+    if (dir) {
       pressed.add(dpad.querySelector(`[data-dir="${dir}"]`));
       next |= 1 << BIT[DPAD[mode][dir]];
     }
+  }
+  const now = performance.now();
+  if (next & ~buttons & SHAKE) shakeUntil = now + SHAKE_MIN_MS;
+  if (!(next & SHAKE) && now < shakeUntil) {
+    next |= SHAKE;
+    setTimeout(refreshButtons, shakeUntil - now);
   }
   for (const el of document.querySelectorAll('[data-btn], [data-dir]')) {
     el.classList.toggle('on', pressed.has(el));
