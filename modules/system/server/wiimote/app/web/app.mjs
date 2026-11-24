@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, toLocal, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, toLocal, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -101,6 +101,34 @@ document.getElementById('pad').addEventListener('click', () => {
 // Volant tenu : position du joystick (−1 à 1), qui remplace l'inclinaison ; null : l'inclinaison reprend.
 let steer = null;
 
+// Réglages du panneau ⚙, mémorisés : B à côté de A, sensibilités de l'inclinaison et du joystick volant.
+const panel = document.getElementById('panel');
+const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
+const settings = { bByA: store('bByA') === '1', tilt: gain('tilt'), stick: gain('stick') };
+const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
+function showSettings() {
+  document.body.classList.toggle('b-by-a', settings.bByA);
+  document.getElementById('bByA').checked = settings.bByA;
+  for (const key of ['tilt', 'stick']) {
+    document.getElementById(key).value = settings[key];
+    document.getElementById(`${key}Out`).textContent = times(settings[key]);
+  }
+}
+showSettings();
+document.getElementById('settingsForm').addEventListener('input', (e) => {
+  if (e.target.id === 'bByA') {
+    settings.bByA = e.target.checked;
+    store('bByA', settings.bByA ? '1' : '0');
+  } else {
+    settings[e.target.id] = Number(e.target.value);
+    store(e.target.id, e.target.value);
+  }
+  showSettings();
+  send();
+});
+document.getElementById('settings').addEventListener('click', () => { panel.hidden = false; });
+document.getElementById('closeSettings').addEventListener('click', () => { panel.hidden = true; });
+
 modeButton.addEventListener('click', () => {
   mode = mode === 'sideways' ? 'vertical' : 'sideways';
   hold = mode === 'sideways' ? 90 : 0;
@@ -117,7 +145,10 @@ function say(text) {
 function send() {
   if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   packet.setUint16(0, buttons, true);
-  (steer === null ? motion : wheelMotion(steer)).forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
+  const out = steer !== null ? wheelMotion(steer * settings.stick)
+    : mode === 'sideways' ? tiltGain(motion, settings.tilt)
+    : motion;
+  out.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
   packet.setUint8(26, aim[0]);
   packet.setUint8(27, aim[1]);
   ws.send(packet.buffer);
@@ -231,6 +262,8 @@ const untrack = (e) => {
 // Joystick : le pouce posé dessus (ou tout près) le garde jusqu'à ce qu'il se lève, même en débordant.
 const stickPointers = new Set();
 addEventListener('pointerdown', (e) => {
+  // Panneau des réglages ouvert : la manette ne réagit pas.
+  if (!panel.hidden) return;
   if (control !== 'dpad' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
     const box = joystick.getBoundingClientRect();
     const r = box.width / 2;

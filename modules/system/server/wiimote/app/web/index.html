@@ -173,7 +173,7 @@
   .leds i.on { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); }
 
   /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
-  .mode, .theme, .pad {
+  .mode, .theme, .pad, .settings {
     position: absolute;
     top: calc(3.5 * var(--u));
     right: calc(3.5 * var(--u));
@@ -182,8 +182,10 @@
     border-radius: 50%;
   }
   .theme { right: calc(15.5 * var(--u)); }
-  .pad { right: calc(27.5 * var(--u)); }
-  .mode svg, .theme svg, .pad svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
+  /* Réglages et croix/joystick : à gauche à la verticale, où la croix (ou le joystick) laisse le coin libre. */
+  .settings { right: auto; left: calc(3.5 * var(--u)); }
+  .pad { right: auto; left: calc(15.5 * var(--u)); }
+  .mode svg, .theme svg, .pad svg, .settings svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
 
   /* Joystick, à la place de la croix (bouton en haut) : le pouce glisse, la croix sort de la même manière. */
   .joystick {
@@ -229,7 +231,8 @@
   .sideways .leds { flex-direction: column-reverse; align-self: end; }
   /* Réglages empilés sur le bord droit : la colonne de 1 et 2 monte jusqu'en haut. */
   .sideways .theme { right: calc(3.5 * var(--u)); top: calc(15.5 * var(--u)); }
-  .sideways .pad { right: calc(3.5 * var(--u)); top: calc(27.5 * var(--u)); }
+  .sideways .pad { left: auto; right: calc(3.5 * var(--u)); top: calc(27.5 * var(--u)); }
+  .sideways .settings { left: auto; right: calc(3.5 * var(--u)); top: calc(39.5 * var(--u)); }
   .sideways .a { width: calc(26 * var(--u)); height: calc(26 * var(--u)); }
   .sideways .b { width: 90%; height: 78%; }
   .sideways .minus, .sideways .plus, .sideways .home { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
@@ -240,6 +243,53 @@
   /* Croix plus grande à l'horizontale, où elle sert à se déplacer (Mario). */
   .sideways .dpad { grid-template: repeat(3, calc(18 * var(--u))) / repeat(3, calc(18 * var(--u))); }
   .sideways .joystick { width: calc(55 * var(--u)); }
+  /* Option « B à côté de A » : B sous Secouer, la croix (ou le joystick) seule à gauche, centrée et agrandie. */
+  body.sideways.b-by-a .remote {
+    grid-template-areas:
+      "dpad a     plus  one leds"
+      "dpad a     plus  one leds"
+      "dpad shake home  one leds"
+      "dpad shake home  two leds"
+      "dpad b     minus two leds"
+      "dpad b     minus two leds";
+  }
+  /* À côté de A, B garde sa forme large mais prend la couleur des boutons de face. */
+  .sideways.b-by-a .b { width: 92%; height: 70%; background: var(--btn); }
+  .sideways.b-by-a .b.on { background: var(--btn-on); }
+  .sideways.b-by-a .dpad { grid-template: repeat(3, calc(20 * var(--u))) / repeat(3, calc(20 * var(--u))); }
+  .sideways.b-by-a .joystick { width: calc(62 * var(--u)); }
+
+  /* Panneau des réglages (⚙), dans la scène comme l'écran d'accueil. */
+  .panel {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    padding: 1.5rem;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    font-family: "Bricolage", system-ui, sans-serif;
+    touch-action: manipulation;
+  }
+  .panel[hidden] { display: none; }
+  .panel form {
+    display: grid;
+    gap: 1.1rem;
+    width: min(88vw, 24rem);
+    padding: 1.4rem 1.5rem;
+    border-radius: 18px;
+    background: var(--paper);
+    color: var(--paper-ink);
+    box-shadow: 0 1rem 3rem rgb(0 0 0 / .35);
+  }
+  .panel h2 { margin: 0; font-size: 1.4rem; font-weight: 760; letter-spacing: -.02em; }
+  .panel label { display: grid; gap: .45rem; font-weight: 500; }
+  .panel label span { display: flex; justify-content: space-between; gap: 1rem; }
+  .panel label small { color: var(--paper-soft); font-weight: 400; }
+  .panel output { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .panel .check { grid-template-columns: auto 1fr; align-items: center; column-gap: .7rem; }
+  .panel input { accent-color: var(--accent); }
+  .panel input[type="checkbox"] { width: 1.3rem; height: 1.3rem; margin: 0; }
+  .panel input[type="range"] { width: 100%; margin: 0; }
 
   /* Dans la scène : tourne avec elle. */
   .overlay {
@@ -259,7 +309,7 @@
   .overlay h1 { margin: 0; font-size: 2.6rem; font-weight: 760; line-height: .95; letter-spacing: -.04em; }
   .overlay h1 i { font-style: normal; color: var(--accent); }
   .overlay p { margin: 0; max-width: 22rem; color: var(--paper-soft); font-weight: 400; line-height: 1.5; }
-  .overlay .start {
+  .overlay .start, .panel .start {
     justify-self: center;
     min-width: 13rem;
     padding: .95rem 2rem;
@@ -314,6 +364,9 @@
     <button class="mode" id="mode" aria-label="Passer de la tenue horizontale à la verticale">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
     </button>
+    <button class="settings" id="settings" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+    </button>
     <button class="pad" id="pad" aria-label="Croix, joystick ou volant">
       <svg class="for-dpad" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>
       <svg class="for-stick" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
@@ -341,6 +394,22 @@
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
     <button class="recenter" id="aim" aria-label="Calibrer le pointeur sur les coins de l'écran">⌖</button>
   </main>
+
+  <div class="panel" id="panel" hidden>
+    <form id="settingsForm">
+      <h2>Réglages</h2>
+      <label class="check"><input type="checkbox" id="bByA"><span>B à côté de A <small>croix seule à gauche</small></span></label>
+      <label>
+        <span>Inclinaison pour tourner <output id="tiltOut"></output></span>
+        <input type="range" id="tilt" min="0.5" max="2" step="0.1">
+      </label>
+      <label>
+        <span>Joystick en mode volant <output id="stickOut"></output></span>
+        <input type="range" id="stick" min="0.5" max="2" step="0.1">
+      </label>
+      <button class="start" id="closeSettings" type="button">OK</button>
+    </form>
+  </div>
 
   <div class="overlay" id="overlay">
     <h1>Wiimote<i>.</i></h1>

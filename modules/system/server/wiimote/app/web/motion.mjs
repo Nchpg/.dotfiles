@@ -62,11 +62,24 @@ export function aimPosition([h, e], topLeft, bottomRight) {
 }
 
 // Volant au joystick (Mario Kart) : ce que mesurerait le téléphone tenu en volant, écran face à soi, tourné de
-// `s` (−1 à 1, vers la droite) fois cet angle. Valeurs DSU, comme `toDSU` ; gyroscope à zéro.
+// `s` (−1 à 1 à sensibilité ×1, vers la droite) fois cet angle. Valeurs DSU, comme `toDSU` ; gyroscope à zéro.
 const WHEEL_MAX = 50;
+// Au-delà, le volant passerait à l'envers.
+const WHEEL_LIMIT = 85;
+const clampAngle = (deg) => Math.max(-WHEEL_LIMIT, Math.min(WHEEL_LIMIT, deg)) * RAD;
 export function wheelMotion(s) {
-  const t = s * WHEEL_MAX * RAD;
+  const t = clampAngle(s * WHEEL_MAX);
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
+}
+
+// Sensibilité de l'inclinaison (tenue en volant) : l'angle du volant, mesuré dans le plan de l'écran, multiplié
+// par `k`. La part hors de ce plan (téléphone penché vers soi) et le gyroscope sont gardés.
+export function tiltGain(motion, k) {
+  const [x, y, z] = motion;
+  const r = Math.hypot(x, z);
+  if (k === 1 || r === 0) return motion;
+  const t = clampAngle((Math.atan2(z, -x) / RAD) * k);
+  return [-r * Math.cos(t), y, r * Math.sin(t), ...motion.slice(3)];
 }
 
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
