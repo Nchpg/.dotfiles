@@ -34,11 +34,23 @@ let
 
       read_attr() { cat "$1" 2>/dev/null || true; }
 
-      # Limite de puissance (PL1) en vigueur, qui suit le profil (cf. intelGraphics.powerLimit).
+      # Mode performance-max : profil performance et plancher de puissance (cf. intelGraphics.powerLimit).
+      MAX=/var/lib/power-limit/performance-max
+      FLOOR=/run/power-limit/floor
+
+      profile_label() {
+        if [ "$1" = performance ] && [ -e "$FLOOR" ]; then printf 'performance-max'; else printf '%s' "''${1:-?}"; fi
+      }
+
+      # Plafond de puissance (PL1) que pose thermald selon la température, et en performance-max le plancher qui
+      # l'empêche de descendre plus bas.
       power_label() {
-        local uw
+        local uw floor
         uw=$(read_attr /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw)
-        if [ -n "$uw" ]; then printf '%s W' "$((uw / 1000000))"; else printf '?'; fi
+        floor=$(read_attr "$FLOOR")
+        if [ -z "$uw" ]; then printf '?'; return; fi
+        printf '%s W' "$((uw / 1000000))"
+        if [ -n "$floor" ]; then printf ' (min %s W)' "$((floor / 1000000))"; fi
       }
 
       choose_fan() {
@@ -55,11 +67,19 @@ let
         mapfile -t profs < <(powerprofilesctl list 2>/dev/null \
           | grep -oP '^\s*\*?\s*\K[a-z-]+(?=:)')
         if [ "''${#profs[@]}" -eq 0 ]; then return 0; fi
+        if [ -w "$MAX" ]; then profs+=("performance-max"); fi
         local cur sel
-        cur=$(powerprofilesctl get 2>/dev/null || true)
-        sel=$(gum choose --header "Profil d'alimentation (actuel : ''${cur:-?})" \
+        cur=$(profile_label "$(powerprofilesctl get 2>/dev/null || true)")
+        sel=$(gum choose --header "Profil d'alimentation (actuel : $cur)" \
           "''${profs[@]}") || return 0
-        if [ -n "$sel" ]; then powerprofilesctl set "$sel" 2>/dev/null || true; fi
+        [ -n "$sel" ] || return 0
+        if [ "$sel" = performance-max ]; then
+          printf '1\n' > "$MAX"
+          sel=performance
+        elif [ -w "$MAX" ]; then
+          printf '0\n' > "$MAX"
+        fi
+        powerprofilesctl set "$sel" 2>/dev/null || true
         # Le temps que la limite de puissance suive, avant de la réafficher.
         sleep 0.5
       }
@@ -74,8 +94,8 @@ let
         fan=$(read_attr "$SYS/fan_mode")
         prof=$(powerprofilesctl get 2>/dev/null || true)
         gum style --bold --foreground "${c.base0D}" "  LG Power Control"
-        printf '  Ventilateur  %s (%s)\n  Profil       %s\n  Puissance    %s\n\n' \
-          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "''${prof:-?}" "$(power_label)"
+        printf '  Ventilateur     %s (%s)\n  Profil          %s\n  Puissance max   %s\n\n' \
+          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "$(profile_label "$prof")" "$(power_label)"
         choice=$(gum choose "Ventilateur" "Profil d'alimentation" "Quitter") || break
         case "$choice" in
           "Ventilateur") choose_fan ;;

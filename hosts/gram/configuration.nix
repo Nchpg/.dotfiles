@@ -4,10 +4,11 @@
   systemSettings.hardware = {
     intelGraphics = {
       enable = true;
-      # 12 W d'origine (DPTF) : Dolphin plafonne à ~1,4 GHz et saccade. 20 W : 95 °C et bridage thermique.
+      # thermald (DPTF) varie de ~12 W (chaud, en jeu) à 28 W (à froid) : à 12 W, Dolphin plafonne à ~1,4 GHz et
+      # saccade. 20 W : 95 °C et bridage thermique.
       # 16 W : courses fluides (~3,3 GHz, 75-84 °C) mais menus à vidéo saccadés (cœur à ~1,5 GHz, bridage pl1).
       # 18 W : compromis retenu (mesures du 2026-11-23). Plafond, pas consommation : sans charge, rien ne change.
-      # En profil performance seulement (lg-control, $mod+Shift+p) ; 12 W dans les autres.
+      # Plancher en performance-max seulement (lg-control, $mod+Shift+p) ; ailleurs, thermald seul.
       powerLimit = 18;
     };
     displaylink.enable = true;
