@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, stickDirections, toLocal, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, shake, SHAKE_MS, stickDirections, toLocal, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
 const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
@@ -23,7 +23,7 @@ const leds = [...document.querySelectorAll('.leds i')];
 const pointers = new Map();
 const packet = new DataView(new ArrayBuffer(28));
 let buttons = 0;
-// Bouton Secouer : pas de bit, le téléphone ajoute lui-même un coup sec à ses mesures (cf. `flick`).
+// Bouton Secouer : pas de bit, le téléphone remplace ses mesures par une vraie secousse (cf. `shake`).
 let shaking = false;
 let flickStart = -Infinity;
 let motion = [0, -1, 0, 0, 0, 0];
@@ -111,7 +111,7 @@ function say(text) {
 function send() {
   if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   packet.setUint16(0, buttons, true);
-  const accel = flick(motion.slice(0, 3), performance.now() - flickStart);
+  const accel = shake(motion.slice(0, 3), performance.now() - flickStart);
   [...accel, ...motion.slice(3)].forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
   packet.setUint8(26, aim[0]);
   packet.setUint8(27, aim[1]);
@@ -193,9 +193,12 @@ function refreshButtons() {
   }
   const shake = pressed.has(shakeButton);
   if (shake && !shaking) {
+    // Envoi cadencé pendant la secousse : juste après un appui, le capteur peut se taire 100 ms. Sans
+    // vibration, qui se lirait dans l'accéléromètre.
     flickStart = performance.now();
-    navigator.vibrate?.(12);
     send();
+    const timer = setInterval(send, 10);
+    setTimeout(() => clearInterval(timer), SHAKE_MS + 20);
   }
   shaking = shake;
   knob.style.transform = `translate(${thumb[0]}px, ${thumb[1]}px)`;

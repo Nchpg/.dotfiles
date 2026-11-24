@@ -61,15 +61,19 @@ export function aimPosition([h, e], topLeft, bottomRight) {
   ];
 }
 
-// Coup sec vers le haut, comme relevé sur un téléphone qu'on lève d'un geste (roue arrière et figures de Mario
-// Kart, secousses de Mario) : la mesure monte vers 2,6 g pendant 100 ms, puis retombe vers 0,4 g pendant 100 ms.
-// `t` : ms depuis l'appui. Ajouté dans le sens de l'accélération mesurée, donc vers le haut réel quelle que soit
-// la tenue. Le jeu ne lit que l'accéléromètre de la Wiimote : rien à simuler côté gyroscope.
-export function flick([x, y, z], t) {
-  const extra = t < 0 ? 0 : t < 100 ? 1.6 : t < 200 ? -0.6 : 0;
+// Secousse relevée sur un vrai téléphone, celle qui fait voler le casque hélice de Mario : la mesure vers le haut
+// passe à +2,2 g, puis −2,5 g (la main redescend plus vite que la chute), puis +2,8 g, en 380 ms. Un simple coup
+// vers le haut suffit à Mario Kart, pas à Mario. [fin (ms depuis l'appui), mesure vers le haut (g)].
+const SHAKE = [[90, 2.2], [190, -2.5], [320, 2.8], [380, 1.6]];
+export const SHAKE_MS = SHAKE.at(-1)[0];
+
+// Mesure `accel` (g) pendant la secousse, `t` ms après l'appui : remplacée dans le sens de l'accélération mesurée,
+// donc le haut réel quelle que soit la tenue. Le jeu ne lit que l'accéléromètre de la Wiimote : pas de gyroscope.
+export function shake([x, y, z], t) {
+  const step = t >= 0 && SHAKE.find(([end]) => t < end);
   const g = Math.hypot(x, y, z);
-  if (!extra || !g) return [x, y, z];
-  const k = 1 + extra / g;
+  if (!step || !g) return [x, y, z];
+  const k = step[1] / g;
   return [x * k, y * k, z * k];
 }
 
