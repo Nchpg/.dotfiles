@@ -74,7 +74,7 @@ let
         fan=$(read_attr "$SYS/fan_mode")
         prof=$(powerprofilesctl get 2>/dev/null || true)
         gum style --bold --foreground "${c.base0D}" "  LG Power Control"
-        printf '  Ventilateur : %s (%s)    Profil : %s    Puissance : %s\n\n' \
+        printf '  Ventilateur  %s (%s)\n  Profil       %s\n  Puissance    %s\n\n' \
           "''${fan:-?}" "$(fan_label "''${fan:-x}")" "''${prof:-?}" "$(power_label)"
         choice=$(gum choose "Ventilateur" "Profil d'alimentation" "Quitter") || break
         case "$choice" in

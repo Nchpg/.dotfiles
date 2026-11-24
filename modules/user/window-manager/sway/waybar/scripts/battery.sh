@@ -59,6 +59,9 @@ case "$ppd" in
     *'"balanced"')    profile="Équilibré" ;;
     *'"power-saver"') profile="Économie" ;;
 esac
+# Limite de puissance (PL1) en vigueur, qui suit le profil (intelGraphics.powerLimit) ; absente hors Intel
+pl1=""
+read -r pl1 2>/dev/null </sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw || true
 
 # Ventilateurs : hwmon instable, on cherche l'acpi_fan dont fan1_input est
 # numérique (deux existent). La « vitesse » ACPI de ce LG est fausse (10 000
@@ -82,7 +85,11 @@ esac
 tooltip="${capacity}%"
 [[ -n "$time_str" ]] && tooltip+="  ·  ${time_str}"
 [[ -n "$health" ]] && tooltip+=$'\n'"Santé ${health}%  ·  ${cycles} cycles"
-[[ -n "$profile" ]] && tooltip+=$'\n'"Profil  ${profile}"
+if [[ -n "$profile" ]]; then
+    profile_line="Profil  ${profile}"
+    [[ $pl1 =~ ^[0-9]+$ ]] && profile_line+="  ·  $(( pl1 / 1000000 )) W"
+    tooltip+=$'\n'"$profile_line"
+fi
 if [[ -n "$fan_rpm" ]]; then
     if (( fan_rpm > 0 )); then fan_line="en marche"; else fan_line="à l'arrêt"; fi
     [[ -n "$fan_mode" ]] && fan_line+=" · mode ${fan_mode}"
