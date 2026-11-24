@@ -194,9 +194,7 @@ func profile(slot int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Profile]\nDevice = DSUClient/%d/%s\n", slot, dsuName)
 	for _, btn := range buttons {
-		for _, control := range strings.Fields(btn.control) {
-			fmt.Fprintf(&b, "%s = `%s`\n", control, btn.input)
-		}
+		fmt.Fprintf(&b, "%s = `%s`\n", btn.control, btn.input)
 	}
 	for _, dir := range []string{"Up", "Down", "Left", "Right", "Forward", "Backward"} {
 		fmt.Fprintf(&b, "IMUAccelerometer/%s = `Accel %s`\n", dir, dir)

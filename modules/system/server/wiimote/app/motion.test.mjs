@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -85,6 +85,15 @@ test('croix tactile : direction la plus proche, centre mort, portée et interfac
   assert.equal(dpadDirection(130, 0, 100, 0), null); // trop loin
   // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
   assert.equal(dpadDirection(0, 50, 100, 90), 'right');
+});
+
+test('coup sec : vers le haut réel, puis retombée, puis rien', () => {
+  near(flick([0, -1, 0], 50), [0, -2.6, 0]); // à plat (haut = −y) : 2,6 g vers le haut
+  near(flick([0, -1, 0], 150), [0, -0.4, 0]);
+  near(flick([0, -1, 0], 250), [0, -1, 0]);
+  near(flick([0, -1, 0], -5), [0, -1, 0]);
+  // Tenue en volant : la gravité est sur x, le coup aussi.
+  near(flick([0.6, -0.8, 0], 50), [0.6 * 2.6, -0.8 * 2.6, 0]);
 });
 
 test('verticale tirée de l’orientation, dans le repère de la spec', () => {

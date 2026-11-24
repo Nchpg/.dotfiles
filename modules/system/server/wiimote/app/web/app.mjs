@@ -1,11 +1,7 @@
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
-const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10, Shake: 11 };
-const SHAKE = 1 << BIT.Shake;
-// Une tape brève pourrait tomber entre deux lectures de Dolphin, ou ne pas suffire au jeu pour voir une
-// secousse : tenue au moins ce temps.
-const SHAKE_MIN_MS = 200;
+const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
 
 // Flèche vue à l'écran → bouton de la Wiimote. De côté, son haut (côté capteur) est à gauche.
 const DPAD = {
@@ -25,7 +21,9 @@ const leds = [...document.querySelectorAll('.leds i')];
 const pointers = new Map();
 const packet = new DataView(new ArrayBuffer(28));
 let buttons = 0;
-let shakeUntil = 0;
+// Bouton Secouer : pas de bit, le téléphone ajoute lui-même un coup sec à ses mesures (cf. `flick`).
+let shaking = false;
+let flickStart = -Infinity;
 let motion = [0, -1, 0, 0, 0, 0];
 // Pointeur envoyé sur le stick droit (128 : centre), calé par le calibrage du bouton ⌖.
 let aim = [128, 128];
@@ -102,7 +100,8 @@ function say(text) {
 function send() {
   if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   packet.setUint16(0, buttons, true);
-  motion.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
+  const accel = flick(motion.slice(0, 3), performance.now() - flickStart);
+  [...accel, ...motion.slice(3)].forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
   packet.setUint8(26, aim[0]);
   packet.setUint8(27, aim[1]);
   ws.send(packet.buffer);
@@ -141,6 +140,7 @@ aimButton.addEventListener('click', () => {
 });
 
 const dpad = document.querySelector('.dpad');
+const shakeButton = document.querySelector('.shake');
 
 // Recalculé à chaque contact : glisser d'un bouton à l'autre et appuyer à plusieurs doigts marchent.
 // La croix se lit à l'angle du doigt (direction la plus proche, zone plus large que son dessin) ; un autre
@@ -153,7 +153,7 @@ function refreshButtons() {
     const el = document.elementFromPoint(x, y)?.closest('[data-btn]');
     if (el) {
       pressed.add(el);
-      next |= 1 << BIT[el.dataset.btn];
+      if (el.dataset.btn !== 'Shake') next |= 1 << BIT[el.dataset.btn];
       continue;
     }
     const dir = dpadDirection(
@@ -167,12 +167,13 @@ function refreshButtons() {
       next |= 1 << BIT[DPAD[mode][dir]];
     }
   }
-  const now = performance.now();
-  if (next & ~buttons & SHAKE) shakeUntil = now + SHAKE_MIN_MS;
-  if (!(next & SHAKE) && now < shakeUntil) {
-    next |= SHAKE;
-    setTimeout(refreshButtons, shakeUntil - now);
+  const shake = pressed.has(shakeButton);
+  if (shake && !shaking) {
+    flickStart = performance.now();
+    navigator.vibrate?.(12);
+    send();
   }
+  shaking = shake;
   for (const el of document.querySelectorAll('[data-btn], [data-dir]')) {
     el.classList.toggle('on', pressed.has(el));
   }

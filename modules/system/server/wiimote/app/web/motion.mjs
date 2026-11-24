@@ -61,6 +61,18 @@ export function aimPosition([h, e], topLeft, bottomRight) {
   ];
 }
 
+// Coup sec vers le haut, comme relevé sur un téléphone qu'on lève d'un geste (roue arrière et figures de Mario
+// Kart, secousses de Mario) : la mesure monte vers 2,6 g pendant 100 ms, puis retombe vers 0,4 g pendant 100 ms.
+// `t` : ms depuis l'appui. Ajouté dans le sens de l'accélération mesurée, donc vers le haut réel quelle que soit
+// la tenue. Le jeu ne lit que l'accéléromètre de la Wiimote : rien à simuler côté gyroscope.
+export function flick([x, y, z], t) {
+  const extra = t < 0 ? 0 : t < 100 ? 1.6 : t < 200 ? -0.6 : 0;
+  const g = Math.hypot(x, y, z);
+  if (!extra || !g) return [x, y, z];
+  const k = 1 + extra / g;
+  return [x * k, y * k, z * k];
+}
+
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
 
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels
