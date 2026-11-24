@@ -326,3 +326,34 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatal("slot toujours occupé après la déconnexion")
 	}
 }
+
+func TestServerPlaysShake(t *testing.T) {
+	// Haut, bas, haut, dans le sens de la mesure (à plat, haut = −y), puis la mesure réelle.
+	still := [6]float32{0, -1, 0}
+	for _, c := range []struct {
+		at time.Duration
+		y  float32
+	}{{0, -2.2}, {150 * time.Millisecond, 2.5}, {250 * time.Millisecond, -2.8}, {time.Second, -1}} {
+		if got := shaken(still, c.at)[1]; math.Abs(float64(got-c.y)) > 1e-6 {
+			t.Errorf("secousse à %v : %v, attendu %v", c.at, got, c.y)
+		}
+	}
+
+	// L'appui lance la secousse dès le paquet suivant ; le bouton tenu ne la relance pas ; aucune entrée DSU.
+	s := newServer(nil)
+	s.mu.Lock()
+	pkt, _ := s.stateLocked(0, padState{buttons: shakeBit, motion: still})
+	first := s.shakeStart[0]
+	s.stateLocked(0, padState{buttons: shakeBit, motion: still})
+	again := s.shakeStart[0]
+	s.mu.Unlock()
+	if y := math.Float32frombits(le.Uint32(pkt[80:])); y > -2.1 {
+		t.Fatalf("accélération y %v au début de la secousse, attendu -2,2", y)
+	}
+	if !first.Equal(again) {
+		t.Fatal("le bouton tenu a relancé la secousse")
+	}
+	if pkt[36] != 0 || pkt[37] != 0 || pkt[38] != 0 || pkt[53] != 0 {
+		t.Fatal("Secouer a produit une entrée DSU")
+	}
+}

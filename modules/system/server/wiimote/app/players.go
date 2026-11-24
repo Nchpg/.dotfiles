@@ -91,6 +91,7 @@ func (s *server) swap(a, b int) {
 	s.mu.Lock()
 	s.seats[a], s.seats[b] = s.seats[b], s.seats[a]
 	s.pads[a], s.pads[b] = s.pads[b], s.pads[a]
+	s.shakeStart[a], s.shakeStart[b] = s.shakeStart[b], s.shakeStart[a]
 	var moved []*player
 	var packets [][]byte
 	var targets [][]net.Addr

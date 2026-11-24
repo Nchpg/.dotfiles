@@ -61,22 +61,6 @@ export function aimPosition([h, e], topLeft, bottomRight) {
   ];
 }
 
-// Secousse relevée sur un vrai téléphone, celle qui fait voler le casque hélice de Mario : la mesure vers le haut
-// passe à +2,2 g, puis −2,5 g (la main redescend plus vite que la chute), puis +2,8 g, en 380 ms. Un simple coup
-// vers le haut suffit à Mario Kart, pas à Mario. [fin (ms depuis l'appui), mesure vers le haut (g)].
-const SHAKE = [[90, 2.2], [190, -2.5], [320, 2.8], [380, 1.6]];
-export const SHAKE_MS = SHAKE.at(-1)[0];
-
-// Mesure `accel` (g) pendant la secousse, `t` ms après l'appui : remplacée dans le sens de l'accélération mesurée,
-// donc le haut réel quelle que soit la tenue. Le jeu ne lit que l'accéléromètre de la Wiimote : pas de gyroscope.
-export function shake([x, y, z], t) {
-  const step = t >= 0 && SHAKE.find(([end]) => t < end);
-  const g = Math.hypot(x, y, z);
-  if (!step || !g) return [x, y, z];
-  const k = step[1] / g;
-  return [x * k, y * k, z * k];
-}
-
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
 
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels

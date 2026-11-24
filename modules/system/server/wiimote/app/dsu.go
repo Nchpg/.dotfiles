@@ -73,7 +73,9 @@ type server struct {
 	seats   [slots]*player
 	pads    [slots]padState
 	counter [slots]uint32
-	subs    map[string]*subscriber
+	// Début de la dernière secousse de chaque slot, cf. shake.go.
+	shakeStart [slots]time.Time
+	subs       map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
 	invite string
 }
@@ -223,8 +225,13 @@ func (s *server) subscribe(from net.Addr, flags, slot byte, addr []byte) {
 // avec `broadcast`, hors du verrou.
 func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.Addr) {
 	now := time.Now()
+	if st.buttons&shakeBit != 0 && s.pads[slot].buttons&shakeBit == 0 {
+		s.shakeStart[slot] = now
+		go s.playShake(slot, now)
+	}
 	s.pads[slot] = st
 	s.counter[slot]++
+	st.motion = shaken(st.motion, now.Sub(s.shakeStart[slot]))
 	pkt = s.padData(slot, st, s.counter[slot])
 	for key, sub := range s.subs {
 		if now.After(sub.until) {

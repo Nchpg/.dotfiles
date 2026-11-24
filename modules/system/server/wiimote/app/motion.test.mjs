@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, shake, stickDirections, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -99,16 +99,6 @@ test('joystick : huit directions, diagonales étroites, centre mort', () => {
   assert.deepEqual(stickDirections(60 * Math.cos(t), 60 * Math.sin(t), 100), ['right']);
   assert.deepEqual(stickDirections(10, 5, 100), []); // pouce au centre
   assert.deepEqual(stickDirections(300, 0, 100), ['right']); // le pouce peut sortir du dessin
-});
-
-test('secousse : haut, bas, haut, dans le sens du haut réel, puis rien', () => {
-  near(shake([0, -1, 0], 50), [0, -2.2, 0]); // à plat (haut = −y) : 2,2 g vers le haut
-  near(shake([0, -1, 0], 150), [0, 2.5, 0]); // puis vers le bas
-  near(shake([0, -1, 0], 250), [0, -2.8, 0]);
-  near(shake([0, -1, 0], 400), [0, -1, 0]);
-  near(shake([0, -1, 0], -5), [0, -1, 0]);
-  // Tenue en volant : la gravité est sur x, le coup aussi.
-  near(shake([0.6, -0.8, 0], 50), [0.6 * 2.2, -0.8 * 2.2, 0]);
 });
 
 test('verticale tirée de l’orientation, dans le repère de la spec', () => {
