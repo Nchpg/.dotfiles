@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -85,6 +85,13 @@ test('croix tactile : direction la plus proche, centre mort, portée et interfac
   assert.equal(dpadDirection(130, 0, 100, 0), null); // trop loin
   // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
   assert.equal(dpadDirection(0, 50, 100, 90), 'right');
+});
+
+test('volant au joystick : la mesure du téléphone tourné en volant', () => {
+  near(wheelMotion(0), toDSU([G, 0, 0], still, 90, true)); // droit
+  const t = 50 * Math.PI / 180; // à fond à droite : tourné de 50° dans le sens horaire
+  near(wheelMotion(1), toDSU([G * Math.cos(t), G * Math.sin(t), 0], still, 90, true));
+  near(wheelMotion(-0.5), toDSU([G * Math.cos(-t / 2), G * Math.sin(-t / 2), 0], still, 90, true));
 });
 
 test('joystick : huit directions, diagonales étroites, centre mort', () => {

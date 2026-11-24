@@ -206,6 +206,9 @@
   }
   .stick .dpad { display: none; }
   .stick .joystick { display: block; }
+  /* Icône du mode en cours (croix, joystick, volant). */
+  .pad svg { display: none; }
+  body:not(.stick) .pad .for-dpad, .stick:not(.wheel) .pad .for-stick, .wheel .pad .for-wheel { display: block; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 et 2 sous le pouce droit.
      Après les règles de base, qu'il remplace. */
@@ -303,8 +306,10 @@
     <button class="mode" id="mode" aria-label="Passer de la tenue horizontale à la verticale">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
     </button>
-    <button class="pad" id="pad" aria-label="Croix ou joystick">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+    <button class="pad" id="pad" aria-label="Croix, joystick ou volant">
+      <svg class="for-dpad" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>
+      <svg class="for-stick" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+      <svg class="for-wheel" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3.5 11.5h17M12 14v7"/><circle cx="12" cy="12" r="2.4"/></g></svg>
     </button>
     <div class="dpad" role="group" aria-label="Croix directionnelle">
       <button data-dir="up" aria-label="Haut"></button>

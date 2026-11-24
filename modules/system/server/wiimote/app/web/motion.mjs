@@ -61,6 +61,14 @@ export function aimPosition([h, e], topLeft, bottomRight) {
   ];
 }
 
+// Volant au joystick (Mario Kart) : ce que mesurerait le téléphone tenu en volant, écran face à soi, tourné de
+// `s` (−1 à 1, vers la droite) fois cet angle. Valeurs DSU, comme `toDSU` ; gyroscope à zéro.
+const WHEEL_MAX = 50;
+export function wheelMotion(s) {
+  const t = s * WHEEL_MAX * RAD;
+  return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
+}
+
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
 
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels
