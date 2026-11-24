@@ -34,6 +34,13 @@ let
 
       read_attr() { cat "$1" 2>/dev/null || true; }
 
+      # Limite de puissance (PL1) en vigueur, qui suit le profil (cf. intelGraphics.powerLimit).
+      power_label() {
+        local uw
+        uw=$(read_attr /sys/class/powercap/intel-rapl-mmio:0/constraint_0_power_limit_uw)
+        if [ -n "$uw" ]; then printf '%s W' "$((uw / 1000000))"; else printf '?'; fi
+      }
+
       choose_fan() {
         local cur sel val
         cur=$(read_attr "$SYS/fan_mode")
@@ -53,6 +60,8 @@ let
         sel=$(gum choose --header "Profil d'alimentation (actuel : ''${cur:-?})" \
           "''${profs[@]}") || return 0
         if [ -n "$sel" ]; then powerprofilesctl set "$sel" 2>/dev/null || true; fi
+        # Le temps que la limite de puissance suive, avant de la réafficher.
+        sleep 0.5
       }
 
       if [ ! -d "$SYS" ]; then
@@ -65,8 +74,8 @@ let
         fan=$(read_attr "$SYS/fan_mode")
         prof=$(powerprofilesctl get 2>/dev/null || true)
         gum style --bold --foreground "${c.base0D}" "  LG Power Control"
-        printf '  Ventilateur : %s (%s)    Profil : %s\n\n' \
-          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "''${prof:-?}"
+        printf '  Ventilateur : %s (%s)    Profil : %s    Puissance : %s\n\n' \
+          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "''${prof:-?}" "$(power_label)"
         choice=$(gum choose "Ventilateur" "Profil d'alimentation" "Quitter") || break
         case "$choice" in
           "Ventilateur") choose_fan ;;

@@ -7,6 +7,7 @@
       # 12 W d'origine (DPTF) : Dolphin plafonne à ~1,4 GHz et saccade. 20 W : 95 °C et bridage thermique.
       # 16 W : courses fluides (~3,3 GHz, 75-84 °C) mais menus à vidéo saccadés (cœur à ~1,5 GHz, bridage pl1).
       # 18 W : compromis retenu (mesures du 2026-11-23). Plafond, pas consommation : sans charge, rien ne change.
+      # En profil performance seulement (lg-control, $mod+Shift+p) ; 12 W dans les autres.
       powerLimit = 18;
     };
     displaylink.enable = true;
