@@ -15,8 +15,8 @@ let
   cfg = config.userSettings.apps.dolphinEmu;
 
   # Progression des jeux (mémoire de la Wii, cartes mémoire GameCube), synchronisée par Nextcloud.
-  # Précondition : y déplacer Wii/ et GC/ de ~/.local/share/dolphin-emu, Dolphin fermé, avant le
-  # premier rebuild ; sinon home-manager refuse d'écraser les dossiers existants.
+  # Précondition : y déplacer Wii/, GC/ et Load/Riivolution/riivolution/save/ de ~/.local/share/dolphin-emu,
+  # Dolphin fermé, avant le premier rebuild ; sinon home-manager refuse d'écraser les dossiers existants.
   saves = "${config.home.homeDirectory}/Nextcloud/Jeux/Dolphin";
 in
 {
@@ -26,9 +26,14 @@ in
     base.config
 
     (lib.mkIf (cfg.enable && config.userSettings.apps.nextcloud.enable) {
-      xdg.dataFile = lib.genAttrs [ "dolphin-emu/Wii" "dolphin-emu/GC" ] (path: {
-        source = config.lib.file.mkOutOfStoreSymlink "${saves}/${baseNameOf path}";
-      });
+      xdg.dataFile =
+        lib.mapAttrs (_: dir: { source = config.lib.file.mkOutOfStoreSymlink "${saves}/${dir}"; })
+          {
+            "dolphin-emu/Wii" = "Wii";
+            "dolphin-emu/GC" = "GC";
+            # Mods Riivolution (Retro Rewind) : leur copie de la sauvegarde Wii, puis leur progression.
+            "dolphin-emu/Load/Riivolution/riivolution/save" = "Riivolution";
+          };
     })
   ];
 }
