@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, toLocal, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -100,6 +100,8 @@ document.getElementById('pad').addEventListener('click', () => {
 });
 // Volant tenu : position du joystick (−1 à 1), qui remplace l'inclinaison ; null : l'inclinaison reprend.
 let steer = null;
+// Coup de pouce du joystick volant en cours (cf. `wheelItem`).
+let flick = { calm: 0, item: null };
 
 // Réglages du panneau ⚙, mémorisés : B à côté de A, sensibilités de l'inclinaison et du joystick volant.
 const panel = document.getElementById('panel');
@@ -107,8 +109,8 @@ const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
 const settings = { bByA: store('bByA') === '1', tilt: gain('tilt'), stick: gain('stick') };
 const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 function showSettings() {
-  document.body.classList.toggle('b-by-a', settings.bByA);
   document.getElementById('bByA').checked = settings.bByA;
+  document.body.classList.toggle('b-by-a', settings.bByA);
   for (const key of ['tilt', 'stick']) {
     document.getElementById(key).value = settings[key];
     document.getElementById(`${key}Out`).textContent = times(settings[key]);
@@ -116,9 +118,9 @@ function showSettings() {
 }
 showSettings();
 document.getElementById('settingsForm').addEventListener('input', (e) => {
-  if (e.target.id === 'bByA') {
-    settings.bByA = e.target.checked;
-    store('bByA', settings.bByA ? '1' : '0');
+  if (e.target.type === 'checkbox') {
+    settings[e.target.id] = e.target.checked;
+    store(e.target.id, e.target.checked ? '1' : '0');
   } else {
     settings[e.target.id] = Number(e.target.value);
     store(e.target.id, e.target.value);
@@ -211,10 +213,11 @@ function refreshButtons() {
       const dirs = stickDirections(lx, ly, radius);
       const reach = radius * 0.6;
       if (control === 'wheel' && mode === 'sideways') {
-        // Volant : la course horizontale tourne, progressivement ; seul un coup franc vers le haut ou le bas
-        // reste une flèche (objets de Mario Kart), sans quoi chaque virage lancerait l'objet.
+        // Volant : la course horizontale braque, progressivement ; seul un coup de pouce vertical franc fait une
+        // flèche (objets de Mario Kart), sans quoi un pouce qui dérive en virage lancerait l'objet.
         wheel = Math.abs(lx) < radius * 0.06 ? 0 : Math.max(-1, Math.min(1, lx / reach));
-        if (dirs.length === 1 && (dirs[0] === 'up' || dirs[0] === 'down')) next |= 1 << BIT[DPAD[mode][dirs[0]]];
+        flick = wheelItem(flick, ly, reach, performance.now());
+        if (flick.item) next |= 1 << BIT[DPAD[mode][flick.item]];
       } else {
         for (const dir of dirs) next |= 1 << BIT[DPAD[mode][dir]];
       }
@@ -267,7 +270,11 @@ addEventListener('pointerdown', (e) => {
   if (control !== 'dpad' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
     const box = joystick.getBoundingClientRect();
     const r = box.width / 2;
-    if (Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r)) < r * 1.3) stickPointers.add(e.pointerId);
+    if (Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r)) < r * 1.3) {
+      stickPointers.add(e.pointerId);
+      // Pouce posé : le calme commence là (posé directement tout en haut, c'est un coup franc).
+      flick = { calm: performance.now(), item: null };
+    }
   }
   track(e);
 });

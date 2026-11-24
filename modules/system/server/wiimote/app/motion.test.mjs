@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -103,6 +103,16 @@ test('sensibilité : l’angle du volant multiplié, sans dépasser 85°', () =>
   // Le téléphone penché (part hors du plan de l'écran) et le gyroscope ne bougent pas.
   near(tiltGain([-0.6, -0.8, 0, 1, 2, 3], 2).slice(1), [-0.8, 0, 1, 2, 3]);
   near(wheelMotion(2), wheel(85)); // joystick à sensibilité ×2, à fond
+});
+
+test('volant : objet seulement sur un coup de pouce franc, tenu jusqu’au retour au calme', () => {
+  const run = (steps) => steps.reduce((s, [ly, t]) => wheelItem(s, ly, 100, t), { calm: 0, item: null }).item;
+  assert.equal(run([[0, 0], [-90, 80]]), 'up'); // coup franc vers le haut
+  assert.equal(run([[0, 0], [60, 60], [95, 120]]), 'down');
+  assert.equal(run([[0, 0], [-50, 150], [-90, 400]]), null); // montée lente
+  assert.equal(run([[0, 0], [-50, 50], [-60, 300], [-90, 320]]), null); // pouce resté à mi-course puis poussé
+  assert.equal(run([[0, 0], [-90, 80], [-50, 600]]), 'up'); // tenu tant qu'il n'est pas revenu au calme
+  assert.equal(run([[0, 0], [-90, 80], [-20, 600]]), null); // relâché
 });
 
 test('joystick : huit directions, diagonales étroites, centre mort', () => {

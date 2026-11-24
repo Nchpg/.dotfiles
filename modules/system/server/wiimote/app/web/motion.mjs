@@ -72,6 +72,21 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
+// Joystick en volant : la flèche (objet de Mario Kart) ne part que sur un coup de pouce franc, de la zone calme
+// (moins de 35 % de la course) au-delà de 75 % en moins de 180 ms ; elle reste tenue tant que le pouce n'est pas
+// revenu au calme (banane derrière soi). Un pouce qui dérive en braquant ne lance rien.
+// `state` : { calm : dernier instant au calme (ms), item }, `ly` : écart vertical (y vers le bas), `reach` : course.
+const FLICK_CALM = 0.35;
+const FLICK_FAR = 0.75;
+const FLICK_MS = 180;
+export function wheelItem(state, ly, reach, now) {
+  const v = Math.abs(ly) / reach;
+  if (v < FLICK_CALM) return { calm: now, item: null };
+  if (state.item) return state;
+  if (v > FLICK_FAR && now - state.calm <= FLICK_MS) return { calm: state.calm, item: ly < 0 ? 'up' : 'down' };
+  return state;
+}
+
 // Sensibilité de l'inclinaison (tenue en volant) : l'angle du volant, mesuré dans le plan de l'écran, multiplié
 // par `k`. La part hors de ce plan (téléphone penché vers soi) et le gyroscope sont gardés.
 export function tiltGain(motion, k) {
