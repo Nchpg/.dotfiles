@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, stickDirections, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -85,6 +85,20 @@ test('croix tactile : direction la plus proche, centre mort, portée et interfac
   assert.equal(dpadDirection(130, 0, 100, 0), null); // trop loin
   // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
   assert.equal(dpadDirection(0, 50, 100, 90), 'right');
+});
+
+test('joystick : huit directions, diagonales étroites, centre mort', () => {
+  assert.deepEqual(stickDirections(50, 0, 100), ['right']);
+  assert.deepEqual(stickDirections(0, -50, 100), ['up']);
+  assert.deepEqual(stickDirections(40, 40, 100), ['right', 'down']); // 45° pile
+  assert.deepEqual(stickDirections(-40, -40, 100), ['left', 'up']);
+  assert.deepEqual(stickDirections(40, -40, 100), ['up', 'right']);
+  assert.deepEqual(stickDirections(-40, 40, 100), ['down', 'left']);
+  // 25° sous l'horizontale : hors de la bande diagonale (45 ± 15°), droite seule.
+  const t = 25 * Math.PI / 180;
+  assert.deepEqual(stickDirections(60 * Math.cos(t), 60 * Math.sin(t), 100), ['right']);
+  assert.deepEqual(stickDirections(10, 5, 100), []); // pouce au centre
+  assert.deepEqual(stickDirections(300, 0, 100), ['right']); // le pouce peut sortir du dessin
 });
 
 test('coup sec : vers le haut réel, puis retombée, puis rien', () => {

@@ -173,7 +173,7 @@
   .leds i.on { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); }
 
   /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
-  .mode, .theme {
+  .mode, .theme, .pad {
     position: absolute;
     top: calc(3.5 * var(--u));
     right: calc(3.5 * var(--u));
@@ -182,7 +182,30 @@
     border-radius: 50%;
   }
   .theme { right: calc(15.5 * var(--u)); }
-  .mode svg, .theme svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
+  .pad { right: calc(27.5 * var(--u)); }
+  .mode svg, .theme svg, .pad svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
+
+  /* Joystick, à la place de la croix (bouton en haut) : le pouce glisse, la croix sort de la même manière. */
+  .joystick {
+    grid-area: dpad;
+    place-self: center;
+    display: none;
+    position: relative;
+    width: calc(40 * var(--u));
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--btn) 55%, var(--body));
+    box-shadow: inset 0 calc(.6 * var(--u)) calc(1.6 * var(--u)) rgb(0 0 0 / .14);
+  }
+  .joystick i {
+    position: absolute;
+    inset: 30%;
+    border-radius: 50%;
+    background: var(--btn);
+    box-shadow: 0 calc(.6 * var(--u)) 0 var(--btn-edge), 0 calc(.8 * var(--u)) calc(1.6 * var(--u)) rgb(0 0 0 / .18);
+  }
+  .stick .dpad { display: none; }
+  .stick .joystick { display: block; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 et 2 sous le pouce droit.
      Après les règles de base, qu'il remplace. */
@@ -205,6 +228,7 @@
   .sideways .one, .sideways .two { width: calc(32 * var(--u)); height: calc(32 * var(--u)); font-size: calc(11 * var(--u)); }
   /* Croix plus grande à l'horizontale, où elle sert à se déplacer (Mario). */
   .sideways .dpad { grid-template: repeat(3, calc(17 * var(--u))) / repeat(3, calc(17 * var(--u))); }
+  .sideways .joystick { width: calc(50 * var(--u)); }
 
   /* Dans la scène : tourne avec elle. */
   .overlay {
@@ -279,12 +303,16 @@
     <button class="mode" id="mode" aria-label="Passer de la tenue horizontale à la verticale">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
     </button>
+    <button class="pad" id="pad" aria-label="Croix ou joystick">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+    </button>
     <div class="dpad" role="group" aria-label="Croix directionnelle">
       <button data-dir="up" aria-label="Haut"></button>
       <button data-dir="left" aria-label="Gauche"></button>
       <button data-dir="right" aria-label="Droite"></button>
       <button data-dir="down" aria-label="Bas"></button>
     </div>
+    <div class="joystick" id="joystick" aria-label="Joystick"><i></i></div>
     <button class="a" data-btn="A">A</button>
     <button class="b" data-btn="B">B</button>
     <button class="minus" data-btn="-" aria-label="Moins">−</button>

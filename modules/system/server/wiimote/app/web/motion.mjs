@@ -81,10 +81,24 @@ const DIRECTIONS = ['right', 'down', 'left', 'up'];
 export function dpadDirection(dx, dy, radius, rotation) {
   const distance = Math.hypot(dx, dy);
   if (distance < radius * 0.16 || distance > radius * 1.2) return null;
-  const a = rotation * RAD;
-  const x = dx * Math.cos(a) + dy * Math.sin(a);
-  const y = -dx * Math.sin(a) + dy * Math.cos(a);
+  const [x, y] = toLocal(dx, dy, rotation);
   return DIRECTIONS[(Math.round(Math.atan2(y, x) / (Math.PI / 2)) + 4) % 4];
+}
+
+// Écart à l'écran (pixels, y vers le bas) → repère de l'interface tournée de `rotation` (°, horaire).
+export function toLocal(dx, dy, rotation) {
+  const a = rotation * RAD;
+  return [dx * Math.cos(a) + dy * Math.sin(a), -dx * Math.sin(a) + dy * Math.cos(a)];
+}
+
+// Joystick : directions pour un pouce à (x, y) du centre, dans le repère de l'interface. Huit directions, mais
+// chaque diagonale n'occupe que 30° (contre 60° par direction droite) : on ne la prend pas par mégarde.
+export function stickDirections(x, y, radius) {
+  if (Math.hypot(x, y) < radius * 0.25) return [];
+  const a = Math.atan2(y, x) / RAD;
+  const sector = Math.round(a / 45);
+  if (sector % 2 === 0 || Math.abs(a - sector * 45) > 15) return [DIRECTIONS[(Math.round(a / 90) + 4) % 4]];
+  return [DIRECTIONS[(Math.floor(a / 90) + 4) % 4], DIRECTIONS[(Math.ceil(a / 90) + 4) % 4]];
 }
 
 // Verticale (unitaire, vers le haut) dans le repère du téléphone, d'après beta et gamma de deviceorientation.

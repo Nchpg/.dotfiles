@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, flick, holdAngle, stickDirections, toLocal, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go.
 const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
@@ -14,6 +14,8 @@ const overlay = document.getElementById('overlay');
 const status = document.getElementById('status');
 const startButton = document.getElementById('start');
 const modeButton = document.getElementById('mode');
+const joystick = document.getElementById('joystick');
+const knob = joystick.querySelector('i');
 const aimButton = document.getElementById('aim');
 const nameInput = document.getElementById('name');
 const leds = [...document.querySelectorAll('.leds i')];
@@ -84,6 +86,15 @@ document.getElementById('theme').addEventListener('click', () => {
   store('theme', theme);
 });
 
+// Croix ou joystick, au choix, mémorisé.
+let control = store('control') === 'stick' ? 'stick' : 'dpad';
+document.body.classList.toggle('stick', control === 'stick');
+document.getElementById('pad').addEventListener('click', () => {
+  control = control === 'stick' ? 'dpad' : 'stick';
+  store('control', control);
+  document.body.classList.toggle('stick', control === 'stick');
+});
+
 modeButton.addEventListener('click', () => {
   mode = mode === 'sideways' ? 'vertical' : 'sideways';
   hold = mode === 'sideways' ? 90 : 0;
@@ -149,13 +160,26 @@ function refreshButtons() {
   const pressed = new Set();
   let next = 0;
   const box = dpad.getBoundingClientRect();
-  for (const { x, y } of pointers.values()) {
+  let thumb = [0, 0];
+  for (const [id, { x, y }] of pointers) {
     const el = document.elementFromPoint(x, y)?.closest('[data-btn]');
-    if (el) {
+    if (el && !stickPointers.has(id)) {
       pressed.add(el);
       if (el.dataset.btn !== 'Shake') next |= 1 << BIT[el.dataset.btn];
       continue;
     }
+    if (stickPointers.has(id)) {
+      const box = joystick.getBoundingClientRect();
+      const radius = box.width / 2;
+      const [lx, ly] = toLocal(x - (box.left + radius), y - (box.top + radius), hold - liveAngle());
+      for (const dir of stickDirections(lx, ly, radius)) next |= 1 << BIT[DPAD[mode][dir]];
+      // Le bouton suit le pouce, sans sortir du socle.
+      const reach = radius * 0.6;
+      const scale = Math.min(1, reach / (Math.hypot(lx, ly) || 1));
+      thumb = [lx * scale, ly * scale];
+      continue;
+    }
+    if (control === 'stick') continue;
     const dir = dpadDirection(
       x - (box.left + box.width / 2),
       y - (box.top + box.height / 2),
@@ -174,6 +198,7 @@ function refreshButtons() {
     send();
   }
   shaking = shake;
+  knob.style.transform = `translate(${thumb[0]}px, ${thumb[1]}px)`;
   for (const el of document.querySelectorAll('[data-btn], [data-dir]')) {
     el.classList.toggle('on', pressed.has(el));
   }
@@ -189,9 +214,19 @@ const track = (e) => {
 };
 const untrack = (e) => {
   pointers.delete(e.pointerId);
+  stickPointers.delete(e.pointerId);
   refreshButtons();
 };
-addEventListener('pointerdown', track);
+// Joystick : le pouce posé dessus (ou tout près) le garde jusqu'à ce qu'il se lève, même en débordant.
+const stickPointers = new Set();
+addEventListener('pointerdown', (e) => {
+  if (control === 'stick' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
+    const box = joystick.getBoundingClientRect();
+    const r = box.width / 2;
+    if (Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r)) < r * 1.3) stickPointers.add(e.pointerId);
+  }
+  track(e);
+});
 addEventListener('pointermove', (e) => pointers.has(e.pointerId) && track(e));
 addEventListener('pointerup', untrack);
 addEventListener('pointercancel', untrack);
