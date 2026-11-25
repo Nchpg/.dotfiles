@@ -25,10 +25,19 @@ const pointers = new Map();
 const packet = new DataView(new ArrayBuffer(30));
 let buttons = 0;
 let motion = [0, -1, 0, 0, 0, 0];
-// Pointeur envoyé sur 16 bits (32768 : centre), calé par le calibrage du bouton ⌖, lissé par `oneEuro`.
+// Pointeur envoyé sur 16 bits (32768 : centre), calé par le calibrage du bouton ⌖.
 const AIM_CENTER = 1 << 15;
 let aim = [AIM_CENTER, AIM_CENTER];
-let aimFilters = [oneEuro(), oneEuro()];
+// Lissage du pointeur (réglage ⚙), du plus léger au plus fort : moins de tremblement, plus de retard. Aucun par
+// défaut. null : à recréer (au calibrage, au changement de réglage).
+const SMOOTHING = [
+  null,
+  { minCutoff: 5, beta: 20, dCutoff: 5 },
+  { minCutoff: 3, beta: 15, dCutoff: 3 },
+  { minCutoff: 1, beta: 7, dCutoff: 1 },
+];
+const SMOOTHING_LABELS = ['aucun', 'léger', 'moyen', 'fort'];
+let aimFilters = null;
 let corners;
 let firstCorner;
 let ws;
@@ -108,7 +117,12 @@ let flick = { calm: 0, item: null };
 // Réglages du panneau ⚙, mémorisés : B à côté de A, sensibilités de l'inclinaison et du joystick volant.
 const panel = document.getElementById('panel');
 const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
-const settings = { bByA: store('bByA') === '1', tilt: gain('tilt'), stick: gain('stick') };
+const settings = {
+  bByA: store('bByA') === '1',
+  tilt: gain('tilt'),
+  stick: gain('stick'),
+  smooth: Math.min(3, Math.max(0, Math.round(Number(store('smooth')) || 0))),
+};
 const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
@@ -117,6 +131,8 @@ function showSettings() {
     document.getElementById(key).value = settings[key];
     document.getElementById(`${key}Out`).textContent = times(settings[key]);
   }
+  document.getElementById('smooth').value = settings.smooth;
+  document.getElementById('smoothOut').textContent = SMOOTHING_LABELS[settings.smooth];
 }
 showSettings();
 document.getElementById('settingsForm').addEventListener('input', (e) => {
@@ -127,6 +143,7 @@ document.getElementById('settingsForm').addEventListener('input', (e) => {
     settings[e.target.id] = Number(e.target.value);
     store(e.target.id, e.target.value);
   }
+  if (e.target.id === 'smooth') aimFilters = null;
   showSettings();
   send();
 });
@@ -165,10 +182,12 @@ const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF)
 function updateAim() {
   if (mode !== 'vertical' || !corners || orientation?.alpha == null) {
     aim = [AIM_CENTER, AIM_CENTER];
-    aimFilters = [oneEuro(), oneEuro()];
+    aimFilters = null;
     return;
   }
   const raw = aimPosition(aimAngles(orientation.alpha, orientation.beta, hold), ...corners);
+  const preset = SMOOTHING[settings.smooth];
+  aimFilters ??= raw.map(() => (preset ? oneEuro(preset) : (v) => v));
   aim = raw.map((v, i) => toU16(aimFilters[i](v, orientation.timeStamp)));
 }
 
@@ -184,7 +203,7 @@ aimButton.addEventListener('click', () => {
   }
   if (aimButton.dataset.step === 'bottom-right' && validCorners(firstCorner, now)) {
     corners = [firstCorner, now];
-    aimFilters = [oneEuro(), oneEuro()];
+    aimFilters = null;
     navigator.vibrate?.([20, 40, 20]);
   }
   const start = !aimButton.dataset.step;
@@ -291,6 +310,8 @@ addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
   orientation = e;
   updateAim();
+  // Visée partie tout de suite, sans attendre le prochain devicemotion (jusqu'à 16 ms de gagnés).
+  if (mode === 'vertical' && corners) send();
 });
 
 addEventListener('devicemotion', (e) => {
