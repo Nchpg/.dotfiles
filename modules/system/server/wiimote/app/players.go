@@ -44,7 +44,7 @@ func (s *server) claim(name string, conn *websocket.Conn) *player {
 			p := &player{name: cleanName(name), conn: conn, slot: i}
 			s.seats[i] = p
 			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
-			s.pads[i] = padState{pointer: [2]byte{128, 128}}
+			s.pads[i] = padState{pointer: [2]uint16{pointerCenter, pointerCenter}}
 			return p
 		}
 	}

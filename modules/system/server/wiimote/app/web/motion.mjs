@@ -97,6 +97,29 @@ export function tiltGain(motion, k) {
   return [-r * Math.cos(t), y, r * Math.sin(t), ...motion.slice(3)];
 }
 
+// Filtre « 1 € » (Casiez, Roussel, Vogel, 2012), celui des pointeurs : il lisse fort quand la valeur bouge peu
+// (tremblement de la main, bruit du capteur) et presque plus quand elle bouge vite (pas de traîne). Réglé pour un
+// pointeur de −1 à 1 : coupure à 2 Hz au repos, +2,5 Hz par unité/s de vitesse. `t` en ms.
+export function oneEuro({ minCutoff = 2, beta = 2.5, dCutoff = 1 } = {}) {
+  const alpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+  let x;
+  let dx = 0;
+  let last;
+  return (value, t) => {
+    if (x === undefined) {
+      x = value;
+      last = t;
+      return x;
+    }
+    const dt = (t - last) / 1000;
+    if (dt <= 0) return x;
+    last = t;
+    dx += alpha(dCutoff, dt) * ((value - x) / dt - dx);
+    x += alpha(minCutoff + beta * Math.abs(dx), dt) * (value - x);
+    return x;
+  };
+}
+
 const DIRECTIONS = ['right', 'down', 'left', 'up'];
 
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels

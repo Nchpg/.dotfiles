@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -22,11 +22,13 @@ const nameInput = document.getElementById('name');
 const leds = [...document.querySelectorAll('.leds i')];
 
 const pointers = new Map();
-const packet = new DataView(new ArrayBuffer(28));
+const packet = new DataView(new ArrayBuffer(30));
 let buttons = 0;
 let motion = [0, -1, 0, 0, 0, 0];
-// Pointeur envoyé sur le stick droit (128 : centre), calé par le calibrage du bouton ⌖.
-let aim = [128, 128];
+// Pointeur envoyé sur 16 bits (32768 : centre), calé par le calibrage du bouton ⌖, lissé par `oneEuro`.
+const AIM_CENTER = 1 << 15;
+let aim = [AIM_CENTER, AIM_CENTER];
+let aimFilters = [oneEuro(), oneEuro()];
 let corners;
 let firstCorner;
 let ws;
@@ -151,22 +153,23 @@ function send() {
     : mode === 'sideways' ? tiltGain(motion, settings.tilt)
     : motion;
   out.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
-  packet.setUint8(26, aim[0]);
-  packet.setUint8(27, aim[1]);
+  packet.setUint16(26, aim[0], true);
+  packet.setUint16(28, aim[1], true);
   ws.send(packet.buffer);
 }
 
-const toByte = (v) => Math.round(128 + v * 127);
+const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF);
 
 // Le téléphone vise lui-même, d'après l'orientation que fusionne son système : rien ne s'accumule si le
 // réseau hoquette, contrairement au pointeur que Dolphin tirerait du gyroscope.
 function updateAim() {
   if (mode !== 'vertical' || !corners || orientation?.alpha == null) {
-    aim = [128, 128];
+    aim = [AIM_CENTER, AIM_CENTER];
+    aimFilters = [oneEuro(), oneEuro()];
     return;
   }
-  const [x, y] = aimPosition(aimAngles(orientation.alpha, orientation.beta, hold), ...corners);
-  aim = [toByte(x), toByte(y)];
+  const raw = aimPosition(aimAngles(orientation.alpha, orientation.beta, hold), ...corners);
+  aim = raw.map((v, i) => toU16(aimFilters[i](v, orientation.timeStamp)));
 }
 
 // ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
@@ -181,6 +184,7 @@ aimButton.addEventListener('click', () => {
   }
   if (aimButton.dataset.step === 'bottom-right' && validCorners(firstCorner, now)) {
     corners = [firstCorner, now];
+    aimFilters = [oneEuro(), oneEuro()];
     navigator.vibrate?.([20, 40, 20]);
   }
   const start = !aimButton.dataset.step;

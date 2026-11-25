@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -113,6 +113,28 @@ test('volant : objet seulement sur un coup de pouce franc, tenu jusqu’au retou
   assert.equal(run([[0, 0], [-50, 50], [-60, 300], [-90, 320]]), null); // pouce resté à mi-course puis poussé
   assert.equal(run([[0, 0], [-90, 80], [-50, 600]]), 'up'); // tenu tant qu'il n'est pas revenu au calme
   assert.equal(run([[0, 0], [-90, 80], [-20, 600]]), null); // relâché
+});
+
+test('filtre du pointeur : tremblement gommé au repos, peu de retard en mouvement', () => {
+  // Main tenue sur un point (0,3), tremblement à 9 Hz de ±0,03 et bruit du capteur, échantillons à 60 Hz.
+  const still = oneEuro();
+  let spread = 0;
+  for (let i = 0; i < 240; i++) {
+    const t = i * 1000 / 60;
+    const raw = 0.3 + 0.03 * Math.sin(2 * Math.PI * 9 * t / 1000) + 0.01 * Math.sin(i * 2.7);
+    const out = still(raw, t);
+    if (i > 60) spread = Math.max(spread, Math.abs(out - 0.3));
+  }
+  assert.ok(spread < 0.012, `tremblement restant ±${spread.toFixed(4)} (±0,04 en entrée)`);
+  // Balayage d'un bord à l'autre en 0,5 s : le pointeur suit à moins d'un dixième d'écran.
+  const sweep = oneEuro();
+  let lag = 0;
+  for (let i = 0; i <= 30; i++) {
+    const t = i * 1000 / 60;
+    const raw = -1 + 2 * Math.min(1, t / 500);
+    lag = Math.max(lag, Math.abs(sweep(raw, t) - raw));
+  }
+  assert.ok(lag < 0.2, `retard ${lag.toFixed(3)} sur une course de 2`);
 });
 
 test('joystick : huit directions, diagonales étroites, centre mort', () => {

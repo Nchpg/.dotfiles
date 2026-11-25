@@ -21,8 +21,12 @@ const (
 	slots           = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
-	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u8).
-	phoneMessageSize = 2 + 6*4 + 2
+	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16).
+	phoneMessageSize = 2 + 6*4 + 4
+	// Celui d'une PWA restée en cache sur un téléphone : pointeur sur un octet par axe.
+	legacyPhoneMessageSize = 2 + 6*4 + 2
+	// Centre du pointeur sur 16 bits.
+	pointerCenter = 1 << 15
 	// Nom du serveur saisi dans Dolphin : il fait partie du nom du périphérique (DSUClient/<slot>/<nom>).
 	dsuName = "Telephone"
 )
@@ -53,8 +57,8 @@ type padState struct {
 	buttons uint16
 	// accel x, y, z (g), gyro tangage, lacet, roulis (°/s), dans l'ordre du paquet.
 	motion [6]float32
-	// Pointeur calculé par le téléphone, sur le stick droit : x, y (y vers le haut), 128 au centre.
-	pointer [2]byte
+	// Pointeur calculé par le téléphone : x, y (y vers le haut), sur 16 bits, `pointerCenter` au centre.
+	pointer [2]uint16
 }
 
 type subscriber struct {
@@ -125,8 +129,8 @@ func (s *server) padData(slot int, st padState, counter uint32) []byte {
 	padInfo(buf, slot, true)
 	buf[31] = 1
 	le.PutUint32(buf[32:], counter)
-	buf[40], buf[41] = 128, 128 // stick gauche inutilisé, au centre
-	buf[42], buf[43] = st.pointer[0], st.pointer[1]
+	buf[42], buf[40] = pointerBytes(st.pointer[0])
+	buf[43], buf[41] = pointerBytes(st.pointer[1])
 	for i, b := range buttons {
 		if st.buttons&(1<<i) == 0 {
 			continue
@@ -249,9 +253,32 @@ func (s *server) broadcast(pkt []byte, targets []net.Addr) {
 	}
 }
 
+// pointerBytes répartit un axe du pointeur (16 bits) sur deux sticks DSU d'un octet : le droit pour le gros, le
+// gauche pour le reste, au 254e de pas ; le profil les additionne (`Right X+` + `Left X+` / 254). Dolphin lit un
+// octet b comme (b-128)/127 au-dessus du centre, (b-128)/128 en dessous.
+func pointerBytes(p uint16) (coarse, fine byte) {
+	v := float64(p)/(1<<16-1)*2 - 1
+	toByte := func(x float64) byte {
+		if x >= 0 {
+			return byte(min(255, 128+math.Round(x*127)))
+		}
+		return byte(max(0, 128+math.Round(x*128)))
+	}
+	coarse = toByte(v)
+	return coarse, toByte((v - stickValue(coarse)) * 254)
+}
+
+// stickValue : la valeur que Dolphin lit pour un octet de stick DSU.
+func stickValue(b byte) float64 {
+	if b >= 128 {
+		return float64(b-128) / 127
+	}
+	return (float64(b) - 128) / 128
+}
+
 func decode(msg []byte) (padState, bool) {
 	var st padState
-	if len(msg) != phoneMessageSize {
+	if len(msg) != phoneMessageSize && len(msg) != legacyPhoneMessageSize {
 		return st, false
 	}
 	st.buttons = le.Uint16(msg)
@@ -262,6 +289,12 @@ func decode(msg []byte) (padState, bool) {
 		}
 		st.motion[i] = v
 	}
-	copy(st.pointer[:], msg[2+6*4:])
+	for i := range st.pointer {
+		if len(msg) == legacyPhoneMessageSize {
+			st.pointer[i] = uint16(msg[2+6*4+i]) << 8
+		} else {
+			st.pointer[i] = le.Uint16(msg[2+6*4+2*i:])
+		}
+	}
 	return st, true
 }

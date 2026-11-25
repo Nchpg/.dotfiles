@@ -42,7 +42,7 @@ func checkSealed(t *testing.T, pkt []byte, size int) {
 
 func TestPadDataLayout(t *testing.T) {
 	s := newServer(nil)
-	st := padState{buttons: 1<<0 | 1<<4 | 1<<7, motion: [6]float32{0.5, -1, 0.25, 10, -20, 30}, pointer: [2]byte{200, 30}}
+	st := padState{buttons: 1<<0 | 1<<4 | 1<<7, motion: [6]float32{0.5, -1, 0.25, 10, -20, 30}, pointer: [2]uint16{0xFFFF, 0}}
 	pkt := s.padData(2, st, 7)
 	checkSealed(t, pkt, 100)
 
@@ -53,14 +53,30 @@ func TestPadDataLayout(t *testing.T) {
 	if pkt[49] != 255 || pkt[47] != 255 || pkt[36] != 0x11 || pkt[37] != 0x40 || pkt[50] != 0 {
 		t.Fatalf("boutons faux : %v", pkt[36:56])
 	}
-	// Stick gauche au centre, pointeur sur le stick droit.
-	if pkt[40] != 128 || pkt[41] != 128 || pkt[42] != 200 || pkt[43] != 30 {
+	// Pointeur aux bords : le gros sur le stick droit, rien à ajouter sur le gauche.
+	if pkt[40] != 128 || pkt[41] != 128 || pkt[42] != 255 || pkt[43] != 0 {
 		t.Fatalf("sticks faux : %v", pkt[40:44])
 	}
 	for i, want := range st.motion {
 		if got := math.Float32frombits(le.Uint32(pkt[76+4*i:])); got != want {
 			t.Fatalf("mouvement %d : %v au lieu de %v", i, got, want)
 		}
+	}
+}
+
+func TestPointerPrecision(t *testing.T) {
+	// Ce que Dolphin recompose (`Right X+` + `Left X+` / 254, moins le côté X-) : au 1/32 000 près, contre 1/127
+	// avec le seul stick droit.
+	for p := 0; p <= 0xFFFF; p += 97 {
+		coarse, fine := pointerBytes(uint16(p))
+		got := stickValue(coarse) + stickValue(fine)/254
+		want := float64(p)/0xFFFF*2 - 1
+		if math.Abs(got-want) > 1.0/32000 {
+			t.Fatalf("pointeur %d : %v recomposé au lieu de %v (octets %d, %d)", p, got, want, coarse, fine)
+		}
+	}
+	if c, f := pointerBytes(pointerCenter); c != 128 || f > 129 || f < 127 {
+		t.Fatalf("centre : octets %d, %d", c, f)
 	}
 }
 
@@ -73,11 +89,17 @@ func TestDecodeRejectsBadInput(t *testing.T) {
 	if st, ok := decode(msg); !ok || st.motion[0] != 0 {
 		t.Fatal("NaN non neutralisé")
 	}
+	// PWA restée en cache : pointeur sur un octet, ramené sur 16 bits.
+	old := make([]byte, legacyPhoneMessageSize)
+	old[26], old[27] = 255, 128
+	if st, ok := decode(old); !ok || st.pointer != [2]uint16{0xFF00, 0x8000} {
+		t.Fatalf("ancien format mal lu : %v", st.pointer)
+	}
 }
 
 func TestProfile(t *testing.T) {
 	p := profile(1)
-	for _, want := range []string{"Device = DSUClient/1/Telephone", "Buttons/2 = `Triangle`", "D-Pad/Up = `Pad N`",
+	for _, want := range []string{"Device = DSUClient/1/Telephone", "Buttons/2 = `Triangle`", "D-Pad/Up = `Pad N`", "IR/Up = `Right Y+` + `Left Y+` / 254",
 		"IMUAccelerometer/Forward = `Accel Forward`", "IMUGyroscope/Yaw Right = `Gyro Yaw Right`",
 		"IR/Up = `Right Y+`", "IR/Left = `Right X-`", "IMUIR/Enabled = False"} {
 		if !strings.Contains(p, want) {
@@ -309,7 +331,8 @@ func TestPhoneToDolphin(t *testing.T) {
 	msg := make([]byte, phoneMessageSize)
 	le.PutUint16(msg, 1<<3) // 2
 	le.PutUint32(msg[2+4*1:], math.Float32bits(-1))
-	msg[26], msg[27] = 255, 0 // pointeur en bas à droite
+	le.PutUint16(msg[26:], 0xFFFF) // pointeur en bas à droite
+	le.PutUint16(msg[28:], 0)
 	websocket.Message.Send(phone, msg)
 	pkt := read(100)
 	if pkt[20] != 1 || pkt[51] != 255 || math.Float32frombits(le.Uint32(pkt[80:])) != -1 || pkt[42] != 255 || pkt[43] != 0 {
