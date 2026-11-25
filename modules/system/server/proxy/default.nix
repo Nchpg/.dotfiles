@@ -12,6 +12,8 @@ let
   static = config.systemSettings.network.staticIPv4;
 
   certNames = lib.attrNames config.security.acme.certs;
+  # Ceux que nginx sert (site du même nom), seuls contrôlables sur son port 443 ; un autre service peut en tenir.
+  servedCerts = lib.filter (name: config.services.nginx.virtualHosts ? ${name}) certNames;
 
   # Journal des visites (onglet Trafic du dashboard, via Vector et Loki) : une ligne JSON par requête.
   visitsFormat = lib.concatStringsSep "," (
@@ -25,7 +27,7 @@ let
     limit=$((now + minDays * 86400))
     status=0
 
-    for host in ${lib.concatStringsSep " " certNames}; do
+    for host in ${lib.concatStringsSep " " servedCerts}; do
       # </dev/null et timeout : s_client attendrait sinon indéfiniment.
       if ! pem=$(timeout 10 openssl s_client -connect 127.0.0.1:443 \
                    -servername "$host" < /dev/null 2> /dev/null); then
