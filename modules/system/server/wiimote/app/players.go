@@ -4,10 +4,12 @@ package main
 // les réordonner et en retirer depuis /dolphin.
 
 import (
+	"crypto/rand"
 	"net"
 	"strings"
 	"unicode"
 
+	"github.com/quic-go/webtransport-go"
 	"golang.org/x/net/websocket"
 )
 
@@ -18,6 +20,11 @@ type player struct {
 	conn *websocket.Conn
 	// Place actuelle, -1 une fois parti. Lue et écrite sous s.mu.
 	slot int
+	// Liaison directe (direct.go) : jeton qui l'ouvre, session ouverte et dernier numéro de datagramme appliqué,
+	// sous s.mu.
+	token  string
+	direct *webtransport.Session
+	seq    uint32
 }
 
 // Nom tapé sur le téléphone, affiché sur la page de l'hôte : sans caractères de contrôle, borné.
@@ -41,7 +48,7 @@ func (s *server) claim(name string, conn *websocket.Conn) *player {
 	defer s.mu.Unlock()
 	for i := range slots {
 		if s.seats[i] == nil {
-			p := &player{name: cleanName(name), conn: conn, slot: i}
+			p := &player{name: cleanName(name), conn: conn, slot: i, token: rand.Text()}
 			s.seats[i] = p
 			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
 			s.pads[i] = padState{pointer: [2]uint16{pointerCenter, pointerCenter}}
@@ -75,8 +82,12 @@ func (s *server) release(p *player) {
 	p.slot = -1
 	s.seats[slot] = nil
 	pkt, targets := s.releasedLocked(slot)
+	sess := p.direct
 	s.mu.Unlock()
 	s.broadcast(pkt, targets)
+	if sess != nil {
+		sess.CloseWithError(0, "manette partie")
+	}
 }
 
 func (s *server) releasedLocked(slot int) ([]byte, []net.Addr) {

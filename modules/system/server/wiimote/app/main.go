@@ -51,6 +51,20 @@ func main() {
 	s := newServer(conn)
 	go func() { log.Fatal(s.serveDSU()) }()
 
+	// Liaison directe (direct.go) : facultative, la manette passe sinon par le WebSocket.
+	if addr := os.Getenv("WIIMOTE_DIRECT_LISTEN"); addr != "" {
+		if udp, err := net.ListenPacket("udp", addr); err != nil {
+			log.Printf("liaison directe indisponible : %v", err)
+		} else {
+			s.directURL = os.Getenv("WIIMOTE_DIRECT_URL")
+			certs := &certReloader{certFile: os.Getenv("WIIMOTE_DIRECT_CERT"), keyFile: os.Getenv("WIIMOTE_DIRECT_KEY")}
+			go func() {
+				log.Printf("liaison directe arrêtée : %v", s.serveDirect(udp, certs.get, os.Getenv("WIIMOTE_ORIGIN")))
+			}()
+			log.Printf("liaison directe sur UDP %s (%s)", addr, s.directURL)
+		}
+	}
+
 	log.Printf("PWA sur %s, DSU sur UDP %s", listen, dsuPort)
 	log.Fatal(http.ListenAndServe(listen, s.routes(dsuHost, dsuPort)))
 }
@@ -173,7 +187,11 @@ func (s *server) phone(ws *websocket.Conn) {
 	s.mu.Lock()
 	slot := p.slot
 	s.mu.Unlock()
-	if websocket.JSON.Send(ws, map[string]int{"slot": slot}) != nil {
+	welcome := map[string]any{"slot": slot}
+	if s.directURL != "" {
+		welcome["direct"] = s.directURL + "?t=" + p.token
+	}
+	if websocket.JSON.Send(ws, welcome) != nil {
 		return
 	}
 

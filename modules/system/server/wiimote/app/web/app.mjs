@@ -42,6 +42,10 @@ let corners;
 let firstCorner;
 let ws;
 let lastError = '';
+// Liaison directe (WebTransport, UDP) que donne le serveur : les états y partent en datagrammes numérotés, sans
+// Cloudflare ni TCP, qui retient tout derrière un paquet perdu. Le WebSocket reste en repli.
+let direct = null;
+const datagram = new DataView(new ArrayBuffer(8 + 30));
 let wakeLock;
 
 // Selon le navigateur, accelerationIncludingGravity n'a pas toujours le signe de la spec : on le recoupe
@@ -164,7 +168,6 @@ function say(text) {
 }
 
 function send() {
-  if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   packet.setUint16(0, buttons, true);
   const out = steer !== null ? wheelMotion(steer * settings.stick)
     : mode === 'sideways' ? tiltGain(motion, settings.tilt)
@@ -172,8 +175,49 @@ function send() {
   out.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
   packet.setUint16(26, aim[0], true);
   packet.setUint16(28, aim[1], true);
+  if (direct) {
+    // Numéro croissant (le serveur jette un datagramme doublé par un plus récent) et instant du téléphone.
+    datagram.setUint32(0, ++direct.seq, true);
+    datagram.setUint32(4, Math.round(performance.now()) >>> 0, true);
+    new Uint8Array(datagram.buffer, 8).set(new Uint8Array(packet.buffer));
+    direct.writer.write(new Uint8Array(datagram.buffer.slice(0))).catch(() => {});
+    return;
+  }
+  if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
   ws.send(packet.buffer);
 }
+
+function showLink() {
+  document.getElementById('link').textContent = direct ? 'directe (UDP)' : 'par Cloudflare (WebSocket)';
+}
+
+async function connectDirect(url) {
+  if (!('WebTransport' in window)) return;
+  try {
+    const wt = new WebTransport(url);
+    await wt.ready;
+    direct = { wt, writer: wt.datagrams.writable.getWriter(), seq: 0 };
+    wt.closed.catch(() => {}).finally(() => {
+      if (direct?.wt === wt) direct = null;
+      showLink();
+    });
+  } catch {
+    // Navigateur ou réseau sans UDP : on reste sur le WebSocket.
+    direct = null;
+  }
+  showLink();
+}
+
+function closeDirect() {
+  direct?.wt.close();
+  direct = null;
+  showLink();
+}
+
+// Liaison directe active : le WebSocket ne porte plus rien, un signe de vie lui évite d'être coupé (2 s).
+setInterval(() => {
+  if (direct && ws?.readyState === WebSocket.OPEN) ws.send(new Uint8Array([0]));
+}, 500);
 
 const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF);
 
@@ -374,12 +418,14 @@ function connect() {
     }
     lastError = '';
     showPlayer(msg.slot);
+    if (msg.direct && !direct) connectDirect(msg.direct);
     overlay.hidden = true;
     navigator.vibrate?.([30, 60, 30]);
     send();
   };
   ws.onclose = () => {
     showPlayer(-1);
+    closeDirect();
     if (retry) {
       say(lastError || 'Connexion perdue, nouvelle tentative…');
       // Après le délai du serveur (2 s sans nouvelles) : l'ancienne place est libérée, on la retrouve.

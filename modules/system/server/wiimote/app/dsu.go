@@ -82,6 +82,8 @@ type server struct {
 	subs       map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
 	invite string
+	// Adresse de la liaison directe donnée aux téléphones (direct.go), vide sans elle.
+	directURL string
 }
 
 func newServer(conn net.PacketConn) *server {

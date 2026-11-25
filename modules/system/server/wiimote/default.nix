@@ -20,12 +20,16 @@ let
     pname = "wiimote";
     version = "0.1.0";
     src = ./app;
-    vendorHash = "sha256-HEY9Vr7nOO8YKOYjHKlVcdl3MlF0DTcIxqHGt8bQIIM=";
+    vendorHash = "sha256-19X/XRsvCJzdy+J+KVVtgyzWQqpI5tm4Pv05kO6umng=";
     env.CGO_ENABLED = 0;
     meta.mainProgram = "wiimote";
   };
 
   pcs = wireguard.sourcesFor "wiimote";
+
+  # Liaison directe des manettes (WebTransport, UDP) : sur le nom public de la box, celui du VPN, hors Cloudflare.
+  directHost = wireguard.host;
+  directCert = "/var/lib/acme/${directHost}";
 in
 {
   options.systemSettings.wiimote = {
@@ -43,6 +47,14 @@ in
       description = "Port de bouclage de la PWA, derrière nginx.";
     };
 
+    directPort = lib.mkOption {
+      type = lib.types.port;
+      default = 4433;
+      description = ''
+        Port UDP de la liaison directe des manettes (WebTransport), à rediriger sur la box comme celui du VPN.
+      '';
+    };
+
     dsuPort = lib.mkOption {
       type = lib.types.port;
       # Port par défaut des serveurs DSU, celui que Dolphin propose.
@@ -54,8 +66,9 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.systemSettings.proxy.enable && wireguard.enable && authelia.enable;
-        message = "systemSettings.wiimote exige le proxy (PWA), le VPN (DSU vers Dolphin) et Authelia (page de l'hôte).";
+        assertion =
+          config.systemSettings.proxy.enable && wireguard.enable && wireguard.host != null && authelia.enable;
+        message = "systemSettings.wiimote exige le proxy (PWA), le VPN et son nom public (DSU vers Dolphin, liaison directe) et Authelia (page de l'hôte).";
       }
     ];
 
@@ -84,10 +97,17 @@ in
         WIIMOTE_LISTEN = "127.0.0.1:${toString cfg.port}";
         WIIMOTE_DSU_PORT = toString cfg.dsuPort;
         WIIMOTE_DSU_HOST = wireguard.serverAddress;
+        WIIMOTE_DIRECT_LISTEN = ":${toString cfg.directPort}";
+        WIIMOTE_DIRECT_URL = "https://${directHost}:${toString cfg.directPort}/wt";
+        WIIMOTE_DIRECT_CERT = "${directCert}/fullchain.pem";
+        WIIMOTE_DIRECT_KEY = "${directCert}/key.pem";
+        WIIMOTE_ORIGIN = "https://${host}";
       };
       serviceConfig = {
         ExecStart = lib.getExe package;
         DynamicUser = true;
+        # Lecture de son seul certificat (relu à chaud au renouvellement).
+        SupplementaryGroups = [ "wiimote-tls" ];
         Restart = "on-failure";
         NoNewPrivileges = true;
         ProtectSystem = "strict";
@@ -106,6 +126,12 @@ in
         CapabilityBoundingSet = [ "" ];
       };
     };
+
+    # Certificat de la liaison directe, servi par l'application : un groupe à lui, pas `acme` (toutes les clés).
+    security.acme.certs.${directHost}.group = "wiimote-tls";
+    users.groups.wiimote-tls = { };
+    # Ouvert à internet comme le VPN : la session n'accepte que le jeton d'une manette déjà connectée.
+    networking.firewall.allowedUDPPorts = [ cfg.directPort ];
 
     # La manette reste ouverte sans compte : l'application exige le jeton du lien d'invitation.
     services.nginx.virtualHosts.${host} = myLib.server.mkTlsVhost {
