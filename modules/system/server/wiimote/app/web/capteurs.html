@@ -157,7 +157,7 @@ function show(still, sweep) {
   const jm = jumps(sweep.o, sweep.m);
   const fc = fusionCheck(sweep.o, sweep.m);
   const verdict = fc.axes === undefined ? 'pas assez de mouvement' : fc.axes === null ? 'non' : 'oui';
-  const accord = fc.results.map(({ cos, ratio }, i) => `${['spec', 'xyz'][i]} ${f(cos, 2)} × ${f(ratio, 2)}`);
+  const accord = fc.results.map(({ cos, ratio }, i) => `${['xyz', 'spec'][i]} ${f(cos, 2)} × ${f(ratio, 2)}`);
   const rows = [
     ['Évènements par seconde', f(co.hz), f(cm.hz)],
     ['Valeurs nouvelles par seconde', f(co.fresh), f(cm.fresh)],

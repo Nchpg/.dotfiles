@@ -82,17 +82,19 @@ export function aimFromQuat([w, x, y, z], hold) {
   return [Math.atan2(f[0], f[1]) / RAD, Math.asin(Math.max(-1, Math.min(1, f[2]))) / RAD];
 }
 
-// Ordre des axes de rotationRate selon le navigateur : celui de la spec (alpha autour de z, beta de x, gamma de y)
-// ou x, y, z dans l'ordre alpha, beta, gamma. Chacun est essayé, l'orientation tranche.
-const GYRO_AXES = [({ alpha, beta, gamma }) => [beta, gamma, alpha], ({ alpha, beta, gamma }) => [alpha, beta, gamma]];
+// Ordre des axes de rotationRate : x, y, z dans l'ordre alpha, beta, gamma pour Chrome, Firefox et Safari (mesuré
+// sur un Xiaomi 17T), alors que le texte de la spec mettrait alpha autour de z. Les deux sont essayés, l'orientation
+// tranche.
+export const gyroXYZ = ({ alpha, beta, gamma }) => [alpha, beta, gamma];
+const GYRO_AXES = [gyroXYZ, ({ alpha, beta, gamma }) => [beta, gamma, alpha]];
 const WINDOW = 4 * RAD;
-const BLOCK = 20;
+const BLOCK = 10;
 
 // Visée fusionnée : chaque devicemotion (60 Hz réguliers) fait tourner l'orientation du gyroscope, chaque
 // deviceorientation la recale (constante de temps `tau`, en s). Certains téléphones (Xiaomi 17T) ne donnent
 // l'orientation qu'à 30 Hz par à-coups, et Chrome la tait sous 0,1° de changement. Le gyroscope n'est suivi que si,
-// sur 20 rotations d'au moins 4°, ce qu'il a mesuré colle à l'orientation (sens et ampleur) ; c'est revérifié
-// toutes les 20 rotations. Sinon l'orientation seule.
+// sur 10 rotations d'au moins 4°, un ordre d'axes colle à l'orientation (sens et ampleur) nettement mieux que
+// l'autre ; c'est revérifié toutes les 10 rotations, un bloc ambigu ne change rien. Sinon l'orientation seule.
 export function aimFusion(tau = 0.3) {
   let q = null;
   let tOrientation = 0;
@@ -127,8 +129,10 @@ export function aimFusion(tau = 0.3) {
         const n = (check.windows++ % BLOCK) + 1;
         check.results = sums.map(({ cos, gyro, orientation }) => ({ cos: cos / n, ratio: gyro / orientation }));
         if (n === BLOCK) {
-          const i = check.results.findIndex(({ cos, ratio }) => cos > 0.8 && Math.abs(ratio - 1) < 0.3);
-          check.axes = i < 0 ? null : i;
+          const [best, other] = check.results.map((_, i) => i).sort((a, b) => check.results[b].cos - check.results[a].cos);
+          const { cos, ratio } = check.results[best];
+          if (cos < 0.9 || Math.abs(ratio - 1) > 0.3) check.axes = null;
+          else if (cos - check.results[other].cos > 0.15) check.axes = best;
           sums = GYRO_AXES.map(() => ({ cos: 0, gyro: 0, orientation: 0 }));
         }
       }

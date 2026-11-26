@@ -1,4 +1,4 @@
-import { G, aimFromQuat, aimFusion, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimFromQuat, aimFusion, gyroXYZ, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -383,7 +383,7 @@ addEventListener('devicemotion', (e) => {
   // Repère de la tenue, pas de l'écran : il ne change pas quand l'écran bascule.
   motion = toDSU(
     [a.x * accelSign, a.y * accelSign, a.z * accelSign],
-    [r?.beta ?? 0, r?.gamma ?? 0, r?.alpha ?? 0],
+    r?.alpha == null ? [0, 0, 0] : gyroXYZ(r),
     hold,
     mode === 'sideways',
   );

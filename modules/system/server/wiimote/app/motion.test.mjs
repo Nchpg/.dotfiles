@@ -187,7 +187,7 @@ function sweep(fusion, { seconds = 10, orientationEvery = 6, rate = spec } = {})
 }
 
 test('visée fusionnée : le gyroscope comble une orientation à 10 Hz, à 0,2° près, quel que soit l’ordre des axes', () => {
-  for (const [rate, axes] of [[spec, 0], [([x, y, z]) => ({ alpha: x, beta: y, gamma: z }), 1]]) {
+  for (const [rate, axes] of [[spec, 1], [([x, y, z]) => ({ alpha: x, beta: y, gamma: z }), 0]]) {
     const fusion = aimFusion();
     const worst = sweep(fusion, { rate });
     assert.equal(fusion.check.axes, axes);
