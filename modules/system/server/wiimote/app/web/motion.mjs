@@ -44,7 +44,7 @@ export function aimAngles(alpha, beta, hold) {
 }
 
 // Quaternions [w, x, y, z] : orientation du téléphone, de son repère vers celui de la Terre.
-const qmul = ([aw, ax, ay, az], [bw, bx, by, bz]) => [
+export const qmul = ([aw, ax, ay, az], [bw, bx, by, bz]) => [
   aw * bw - ax * bx - ay * by - az * bz,
   aw * bx + ax * bw + ay * bz - az * by,
   aw * by - ax * bz + ay * bw + az * bx,
@@ -63,7 +63,7 @@ export function orientationQuat(alpha, beta, gamma) {
 }
 
 // Rotation d'un vecteur [x, y, z] (radians, repère du téléphone), et l'inverse.
-function rotationQuat(v) {
+export function rotationQuat(v) {
   const angle = Math.hypot(...v);
   if (angle < 1e-12) return [1, 0, 0, 0];
   const s = Math.sin(angle / 2) / angle;
@@ -91,8 +91,9 @@ const WINDOW = 4 * RAD;
 const BLOCK = 10;
 
 // Visée fusionnée : chaque devicemotion (60 Hz réguliers) fait tourner l'orientation du gyroscope, chaque
-// deviceorientation la recale (constante de temps `tau`, en s). Certains téléphones (Xiaomi 17T) ne donnent
-// l'orientation qu'à 30 Hz par à-coups, et Chrome la tait sous 0,1° de changement. Le gyroscope n'est suivi que si,
+// deviceorientation la recale (constante de temps `tau`, en s). Chrome tait l'orientation qui bouge de moins de
+// 0,1° : en visée lente, elle n'arrive que par à-coups (jusqu'à 230 ms d'écart mesurés sur un Xiaomi 17T, 60 Hz
+// réguliers dès qu'il tourne franchement), le gyroscope reste à 60 Hz. Le gyroscope n'est suivi que si,
 // sur 10 rotations d'au moins 4°, un ordre d'axes colle à l'orientation (sens et ampleur) nettement mieux que
 // l'autre ; c'est revérifié toutes les 10 rotations, un bloc ambigu ne change rien. Sinon l'orientation seule.
 export function aimFusion(tau = 0.3) {

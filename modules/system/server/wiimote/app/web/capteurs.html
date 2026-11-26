@@ -36,7 +36,7 @@
 <p class="soft" id="ua"></p>
 
 <script type="module">
-import { aimAngles, aimFusion } from './motion.mjs';
+import { aimAngles, aimFromQuat, aimFusion, gyroXYZ, orientationQuat, qmul, rotationQuat } from './motion.mjs';
 
 const RAD = Math.PI / 180;
 const $ = (id) => document.getElementById(id);
@@ -65,7 +65,8 @@ const wait = (s) => new Promise((done) => {
   tick();
 });
 
-async function record(text, seconds) {
+// `still` : les dernières secondes, immobile.
+async function record(text, seconds, still = 0) {
   $('step').textContent = text;
   await wait(3);
   navigator.vibrate?.(60);
@@ -73,7 +74,12 @@ async function record(text, seconds) {
   await new Promise((done) => setTimeout(done, 300));
   $('step').textContent = 'Mesure en cours… ' + text;
   rec = { o: [], m: [] };
-  await wait(seconds);
+  await wait(seconds - still);
+  if (still) {
+    $('step').textContent = "Stop ! Vise le centre de l'écran et ne bouge plus.";
+    navigator.vibrate?.(200);
+    await wait(still);
+  }
   const done = rec;
   rec = null;
   navigator.vibrate?.([60, 80, 60]);
@@ -123,15 +129,55 @@ function jumps(o, m) {
   };
 }
 
+const merged = (o, m) => [...o.map((r) => ['o', r]), ...m.map((r) => ['m', r])].sort((a, b) => a[1][0] - b[1][0]);
+const rateOf = (r) => ({ alpha: r[1], beta: r[2], gamma: r[3] });
+
 // La visée fusionnée de la manette, rejouée sur le balayage : le gyroscope est-il retenu ?
 function fusionCheck(o, m) {
   const fusion = aimFusion();
-  const events = [...o.map((r) => ['o', r]), ...m.map((r) => ['m', r])].sort((a, b) => a[1][0] - b[1][0]);
-  for (const [kind, r] of events) {
+  for (const [kind, r] of merged(o, m)) {
     if (kind === 'o') fusion.orientation(r[1], r[2], r[3], r[0]);
-    else fusion.gyro({ alpha: r[1], beta: r[2], gamma: r[3] }, r[0]);
+    else fusion.gyro(rateOf(r), r[0]);
   }
   return fusion.check;
+}
+
+// Cercles : cap et élévation selon l'orientation, selon le gyroscope seul (intégré depuis la première orientation)
+// et selon la visée de la manette, comparés une fois le téléphone immobile. Si l'orientation s'écarte du gyroscope,
+// c'est elle qui dérive ; si la visée s'écarte de l'orientation, c'est la fusion.
+function drift(o, m) {
+  const fusion = aimFusion();
+  let gyro = null;
+  let tGyro = null;
+  let total = 0;
+  const gaps = [];
+  for (const [kind, r] of merged(o, m)) {
+    if (kind === 'm') {
+      fusion.gyro(rateOf(r), r[0]);
+      const dt = tGyro === null ? 0 : Math.min(Math.max((r[0] - tGyro) / 1000, 0), 0.05);
+      tGyro = r[0];
+      const rate = gyroXYZ(rateOf(r));
+      if (gyro) gyro = qmul(gyro, rotationQuat(rate.map((c) => c * RAD * dt)));
+      total += Math.hypot(...rate) * dt;
+      continue;
+    }
+    fusion.orientation(r[1], r[2], r[3], r[0]);
+    const measured = orientationQuat(r[1], r[2], r[3]);
+    gyro ??= measured;
+    const [ho, eo] = aimFromQuat(measured, 0);
+    const [hg, eg] = aimFromQuat(gyro, 0);
+    const [hf, ef] = aimFromQuat(fusion.quat, 0);
+    gaps.push([r[0], wrap(ho - hg), eo - eg, wrap(hf - ho), ef - eo]);
+  }
+  const end = gaps.filter(([t]) => t > gaps.at(-1)[0] - 1000);
+  const avg = (k) => mean(end.map((g) => g[k]));
+  return {
+    total,
+    og: [avg(1), avg(2)],
+    fo: [avg(3), avg(4)],
+    worst: Math.max(...gaps.map((g) => Math.hypot(g[3], g[4]))),
+    trusted: Number.isInteger(fusion.check.axes),
+  };
 }
 
 // Au repos, Chrome peut ne donner aucune orientation (moins de 0,1° de changement) : rien à mesurer alors.
@@ -150,13 +196,14 @@ function rest(o, m) {
 
 const f = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : '—');
 
-function show(still, sweep) {
+function show(still, sweep, circles) {
   const r = rest(still.o, still.m);
   const co = cadence(sweep.o);
   const cm = cadence(sweep.m);
   const jm = jumps(sweep.o, sweep.m);
   const fc = fusionCheck(sweep.o, sweep.m);
   const verdict = fc.axes === undefined ? 'pas assez de mouvement' : fc.axes === null ? 'non' : 'oui';
+  const d = drift(circles.o, circles.m);
   const accord = fc.results.map(({ cos, ratio }, i) => `${['xyz', 'spec'][i]} ${f(cos, 2)} × ${f(ratio, 2)}`);
   const rows = [
     ['Évènements par seconde', f(co.hz), f(cm.hz)],
@@ -171,6 +218,10 @@ function show(still, sweep) {
     ['En mouvement : écart p95 / max (ms)', `${f(jm.p95, 0)} / ${f(jm.max, 0)}`, ''],
     ['Gyroscope suivi par la visée', '', verdict],
     [`Accord sur ${fc.windows} rotations de 4° (sens × ampleur)`, '', accord.join('<br>') || '—'],
+    ['Cercles : rotation totale', f(d.total, 0) + ' °', ''],
+    ['Cercles, à la fin : orientation − gyroscope (cap, élévation)', `${f(d.og[0])}, ${f(d.og[1])} °`, ''],
+    [`Cercles : visée − orientation (cap, élévation à la fin ; pire)${d.trusted ? '' : ', gyroscope non suivi'}`,
+      `${f(d.fo[0])}, ${f(d.fo[1])} ° ; ${f(d.worst)} °`, ''],
   ];
   $('out').innerHTML = '<table><tr><th></th><th>Orientation</th><th>Gyroscope</th></tr>' +
     rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('') + '</table>';
@@ -192,15 +243,16 @@ $('go').addEventListener('click', async () => {
   const still = await record('Pose le téléphone à plat sur une table et ne le touche plus.', 5);
   const sweep = await record(
     "Prends-le comme la manette, pointé vers l'écran, et vise partout comme dans un menu : gauche, droite, haut, bas.", 12);
+  const circles = await record("Vise le centre de l'écran, puis fais de grands cercles autour, toujours dans le même sens.", 13, 3);
   $('count').textContent = '';
   $('go').hidden = false;
   $('go').textContent = 'Recommencer';
-  if (still.m.length < 10 || sweep.o.length < 10 || sweep.m.length < 10) {
+  if (still.m.length < 10 || sweep.o.length < 10 || sweep.m.length < 10 || circles.o.length < 10) {
     $('step').textContent = `Pas assez de mesures (orientation ${sweep.o.length}, gyroscope ${sweep.m.length}) : ` +
       'le navigateur ne donne pas les capteurs.';
     return;
   }
-  show(still, sweep);
+  show(still, sweep, circles);
 });
 </script>
 </body>
