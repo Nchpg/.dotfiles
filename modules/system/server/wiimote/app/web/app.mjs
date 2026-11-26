@@ -1,4 +1,4 @@
-import { G, aimPosition, gyroAim, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimPosition, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -38,9 +38,8 @@ const SMOOTHING = [
 ];
 const SMOOTHING_LABELS = ['aucun', 'léger', 'moyen', 'fort'];
 let aimFilters = null;
-// Visée au gyroscope (gyroAim) : angles cumulés, gravité lissée (sans les à-coups de la main), dernier échantillon.
-let aimAngle = [0, 0];
-let gravity = [0, 0, G];
+// Visée au gyroscope (gyroPointer), et l'instant de son dernier échantillon.
+const pointer = gyroPointer();
 let lastMotion = null;
 let corners;
 let firstCorner;
@@ -233,7 +232,7 @@ function updateAim(t) {
     aimFilters = null;
     return;
   }
-  const raw = aimPosition(aimAngle, ...corners);
+  const raw = aimPosition(pointer.aim(hold), ...corners);
   const preset = SMOOTHING[settings.smooth];
   aimFilters ??= raw.map(() => (preset ? oneEuro(preset) : (v) => v));
   aim = raw.map((v, i) => toU16(aimFilters[i](v, t)));
@@ -242,7 +241,7 @@ function updateAim(t) {
 // ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
 aimButton.addEventListener('click', () => {
   if (lastMotion === null) return;
-  const now = aimAngle;
+  const now = pointer.aim(hold);
   if (aimButton.dataset.step === 'top-left') {
     firstCorner = now;
     aimButton.dataset.step = 'bottom-right';
@@ -366,8 +365,7 @@ addEventListener('devicemotion', (e) => {
   if (r?.alpha != null) {
     const dt = lastMotion === null ? 0 : Math.min(Math.max((e.timeStamp - lastMotion) / 1000, 0), 0.05);
     lastMotion = e.timeStamp;
-    gravity = gravity.map((g, i) => g + ([a.x, a.y, a.z][i] - g) * 0.2);
-    aimAngle = gyroAim(aimAngle, r, gravity, dt, hold);
+    pointer.update(r, [a.x, a.y, a.z], dt);
     updateAim(e.timeStamp);
   }
 

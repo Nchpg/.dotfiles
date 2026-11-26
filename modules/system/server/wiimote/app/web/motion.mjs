@@ -33,18 +33,55 @@ export function holdAngle(hold, live, sideways) {
   return (live % 180 !== 0) === sideways ? live : hold;
 }
 
-// Visée au gyroscope seul, comme une souris en l'air : [cap, élévation] cumulés sur `dt` secondes. Le cap tourne
-// autour de la verticale que donne la gravité mesurée, l'élévation autour de l'horizontale qui croise la direction
-// visée (le haut du téléphone) : penché ou roulé, le téléphone balaie toujours droit. rotationRate donne x, y, z
-// dans l'ordre alpha, beta, gamma (Chrome, Firefox, Safari). Unités et signes propres au navigateur ne comptent
+// Quaternions [w, x, y, z].
+const qmul = ([aw, ax, ay, az], [bw, bx, by, bz]) => [
+  aw * bw - ax * bx - ay * by - az * bz,
+  aw * bx + ax * bw + ay * bz - az * by,
+  aw * by - ax * bz + ay * bw + az * bx,
+  aw * bz + ax * by - ay * bx + az * bw,
+];
+const unit = (v) => v.map((c) => c / (Math.hypot(...v) || 1));
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+// Vecteur v du repère du téléphone, vu du repère fixe.
+const rotate = ([w, ...r], v) => {
+  const t = cross(r, v).map((c) => 2 * c);
+  const rt = cross(r, t);
+  return v.map((c, i) => c + w * t[i] + rt[i]);
+};
+
+// Visée au gyroscope seul. La pose du téléphone, suivie de sa rotation depuis le premier échantillon, place la
+// direction visée (son haut, axe y) dans un repère fixe ; cap et élévation s'en déduisent à chaque fois, rien ne
+// s'additionne : revenir au même endroit redonne la même visée, même après des cercles. La verticale de ce repère
+// est une moyenne lente de l'accéléromètre (constante de temps `tau`, en s) : les accélérations de la main s'y
+// annulent (moins de 0,6° d'écart en grands cercles rapides, bras tendu, à 10 s ; 4° à 2 s), et une erreur n'y
+// ferait que pencher les axes, sans dérive. rotationRate donne x, y, z dans l'ordre
+// alpha, beta, gamma (Chrome, Firefox, Safari), en °/s. Signes propres au navigateur et zéro du cap ne comptent
 // pas : le calibrage ⌖ (aimPosition) en tire l'échelle et le sens.
-export function gyroAim([cap, elevation], { alpha: x, beta: y, gamma: z }, gravity, dt, hold) {
-  const n = Math.hypot(...gravity) || 1;
-  const [ux, uy, uz] = gravity.map((g) => g / n);
-  const h = Math.hypot(ux, uz);
-  // Visée à la verticale : plus d'horizontale définie, on garde le bord du téléphone.
-  const pitch = h > 0.1 ? (x * uz - z * ux) / h : x;
-  return [cap - (x * ux + y * uy + z * uz) * dt, elevation + (hold === 180 ? -pitch : pitch) * dt];
+export function gyroPointer(tau = 10) {
+  let q = [1, 0, 0, 0];
+  let up = null;
+  // Axe du repère fixe qui donne le zéro du cap : le plus horizontal au départ (téléphone tenu debout ou à plat).
+  let north;
+  return {
+    update({ alpha, beta, gamma }, accel, dt) {
+      const v = [alpha, beta, gamma].map((c) => (c * RAD * dt) / 2);
+      const s = Math.hypot(...v);
+      const k = s < 1e-12 ? 1 : Math.sin(s) / s;
+      q = unit(qmul(q, [Math.cos(s), ...v.map((c) => c * k)]));
+      const g = rotate(q, accel);
+      up = up ? up.map((c, i) => c + (g[i] - c) * (dt / (tau + dt))) : g;
+      north ??= [[1, 0, 0], [0, 1, 0], [0, 0, 1]].reduce((a, b) => (Math.abs(dot(a, up)) <= Math.abs(dot(b, up)) ? a : b));
+    },
+    // [cap vers la droite, élévation], en degrés.
+    aim(hold) {
+      if (!up) return [0, 0];
+      const u = unit(up);
+      const n = unit(north.map((c, i) => c - dot(north, u) * u[i]));
+      const f = rotate(q, [0, hold === 180 ? -1 : 1, 0]);
+      return [Math.atan2(dot(f, cross(n, u)), dot(f, n)) / RAD, Math.asin(Math.max(-1, Math.min(1, dot(f, u)))) / RAD];
+    },
+  };
 }
 
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
