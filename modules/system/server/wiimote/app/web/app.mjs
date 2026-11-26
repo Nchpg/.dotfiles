@@ -1,4 +1,4 @@
-import { G, aimPosition, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -38,11 +38,13 @@ const SMOOTHING = [
 ];
 const SMOOTHING_LABELS = ['aucun', 'léger', 'moyen', 'fort'];
 let aimFilters = null;
-// Visée au gyroscope (gyroPointer), et l'instant de son dernier échantillon.
+// Visée au gyroscope (gyroPointer).
 const pointer = gyroPointer();
-let lastMotion = null;
-let corners;
-let firstCorner;
+// Écran de la télé calibré (screenFrom) ; pendant le calibrage, les directions visées à ses coins ; recentrage
+// (turnTo) contre la lente dérive du gyroscope.
+let tv;
+let aimed = null;
+let recentre = (v) => v;
 let ws;
 let lastError = '';
 // Liaison directe (WebTransport, UDP) que donne le serveur : les états y partent en datagrammes numérotés, sans
@@ -227,35 +229,55 @@ const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF)
 // Le téléphone vise lui-même, avec ses propres horodatages : rien ne s'accumule si le réseau hoquette, contrairement
 // au pointeur que Dolphin tirerait du gyroscope reçu.
 function updateAim(t) {
-  if (mode !== 'vertical' || !corners) {
+  const direction = pointer.direction(hold);
+  if (mode !== 'vertical' || !tv || !direction) {
     aim = [AIM_CENTER, AIM_CENTER];
     aimFilters = null;
     return;
   }
-  const raw = aimPosition(pointer.aim(hold), ...corners);
+  const raw = tv(recentre(direction));
   const preset = SMOOTHING[settings.smooth];
   aimFilters ??= raw.map(() => (preset ? oneEuro(preset) : (v) => v));
   aim = raw.map((v, i) => toU16(aimFilters[i](v, t)));
 }
 
-// ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
+// Calibrage (⚙, ou ⌖ la première fois) : viser les coins de l'écran dans l'ordre (↖ ↗ ↘ ↙) en appuyant sur ⌖ à
+// chacun. Ensuite, ⌖ recentre : viser le milieu de l'écran et appuyer.
+const CORNERS = ['↖', '↗', '↘', '↙'];
+function calibrate() {
+  aimed = [];
+  aimButton.textContent = `${CORNERS[0]} coin`;
+}
 aimButton.addEventListener('click', () => {
-  if (lastMotion === null) return;
-  const now = pointer.aim(hold);
-  if (aimButton.dataset.step === 'top-left') {
-    firstCorner = now;
-    aimButton.dataset.step = 'bottom-right';
-    aimButton.textContent = '↘ coin';
+  const now = pointer.direction(hold);
+  if (!now) return;
+  if (!aimed) {
+    if (!tv) return calibrate();
+    recentre = ((fix, before) => (v) => fix(before(v)))(turnTo(recentre(now), tv.center), recentre);
+    navigator.vibrate?.(20);
     return;
   }
-  if (aimButton.dataset.step === 'bottom-right' && validCorners(firstCorner, now)) {
-    corners = [firstCorner, now];
+  aimed.push(now);
+  if (aimed.length < CORNERS.length) {
+    aimButton.textContent = `${CORNERS[aimed.length]} coin`;
+    return;
+  }
+  const calibrated = screenFrom(aimed);
+  if (calibrated) {
+    tv = calibrated;
+    recentre = (v) => v;
     aimFilters = null;
     navigator.vibrate?.([20, 40, 20]);
+  } else {
+    // Coins confondus ou dans le désordre : calibrage refusé, l'ancien reste.
+    navigator.vibrate?.(300);
   }
-  const start = !aimButton.dataset.step;
-  aimButton.dataset.step = start ? 'top-left' : '';
-  aimButton.textContent = start ? '↖ coin' : '⌖';
+  aimed = null;
+  aimButton.textContent = '⌖';
+});
+document.getElementById('calibrate').addEventListener('click', () => {
+  panel.hidden = true;
+  calibrate();
 });
 
 const dpad = document.querySelector('.dpad');
@@ -359,15 +381,13 @@ addEventListener('deviceorientation', (e) => {
 });
 
 addEventListener('devicemotion', (e) => {
-  const a = e.accelerationIncludingGravity;
-  if (a?.x == null) return;
   const r = e.rotationRate;
   if (r?.alpha != null) {
-    const dt = lastMotion === null ? 0 : Math.min(Math.max((e.timeStamp - lastMotion) / 1000, 0), 0.05);
-    lastMotion = e.timeStamp;
-    pointer.update(r, [a.x, a.y, a.z], dt);
+    pointer.update(r, e.timeStamp);
     updateAim(e.timeStamp);
   }
+  const a = e.accelerationIncludingGravity;
+  if (a?.x == null) return;
 
   if (samples < 30 && orientation) {
     const norm = Math.hypot(a.x, a.y, a.z);

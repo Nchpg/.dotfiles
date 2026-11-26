@@ -51,55 +51,110 @@ const rotate = ([w, ...r], v) => {
 };
 
 // Visée au gyroscope seul. La pose du téléphone, suivie de sa rotation depuis le premier échantillon, place la
-// direction visée (son haut, axe y) dans un repère fixe ; cap et élévation s'en déduisent à chaque fois, rien ne
-// s'additionne : revenir au même endroit redonne la même visée, même après des cercles. La verticale de ce repère
-// est une moyenne lente de l'accéléromètre (constante de temps `tau`, en s) : les accélérations de la main s'y
-// annulent (moins de 0,6° d'écart en grands cercles rapides, bras tendu, à 10 s ; 4° à 2 s), et une erreur n'y
-// ferait que pencher les axes, sans dérive. rotationRate donne x, y, z dans l'ordre
-// alpha, beta, gamma (Chrome, Firefox, Safari), en °/s. Signes propres au navigateur et zéro du cap ne comptent
-// pas : le calibrage ⌖ (aimPosition) en tire l'échelle et le sens.
-export function gyroPointer(tau = 10) {
+// direction visée (son haut, axe y) dans un repère fixe : revenir au même endroit redonne la même direction, même
+// après des cercles. rotationRate donne x, y, z dans l'ordre alpha, beta, gamma (Chrome, Firefox, Safari), en °/s.
+export function gyroPointer() {
   let q = [1, 0, 0, 0];
-  let up = null;
-  // Axe du repère fixe qui donne le zéro du cap : le plus horizontal au départ (téléphone tenu debout ou à plat).
-  let north;
+  // Les deux derniers échantillons : [instant (ms), rotation (°/s)].
+  let last = null;
+  let previous = null;
   return {
-    update({ alpha, beta, gamma }, accel, dt) {
-      const v = [alpha, beta, gamma].map((c) => (c * RAD * dt) / 2);
-      const s = Math.hypot(...v);
-      const k = s < 1e-12 ? 1 : Math.sin(s) / s;
-      q = unit(qmul(q, [Math.cos(s), ...v.map((c) => c * k)]));
-      const g = rotate(q, accel);
-      up = up ? up.map((c, i) => c + (g[i] - c) * (dt / (tau + dt))) : g;
-      north ??= [[1, 0, 0], [0, 1, 0], [0, 0, 1]].reduce((a, b) => (Math.abs(dot(a, up)) <= Math.abs(dot(b, up)) ? a : b));
+    // rotationRate d'un devicemotion et son instant (ms). Les instants d'arrivée, même décalés de 1 à 3 ms, valent
+    // mieux qu'une horloge reconstituée (simulation).
+    update({ alpha, beta, gamma }, t) {
+      const rate = [alpha, beta, gamma];
+      // Un échantillon vide ou invalide empoisonnerait la pose pour de bon : ignoré.
+      if (![...rate, t].every(Number.isFinite)) return;
+      // Durée entre deux échantillons ; au-delà de 100 ms (page en arrière-plan), la rotation d'alors ne dit plus
+      // rien du trou.
+      const span = (a, b) => (a && b[0] - a[0] > 0 && b[0] - a[0] <= 100 ? (b[0] - a[0]) / 1000 : 0);
+      const dt = span(last, [t]);
+      // Rotation (radians, repère du téléphone) entre les deux derniers échantillons : la vitesse suit la parabole
+      // des trois derniers (trapèzes corrigés de sa courbure, sans attendre le suivant), plus la correction de
+      // conicité. Sans elles, dix cercles rapides tourneraient la pose de 1° à 60 Hz ; avec, de 0,02°.
+      let turn = [0, 0, 0];
+      if (dt > 0) {
+        const [r1, h1] = [last[1], span(previous, last)];
+        const curve = (i) => (h1 ? ((rate[i] - r1[i]) * h1 + (previous[1][i] - r1[i]) * dt) / (h1 * dt * (h1 + dt)) : 0);
+        const coning = cross(r1, rate);
+        turn = rate.map((c, i) => (((c + r1[i]) / 2) * dt - (curve(i) * dt ** 3) / 6) * RAD + (coning[i] * (RAD * dt) ** 2) / 12);
+      }
+      previous = last;
+      last = [t, rate];
+      const s = Math.hypot(...turn) / 2;
+      const k = s < 1e-12 ? 0.5 : Math.sin(s) / (2 * s);
+      q = unit(qmul(q, [Math.cos(s), ...turn.map((c) => c * k)]));
     },
-    // [cap vers la droite, élévation], en degrés.
-    aim(hold) {
-      if (!up) return [0, 0];
-      const u = unit(up);
-      const n = unit(north.map((c, i) => c - dot(north, u) * u[i]));
-      const f = rotate(q, [0, hold === 180 ? -1 : 1, 0]);
-      return [Math.atan2(dot(f, cross(n, u)), dot(f, n)) / RAD, Math.asin(Math.max(-1, Math.min(1, dot(f, u)))) / RAD];
+    // Direction visée (vecteur unitaire du repère fixe), le bas du téléphone si on le tient retourné ; null avant le
+    // premier échantillon.
+    direction(hold) {
+      return last ? rotate(q, [0, hold === 180 ? -1 : 1, 0]) : null;
     },
   };
 }
 
-const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
-
-// Coins visés au calibrage trop proches : on garderait un pointeur affolé.
-export function validCorners(topLeft, bottomRight) {
-  return Math.abs(wrap(bottomRight[0] - topLeft[0])) > 2 && Math.abs(topLeft[1] - bottomRight[1]) > 1;
+// Écran d'après les directions visées à ses quatre coins au calibrage (haut gauche, haut droit, bas droit, bas
+// gauche) : projetées sur un plan face à elles, la perspective (homographie) qui envoie ces quatre points sur les
+// coins de l'écran place exactement tout le reste, qu'on soit de face ou de biais, tant que la main reste où elle
+// était. Ni la gravité (l'accéléromètre, décalé de quelques centièmes de g, pencherait les axes) ni le format de
+// l'écran n'y entrent ; les signes propres au navigateur non plus. Rend la position de -1 à 1 (y vers le haut)
+// d'une direction, bloquée aux bords ; null si les coins ne dessinent pas un quadrilatère convexe d'au moins 1° de
+// côté (appui en double, ordre faux).
+export function screenFrom(corners) {
+  const normal = unit(corners.reduce((sum, v) => sum.map((c, i) => c + v[i]), [0, 0, 0]));
+  const axis = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].reduce((a, b) => (Math.abs(dot(a, normal)) <= Math.abs(dot(b, normal)) ? a : b));
+  const [e1, e2] = [unit(cross(normal, axis)), unit(cross(normal, unit(cross(normal, axis))))];
+  // Derrière soi, la profondeur bornée garde des coordonnées finies.
+  const plane = (v) => [dot(v, e1), dot(v, e2)].map((c) => c / Math.max(dot(v, normal), 1e-3));
+  const p = corners.map(plane);
+  const sides = p.map((a, i) => [p[(i + 1) % 4][0] - a[0], p[(i + 1) % 4][1] - a[1]]);
+  const turns = sides.map((a, i) => a[0] * sides[(i + 1) % 4][1] - a[1] * sides[(i + 1) % 4][0]);
+  const convex = turns.every((t) => t > 0) || turns.every((t) => t < 0);
+  if (!convex || sides.some((a) => Math.hypot(...a) < Math.tan(RAD))) return null;
+  // Homographie du carré unité (coins (0,0), (1,0), (1,1), (0,1)) vers le quadrilatère (Heckbert), puis son inverse
+  // (la comatrice suffit : coordonnées homogènes).
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = p;
+  const [sx, sy] = [x0 - x1 + x2 - x3, y0 - y1 + y2 - y3];
+  const [dx1, dx2, dy1, dy2] = [x1 - x2, x3 - x2, y1 - y2, y3 - y2];
+  const det = dx1 * dy2 - dx2 * dy1;
+  const [g, h] = [(sx * dy2 - dx2 * sy) / det, (dx1 * sy - sx * dy1) / det];
+  const [a, b, c, d, e, f] = [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0];
+  const inverse = [
+    [e - f * h, c * h - b, b * f - c * e],
+    [f * g - d, a - c * g, c * d - a * f],
+    [d * h - e * g, b * g - a * h, a * e - b * d],
+  ];
+  // Coordonnées homogènes de signe quelconque : positives au centre de l'écran.
+  if (inverse[2][2] < 0) inverse.forEach((r) => r.forEach((c, j) => (r[j] = -c)));
+  const clamp = (v) => Math.max(-1, Math.min(1, v));
+  let held = [0, 0];
+  const toScreen = (direction) => {
+    const [x, y] = plane(direction);
+    const [u, v, w] = inverse.map((r) => r[0] * x + r[1] * y + r[2]);
+    // Au-delà de l'horizon de la perspective (visée très loin de l'écran), le pointeur reste où il était.
+    if (w <= 1e-9 * Math.hypot(u, v, w)) return held;
+    held = [clamp((2 * u) / w - 1), clamp(1 - (2 * v) / w)];
+    return held;
+  };
+  // Direction du centre de l'écran (milieu du carré unité), pour recentrer.
+  const [cx, cy, cw] = [[a, b, c], [d, e, f], [g, h, 1]].map((r) => (r[0] + r[1]) / 2 + r[2]);
+  toScreen.center = unit(normal.map((n, i) => n + (cx / cw) * e1[i] + (cy / cw) * e2[i]));
+  return toScreen;
 }
 
-// Pointeur de -1 à 1 (y vers le haut) entre les coins haut gauche et bas droit visés au calibrage.
-export function aimPosition([h, e], topLeft, bottomRight) {
-  const halfYaw = wrap(bottomRight[0] - topLeft[0]) / 2;
-  const halfPitch = (topLeft[1] - bottomRight[1]) / 2;
-  const clamp = (v) => Math.max(-1, Math.min(1, v));
-  return [
-    clamp(wrap(h - topLeft[0] - halfYaw) / halfYaw),
-    clamp((e - (topLeft[1] + bottomRight[1]) / 2) / halfPitch),
-  ];
+// Recentrage : la rotation la plus courte (Rodrigues) qui ramène la visée `from` (le milieu de l'écran, visé après
+// une dérive du gyroscope) sur `to` (le centre calibré), à appliquer à toute direction. Centre exact ; aux coins,
+// 4 à 7 px (sur 1 920) par degré de dérive, que ni une correction du cap puis de la hauteur ni rien d'autre à un
+// seul point visé ne ferait mieux (simulation) ; le roulis dérivé, lui, demande un nouveau calibrage.
+export function turnTo(from, to) {
+  const k = cross(from, to);
+  const [s2, c] = [dot(k, k), dot(from, to)];
+  if (s2 < 1e-24) return (v) => v;
+  return (v) => {
+    const kv = cross(k, v);
+    const f = (dot(k, v) * (1 - c)) / s2;
+    return v.map((x, i) => x * c + kv[i] + k[i] * f);
+  };
 }
 
 // Volant au joystick (Mario Kart) : ce que mesurerait le téléphone tenu en volant, écran face à soi, tourné de

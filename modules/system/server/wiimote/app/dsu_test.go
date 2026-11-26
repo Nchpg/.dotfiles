@@ -67,13 +67,16 @@ func TestPadDataLayout(t *testing.T) {
 func TestPointerPrecision(t *testing.T) {
 	// Ce que Dolphin recompose (`Right X+` + `Left X+` / 254, moins le côté X-) : au 1/32 000 près, contre 1/127
 	// avec le seul stick droit.
-	for p := 0; p <= 0xFFFF; p += 97 {
+	// Toutes les valeurs, et jamais de recul d'une valeur à la suivante (le pointeur sauterait en arrière).
+	previous := math.Inf(-1)
+	for p := 0; p <= 0xFFFF; p++ {
 		coarse, fine := pointerBytes(uint16(p))
 		got := stickValue(coarse) + stickValue(fine)/254
 		want := float64(p)/0xFFFF*2 - 1
-		if math.Abs(got-want) > 1.0/32000 {
+		if math.Abs(got-want) > 1.0/32000 || got < previous {
 			t.Fatalf("pointeur %d : %v recomposé au lieu de %v (octets %d, %d)", p, got, want, coarse, fine)
 		}
+		previous = got
 	}
 	if c, f := pointerBytes(pointerCenter); c != 128 || f > 129 || f < 127 {
 		t.Fatalf("centre : octets %d, %d", c, f)

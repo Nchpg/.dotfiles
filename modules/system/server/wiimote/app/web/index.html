@@ -291,6 +291,7 @@
   .panel input[type="checkbox"] { width: 1.3rem; height: 1.3rem; margin: 0; }
   .panel input[type="range"] { width: 100%; margin: 0; }
   .panel .link { margin: 0; color: var(--paper-soft); font-size: .9rem; }
+  .panel .start.quiet { background: transparent; border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); color: var(--paper-ink); }
 
   /* Dans la scène : tourne avec elle. */
   .overlay {
@@ -393,7 +394,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l3-5 4 10 4-10 4 10 3-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
-    <button class="recenter" id="aim" aria-label="Calibrer le pointeur sur les coins de l'écran">⌖</button>
+    <button class="recenter" id="aim" aria-label="Calibrer le pointeur aux coins de l'écran, puis le recentrer">⌖</button>
   </main>
 
   <div class="panel" id="panel" hidden>
@@ -412,6 +413,8 @@
         <span>Lissage du pointeur <output id="smoothOut"></output></span>
         <input type="range" id="smooth" min="0" max="3" step="1">
       </label>
+      <button class="start quiet" id="calibrate" type="button">Calibrer le pointeur</button>
+      <p class="link">Vise chaque coin de la télé (↖ ↗ ↘ ↙) et appuie sur ⌖. Ensuite, ⌖ recentre : vise le milieu de l'écran et appuie.</p>
       <p class="link">Liaison : <b id="link">par Cloudflare (WebSocket)</b></p>
       <button class="start" id="closeSettings" type="button">OK</button>
     </form>

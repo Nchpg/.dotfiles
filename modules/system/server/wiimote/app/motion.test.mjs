@@ -1,10 +1,12 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimPosition, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
+const close = (got, want, tolerance) =>
+  want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < tolerance, `${got} ≠ ${want}`));
 
 // Lecture de Dolphin (DualShockUDPClient.cpp), ramenée en g et °/s.
 const dolphin = ([x, y, z, pitch, yaw, roll]) => ({
@@ -55,16 +57,75 @@ test('la tenue ignore l’écran qui bascule quand on braque, mais suit un retou
   assert.equal(holdAngle(0, 180, false), 180);
 });
 
-test('pointeur calé sur les coins visés, y compris à cheval sur ±180°', () => {
-  const tl = [-20, 10];
-  const br = [20, -10];
-  near(aimPosition([0, 0], tl, br), [0, 0]);
-  near(aimPosition([20, -10], tl, br), [1, -1]);
-  near(aimPosition([-10, 5], tl, br), [-0.5, 0.5]);
-  near(aimPosition([90, 40], tl, br), [1, 1]); // hors de l'écran : bloqué au bord
-  near(aimPosition([-175, 0], [170, 5], [-170, -5]), [0.5, 0]);
-  assert.ok(!validCorners([3, 2], [3.5, 1.8]));
-  assert.ok(validCorners(tl, br));
+// Télé plate de `size` (largeur, hauteur, en m), centrée en `center` (m, vu de la main), face vers `facing` :
+// direction de son point (X, Y) (de -1 à 1, y en haut) vue de la main.
+const unit3 = (v) => v.map((c) => c / Math.hypot(...v));
+const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function television(center, facing, [width, height]) {
+  const n = unit3(facing);
+  const right = unit3(cross3([0, 0, 1], n));
+  const up = cross3(n, right);
+  return (X, Y) => unit3(center.map((c, i) => c + (X * width / 2) * right[i] + (Y * height / 2) * up[i]));
+}
+const cornersOf = (at) => [at(-1, 1), at(1, 1), at(1, -1), at(-1, -1)];
+
+test('calibrage aux quatre coins : position exacte sur l’écran, de face, de biais, de près, en hauteur, derrière soi', () => {
+  const cases = [
+    [[0, 2.5, 0.3], [0, -1, 0], [1.2, 0.68]], // de face, à 2,5 m
+    [[1.2, 2.5, 0.2], [0, -1, 0], [1.2, 0.68]], // assis à 1,2 m sur le côté (deuxième joueur)
+    [[0, 1, 0], [0, -1, 0], [1.6, 0.9]], // tout près d'une grande télé
+    [[0, 2, 1.2], [0, -1, -0.4], [1, 0.56]], // fixée en hauteur, penchée vers soi
+    [[-0.4, -2.5, 0.1], [0.2, 1, 0], [1.2, 0.68]], // derrière soi dans le repère du téléphone, de biais
+  ];
+  for (const [center, facing, size] of cases) {
+    const at = television(center, facing, size);
+    // Repère du pointeur en miroir : signes propres au navigateur.
+    for (const mirror of [1, -1]) {
+      const seen = (X, Y) => at(X, Y).map((c, i) => (i === 0 ? c * mirror : c));
+      const tv = screenFrom(cornersOf(seen));
+      for (const [X, Y] of [[0, 0], [-0.5, 0.5], [0.3, -0.8], [1, -1], [-0.99, 0.2], [0.7, 0.9]]) {
+        close(tv(seen(X, Y)), [X, Y], 1e-9);
+      }
+      close(tv(seen(3, 2)), [1, 1], 1e-9); // hors de l'écran : bloqué au bord
+    }
+  }
+  // Coins presque confondus (double appui) ou dans le désordre : refusés.
+  const at = television([0, 2.5, 0], [0, -1, 0], [1.2, 0.68]);
+  assert.equal(screenFrom([at(-1, 1), at(-0.99, 1), at(1, -1), at(-1, -1)]), null);
+  assert.equal(screenFrom([at(-1, 1), at(1, -1), at(1, 1), at(-1, -1)]), null);
+});
+
+test('recentrage : la visée du milieu de l’écran ramenée à son centre, après une dérive du gyroscope', () => {
+  const turn = turnTo(unit3([0.2, 1, 0.1]), unit3([-0.3, 0.9, 0.4]));
+  close(turn(unit3([0.2, 1, 0.1])), unit3([-0.3, 0.9, 0.4]), 1e-12);
+  const [p, q] = [unit3([1, 2, 3]), unit3([-2, 0.5, 1])];
+  close([turn(p).reduce((s, c, i) => s + c * turn(q)[i], 0)], [p.reduce((s, c, i) => s + c * q[i], 0)], 1e-12);
+  // Aux coins, l'écart que laisse un recentrage à un seul point : 2 % face à la télé, 5 % sous une télé fixée haut
+  // (visée à 30° au-dessus de l'horizon), où une dérive du cap déforme davantage. Un recalibrage fait mieux.
+  const setups = [[[0, 2.5, 0.3], [0, -1, 0], 0.02], [[1.2, 2.5, 0.2], [0, -1, 0], 0.02], [[0, 2, 1.2], [0, -1, -0.4], 0.05]];
+  for (const [center, facing, tolerance] of setups) {
+    const at = television(center, facing, [1.2, 0.68]);
+    const tv = screenFrom(cornersOf(at));
+    close(tv(tv.center), [0, 0], 1e-9);
+    // Le gyroscope a tourné la visée de 3° en cap et 1° en élévation depuis le calibrage : on vise le milieu, ⌖.
+    const [yaw, pitch] = [3 * Math.PI / 180, Math.PI / 180];
+    const drift = (v) => {
+      const w = [v[0] * Math.cos(yaw) - v[1] * Math.sin(yaw), v[0] * Math.sin(yaw) + v[1] * Math.cos(yaw), v[2]];
+      return [w[0], w[1] * Math.cos(pitch) - w[2] * Math.sin(pitch), w[1] * Math.sin(pitch) + w[2] * Math.cos(pitch)];
+    };
+    const recentre = turnTo(drift(at(0, 0)), tv.center);
+    close(tv(recentre(drift(at(0, 0)))), [0, 0], 1e-9);
+    for (const [X, Y] of [[-0.9, 0.9], [0.9, 0.9], [0.9, -0.9], [-0.9, -0.9], [0.5, -0.2]]) {
+      close(tv(recentre(drift(at(X, Y)))), [X, Y], tolerance);
+    }
+  }
+});
+
+test('calibrage aux quatre coins : visée très loin de l’écran, le pointeur reste fini et dans l’écran', () => {
+  const tv = screenFrom(cornersOf(television([1.2, 2.5, 0.2], [0, -1, 0], [1.2, 0.68])));
+  for (const v of [[0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0.6, 0.1, -0.8]]) {
+    assert.ok(tv(v).every((c) => Number.isFinite(c) && Math.abs(c) <= 1), `${v}`);
+  }
 });
 
 test('croix tactile : direction la plus proche, centre mort, portée et interface tournée', () => {
@@ -164,79 +225,180 @@ const pose = (psi, theta, phi) => {
   return matMul(matMul(Rz, Rx), Ry);
 };
 
-// Joue une trajectoire (pose à l'instant t, en s) de `from` à `to` : ce que mesure le téléphone, tenu à `arm` m du
-// poignet le long de l'axe visé (l'accéléromètre lit aussi les accélérations de la main) ; `sign` inverse
-// l'accéléromètre, comme certains navigateurs.
-function play(pointer, at, from, to, { arm = 0.1, sign = 1 } = {}) {
-  const dt = 1 / 60;
-  const pos = (t) => apply(at(t), [0, arm, 0]);
-  for (let i = 0; i < Math.round((to - from) / dt); i++) {
-    const t = from + i * dt;
-    const D = matMul(transpose(at(t)), at(t + dt));
-    const w = [D[2][1] - D[1][2], D[0][2] - D[2][0], D[1][0] - D[0][1]].map((c) => c / 2 / dt * 180 / Math.PI);
-    const [p0, p1, p2] = [pos(t), pos(t + dt), pos(t + 2 * dt)];
-    const acc = [0, 1, 2].map((j) => (p2[j] - 2 * p1[j] + p0[j]) / dt / dt);
-    const accel = apply(transpose(at(t + dt)), [acc[0], acc[1], acc[2] + G]).map((c) => c * sign);
-    pointer.update({ alpha: w[0], beta: w[1], gamma: w[2] }, accel, dt);
+// Joue une trajectoire (pose à l'instant t, en s) de `from` à `to`, échantillonnée à 60 Hz comme un vrai capteur :
+// rotation à l'instant de l'échantillon.
+function play(pointer, at, from, to) {
+  for (let i = 1; i <= Math.round((to - from) * 60); i++) {
+    const t = from + i / 60;
+    const h = 1e-4;
+    const D = matMul(transpose(at(t - h)), at(t + h));
+    const w = [D[2][1] - D[1][2], D[0][2] - D[2][0], D[1][0] - D[0][1]].map((c) => c / 4 / h * 180 / Math.PI);
+    pointer.update({ alpha: w[0], beta: w[1], gamma: w[2] }, t * 1000);
   }
   return pointer;
 }
+// Départ et arrivée en douceur, comme une main.
+const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+
+// [cap vers la droite, élévation] de la visée, pour vérifier les mouvements. Le repère fixe du pointeur est celui du
+// téléphone au premier échantillon : la verticale y est la dernière ligne de cette pose ; cap compté depuis l'axe le
+// plus horizontal.
+function aimOf(pointer, first, hold = 0) {
+  const [f, u] = [pointer.direction(hold), first[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const axis = [[1, 0, 0], [0, 1, 0], [0, 0, 1]].reduce((a, b) => (Math.abs(dot(a, u)) <= Math.abs(dot(b, u)) ? a : b));
+  const n = axis.map((c, i) => c - dot(axis, u) * u[i]);
+  const east = cross3(n, u);
+  return [Math.atan2(dot(f, east), dot(f, n)) * 180 / Math.PI, Math.asin(dot(f, u)) * 180 / Math.PI];
+}
 const diff = ([h1, e1], [h2, e2]) => [((h1 - h2 + 540) % 360) - 180, e1 - e2];
-const close = (got, want, tolerance) =>
-  want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < tolerance, `${got} ≠ ${want}`));
 
 test('pointeur au gyroscope : tourner à gauche baisse le cap, lever le bout monte, retourné il s’inverse', () => {
   const pointer = gyroPointer();
-  const at = (t) => pose(t < 2 ? 0 : -15 * Math.min(1, t - 2), 10 + (t < 4 ? 0 : 8 * Math.min(1, t - 4)), 0);
+  const at = (t) => pose(-15 * ease(t - 2), 10 + 8 * ease(t - 4), 0);
   play(pointer, at, 0, 2);
-  const start = pointer.aim(0);
+  const start = aimOf(pointer, at(0));
   play(pointer, at, 2, 4);
-  close(diff(pointer.aim(0), start), [15, 0], 0.1); // ψ −15 : vers la droite
+  close(diff(aimOf(pointer, at(0)), start), [15, 0], 0.01); // ψ −15 : vers la droite
   play(pointer, at, 4, 6);
-  close(diff(pointer.aim(0), start), [15, 8], 0.1);
-  const flipped = diff(pointer.aim(180), pointer.aim(0));
-  close([Math.abs(flipped[0]), flipped[1]], [180, -2 * pointer.aim(0)[1]], 1e-6);
+  close(diff(aimOf(pointer, at(0)), start), [15, 8], 0.01);
+  close(pointer.direction(180), pointer.direction(0).map((c) => -c), 1e-12);
+});
+
+test('pointeur au gyroscope : un échantillon vide ou invalide est ignoré', () => {
+  const pointer = gyroPointer();
+  pointer.update({ alpha: 0, beta: 0, gamma: 0 }, 0);
+  pointer.update({ alpha: null, beta: 0, gamma: 0 }, 16);
+  pointer.update({ alpha: NaN, beta: 1, gamma: 2 }, 33);
+  pointer.update({ alpha: 0, beta: 0, gamma: 0 }, Infinity);
+  pointer.update({ alpha: 0, beta: 0, gamma: 30 }, 50);
+  assert.ok(pointer.direction(0).every(Number.isFinite));
 });
 
 test('pointeur au gyroscope : levé et roulé, un balayage reste droit', () => {
   const pointer = gyroPointer();
-  const at = (t) => pose(30 * Math.max(0, t - 3), 25, 20);
+  const at = (t) => pose(30 * ease(t - 3), 25, 20);
   play(pointer, at, 0, 3);
-  const start = pointer.aim(0);
+  const start = aimOf(pointer, at(0));
   play(pointer, at, 3, 4);
-  close(diff(pointer.aim(0), start), [-30, 0], 0.1);
+  close(diff(aimOf(pointer, at(0)), start), [-30, 0], 0.01);
 });
 
-test('pointeur au gyroscope : dix grands cercles rapides au bras, et la visée revient', () => {
+test('pointeur au gyroscope : dix grands cercles rapides, et la visée revient', () => {
   const pointer = gyroPointer();
   const w = 2 * Math.PI;
-  const at = (t) => (t < 3 ? pose(0, 32, 0)
-    : pose(25 * Math.sin(w * (t - 3)), 15 + 17 * Math.cos(w * (t - 3)), 12 * Math.sin(w * (t - 3) + 1)));
+  // Cercles à 1 Hz lancés en douceur (une demi-seconde), roulis de la main compris.
+  const at = (t) => {
+    const [a, c] = [ease((t - 3) / 0.5), w * Math.max(0, t - 3)];
+    return pose(25 * a * Math.sin(c), 32 - 17 * a * (1 - Math.cos(c)), 12 * a * Math.sin(c));
+  };
   play(pointer, at, 0, 3);
-  const start = pointer.aim(0);
-  // Cercles à 1 Hz, bras tendu : jusqu'à 0,65 g d'accélération de la main.
-  play(pointer, at, 3, 13, { arm: 0.4 });
-  close(diff(pointer.aim(0), start), [0, 0], 0.5);
+  const start = pointer.direction(0);
+  play(pointer, at, 3, 13);
+  const end = pointer.direction(0);
+  // Même direction à 0,03° près.
+  const drift = Math.acos(Math.min(1, end.reduce((s, c, i) => s + c * start[i], 0))) * 180 / Math.PI;
+  assert.ok(drift < 0.03, `${drift}°`);
 });
 
 test('pointeur au gyroscope : tenu debout au départ, puis pointé vers l’écran', () => {
   const pointer = gyroPointer();
-  const at = (t) => pose(t < 3 ? 0 : -20 * Math.min(1, t - 3), t < 1 ? 90 : 90 - 80 * Math.min(1, t - 1), 0);
-  play(pointer, at, 0, 2.5);
-  const lowered = play(pointer, at, 2.5, 3).aim(0);
+  const at = (t) => pose(-20 * ease(t - 3), 90 - 80 * ease(t - 1), 0);
+  const lowered = aimOf(play(pointer, at, 0, 3), at(0));
   play(pointer, at, 3, 4);
-  close(diff(pointer.aim(0), lowered), [20, 0], 0.2);
-  close([pointer.aim(0)[1]], [10], 0.5);
+  close(diff(aimOf(pointer, at(0)), lowered), [20, 0], 0.05);
+  close([aimOf(pointer, at(0))[1]], [10], 0.05);
 });
 
-test('pointeur au gyroscope : accéléromètre de signe inversé, même visée une fois calibré', () => {
-  const at = (t) => pose(t < 2 ? 0 : t < 3 ? 10 * (t - 2) : t < 4 ? 10 - 20 * (t - 3) : -10 + 10 * (t - 4),
-    t < 2 ? 10 : t < 3 ? 10 + 5 * (t - 2) : t < 4 ? 15 - 10 * (t - 3) : 5 + 5 * (t - 4), 5);
-  for (const sign of [1, -1]) {
-    const pointer = gyroPointer();
-    const aimAt = (t) => play(pointer, at, t - 1, t, { sign }).aim(0);
-    play(pointer, at, 0, 2, { sign });
-    const [topLeft, bottomRight, middle] = [aimAt(3), aimAt(4), aimAt(5)];
-    close(aimPosition(middle, topLeft, bottomRight), [0, 0], 0.01);
+// Session de jeu simulée de bout en bout, reproductible (`seed`) : joueur n'importe où face à la télé (de 1,2 à
+// 3,5 m, jusqu'à 1,5 m sur le côté, télé de 80 cm à 1,6 m), téléphone tenu debout puis pointé, calibrage aux quatre
+// coins, puis visée au hasard dans l'écran et au-delà en roulant la main. Rend l'écart au vrai point visé, en pixels
+// d'un écran 1 920 × 1 080 : le pire et la moyenne quadratique.
+function random(seed) {
+  return () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function session({ seed, seconds = 60, gyroNoise = 0, jitter = 0, drop = 0 }) {
+  const rnd = random(seed);
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+  const smooth = (amplitude, maxHz) => {
+    const parts = Array.from({ length: 5 }, () => [(amplitude / 2.5) * (0.3 + rnd()), 2 * Math.PI * (0.05 + rnd() * maxHz), 2 * Math.PI * rnd()]);
+    return (t) => parts.reduce((s, [a, w, p]) => s + a * Math.sin(w * t + p), 0);
+  };
+  const mix = (a, b, k) => a.map((c, i) => c + (b[i] - c) * k);
+  const width = 0.8 + 0.8 * rnd();
+  const spin = 2 * Math.PI * rnd();
+  const seat = [3 * (rnd() - 0.5), 1.2 + 2.3 * rnd(), 0.8 * (rnd() - 0.5)];
+  const at = (X, Y) => {
+    const v = television(seat, [0, -1, 0], [width, (width * 9) / 16])(X, Y);
+    return [v[0] * Math.cos(spin) - v[1] * Math.sin(spin), v[0] * Math.sin(spin) + v[1] * Math.cos(spin), v[2]];
+  };
+  const [sx, sy, roll] = [smooth(1.3, 0.8), smooth(1.3, 0.8), smooth(25, 0.5)];
+  const anglesOf = ([x, y, z]) => [(Math.atan2(-x, y) * 180) / Math.PI, (Math.asin(z) * 180) / Math.PI];
+  const upright = [anglesOf(at(0, 0))[0] + 40 * (rnd() - 0.5), 70];
+  // Coins visés dans l'ordre, appui au milieu de chaque arrêt d'une demi-seconde.
+  const stops = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+  const target = (t) => {
+    let from = [0, 0];
+    for (let i = 0; i < 4; i++) {
+      const start = 3 + 1.5 * i;
+      if (t < start + 1) return mix(from, stops[i], ease(t - start));
+      if (t < start + 1.5) return stops[i];
+      from = stops[i];
+    }
+    return mix(from, [sx(t), sy(t)], ease((t - 9) / 0.5));
+  };
+  const angles = (t) => {
+    if (t >= 3) return anglesOf(at(...target(t)));
+    const [a, b] = [[upright[0] + 5 * Math.sin(t), upright[1]], anglesOf(at(0, 0))];
+    const k = ease(t - 2);
+    return [a[0] + ((((b[0] - a[0] + 180) % 360) + 360) % 360 - 180) * k, a[1] + (b[1] - a[1]) * k];
+  };
+  const R = (t) => {
+    const [psi, e] = angles(t);
+    return pose(psi, e, roll(t) * ease(t - 3));
+  };
+  const pointer = gyroPointer();
+  const corners = [];
+  let tv = null;
+  let [worst, sum, count] = [0, 0, 0];
+  for (let k = 1; k <= seconds * 60; k++) {
+    const t = k / 60;
+    if (rnd() < drop) continue;
+    const h = 1e-4;
+    const D = matMul(transpose(R(t - h)), R(t + h));
+    const w = [D[2][1] - D[1][2], D[0][2] - D[2][0], D[1][0] - D[0][1]].map((c) => (c / 4 / h) * 180 / Math.PI + gyroNoise * gauss());
+    pointer.update({ alpha: w[0], beta: w[1], gamma: w[2] }, t * 1000 + jitter * 2 * (rnd() - 0.5));
+    if (corners.length < 4 && t >= 4.3 + 1.5 * corners.length - 1e-9) corners.push(pointer.direction(0));
+    if (corners.length === 4 && !tv) tv = screenFrom(corners);
+    if (t > 9.5 && tv) {
+      const [X, Y] = tv(pointer.direction(0));
+      const [x, y] = target(t).map((c) => Math.max(-1, Math.min(1, c)));
+      const error = Math.hypot((X - x) * 960, (Y - y) * 540);
+      [worst, sum, count] = [Math.max(worst, error), sum + error * error, count + 1];
+    }
   }
+  assert.ok(tv, `calibrage refusé (graine ${seed})`);
+  return { worst, rms: Math.sqrt(sum / count) };
+}
+
+test('simulation de bout en bout : sans bruit de capteur, à 3 px près, où qu’on soit assis', () => {
+  for (let seed = 1; seed <= 10; seed++) {
+    const { worst } = session({ seed });
+    assert.ok(worst < 3, `graine ${seed} : ${worst} px`);
+  }
+});
+
+test('simulation de bout en bout : capteurs réels (gyroscope bruité, évènements décalés de ±1 ms, 2 % perdus)', () => {
+  let rms = 0;
+  for (let seed = 1; seed <= 10; seed++) {
+    const r = session({ seed, gyroNoise: 0.05, jitter: 1, drop: 0.02 });
+    assert.ok(r.worst < 35, `graine ${seed} : ${r.worst} px au pire`);
+    rms += r.rms / 10;
+  }
+  assert.ok(rms < 8, `${rms} px en moyenne quadratique`);
 });
