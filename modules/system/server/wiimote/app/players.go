@@ -52,6 +52,7 @@ func (s *server) claim(name string, conn *websocket.Conn) *player {
 			s.seats[i] = p
 			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
 			s.pads[i] = padState{pointer: [2]uint16{pointerCenter, pointerCenter}}
+			s.hold[i] = buttonHold{}
 			return p
 		}
 	}
@@ -92,7 +93,9 @@ func (s *server) release(p *player) {
 
 func (s *server) releasedLocked(slot int) ([]byte, []net.Addr) {
 	st := s.pads[slot]
-	st.buttons = 0
+	st.buttons, st.counted = 0, false
+	// Tout de suite, sans rejouer les appuis en attente.
+	s.hold[slot] = buttonHold{}
 	return s.stateLocked(slot, st)
 }
 
@@ -103,6 +106,7 @@ func (s *server) swap(a, b int) {
 	s.seats[a], s.seats[b] = s.seats[b], s.seats[a]
 	s.pads[a], s.pads[b] = s.pads[b], s.pads[a]
 	s.shakeStart[a], s.shakeStart[b] = s.shakeStart[b], s.shakeStart[a]
+	s.hold[a], s.hold[b] = s.hold[b], s.hold[a]
 	var moved []*player
 	var packets [][]byte
 	var targets [][]net.Addr

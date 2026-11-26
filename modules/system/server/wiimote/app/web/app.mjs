@@ -22,7 +22,10 @@ const nameInput = document.getElementById('name');
 const leds = [...document.querySelectorAll('.leds i')];
 
 const pointers = new Map();
-const packet = new DataView(new ArrayBuffer(30));
+// Boutons, mouvement, pointeur (30 octets), puis le nombre d'appuis de chaque bouton (un octet par bit, modulo 256) :
+// le serveur rejoue ainsi un appui même si le réseau a perdu ou groupé les messages où il était enfoncé (buttons.go).
+const packet = new DataView(new ArrayBuffer(30 + 16));
+const presses = new Uint8Array(packet.buffer, 30);
 let buttons = 0;
 let motion = [0, -1, 0, 0, 0, 0];
 // Pointeur envoyé sur 16 bits (32768 : centre), calé par le calibrage du bouton ⌖.
@@ -50,7 +53,7 @@ let lastError = '';
 // Liaison directe (WebTransport, UDP) que donne le serveur : les états y partent en datagrammes numérotés, sans
 // Cloudflare ni TCP, qui retient tout derrière un paquet perdu. Le WebSocket reste en repli.
 let direct = null;
-const datagram = new DataView(new ArrayBuffer(8 + 30));
+const datagram = new DataView(new ArrayBuffer(8 + packet.byteLength));
 let wakeLock;
 
 // Selon le navigateur, accelerationIncludingGravity n'a pas toujours le signe de la spec : on le recoupe
@@ -341,6 +344,7 @@ function refreshButtons() {
     return;
   }
   if (next & ~buttons) navigator.vibrate?.(12);
+  for (let b = 0; b < 16; b++) if (next & ~buttons & (1 << b)) presses[b]++;
   buttons = next;
   send();
 }

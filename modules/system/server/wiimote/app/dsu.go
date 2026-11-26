@@ -21,9 +21,11 @@ const (
 	slots           = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
-	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16).
-	phoneMessageSize = 2 + 6*4 + 4
-	// Celui d'une PWA restée en cache sur un téléphone : pointeur sur un octet par axe.
+	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16), puis
+	// le nombre d'appuis de chaque bouton (un octet par bit, modulo 256, cf. buttons.go).
+	phoneMessageSize = 2 + 6*4 + 4 + 16
+	// Ceux d'une PWA restée en cache sur un téléphone : sans les compteurs, puis avec le pointeur sur un octet.
+	uncountedMessageSize   = 2 + 6*4 + 4
 	legacyPhoneMessageSize = 2 + 6*4 + 2
 	// Centre du pointeur sur 16 bits.
 	pointerCenter = 1 << 15
@@ -59,6 +61,9 @@ type padState struct {
 	motion [6]float32
 	// Pointeur calculé par le téléphone : x, y (y vers le haut), sur 16 bits, `pointerCenter` au centre.
 	pointer [2]uint16
+	// Nombre d'appuis de chaque bouton (bit), si le téléphone les compte (counted).
+	presses [16]uint8
+	counted bool
 }
 
 type subscriber struct {
@@ -79,6 +84,9 @@ type server struct {
 	counter [slots]uint32
 	// Début de la dernière secousse de chaque slot, cf. shake.go.
 	shakeStart [slots]time.Time
+	// Appuis rejoués à Dolphin, et le réveil qui relâche un bouton sans attendre de message, cf. buttons.go.
+	hold  [slots]buttonHold
+	wakes [slots]*time.Timer
 	subs       map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
 	invite string
@@ -231,11 +239,21 @@ func (s *server) subscribe(from net.Addr, flags, slot byte, addr []byte) {
 // avec `broadcast`, hors du verrou.
 func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.Addr) {
 	now := time.Now()
-	if st.buttons&shakeBit != 0 && s.pads[slot].buttons&shakeBit == 0 {
+	s.pads[slot] = st
+	before := s.hold[slot].out
+	buttons, wake := s.hold[slot].next(st, now)
+	// Chaque appui rejoué sur Secouer lance sa secousse.
+	if buttons&shakeBit != 0 && before&shakeBit == 0 {
 		s.shakeStart[slot] = now
 		go s.playShake(slot, now)
 	}
-	s.pads[slot] = st
+	if !wake.IsZero() {
+		if t := s.wakes[slot]; t != nil {
+			t.Stop()
+		}
+		s.wakes[slot] = time.AfterFunc(wake.Sub(now), func() { s.replay(slot) })
+	}
+	st.buttons = buttons
 	s.counter[slot]++
 	st.motion = shaken(st.motion, now.Sub(s.shakeStart[slot]))
 	pkt = s.padData(slot, st, s.counter[slot])
@@ -247,6 +265,18 @@ func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.A
 		}
 	}
 	return pkt, targets
+}
+
+// Renvoie l'état du slot tel quel : un bouton à relâcher ou un appui en attente (buttons.go), une secousse en cours.
+func (s *server) replay(slot int) {
+	s.mu.Lock()
+	if s.seats[slot] == nil {
+		s.mu.Unlock()
+		return
+	}
+	pkt, targets := s.stateLocked(slot, s.pads[slot])
+	s.mu.Unlock()
+	s.broadcast(pkt, targets)
 }
 
 func (s *server) broadcast(pkt []byte, targets []net.Addr) {
@@ -280,7 +310,7 @@ func stickValue(b byte) float64 {
 
 func decode(msg []byte) (padState, bool) {
 	var st padState
-	if len(msg) != phoneMessageSize && len(msg) != legacyPhoneMessageSize {
+	if len(msg) != phoneMessageSize && len(msg) != uncountedMessageSize && len(msg) != legacyPhoneMessageSize {
 		return st, false
 	}
 	st.buttons = le.Uint16(msg)
@@ -297,6 +327,10 @@ func decode(msg []byte) (padState, bool) {
 		} else {
 			st.pointer[i] = le.Uint16(msg[2+6*4+2*i:])
 		}
+	}
+	if len(msg) == phoneMessageSize {
+		copy(st.presses[:], msg[uncountedMessageSize:])
+		st.counted = true
 	}
 	return st, true
 }
