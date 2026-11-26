@@ -44,6 +44,11 @@
     "port": 3000,
     "revision": "b8cf73a5b274d98ec9c0d1f33784bc0f605c8e3c"
   },
+  "ghcr.io/nchpg/wii:main": {
+    "digest": "sha256:4eaa56a9a4af46178b66c2a6bc7c3771b116312824df3674f827613a358bf2d9",
+    "port": 8080,
+    "revision": "63012910178d52e85eb25de4d691bb0711240b08"
+  },
   "ghcr.io/nchpg/yolo-detection:main": {
     "digest": "sha256:0b4115eef5c301e766fbc93c4d3dc8aff8cba7378058d31ae3aca5221abc14f3",
     "port": 8080,

@@ -132,5 +132,14 @@
       }
     },
     "subdomain": "trafficvision"
+  },
+  "wiimotelocal": {
+    "containers": {
+      "web": {
+        "image": "wii:main",
+        "memory": "64m"
+      }
+    },
+    "subdomain": "wiimote"
   }
 }
