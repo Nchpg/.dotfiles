@@ -33,128 +33,18 @@ export function holdAngle(hold, live, sideways) {
   return (live % 180 !== 0) === sideways ? live : hold;
 }
 
-// Direction visée par la Wiimote debout (haut du téléphone), d'après alpha et beta de deviceorientation :
-// [cap, élévation] en degrés, le cap croissant vers la droite. Le roulis ne déplace pas le pointeur.
-export function aimAngles(alpha, beta, hold) {
-  const s = hold === 180 ? -1 : 1;
-  const a = alpha * RAD;
-  const b = beta * RAD;
-  const f = [-s * Math.sin(a) * Math.cos(b), s * Math.cos(a) * Math.cos(b), s * Math.sin(b)];
-  return [Math.atan2(f[0], f[1]) / RAD, Math.asin(f[2]) / RAD];
-}
-
-// Quaternions [w, x, y, z] : orientation du téléphone, de son repère vers celui de la Terre.
-export const qmul = ([aw, ax, ay, az], [bw, bx, by, bz]) => [
-  aw * bw - ax * bx - ay * by - az * bz,
-  aw * bx + ax * bw + ay * bz - az * by,
-  aw * by - ax * bz + ay * bw + az * bx,
-  aw * bz + ax * by - ay * bx + az * bw,
-];
-const qnorm = (q) => q.map((v) => v / Math.hypot(...q));
-const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
-
-// D'après deviceorientation : rotations Z-X'-Y'' de alpha, beta, gamma (spec W3C).
-export function orientationQuat(alpha, beta, gamma) {
-  const half = (deg) => [Math.cos((deg * RAD) / 2), Math.sin((deg * RAD) / 2)];
-  const [cz, sz] = half(alpha);
-  const [cx, sx] = half(beta);
-  const [cy, sy] = half(gamma);
-  return qmul(qmul([cz, 0, 0, sz], [cx, sx, 0, 0]), [cy, 0, sy, 0]);
-}
-
-// Rotation d'un vecteur [x, y, z] (radians, repère du téléphone), et l'inverse.
-export function rotationQuat(v) {
-  const angle = Math.hypot(...v);
-  if (angle < 1e-12) return [1, 0, 0, 0];
-  const s = Math.sin(angle / 2) / angle;
-  return [Math.cos(angle / 2), ...v.map((c) => c * s)];
-}
-function rotationVector(q) {
-  const [w, ...v] = q[0] < 0 ? q.map((c) => -c) : q;
-  const s = Math.hypot(...v);
-  return s < 1e-12 ? [0, 0, 0] : v.map((c) => (c / s) * 2 * Math.atan2(s, w));
-}
-
-// Comme aimAngles, depuis un quaternion : le haut du téléphone (son axe y) dans le repère de la Terre.
-export function aimFromQuat([w, x, y, z], hold) {
-  const s = hold === 180 ? -1 : 1;
-  const f = [2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x)].map((c) => c * s);
-  return [Math.atan2(f[0], f[1]) / RAD, Math.asin(Math.max(-1, Math.min(1, f[2]))) / RAD];
-}
-
-// Ordre des axes de rotationRate : x, y, z dans l'ordre alpha, beta, gamma pour Chrome, Firefox et Safari (mesuré
-// sur un Xiaomi 17T), alors que le texte de la spec mettrait alpha autour de z. Les deux sont essayés, l'orientation
-// tranche.
-export const gyroXYZ = ({ alpha, beta, gamma }) => [alpha, beta, gamma];
-const GYRO_AXES = [gyroXYZ, ({ alpha, beta, gamma }) => [beta, gamma, alpha]];
-const WINDOW = 4 * RAD;
-const BLOCK = 10;
-
-// Visée fusionnée : chaque devicemotion (60 Hz réguliers) fait tourner l'orientation du gyroscope, chaque
-// deviceorientation la recale (constante de temps `tau`, en s). Chrome tait l'orientation qui bouge de moins de
-// 0,1° : en visée lente, elle n'arrive que par à-coups (jusqu'à 230 ms d'écart mesurés sur un Xiaomi 17T, 60 Hz
-// réguliers dès qu'il tourne franchement), le gyroscope reste à 60 Hz. Le gyroscope n'est suivi que si,
-// sur 10 rotations d'au moins 4°, un ordre d'axes colle à l'orientation (sens et ampleur) nettement mieux que
-// l'autre ; c'est revérifié toutes les 10 rotations, un bloc ambigu ne change rien. Sinon l'orientation seule.
-export function aimFusion(tau = 0.3) {
-  let q = null;
-  let tOrientation = 0;
-  let tGyro = null;
-  let start = null;
-  const fresh = () => GYRO_AXES.map(() => [1, 0, 0, 0]);
-  let turned = fresh();
-  let sums = GYRO_AXES.map(() => ({ cos: 0, gyro: 0, orientation: 0 }));
-  // axes : undefined tant que rien n'est tranché, null si aucun ordre ne colle, sinon l'indice dans GYRO_AXES.
-  const check = { windows: 0, axes: undefined, results: [] };
-  const trusted = () => Number.isInteger(check.axes);
-  return {
-    check,
-    get quat() {
-      return q;
-    },
-    orientation(alpha, beta, gamma, t) {
-      const m = orientationQuat(alpha, beta, gamma);
-      if (!start) {
-        start = m;
-      } else if (Math.hypot(...rotationVector(turned[0])) > WINDOW) {
-        const d = rotationVector(qmul([start[0], -start[1], -start[2], -start[3]], m));
-        turned.forEach((w, i) => {
-          const g = rotationVector(w);
-          sums[i].cos += dot(d, g) / (Math.hypot(...d) * Math.hypot(...g) || 1);
-          sums[i].gyro += Math.hypot(...g);
-          sums[i].orientation += Math.hypot(...d);
-        });
-        start = m;
-        turned = fresh();
-        // Moyennes du bloc en cours, affichées par la page de test ; verdict au bout du bloc.
-        const n = (check.windows++ % BLOCK) + 1;
-        check.results = sums.map(({ cos, gyro, orientation }) => ({ cos: cos / n, ratio: gyro / orientation }));
-        if (n === BLOCK) {
-          const [best, other] = check.results.map((_, i) => i).sort((a, b) => check.results[b].cos - check.results[a].cos);
-          const { cos, ratio } = check.results[best];
-          if (cos < 0.9 || Math.abs(ratio - 1) > 0.3) check.axes = null;
-          else if (cos - check.results[other].cos > 0.15) check.axes = best;
-          sums = GYRO_AXES.map(() => ({ cos: 0, gyro: 0, orientation: 0 }));
-        }
-      }
-      if (trusted() && q) {
-        const k = 1 - Math.exp(-(t - tOrientation) / 1000 / tau);
-        const target = dot(q, m) < 0 ? m.map((c) => -c) : m;
-        q = qnorm(q.map((c, i) => c + (target[i] - c) * k));
-      } else {
-        q = m;
-      }
-      tOrientation = t;
-    },
-    // rotationRate tel quel (°/s).
-    gyro(rate, t) {
-      const dt = tGyro === null ? 0 : Math.min(Math.max((t - tGyro) / 1000, 0), 0.05);
-      tGyro = t;
-      const steps = GYRO_AXES.map((axes) => rotationQuat(axes(rate).map((r) => r * RAD * dt)));
-      turned = turned.map((w, i) => qmul(w, steps[i]));
-      if (trusted() && q) q = qnorm(qmul(q, steps[check.axes]));
-    },
-  };
+// Visée au gyroscope seul, comme une souris en l'air : [cap, élévation] cumulés sur `dt` secondes. Le cap tourne
+// autour de la verticale que donne la gravité mesurée, l'élévation autour de l'horizontale qui croise la direction
+// visée (le haut du téléphone) : penché ou roulé, le téléphone balaie toujours droit. rotationRate donne x, y, z
+// dans l'ordre alpha, beta, gamma (Chrome, Firefox, Safari). Unités et signes propres au navigateur ne comptent
+// pas : le calibrage ⌖ (aimPosition) en tire l'échelle et le sens.
+export function gyroAim([cap, elevation], { alpha: x, beta: y, gamma: z }, gravity, dt, hold) {
+  const n = Math.hypot(...gravity) || 1;
+  const [ux, uy, uz] = gravity.map((g) => g / n);
+  const h = Math.hypot(ux, uz);
+  // Visée à la verticale : plus d'horizontale définie, on garde le bord du téléphone.
+  const pitch = h > 0.1 ? (x * uz - z * ux) / h : x;
+  return [cap - (x * ux + y * uy + z * uz) * dt, elevation + (hold === 180 ? -pitch : pitch) * dt];
 }
 
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;

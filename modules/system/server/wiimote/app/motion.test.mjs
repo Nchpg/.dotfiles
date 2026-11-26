@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimFromQuat, aimFusion, aimPosition, orientationQuat, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimPosition, gyroAim, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -55,10 +55,38 @@ test('la tenue ignore l’écran qui bascule quand on braque, mais suit un retou
   assert.equal(holdAngle(0, 180, false), 180);
 });
 
-test('visée : tourner à gauche baisse le cap, lever le bout monte, le roulis ne compte pas', () => {
-  near(aimAngles(0, 0, 0), [0, 0]);
-  near(aimAngles(30, 0, 0), [-30, 0]); // alpha croît en tournant à gauche (antihoraire vu d'au-dessus)
-  near(aimAngles(0, 10, 0), [0, 10]);
+// rotationRate du navigateur : x, y, z dans l'ordre alpha, beta, gamma.
+const rate = ([x, y, z]) => ({ alpha: x, beta: y, gamma: z });
+const scale = (v, k) => v.map((c) => c * k);
+
+test('visée au gyroscope : tourner à gauche baisse le cap, lever le bout monte', () => {
+  const flat = [0, 0, G];
+  near(gyroAim([0, 0], rate([0, 0, 30]), flat, 1, 0), [-30, 0]); // antihoraire vu d'au-dessus
+  near(gyroAim([0, 0], rate([10, 0, 0]), flat, 1, 0), [0, 10]);
+  near(gyroAim([0, 0], rate([10, 0, 0]), flat, 1, 180), [0, -10]); // téléphone retourné : bas vers l'écran
+});
+
+test('visée au gyroscope : penché et roulé, un balayage reste droit', () => {
+  // Verticale vue d'un téléphone levé et roulé, et l'horizontale qui croise sa direction visée (axe y).
+  const n = Math.hypot(-0.34, 0.26, 0.9);
+  const up = [-0.34 / n, 0.26 / n, 0.9 / n];
+  const h = Math.hypot(up[0], up[2]);
+  const across = [up[2] / h, 0, -up[0] / h];
+  near(gyroAim([0, 0], rate(scale(up, 30)), scale(up, G), 1, 0), [-30, 0]);
+  near(gyroAim([0, 0], rate(scale(across, 10)), scale(up, G), 1, 0), [0, 10]);
+});
+
+test('visée au gyroscope : un navigateur aux signes inversés vise pareil une fois calibré', () => {
+  // Gravité et rotations de signe opposé : le calibrage ⌖ l'absorbe.
+  for (const k of [1, -1]) {
+    const g = [0, 0, k * G];
+    const turn = (aim, w) => gyroAim(aim, rate(scale(w, k)), g, 1, 0);
+    const topLeft = turn(turn([0, 0], [0, 0, 20]), [8, 0, 0]);
+    const bottomRight = turn(turn(topLeft, [0, 0, -40]), [-16, 0, 0]);
+    const middle = turn(turn(bottomRight, [0, 0, 20]), [8, 0, 0]);
+    near(aimPosition(middle, topLeft, bottomRight), [0, 0]);
+    near(aimPosition(topLeft, topLeft, bottomRight), [-1, 1]);
+  }
 });
 
 test('pointeur calé sur les coins visés, y compris à cheval sur ±180°', () => {
@@ -155,58 +183,4 @@ test('verticale tirée de l’orientation, dans le repère de la spec', () => {
   near(upFromOrientation(0, 0), [0, 0, 1]);
   near(upFromOrientation(90, 0), [0, 1, 0]);
   near(upFromOrientation(0, -90), [1, 0, 0]);
-});
-
-// Même visée, au tour près (−180° et 180° se valent).
-const sameAim = ([h1, e1], [h2, e2]) => near([((h1 - h2 + 540) % 360) - 180, e1 - e2], [0, 0]);
-
-test('visée depuis un quaternion : la même que depuis les angles, roulis et tenue compris', () => {
-  for (const [a, b, g] of [[0, 0, 0], [30, 10, 0], [200, -40, 25], [350, 80, -60]]) {
-    for (const hold of [0, 180]) sameAim(aimFromQuat(orientationQuat(a, b, g), hold), aimAngles(a, b, hold));
-  }
-});
-
-// Lacet autour de la verticale, bout levé de 10° : alpha(t) = 40 sin t. Vu du téléphone, la rotation est
-// alpha' × (0, sin 10°, cos 10°) en x, y, z ; `rate` en fait le rotationRate du navigateur (spec par défaut).
-const spec = ([x, y, z]) => ({ alpha: z, beta: x, gamma: y });
-function sweep(fusion, { seconds = 10, orientationEvery = 6, rate = spec } = {}) {
-  const beta = 10;
-  let worst = 0;
-  for (let i = 0; i <= seconds * 60; i++) {
-    const t = i / 60;
-    const w = 40 * Math.cos(t);
-    fusion.gyro(rate([0, w * Math.sin(beta * Math.PI / 180), w * Math.cos(beta * Math.PI / 180)]), t * 1000);
-    if (i % orientationEvery === 0) fusion.orientation((40 * Math.sin(t) + 360) % 360, beta, 0, t * 1000);
-    if (t > seconds - 3) {
-      const [h, e] = aimFromQuat(fusion.quat, 0);
-      const [wh, we] = aimAngles(40 * Math.sin(t), beta, 0);
-      worst = Math.max(worst, Math.abs(h - wh), Math.abs(e - we));
-    }
-  }
-  return worst;
-}
-
-test('visée fusionnée : le gyroscope comble une orientation à 10 Hz, à 0,2° près, quel que soit l’ordre des axes', () => {
-  for (const [rate, axes] of [[spec, 1], [([x, y, z]) => ({ alpha: x, beta: y, gamma: z }), 0]]) {
-    const fusion = aimFusion();
-    const worst = sweep(fusion, { rate });
-    assert.equal(fusion.check.axes, axes);
-    assert.ok(worst < 0.2, `écart ${worst}°`);
-  }
-  // Sans le gyroscope, la visée resterait sur l'orientation de 100 ms plus tôt : jusqu'à 4° de retard.
-  assert.ok(sweep(aimFusion(), { rate: () => ({ alpha: 0, beta: 0, gamma: 0 }) }) > 3);
-});
-
-test('visée fusionnée : gyroscope ignoré s’il tourne à l’envers ou n’est pas en °/s', () => {
-  const reversed = aimFusion();
-  sweep(reversed, { rate: (v) => spec(v.map((c) => -c)) });
-  assert.equal(reversed.check.axes, null);
-  const radians = aimFusion();
-  sweep(radians, { rate: (v) => spec(v.map((c) => c * Math.PI / 180)) });
-  assert.ok(!Number.isInteger(radians.check.axes));
-  // Tant que rien n'est tranché : l'orientation telle quelle.
-  const fresh = aimFusion();
-  fresh.orientation(30, 10, 5, 0);
-  fresh.gyro({ alpha: 50, beta: 50, gamma: 50 }, 16);
-  sameAim(aimFromQuat(fresh.quat, 0), aimAngles(30, 10, 0));
 });

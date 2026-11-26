@@ -1,4 +1,4 @@
-import { G, aimFromQuat, aimFusion, gyroXYZ, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimPosition, gyroAim, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -38,8 +38,10 @@ const SMOOTHING = [
 ];
 const SMOOTHING_LABELS = ['aucun', 'léger', 'moyen', 'fort'];
 let aimFilters = null;
-// Visée : gyroscope régulier recalé par l'orientation (aimFusion).
-const fusion = aimFusion();
+// Visée au gyroscope (gyroAim) : angles cumulés, gravité lissée (sans les à-coups de la main), dernier échantillon.
+let aimAngle = [0, 0];
+let gravity = [0, 0, G];
+let lastMotion = null;
 let corners;
 let firstCorner;
 let ws;
@@ -223,15 +225,15 @@ setInterval(() => {
 
 const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF);
 
-// Le téléphone vise lui-même : rien ne s'accumule si le réseau hoquette, contrairement au pointeur que Dolphin
-// tirerait du gyroscope reçu.
+// Le téléphone vise lui-même, avec ses propres horodatages : rien ne s'accumule si le réseau hoquette, contrairement
+// au pointeur que Dolphin tirerait du gyroscope reçu.
 function updateAim(t) {
-  if (mode !== 'vertical' || !corners || !fusion.quat) {
+  if (mode !== 'vertical' || !corners) {
     aim = [AIM_CENTER, AIM_CENTER];
     aimFilters = null;
     return;
   }
-  const raw = aimPosition(aimFromQuat(fusion.quat, hold), ...corners);
+  const raw = aimPosition(aimAngle, ...corners);
   const preset = SMOOTHING[settings.smooth];
   aimFilters ??= raw.map(() => (preset ? oneEuro(preset) : (v) => v));
   aim = raw.map((v, i) => toU16(aimFilters[i](v, t)));
@@ -239,8 +241,8 @@ function updateAim(t) {
 
 // ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
 aimButton.addEventListener('click', () => {
-  if (!fusion.quat) return;
-  const now = aimFromQuat(fusion.quat, hold);
+  if (lastMotion === null) return;
+  const now = aimAngle;
   if (aimButton.dataset.step === 'top-left') {
     firstCorner = now;
     aimButton.dataset.step = 'bottom-right';
@@ -355,11 +357,6 @@ addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
   orientation = e;
-  // Sans cap (alpha), pas de visée : le reste de l'orientation sert encore à l'accéléromètre.
-  if (e.alpha != null) fusion.orientation(e.alpha, e.beta, e.gamma, e.timeStamp);
-  updateAim(e.timeStamp);
-  // Visée partie tout de suite, sans attendre le prochain devicemotion (jusqu'à 16 ms de gagnés).
-  if (mode === 'vertical' && corners) send();
 });
 
 addEventListener('devicemotion', (e) => {
@@ -367,7 +364,10 @@ addEventListener('devicemotion', (e) => {
   if (a?.x == null) return;
   const r = e.rotationRate;
   if (r?.alpha != null) {
-    fusion.gyro(r, e.timeStamp);
+    const dt = lastMotion === null ? 0 : Math.min(Math.max((e.timeStamp - lastMotion) / 1000, 0), 0.05);
+    lastMotion = e.timeStamp;
+    gravity = gravity.map((g, i) => g + ([a.x, a.y, a.z][i] - g) * 0.2);
+    aimAngle = gyroAim(aimAngle, r, gravity, dt, hold);
     updateAim(e.timeStamp);
   }
 
@@ -383,7 +383,8 @@ addEventListener('devicemotion', (e) => {
   // Repère de la tenue, pas de l'écran : il ne change pas quand l'écran bascule.
   motion = toDSU(
     [a.x * accelSign, a.y * accelSign, a.z * accelSign],
-    r?.alpha == null ? [0, 0, 0] : gyroXYZ(r),
+    // rotationRate : x, y, z dans l'ordre alpha, beta, gamma (Chrome, Firefox, Safari).
+    [r?.alpha ?? 0, r?.beta ?? 0, r?.gamma ?? 0],
     hold,
     mode === 'sideways',
   );
