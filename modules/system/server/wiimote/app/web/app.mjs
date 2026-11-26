@@ -1,4 +1,4 @@
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
+import { G, aimFromQuat, aimFusion, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -38,6 +38,8 @@ const SMOOTHING = [
 ];
 const SMOOTHING_LABELS = ['aucun', 'léger', 'moyen', 'fort'];
 let aimFilters = null;
+// Visée : gyroscope régulier recalé par l'orientation (aimFusion).
+const fusion = aimFusion();
 let corners;
 let firstCorner;
 let ws;
@@ -221,24 +223,24 @@ setInterval(() => {
 
 const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF);
 
-// Le téléphone vise lui-même, d'après l'orientation que fusionne son système : rien ne s'accumule si le
-// réseau hoquette, contrairement au pointeur que Dolphin tirerait du gyroscope.
-function updateAim() {
-  if (mode !== 'vertical' || !corners || orientation?.alpha == null) {
+// Le téléphone vise lui-même : rien ne s'accumule si le réseau hoquette, contrairement au pointeur que Dolphin
+// tirerait du gyroscope reçu.
+function updateAim(t) {
+  if (mode !== 'vertical' || !corners || !fusion.quat) {
     aim = [AIM_CENTER, AIM_CENTER];
     aimFilters = null;
     return;
   }
-  const raw = aimPosition(aimAngles(orientation.alpha, orientation.beta, hold), ...corners);
+  const raw = aimPosition(aimFromQuat(fusion.quat, hold), ...corners);
   const preset = SMOOTHING[settings.smooth];
   aimFilters ??= raw.map(() => (preset ? oneEuro(preset) : (v) => v));
-  aim = raw.map((v, i) => toU16(aimFilters[i](v, orientation.timeStamp)));
+  aim = raw.map((v, i) => toU16(aimFilters[i](v, t)));
 }
 
 // ⌖, puis viser le coin haut gauche de l'écran et appuyer, puis le coin bas droit et appuyer.
 aimButton.addEventListener('click', () => {
-  if (orientation?.alpha == null) return;
-  const now = aimAngles(orientation.alpha, orientation.beta, hold);
+  if (!fusion.quat) return;
+  const now = aimFromQuat(fusion.quat, hold);
   if (aimButton.dataset.step === 'top-left') {
     firstCorner = now;
     aimButton.dataset.step = 'bottom-right';
@@ -353,7 +355,9 @@ addEventListener('contextmenu', (e) => e.preventDefault());
 addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
   orientation = e;
-  updateAim();
+  // Sans cap (alpha), pas de visée : le reste de l'orientation sert encore à l'accéléromètre.
+  if (e.alpha != null) fusion.orientation(e.alpha, e.beta, e.gamma, e.timeStamp);
+  updateAim(e.timeStamp);
   // Visée partie tout de suite, sans attendre le prochain devicemotion (jusqu'à 16 ms de gagnés).
   if (mode === 'vertical' && corners) send();
 });
@@ -362,6 +366,10 @@ addEventListener('devicemotion', (e) => {
   const a = e.accelerationIncludingGravity;
   if (a?.x == null) return;
   const r = e.rotationRate;
+  if (r?.alpha != null) {
+    fusion.gyro([r.beta, r.gamma, r.alpha], e.timeStamp);
+    updateAim(e.timeStamp);
+  }
 
   if (samples < 30 && orientation) {
     const norm = Math.hypot(a.x, a.y, a.z);

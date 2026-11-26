@@ -43,6 +43,98 @@ export function aimAngles(alpha, beta, hold) {
   return [Math.atan2(f[0], f[1]) / RAD, Math.asin(f[2]) / RAD];
 }
 
+// Quaternions [w, x, y, z] : orientation du téléphone, de son repère vers celui de la Terre.
+const qmul = ([aw, ax, ay, az], [bw, bx, by, bz]) => [
+  aw * bw - ax * bx - ay * by - az * bz,
+  aw * bx + ax * bw + ay * bz - az * by,
+  aw * by - ax * bz + ay * bw + az * bx,
+  aw * bz + ax * by - ay * bx + az * bw,
+];
+const qnorm = (q) => q.map((v) => v / Math.hypot(...q));
+const dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+
+// D'après deviceorientation : rotations Z-X'-Y'' de alpha, beta, gamma (spec W3C).
+export function orientationQuat(alpha, beta, gamma) {
+  const half = (deg) => [Math.cos((deg * RAD) / 2), Math.sin((deg * RAD) / 2)];
+  const [cz, sz] = half(alpha);
+  const [cx, sx] = half(beta);
+  const [cy, sy] = half(gamma);
+  return qmul(qmul([cz, 0, 0, sz], [cx, sx, 0, 0]), [cy, 0, sy, 0]);
+}
+
+// Rotation d'un vecteur [x, y, z] (radians, repère du téléphone), et l'inverse.
+function rotationQuat(v) {
+  const angle = Math.hypot(...v);
+  if (angle < 1e-12) return [1, 0, 0, 0];
+  const s = Math.sin(angle / 2) / angle;
+  return [Math.cos(angle / 2), ...v.map((c) => c * s)];
+}
+function rotationVector(q) {
+  const [w, ...v] = q[0] < 0 ? q.map((c) => -c) : q;
+  const s = Math.hypot(...v);
+  return s < 1e-12 ? [0, 0, 0] : v.map((c) => (c / s) * 2 * Math.atan2(s, w));
+}
+
+// Comme aimAngles, depuis un quaternion : le haut du téléphone (son axe y) dans le repère de la Terre.
+export function aimFromQuat([w, x, y, z], hold) {
+  const s = hold === 180 ? -1 : 1;
+  const f = [2 * (x * y - w * z), 1 - 2 * (x * x + z * z), 2 * (y * z + w * x)].map((c) => c * s);
+  return [Math.atan2(f[0], f[1]) / RAD, Math.asin(Math.max(-1, Math.min(1, f[2]))) / RAD];
+}
+
+// Visée fusionnée : chaque devicemotion (60 Hz réguliers) fait tourner l'orientation du gyroscope, chaque
+// deviceorientation la recale (constante de temps `tau`, en s). Certains téléphones (Xiaomi 17T) ne donnent
+// l'orientation qu'à 30 Hz par à-coups, et Chrome la tait sous 0,1° de changement. Le gyroscope n'est suivi qu'une
+// fois ses axes et son unité confirmés par l'orientation sur 30 mouvements ; sinon l'orientation seule.
+export function aimFusion(tau = 0.3) {
+  let q = null;
+  let measured = null;
+  let tOrientation = 0;
+  let tGyro = null;
+  let turned = [0, 0, 0];
+  const check = { n: 0, cos: 0, gyro: 0, orientation: 0, trusted: null };
+  return {
+    check,
+    get quat() {
+      return q;
+    },
+    orientation(alpha, beta, gamma, t) {
+      const m = orientationQuat(alpha, beta, gamma);
+      if (measured && check.trusted === null) {
+        const d = rotationVector(qmul([measured[0], ...measured.slice(1).map((c) => -c)], m));
+        const [a, g] = [Math.hypot(...d), Math.hypot(...turned)];
+        if (a > 0.5 * RAD && g > 0) {
+          check.n++;
+          check.cos += dot(d, turned) / (a * g);
+          check.orientation += a;
+          check.gyro += g;
+          if (check.n === 30) {
+            check.trusted = check.cos / check.n > 0.8 && Math.abs(check.gyro / check.orientation - 1) < 0.3;
+          }
+        }
+      }
+      turned = [0, 0, 0];
+      if (check.trusted && q) {
+        const k = 1 - Math.exp(-(t - tOrientation) / 1000 / tau);
+        const target = dot(q, m) < 0 ? m.map((c) => -c) : m;
+        q = qnorm(q.map((c, i) => c + (target[i] - c) * k));
+      } else {
+        q = m;
+      }
+      measured = m;
+      tOrientation = t;
+    },
+    // [x, y, z] en °/s dans le repère du téléphone : rotationRate beta, gamma, alpha.
+    gyro(rate, t) {
+      const dt = tGyro === null ? 0 : Math.min(Math.max((t - tGyro) / 1000, 0), 0.05);
+      tGyro = t;
+      const v = rate.map((r) => r * RAD * dt);
+      turned = turned.map((c, i) => c + v[i]);
+      if (check.trusted && q) q = qnorm(qmul(q, rotationQuat(v)));
+    },
+  };
+}
+
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
 
 // Coins visés au calibrage trop proches : on garderait un pointeur affolé.

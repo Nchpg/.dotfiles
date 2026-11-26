@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, aimAngles, aimPosition, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
+import { G, aimAngles, aimFromQuat, aimFusion, aimPosition, orientationQuat, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, upFromOrientation, validCorners } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -155,4 +155,55 @@ test('verticale tirée de l’orientation, dans le repère de la spec', () => {
   near(upFromOrientation(0, 0), [0, 0, 1]);
   near(upFromOrientation(90, 0), [0, 1, 0]);
   near(upFromOrientation(0, -90), [1, 0, 0]);
+});
+
+// Même visée, au tour près (−180° et 180° se valent).
+const sameAim = ([h1, e1], [h2, e2]) => near([((h1 - h2 + 540) % 360) - 180, e1 - e2], [0, 0]);
+
+test('visée depuis un quaternion : la même que depuis les angles, roulis et tenue compris', () => {
+  for (const [a, b, g] of [[0, 0, 0], [30, 10, 0], [200, -40, 25], [350, 80, -60]]) {
+    for (const hold of [0, 180]) sameAim(aimFromQuat(orientationQuat(a, b, g), hold), aimAngles(a, b, hold));
+  }
+});
+
+// Lacet autour de la verticale, bout levé de 10° : alpha(t) = 40 sin t. Vu du téléphone, la rotation est
+// alpha' × (0, sin 10°, cos 10°) ; `axes` permet de fausser ce que donne le gyroscope.
+function sweep(fusion, { seconds = 8, orientationEvery = 6, axes = (r) => r } = {}) {
+  const beta = 10;
+  let worst = 0;
+  for (let i = 0; i <= seconds * 60; i++) {
+    const t = i / 60;
+    const rate = 40 * Math.cos(t);
+    fusion.gyro(axes([0, rate * Math.sin(beta * Math.PI / 180), rate * Math.cos(beta * Math.PI / 180)]), t * 1000);
+    if (i % orientationEvery === 0) fusion.orientation((40 * Math.sin(t) + 360) % 360, beta, 0, t * 1000);
+    if (t > seconds - 3) {
+      const [h, e] = aimFromQuat(fusion.quat, 0);
+      const [wh, we] = aimAngles(40 * Math.sin(t), beta, 0);
+      worst = Math.max(worst, Math.abs(h - wh), Math.abs(e - we));
+    }
+  }
+  return worst;
+}
+
+test('visée fusionnée : le gyroscope comble une orientation à 10 Hz, à 0,2° près', () => {
+  const fusion = aimFusion();
+  const worst = sweep(fusion);
+  assert.equal(fusion.check.trusted, true);
+  assert.ok(worst < 0.2, `écart ${worst}°`);
+  // Sans le gyroscope, la visée resterait sur l'orientation de 100 ms plus tôt : jusqu'à 4° de retard.
+  assert.ok(sweep(aimFusion(), { axes: () => [0, 0, 0] }) > 3);
+});
+
+test('visée fusionnée : gyroscope ignoré si ses axes ou son unité ne collent pas à l’orientation', () => {
+  const swapped = aimFusion();
+  sweep(swapped, { axes: ([x, y, z]) => [x, z, y] });
+  assert.equal(swapped.check.trusted, false);
+  const radians = aimFusion();
+  sweep(radians, { axes: (r) => r.map((c) => c * Math.PI / 180) });
+  assert.equal(radians.check.trusted, false);
+  // Tant qu'il n'est pas confirmé : l'orientation telle quelle.
+  const fresh = aimFusion();
+  fresh.orientation(30, 10, 5, 0);
+  fresh.gyro([50, 50, 50], 16);
+  sameAim(aimFromQuat(fresh.quat, 0), aimAngles(30, 10, 0));
 });
