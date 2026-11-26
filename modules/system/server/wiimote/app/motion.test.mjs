@@ -167,14 +167,15 @@ test('visée depuis un quaternion : la même que depuis les angles, roulis et te
 });
 
 // Lacet autour de la verticale, bout levé de 10° : alpha(t) = 40 sin t. Vu du téléphone, la rotation est
-// alpha' × (0, sin 10°, cos 10°) ; `axes` permet de fausser ce que donne le gyroscope.
-function sweep(fusion, { seconds = 8, orientationEvery = 6, axes = (r) => r } = {}) {
+// alpha' × (0, sin 10°, cos 10°) en x, y, z ; `rate` en fait le rotationRate du navigateur (spec par défaut).
+const spec = ([x, y, z]) => ({ alpha: z, beta: x, gamma: y });
+function sweep(fusion, { seconds = 10, orientationEvery = 6, rate = spec } = {}) {
   const beta = 10;
   let worst = 0;
   for (let i = 0; i <= seconds * 60; i++) {
     const t = i / 60;
-    const rate = 40 * Math.cos(t);
-    fusion.gyro(axes([0, rate * Math.sin(beta * Math.PI / 180), rate * Math.cos(beta * Math.PI / 180)]), t * 1000);
+    const w = 40 * Math.cos(t);
+    fusion.gyro(rate([0, w * Math.sin(beta * Math.PI / 180), w * Math.cos(beta * Math.PI / 180)]), t * 1000);
     if (i % orientationEvery === 0) fusion.orientation((40 * Math.sin(t) + 360) % 360, beta, 0, t * 1000);
     if (t > seconds - 3) {
       const [h, e] = aimFromQuat(fusion.quat, 0);
@@ -185,25 +186,27 @@ function sweep(fusion, { seconds = 8, orientationEvery = 6, axes = (r) => r } = 
   return worst;
 }
 
-test('visée fusionnée : le gyroscope comble une orientation à 10 Hz, à 0,2° près', () => {
-  const fusion = aimFusion();
-  const worst = sweep(fusion);
-  assert.equal(fusion.check.trusted, true);
-  assert.ok(worst < 0.2, `écart ${worst}°`);
+test('visée fusionnée : le gyroscope comble une orientation à 10 Hz, à 0,2° près, quel que soit l’ordre des axes', () => {
+  for (const [rate, axes] of [[spec, 0], [([x, y, z]) => ({ alpha: x, beta: y, gamma: z }), 1]]) {
+    const fusion = aimFusion();
+    const worst = sweep(fusion, { rate });
+    assert.equal(fusion.check.axes, axes);
+    assert.ok(worst < 0.2, `écart ${worst}°`);
+  }
   // Sans le gyroscope, la visée resterait sur l'orientation de 100 ms plus tôt : jusqu'à 4° de retard.
-  assert.ok(sweep(aimFusion(), { axes: () => [0, 0, 0] }) > 3);
+  assert.ok(sweep(aimFusion(), { rate: () => ({ alpha: 0, beta: 0, gamma: 0 }) }) > 3);
 });
 
-test('visée fusionnée : gyroscope ignoré si ses axes ou son unité ne collent pas à l’orientation', () => {
-  const swapped = aimFusion();
-  sweep(swapped, { axes: ([x, y, z]) => [x, z, y] });
-  assert.equal(swapped.check.trusted, false);
+test('visée fusionnée : gyroscope ignoré s’il tourne à l’envers ou n’est pas en °/s', () => {
+  const reversed = aimFusion();
+  sweep(reversed, { rate: (v) => spec(v.map((c) => -c)) });
+  assert.equal(reversed.check.axes, null);
   const radians = aimFusion();
-  sweep(radians, { axes: (r) => r.map((c) => c * Math.PI / 180) });
-  assert.equal(radians.check.trusted, false);
-  // Tant qu'il n'est pas confirmé : l'orientation telle quelle.
+  sweep(radians, { rate: (v) => spec(v.map((c) => c * Math.PI / 180)) });
+  assert.ok(!Number.isInteger(radians.check.axes));
+  // Tant que rien n'est tranché : l'orientation telle quelle.
   const fresh = aimFusion();
   fresh.orientation(30, 10, 5, 0);
-  fresh.gyro([50, 50, 50], 16);
+  fresh.gyro({ alpha: 50, beta: 50, gamma: 50 }, 16);
   sameAim(aimFromQuat(fresh.quat, 0), aimAngles(30, 10, 0));
 });

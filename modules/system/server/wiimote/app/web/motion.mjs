@@ -82,17 +82,28 @@ export function aimFromQuat([w, x, y, z], hold) {
   return [Math.atan2(f[0], f[1]) / RAD, Math.asin(Math.max(-1, Math.min(1, f[2]))) / RAD];
 }
 
+// Ordre des axes de rotationRate selon le navigateur : celui de la spec (alpha autour de z, beta de x, gamma de y)
+// ou x, y, z dans l'ordre alpha, beta, gamma. Chacun est essayé, l'orientation tranche.
+const GYRO_AXES = [({ alpha, beta, gamma }) => [beta, gamma, alpha], ({ alpha, beta, gamma }) => [alpha, beta, gamma]];
+const WINDOW = 4 * RAD;
+const BLOCK = 20;
+
 // Visée fusionnée : chaque devicemotion (60 Hz réguliers) fait tourner l'orientation du gyroscope, chaque
 // deviceorientation la recale (constante de temps `tau`, en s). Certains téléphones (Xiaomi 17T) ne donnent
-// l'orientation qu'à 30 Hz par à-coups, et Chrome la tait sous 0,1° de changement. Le gyroscope n'est suivi qu'une
-// fois ses axes et son unité confirmés par l'orientation sur 30 mouvements ; sinon l'orientation seule.
+// l'orientation qu'à 30 Hz par à-coups, et Chrome la tait sous 0,1° de changement. Le gyroscope n'est suivi que si,
+// sur 20 rotations d'au moins 4°, ce qu'il a mesuré colle à l'orientation (sens et ampleur) ; c'est revérifié
+// toutes les 20 rotations. Sinon l'orientation seule.
 export function aimFusion(tau = 0.3) {
   let q = null;
-  let measured = null;
   let tOrientation = 0;
   let tGyro = null;
-  let turned = [0, 0, 0];
-  const check = { n: 0, cos: 0, gyro: 0, orientation: 0, trusted: null };
+  let start = null;
+  const fresh = () => GYRO_AXES.map(() => [1, 0, 0, 0]);
+  let turned = fresh();
+  let sums = GYRO_AXES.map(() => ({ cos: 0, gyro: 0, orientation: 0 }));
+  // axes : undefined tant que rien n'est tranché, null si aucun ordre ne colle, sinon l'indice dans GYRO_AXES.
+  const check = { windows: 0, axes: undefined, results: [] };
+  const trusted = () => Number.isInteger(check.axes);
   return {
     check,
     get quat() {
@@ -100,37 +111,43 @@ export function aimFusion(tau = 0.3) {
     },
     orientation(alpha, beta, gamma, t) {
       const m = orientationQuat(alpha, beta, gamma);
-      if (measured && check.trusted === null) {
-        const d = rotationVector(qmul([measured[0], ...measured.slice(1).map((c) => -c)], m));
-        const [a, g] = [Math.hypot(...d), Math.hypot(...turned)];
-        if (a > 0.5 * RAD && g > 0) {
-          check.n++;
-          check.cos += dot(d, turned) / (a * g);
-          check.orientation += a;
-          check.gyro += g;
-          if (check.n === 30) {
-            check.trusted = check.cos / check.n > 0.8 && Math.abs(check.gyro / check.orientation - 1) < 0.3;
-          }
+      if (!start) {
+        start = m;
+      } else if (Math.hypot(...rotationVector(turned[0])) > WINDOW) {
+        const d = rotationVector(qmul([start[0], -start[1], -start[2], -start[3]], m));
+        turned.forEach((w, i) => {
+          const g = rotationVector(w);
+          sums[i].cos += dot(d, g) / (Math.hypot(...d) * Math.hypot(...g) || 1);
+          sums[i].gyro += Math.hypot(...g);
+          sums[i].orientation += Math.hypot(...d);
+        });
+        start = m;
+        turned = fresh();
+        // Moyennes du bloc en cours, affichées par la page de test ; verdict au bout du bloc.
+        const n = (check.windows++ % BLOCK) + 1;
+        check.results = sums.map(({ cos, gyro, orientation }) => ({ cos: cos / n, ratio: gyro / orientation }));
+        if (n === BLOCK) {
+          const i = check.results.findIndex(({ cos, ratio }) => cos > 0.8 && Math.abs(ratio - 1) < 0.3);
+          check.axes = i < 0 ? null : i;
+          sums = GYRO_AXES.map(() => ({ cos: 0, gyro: 0, orientation: 0 }));
         }
       }
-      turned = [0, 0, 0];
-      if (check.trusted && q) {
+      if (trusted() && q) {
         const k = 1 - Math.exp(-(t - tOrientation) / 1000 / tau);
         const target = dot(q, m) < 0 ? m.map((c) => -c) : m;
         q = qnorm(q.map((c, i) => c + (target[i] - c) * k));
       } else {
         q = m;
       }
-      measured = m;
       tOrientation = t;
     },
-    // [x, y, z] en °/s dans le repère du téléphone : rotationRate beta, gamma, alpha.
+    // rotationRate tel quel (°/s).
     gyro(rate, t) {
       const dt = tGyro === null ? 0 : Math.min(Math.max((t - tGyro) / 1000, 0), 0.05);
       tGyro = t;
-      const v = rate.map((r) => r * RAD * dt);
-      turned = turned.map((c, i) => c + v[i]);
-      if (check.trusted && q) q = qnorm(qmul(q, rotationQuat(v)));
+      const steps = GYRO_AXES.map((axes) => rotationQuat(axes(rate).map((r) => r * RAD * dt)));
+      turned = turned.map((w, i) => qmul(w, steps[i]));
+      if (trusted() && q) q = qnorm(qmul(q, steps[check.axes]));
     },
   };
 }

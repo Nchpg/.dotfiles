@@ -367,7 +367,7 @@ addEventListener('devicemotion', (e) => {
   if (a?.x == null) return;
   const r = e.rotationRate;
   if (r?.alpha != null) {
-    fusion.gyro([r.beta, r.gamma, r.alpha], e.timeStamp);
+    fusion.gyro(r, e.timeStamp);
     updateAim(e.timeStamp);
   }
 

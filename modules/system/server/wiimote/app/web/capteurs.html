@@ -99,7 +99,7 @@ const angle = (u, v) => Math.acos(Math.min(1, u[0] * v[0] + u[1] * v[1] + u[2] *
 
 // En mouvement, chaque pas de l'orientation comparé à la rotation que mesure le gyroscope sur le même intervalle :
 // un saut sans rotation, c'est la fusion du système. Chrome tait l'orientation qui bouge de moins de 0,1° : son
-// rythme ne se juge que quand le téléphone tourne vite (plus de 20 °/s, soit 0,3° toutes les 16 ms).
+// rythme ne se juge que quand le téléphone tourne franchement (plus de 15 °/s, soit 0,25° toutes les 16 ms).
 function jumps(o, m) {
   let j = 0;
   let sauts = 0;
@@ -113,7 +113,7 @@ function jumps(o, m) {
     const gyro = (mean(rates) * (t1 - t0)) / 1000;
     const moved = angle(forward(o[i - 1]), forward(o[i]));
     if (moved > 2 * gyro + 0.5) sauts++;
-    if (mean(rates) > 20) moving.push(t1 - t0);
+    if (mean(rates) > 15) moving.push(t1 - t0);
   }
   return {
     sauts: sauts / seconds(o),
@@ -129,7 +129,7 @@ function fusionCheck(o, m) {
   const events = [...o.map((r) => ['o', r]), ...m.map((r) => ['m', r])].sort((a, b) => a[1][0] - b[1][0]);
   for (const [kind, r] of events) {
     if (kind === 'o') fusion.orientation(r[1], r[2], r[3], r[0]);
-    else fusion.gyro([r[2], r[3], r[1]], r[0]);
+    else fusion.gyro({ alpha: r[1], beta: r[2], gamma: r[3] }, r[0]);
   }
   return fusion.check;
 }
@@ -156,7 +156,8 @@ function show(still, sweep) {
   const cm = cadence(sweep.m);
   const jm = jumps(sweep.o, sweep.m);
   const fc = fusionCheck(sweep.o, sweep.m);
-  const verdict = fc.trusted === null ? 'pas assez de mouvement' : fc.trusted ? 'oui' : 'non';
+  const verdict = fc.axes === undefined ? 'pas assez de mouvement' : fc.axes === null ? 'non' : 'oui';
+  const accord = fc.results.map(({ cos, ratio }, i) => `${['spec', 'xyz'][i]} ${f(cos, 2)} × ${f(ratio, 2)}`);
   const rows = [
     ['Évènements par seconde', f(co.hz), f(cm.hz)],
     ['Valeurs nouvelles par seconde', f(co.fresh), f(cm.fresh)],
@@ -169,7 +170,7 @@ function show(still, sweep) {
     ['En mouvement : par seconde', f(jm.hz), ''],
     ['En mouvement : écart p95 / max (ms)', `${f(jm.p95, 0)} / ${f(jm.max, 0)}`, ''],
     ['Gyroscope suivi par la visée', '', verdict],
-    ['Accord (cos, rapport)', '', fc.n ? `${f(fc.cos / fc.n, 2)}, ${f(fc.gyro / fc.orientation, 2)}` : '—'],
+    [`Accord sur ${fc.windows} rotations de 4° (sens × ampleur)`, '', accord.join('<br>') || '—'],
   ];
   $('out').innerHTML = '<table><tr><th></th><th>Orientation</th><th>Gyroscope</th></tr>' +
     rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('') + '</table>';
@@ -190,7 +191,7 @@ $('go').addEventListener('click', async () => {
   absolute = null;
   const still = await record('Pose le téléphone à plat sur une table et ne le touche plus.', 5);
   const sweep = await record(
-    "Prends-le comme la manette, pointé vers l'écran, et balaie lentement de gauche à droite puis de haut en bas.", 8);
+    "Prends-le comme la manette, pointé vers l'écran, et vise partout comme dans un menu : gauche, droite, haut, bas.", 12);
   $('count').textContent = '';
   $('go').hidden = false;
   $('go').textContent = 'Recommencer';
