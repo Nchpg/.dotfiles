@@ -36,7 +36,7 @@
 <p class="soft" id="ua"></p>
 
 <script type="module">
-import { aimAngles } from './motion.mjs';
+import { aimAngles, aimFusion } from './motion.mjs';
 
 const RAD = Math.PI / 180;
 const $ = (id) => document.getElementById(id);
@@ -69,6 +69,8 @@ async function record(text, seconds) {
   $('step').textContent = text;
   await wait(3);
   navigator.vibrate?.(60);
+  // La vibration secoue le gyroscope : mesure après.
+  await new Promise((done) => setTimeout(done, 300));
   $('step').textContent = 'Mesure en cours… ' + text;
   rec = { o: [], m: [] };
   await wait(seconds);
@@ -96,11 +98,12 @@ const forward = ([, a, b]) => [-Math.sin(a * RAD) * Math.cos(b * RAD), Math.cos(
 const angle = (u, v) => Math.acos(Math.min(1, u[0] * v[0] + u[1] * v[1] + u[2] * v[2])) / RAD;
 
 // En mouvement, chaque pas de l'orientation comparé à la rotation que mesure le gyroscope sur le même intervalle :
-// un saut sans rotation, c'est la fusion du système ; une orientation figée alors que le téléphone tourne, un gel.
+// un saut sans rotation, c'est la fusion du système. Chrome tait l'orientation qui bouge de moins de 0,1° : son
+// rythme ne se juge que quand le téléphone tourne vite (plus de 20 °/s, soit 0,3° toutes les 16 ms).
 function jumps(o, m) {
   let j = 0;
   let sauts = 0;
-  let gels = 0;
+  const moving = [];
   for (let i = 1; i < o.length; i++) {
     const [t0, t1] = [o[i - 1][0], o[i][0]];
     while (j < m.length - 1 && m[j][0] <= t0) j++;
@@ -110,19 +113,36 @@ function jumps(o, m) {
     const gyro = (mean(rates) * (t1 - t0)) / 1000;
     const moved = angle(forward(o[i - 1]), forward(o[i]));
     if (moved > 2 * gyro + 0.5) sauts++;
-    else if (moved < 0.05 && gyro > 0.5) gels++;
+    if (mean(rates) > 20) moving.push(t1 - t0);
   }
-  return { sauts: sauts / seconds(o), gels: gels / seconds(o) };
+  return {
+    sauts: sauts / seconds(o),
+    hz: moving.length / (moving.reduce((a, b) => a + b, 0) / 1000),
+    p95: pct(moving, 0.95),
+    max: Math.max(...moving),
+  };
 }
 
+// La visée fusionnée de la manette, rejouée sur le balayage : le gyroscope est-il retenu ?
+function fusionCheck(o, m) {
+  const fusion = aimFusion();
+  const events = [...o.map((r) => ['o', r]), ...m.map((r) => ['m', r])].sort((a, b) => a[1][0] - b[1][0]);
+  for (const [kind, r] of events) {
+    if (kind === 'o') fusion.orientation(r[1], r[2], r[3], r[0]);
+    else fusion.gyro([r[2], r[3], r[1]], r[0]);
+  }
+  return fusion.check;
+}
+
+// Au repos, Chrome peut ne donner aucune orientation (moins de 0,1° de changement) : rien à mesurer alors.
 function rest(o, m) {
-  const aims = o.map(([, a, b]) => aimAngles(a, b, 0));
+  const aims = o.length > 1 ? o.map(([, a, b]) => aimAngles(a, b, 0)) : [[NaN, NaN]];
   const yaw = aims.map(([h]) => wrap(h - aims[0][0]));
   const pitch = aims.map(([, e]) => e);
   const axes = [1, 2, 3].map((k) => m.map((r) => r[k]));
   return {
     noise: Math.max(std(yaw), std(pitch)),
-    drift: (yaw.at(-1) / seconds(o)) * 60,
+    drift: o.length > 1 ? (yaw.at(-1) / seconds(o)) * 60 : NaN,
     gyroNoise: Math.max(...axes.map(std)),
     gyroBias: Math.max(...axes.map((xs) => Math.abs(mean(xs)))),
   };
@@ -135,6 +155,8 @@ function show(still, sweep) {
   const co = cadence(sweep.o);
   const cm = cadence(sweep.m);
   const jm = jumps(sweep.o, sweep.m);
+  const fc = fusionCheck(sweep.o, sweep.m);
+  const verdict = fc.trusted === null ? 'pas assez de mouvement' : fc.trusted ? 'oui' : 'non';
   const rows = [
     ['Évènements par seconde', f(co.hz), f(cm.hz)],
     ['Valeurs nouvelles par seconde', f(co.fresh), f(cm.fresh)],
@@ -144,7 +166,10 @@ function show(still, sweep) {
     ['Bruit au repos', f(r.noise, 3) + ' °', f(r.gyroNoise, 3) + ' °/s'],
     ['Dérive / biais au repos', f(r.drift, 2) + ' °/min', f(r.gyroBias, 3) + ' °/s'],
     ['Sauts par seconde', f(jm.sauts, 2), ''],
-    ['Gels par seconde', f(jm.gels, 2), ''],
+    ['En mouvement : par seconde', f(jm.hz), ''],
+    ['En mouvement : écart p95 / max (ms)', `${f(jm.p95, 0)} / ${f(jm.max, 0)}`, ''],
+    ['Gyroscope suivi par la visée', '', verdict],
+    ['Accord (cos, rapport)', '', fc.n ? `${f(fc.cos / fc.n, 2)}, ${f(fc.gyro / fc.orientation, 2)}` : '—'],
   ];
   $('out').innerHTML = '<table><tr><th></th><th>Orientation</th><th>Gyroscope</th></tr>' +
     rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('') + '</table>';
@@ -169,7 +194,7 @@ $('go').addEventListener('click', async () => {
   $('count').textContent = '';
   $('go').hidden = false;
   $('go').textContent = 'Recommencer';
-  if (still.o.length < 10 || still.m.length < 10 || sweep.o.length < 10 || sweep.m.length < 10) {
+  if (still.m.length < 10 || sweep.o.length < 10 || sweep.m.length < 10) {
     $('step').textContent = `Pas assez de mesures (orientation ${sweep.o.length}, gyroscope ${sweep.m.length}) : ` +
       'le navigateur ne donne pas les capteurs.';
     return;
