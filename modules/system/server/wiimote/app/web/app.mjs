@@ -154,7 +154,8 @@ const panel = document.getElementById('panel');
 const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
 const settings = {
   bByA: store('bByA') === '1',
-  vibrate: store('vibrate') !== '0',
+  // 0 à 3 (cf. RUMBLE_PATTERNS) ; légères par défaut. L'ancienne case cochée (« 1 ») devient légères.
+  vibrate: [0, 1, 2, 3].includes(Number(store('vibrate') ?? 1)) ? Number(store('vibrate') ?? 1) : 1,
   showLag: store('showLag') === '1',
   tilt: gain('tilt'),
   stick: gain('stick'),
@@ -163,32 +164,40 @@ const settings = {
 const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 // Vibrations du jeu, au choix, comme celles d'une vraie Wiimote : rien d'autre ne fait vibrer. Sans
 // navigator.vibrate (iPhone : Safari n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
-const vibrateBox = document.getElementById('vibrate');
 document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
-// Tester : le navigateur accepte-t-il de vibrer ? S'il accepte sans que le téléphone vibre, c'est un réglage du
-// téléphone (vibrations coupées, mode silencieux).
+// Vibration jouée par tranches de RUMBLE_SLICE ms, renouvelées tant qu'elle dure : même si le téléphone ignore
+// l'arrêt, elle ne dépasse sa fin que d'une tranche au plus. Le navigateur ne règle pas l'intensité : dans chaque
+// tranche, le moteur vibre par bouffées (5 ou 10 ms sur 20) et ne monte pas à fond ; fortes, en continu.
+const RUMBLE_SLICE = 40;
+const RUMBLE_PATTERNS = [null, [5, 15, 5, 15], [10, 10, 10, 10], [RUMBLE_SLICE]];
+const RUMBLE_LABELS = ['aucune', 'légères', 'moyennes', 'fortes'];
+// Tester : une vibration de menu de Mario Kart (50 ms), à la force choisie. « Bloqué » : le navigateur refuse ;
+// « Envoyé » sans que rien ne vibre : un réglage du téléphone (vibrations coupées, mode silencieux).
 const vibrateTest = document.getElementById('vibrateTest');
 vibrateTest.addEventListener('click', () => {
-  vibrateTest.textContent = navigator.vibrate?.(400) ? 'Envoyé' : 'Bloqué';
+  const pattern = RUMBLE_PATTERNS[settings.vibrate];
+  vibrateTest.textContent = !pattern ? 'Coupées' : navigator.vibrate(pattern) ? 'Envoyé' : 'Bloqué';
+  if (pattern) setTimeout(() => navigator.vibrate(0), 50);
   setTimeout(() => {
     vibrateTest.textContent = 'Tester';
   }, 1500);
 });
-// Vibration du jeu en cours (minuterie qui la prolonge), cf. rumble.
+// Vibration du jeu en cours (minuterie qui la renouvelle), cf. rumble.
 let rumbling = null;
 let rumbleStart = 0;
 let rumbleEnd = null;
-// Vibration demandée par le jeu (Dolphin, par le serveur) : navigator.vibrate ne tient qu'une durée, renouvelée
-// tant qu'elle n'est pas arrêtée. À l'arrêt, elle dure ce qu'elle a duré dans le jeu (`ms`, mesuré par le
-// serveur), même si le réseau a livré le début et la fin ensemble. La Wiimote n'a qu'un moteur, tout ou rien.
+// Vibration demandée par le jeu (Dolphin, par le serveur), tant qu'elle dure. À l'arrêt, elle dure ce qu'elle a
+// duré dans le jeu (`ms`, mesuré par le serveur), même si le réseau a livré le début et la fin ensemble. La
+// Wiimote n'a qu'un moteur, tout ou rien.
 function rumble(level, ms = 0) {
   clearTimeout(rumbleEnd);
   rumbleEnd = null;
-  if (level && settings.vibrate && 'vibrate' in navigator) {
+  const pattern = RUMBLE_PATTERNS[settings.vibrate];
+  if (level && pattern && 'vibrate' in navigator) {
     if (!rumbling) {
       rumbleStart = performance.now();
-      navigator.vibrate(1000);
-      rumbling = setInterval(() => navigator.vibrate(1000), 900);
+      navigator.vibrate(pattern);
+      rumbling = setInterval(() => navigator.vibrate(pattern), RUMBLE_SLICE);
     }
     return;
   }
@@ -212,7 +221,8 @@ function rumbleMessage(level, seq, ms) {
 }
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
-  vibrateBox.checked = settings.vibrate;
+  document.getElementById('vibrate').value = settings.vibrate;
+  document.getElementById('vibrateOut').textContent = RUMBLE_LABELS[settings.vibrate];
   document.getElementById('showLag').checked = settings.showLag;
   document.getElementById('lag').hidden = !settings.showLag;
   document.body.classList.toggle('b-by-a', settings.bByA);
@@ -233,7 +243,7 @@ document.getElementById('settingsForm').addEventListener('input', (e) => {
     store(e.target.id, e.target.value);
   }
   if (e.target.id === 'smooth') aimFilters = null;
-  if (e.target.id === 'vibrate' && !e.target.checked) rumble(0);
+  if (e.target.id === 'vibrate') rumble(0);
   showSettings();
   send();
 });

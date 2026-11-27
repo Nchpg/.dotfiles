@@ -297,6 +297,7 @@
   .panel label { display: grid; gap: .45rem; font-weight: 500; }
   .panel label[hidden] { display: none; }
   .panel .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .panel .row label { flex: 1; }
   .panel .row[hidden] { display: none; }
   .panel .test {
     padding: .35rem .8rem;
@@ -437,7 +438,10 @@
       <h2>Réglages</h2>
       <label class="check"><input type="checkbox" id="bByA"><span>B à côté de A</span></label>
       <div class="row" id="vibrateRow">
-        <label class="check"><input type="checkbox" id="vibrate"><span>Vibrations</span></label>
+        <label>
+          <span>Vibrations <output id="vibrateOut"></output></span>
+          <input type="range" id="vibrate" min="0" max="3" step="1">
+        </label>
         <button class="test" id="vibrateTest" type="button">Tester</button>
       </div>
       <label class="check"><input type="checkbox" id="showLag"><span>Délai sur la manette</span></label>
