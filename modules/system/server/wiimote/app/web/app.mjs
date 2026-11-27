@@ -149,6 +149,7 @@ const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
 const settings = {
   bByA: store('bByA') === '1',
   vibrate: store('vibrate') !== '0',
+  showLag: store('showLag') === '1',
   tilt: gain('tilt'),
   stick: gain('stick'),
   smooth: Math.min(3, Math.max(0, Math.round(Number(store('smooth')) || 0))),
@@ -157,7 +158,16 @@ const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 // Vibrations (celles du jeu, et un petit retour au toucher), au choix. Sans navigator.vibrate (iPhone : Safari
 // n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
 const vibrateBox = document.getElementById('vibrate');
-vibrateBox.closest('label').hidden = !('vibrate' in navigator);
+document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
+// Tester : le navigateur accepte-t-il de vibrer ? S'il accepte sans que le téléphone vibre, c'est un réglage du
+// téléphone (vibrations coupées, mode silencieux).
+const vibrateTest = document.getElementById('vibrateTest');
+vibrateTest.addEventListener('click', () => {
+  vibrateTest.textContent = navigator.vibrate?.(400) ? 'Envoyé' : 'Bloqué';
+  setTimeout(() => {
+    vibrateTest.textContent = 'Tester';
+  }, 1500);
+});
 // Vibration du jeu en cours (minuterie qui la prolonge), cf. rumble.
 let rumbling = null;
 // Retour au toucher, jamais par-dessus la vibration du jeu, qu'il couperait.
@@ -177,6 +187,8 @@ function rumble(level) {
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
   vibrateBox.checked = settings.vibrate;
+  document.getElementById('showLag').checked = settings.showLag;
+  document.getElementById('lag').hidden = !settings.showLag;
   document.body.classList.toggle('b-by-a', settings.bByA);
   for (const key of ['tilt', 'stick']) {
     document.getElementById(key).value = settings[key];
@@ -322,7 +334,16 @@ function pong(data) {
   lastPong = performance.now();
   roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
   const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
-  document.getElementById('delay').textContent = `≈ ${Math.round(ms / 2)} ms`;
+  showDelay(Math.round(ms / 2));
+}
+// Délai d'un appui jusqu'au serveur (la moitié de l'aller-retour), dans les réglages et sur la manette : vert
+// jusqu'à 40 ms, orange jusqu'à 80, rouge au-delà ou sans réponse.
+function showDelay(oneWay) {
+  const text = oneWay === null ? 'sans réponse' : `≈ ${oneWay} ms`;
+  document.getElementById('delay').textContent = text;
+  const lag = document.getElementById('lag');
+  lag.textContent = oneWay === null ? '—' : `${oneWay} ms`;
+  lag.className = `lag ${oneWay === null || oneWay > 80 ? 'bad' : oneWay > 40 ? 'fair' : 'good'}`;
 }
 async function readPongs(readable) {
   const reader = readable?.getReader();
@@ -335,7 +356,7 @@ async function readPongs(readable) {
 setInterval(() => {
   if (roundTrips.length && performance.now() - lastPong > 3000) {
     roundTrips = [];
-    document.getElementById('delay').textContent = 'sans réponse';
+    showDelay(null);
   }
   const ping = new DataView(new ArrayBuffer(pingSize));
   ping.setUint32(4, now32(), true);

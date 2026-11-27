@@ -5,6 +5,7 @@ package main
 
 import (
 	"crypto/rand"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -137,6 +138,7 @@ func (s *server) rumble(slot int, level uint8) {
 	}
 	p.rumble = level
 	s.mu.Unlock()
+	log.Printf("vibration %d → %s (Wii Remote %d)", level, p.name, slot+1)
 	websocket.JSON.Send(p.conn, map[string]uint8{"rumble": level})
 }
 

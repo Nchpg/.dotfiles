@@ -168,6 +168,21 @@
   .leds { grid-area: leds; place-self: center; display: flex; gap: calc(2.4 * var(--u)); }
   .leds i { width: calc(3.6 * var(--u)); height: calc(2 * var(--u)); border-radius: calc(.6 * var(--u)); background: var(--led-off); }
   .leds i.on { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); }
+  /* Délai affiché en permanence (⚙) : vert, orange ou rouge selon sa valeur. Dans un coin libre : en bas à gauche
+     debout, en haut à gauche de côté. */
+  .lag {
+    position: absolute;
+    left: calc(5 * var(--u));
+    bottom: calc(4 * var(--u));
+    font: 700 calc(4.2 * var(--u)) / 1 system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .lag[hidden] { display: none; }
+  .lag.good { color: #2e9e57; }
+  .lag.fair { color: #e08a00; }
+  .lag.bad { color: #d94141; }
+  .sideways .lag { bottom: auto; top: calc(4 * var(--u)); }
   /* Liaison coupée, reconnexion en cours : les diodes clignotent, comme une vraie Wiimote qui cherche. */
   .searching .leds i { animation: searching 1s steps(1) infinite; }
   @keyframes searching { 50% { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); } }
@@ -281,6 +296,17 @@
   .panel h2 { margin: 0; font-size: 1.4rem; font-weight: 760; letter-spacing: -.02em; }
   .panel label { display: grid; gap: .45rem; font-weight: 500; }
   .panel label[hidden] { display: none; }
+  .panel .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .panel .row[hidden] { display: none; }
+  .panel .test {
+    padding: .35rem .8rem;
+    border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent);
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--paper-ink);
+    font-size: .9rem;
+  }
   .panel label span { display: flex; justify-content: space-between; gap: 1rem; }
   .panel label small { color: var(--paper-soft); font-weight: 400; }
   .panel output { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -402,6 +428,7 @@
     <button class="one" data-btn="1">1</button>
     <button class="two" data-btn="2">2</button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
+    <output class="lag" id="lag" aria-label="Délai de la liaison" hidden>—</output>
     <button class="recenter" id="aim" aria-label="Calibrer le pointeur aux coins de l'écran, puis le recentrer">⌖</button>
   </main>
 
@@ -409,7 +436,11 @@
     <form id="settingsForm">
       <h2>Réglages</h2>
       <label class="check"><input type="checkbox" id="bByA"><span>B à côté de A</span></label>
-      <label class="check"><input type="checkbox" id="vibrate"><span>Vibrations</span></label>
+      <div class="row" id="vibrateRow">
+        <label class="check"><input type="checkbox" id="vibrate"><span>Vibrations</span></label>
+        <button class="test" id="vibrateTest" type="button">Tester</button>
+      </div>
+      <label class="check"><input type="checkbox" id="showLag"><span>Délai sur la manette</span></label>
       <label>
         <span>Inclinaison <output id="tiltOut"></output></span>
         <input type="range" id="tilt" min="0.5" max="2" step="0.1">
