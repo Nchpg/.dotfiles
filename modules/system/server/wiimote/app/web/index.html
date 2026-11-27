@@ -171,6 +171,9 @@
   .leds { grid-area: leds; place-self: center; display: flex; gap: calc(2.4 * var(--u)); }
   .leds i { width: calc(3.6 * var(--u)); height: calc(2 * var(--u)); border-radius: calc(.6 * var(--u)); background: var(--led-off); }
   .leds i.on { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); }
+  /* Liaison coupée, reconnexion en cours : les diodes clignotent, comme une vraie Wiimote qui cherche. */
+  .searching .leds i { animation: searching 1s steps(1) infinite; }
+  @keyframes searching { 50% { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); } }
 
   /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
   .mode, .theme, .pad, .settings {

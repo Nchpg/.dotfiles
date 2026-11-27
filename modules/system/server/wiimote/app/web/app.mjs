@@ -211,7 +211,6 @@ async function connectDirect(url) {
     });
   } catch {
     // Navigateur ou réseau sans UDP : on reste sur le WebSocket.
-    direct = null;
   }
   showLink();
 }
@@ -434,11 +433,24 @@ addEventListener('hashchange', () => {
 });
 
 let retry = true;
+// Jeton de la session en cours, pour en reprendre la place après une coupure ou un rechargement de l'onglet ; début
+// de la coupure (0 : aucune).
+let session = '';
+try {
+  session = sessionStorage.getItem('session') ?? '';
+} catch {}
+function keepSession(token) {
+  session = token;
+  try {
+    sessionStorage.setItem('session', token);
+  } catch {}
+}
+let lost = 0;
 
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${scheme}://${location.host}/ws`);
-  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', name: nameInput.value.trim() }));
+  ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', name: nameInput.value.trim(), resume: session }));
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return;
     const msg = JSON.parse(e.data);
@@ -448,6 +460,9 @@ function connect() {
       return;
     }
     lastError = '';
+    if (msg.token) keepSession(msg.token);
+    lost = 0;
+    document.body.classList.remove('searching');
     showPlayer(msg.slot);
     if (msg.direct && !direct) connectDirect(msg.direct);
     overlay.hidden = true;
@@ -458,14 +473,21 @@ function connect() {
     showPlayer(-1);
     closeDirect();
     if (retry) {
-      say(lastError || 'Connexion perdue, nouvelle tentative…');
-      // Après le délai du serveur (2 s sans nouvelles) : l'ancienne place est libérée, on la retrouve.
-      setTimeout(connect, 2500);
+      // Coupure : reconnexion aussitôt, sa place reprise avec le jeton de session. La manette reste à l'écran, ses
+      // diodes clignotent ; l'écran de connexion ne revient que si ça dure.
+      lost ||= performance.now();
+      const since = performance.now() - lost;
+      if (lastError || since > 5000) say(lastError || 'Connexion perdue, nouvelle tentative…');
+      else document.body.classList.add('searching');
+      setTimeout(connect, since < 2000 ? 250 : 2500);
       return;
     }
     // Lien remplacé par l'hôte : on oublie l'ancien et on propose de scanner le nouveau.
     store('invite', '');
     retry = true;
+    keepSession('');
+    lost = 0;
+    document.body.classList.remove('searching');
     idle(lastError);
   };
 }

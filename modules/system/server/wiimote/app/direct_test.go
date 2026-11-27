@@ -111,3 +111,29 @@ func TestDirectDatagrams(t *testing.T) {
 		t.Fatal("liaison restée ouverte après le départ de la manette")
 	}
 }
+
+func TestDirectKeepsSessionAlive(t *testing.T) {
+	// WebSocket muet (TCP bloqué derrière Cloudflare), datagrammes qui passent : la manette reste.
+	s := newServer(nil)
+	p := s.claim("Test", nil)
+	gone := make(chan struct{})
+	go func() {
+		s.linger(p)
+		close(gone)
+	}()
+	for seq := range uint32(30) {
+		s.pushDirect(p, seq+1, padState{})
+		time.Sleep(phoneTimeout / 20)
+	}
+	select {
+	case <-gone:
+		t.Fatal("manette coupée alors que sa liaison directe passe")
+	default:
+	}
+	// Plus rien sur aucune liaison : partie.
+	select {
+	case <-gone:
+	case <-time.After(phoneTimeout + time.Second):
+		t.Fatal("manette muette gardée")
+	}
+}

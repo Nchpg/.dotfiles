@@ -277,16 +277,17 @@ func TestPhoneToDolphin(t *testing.T) {
 	}
 	var answer struct {
 		Slot  int
+		Token string
 		Error string
 		Retry bool
 	}
-	connect := func(invite string) *websocket.Conn {
+	connect := func(invite string, resume ...string) *websocket.Conn {
 		t.Helper()
 		phone, err := websocket.Dial(wsURL, "", web.URL)
 		if err != nil {
 			t.Fatal(err)
 		}
-		websocket.JSON.Send(phone, hello{Invite: invite})
+		websocket.JSON.Send(phone, hello{Invite: invite, Resume: strings.Join(resume, "")})
 		answer.Error = ""
 		if err := websocket.JSON.Receive(phone, &answer); err != nil {
 			t.Fatal(err)
@@ -312,6 +313,7 @@ func TestPhoneToDolphin(t *testing.T) {
 	if answer.Error != "" || answer.Slot != 0 {
 		t.Fatalf("premier téléphone sur le slot %d (%s)", answer.Slot, answer.Error)
 	}
+	firstToken := answer.Token
 	phone := connect(s.currentInvite())
 	if answer.Error != "" || answer.Slot != 1 {
 		t.Fatalf("second téléphone sur le slot %d (%s)", answer.Slot, answer.Error)
@@ -320,12 +322,17 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("états des slots : %v", got)
 	}
 
-	// Le premier part puis revient : il reprend le slot 0, sans trou que Dolphin ne lirait pas.
+	// Le premier perd sa liaison : un nouveau venu ne lui prend pas sa place, et lui la reprend aussitôt avec son
+	// jeton de session, même après un nouveau lien. Sans trou que Dolphin ne lirait pas.
 	first.Close()
 	time.Sleep(50 * time.Millisecond)
-	connect(s.currentInvite())
-	if answer.Slot != 0 {
-		t.Fatalf("retour sur le slot %d au lieu de 0", answer.Slot)
+	if connect(s.currentInvite()).Close(); answer.Slot != 2 {
+		t.Fatalf("nouveau venu sur le slot %d, gardé pour le premier", answer.Slot)
+	}
+	s.newInvite()
+	connect("périmé", firstToken)
+	if answer.Error != "" || answer.Slot != 0 {
+		t.Fatalf("retour sur le slot %d au lieu de 0 (%s)", answer.Slot, answer.Error)
 	}
 
 	// Abonnement au slot 1 (drapeau « par numéro »), puis un état envoyé par le téléphone.
@@ -342,12 +349,19 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("état mal relayé : %v", pkt[20:100])
 	}
 
-	// Téléphone parti : boutons relâchés, puis slot libéré.
+	// Téléphone parti : boutons relâchés tout de suite, slot gardé pour une reprise, puis libéré.
 	phone.Close()
 	if pkt := read(100); pkt[51] != 0 {
 		t.Fatal("bouton resté enfoncé après la déconnexion")
 	}
 	time.Sleep(50 * time.Millisecond)
+	if got := listPorts(); got[1] != 2 {
+		t.Fatal("slot libéré sans laisser le temps de revenir")
+	}
+	time.Sleep(phoneTimeout)
+	if pkt := read(100); pkt[51] != 0 {
+		t.Fatal("bouton enfoncé à la libération")
+	}
 	if got := listPorts(); got[1] != 0 {
 		t.Fatal("slot toujours occupé après la déconnexion")
 	}

@@ -76,6 +76,13 @@ func (s *server) byToken(token string) *player {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.seatByTokenLocked(token)
+}
+
+func (s *server) seatByTokenLocked(token string) *player {
+	if token == "" {
+		return nil
+	}
 	for _, p := range s.seats {
 		if p != nil && subtle.ConstantTimeCompare([]byte(p.token), []byte(token)) == 1 {
 			return p
@@ -99,7 +106,12 @@ func (s *server) attachDirect(p *player, sess *webtransport.Session) {
 // peuvent se doubler, et un état périmé relâcherait puis rappuierait un bouton.
 func (s *server) pushDirect(p *player, seq uint32, st padState) {
 	s.mu.Lock()
-	if p.slot < 0 || seq <= p.seq {
+	if p.slot < 0 {
+		s.mu.Unlock()
+		return
+	}
+	p.seen = time.Now()
+	if seq <= p.seq {
 		s.mu.Unlock()
 		return
 	}

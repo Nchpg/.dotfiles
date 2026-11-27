@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"net"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/quic-go/webtransport-go"
@@ -25,6 +26,8 @@ type player struct {
 	token  string
 	direct *webtransport.Session
 	seq    uint32
+	// Dernières nouvelles, par l'une ou l'autre liaison, sous s.mu.
+	seen time.Time
 }
 
 // Nom tapé sur le téléphone, affiché sur la page de l'hôte : sans caractères de contrôle, borné.
@@ -48,7 +51,7 @@ func (s *server) claim(name string, conn *websocket.Conn) *player {
 	defer s.mu.Unlock()
 	for i := range slots {
 		if s.seats[i] == nil {
-			p := &player{name: cleanName(name), conn: conn, slot: i, token: rand.Text()}
+			p := &player{name: cleanName(name), conn: conn, slot: i, token: rand.Text(), seen: time.Now()}
 			s.seats[i] = p
 			// Rien du joueur précédent ; pointeur au centre tant que le téléphone n'a rien envoyé.
 			s.pads[i] = padState{pointer: [2]uint16{pointerCenter, pointerCenter}}
@@ -57,6 +60,61 @@ func (s *server) claim(name string, conn *websocket.Conn) *player {
 		}
 	}
 	return nil
+}
+
+// resume rend sa place à un téléphone qui se reconnecte avec le jeton `token` de sa session précédente, encore
+// gardée (linger) : il la reprend aussitôt, l'ancienne session est fermée. nil si elle n'existe plus.
+func (s *server) resume(token, name string, conn *websocket.Conn) *player {
+	s.mu.Lock()
+	old := s.seatByTokenLocked(token)
+	if old == nil {
+		s.mu.Unlock()
+		return nil
+	}
+	p := &player{name: cleanName(name), conn: conn, slot: old.slot, token: rand.Text(), seen: time.Now()}
+	s.seats[p.slot] = p
+	old.slot = -1
+	sess := old.direct
+	s.mu.Unlock()
+	if old.conn != nil {
+		old.conn.Close()
+	}
+	if sess != nil {
+		sess.CloseWithError(0, "remplacée")
+	}
+	return p
+}
+
+// heard note un signe de vie de `p`.
+func (s *server) heard(p *player) {
+	s.mu.Lock()
+	p.seen = time.Now()
+	s.mu.Unlock()
+}
+
+// linger rend la main quand `p` est parti : muet depuis phoneTimeout sur ses deux liaisons, ou remplacé.
+func (s *server) linger(p *player) {
+	for {
+		s.mu.Lock()
+		left, gone := phoneTimeout-time.Since(p.seen), p.slot < 0
+		s.mu.Unlock()
+		if gone || left <= 0 {
+			return
+		}
+		time.Sleep(left)
+	}
+}
+
+// letGo relâche les boutons de `p` sans libérer sa place.
+func (s *server) letGo(p *player) {
+	s.mu.Lock()
+	if p.slot < 0 {
+		s.mu.Unlock()
+		return
+	}
+	pkt, targets := s.releasedLocked(p.slot)
+	s.mu.Unlock()
+	s.broadcast(pkt, targets)
 }
 
 // État reçu du téléphone, rediffusé sur la place qu'il occupe à cet instant (l'hôte a pu la changer).
@@ -143,8 +201,9 @@ func (s *server) kick(slot int) {
 		return
 	}
 	websocket.JSON.Send(p.conn, map[string]any{"error": "Retiré par l'hôte.", "retry": false})
-	// Sa boucle de lecture s'arrête et libère la place.
 	p.conn.Close()
+	// Tout de suite : pas de place gardée pour une reprise.
+	s.release(p)
 }
 
 type seatInfo struct {

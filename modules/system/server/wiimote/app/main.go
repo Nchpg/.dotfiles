@@ -28,7 +28,8 @@ var webFiles embed.FS
 //go:embed dolphin.html
 var setupPage string
 
-// La PWA renvoie son état au moins toutes les 200 ms : au-delà, l'écran est verrouillé ou le réseau perdu.
+// La PWA renvoie son état au moins toutes les 200 ms : muette plus longtemps sur ses deux liaisons, l'écran est
+// verrouillé ou le réseau perdu. C'est aussi le temps qu'un téléphone coupé a pour reprendre sa place.
 const phoneTimeout = 2 * time.Second
 
 func env(key, fallback string) string {
@@ -161,10 +162,12 @@ func (s *server) invited(token string) bool {
 	return subtle.ConstantTimeCompare([]byte(token), []byte(s.currentInvite())) == 1
 }
 
-// Premier message du téléphone : le jeton d'invitation et le prénom du joueur.
+// Premier message du téléphone : le jeton d'invitation et le prénom du joueur ; après une coupure, le jeton de sa
+// session précédente pour en reprendre la place.
 type hello struct {
 	Invite string `json:"invite"`
 	Name   string `json:"name"`
+	Resume string `json:"resume"`
 }
 
 func (s *server) phone(ws *websocket.Conn) {
@@ -174,20 +177,24 @@ func (s *server) phone(ws *websocket.Conn) {
 	if websocket.JSON.Receive(ws, &h) != nil {
 		return
 	}
-	if !s.invited(h.Invite) {
-		websocket.JSON.Send(ws, map[string]any{"error": "Lien d'invitation invalide ou remplacé : scanne le QR code de l'hôte.", "retry": false})
-		return
-	}
-	p := s.claim(h.Name, ws)
+	ws.SetReadDeadline(time.Time{})
+	// Une session encore là se reprend même si l'hôte a changé de lien depuis : le jeton de session suffit.
+	p := s.resume(h.Resume, h.Name, ws)
 	if p == nil {
-		websocket.JSON.Send(ws, map[string]any{"error": "Déjà 4 manettes connectées.", "retry": true})
-		return
+		if !s.invited(h.Invite) {
+			websocket.JSON.Send(ws, map[string]any{"error": "Lien d'invitation invalide ou remplacé : scanne le QR code de l'hôte.", "retry": false})
+			return
+		}
+		if p = s.claim(h.Name, ws); p == nil {
+			websocket.JSON.Send(ws, map[string]any{"error": "Déjà 4 manettes connectées.", "retry": true})
+			return
+		}
 	}
 	defer s.release(p)
 	s.mu.Lock()
 	slot := p.slot
 	s.mu.Unlock()
-	welcome := map[string]any{"slot": slot}
+	welcome := map[string]any{"slot": slot, "token": p.token}
 	if s.directURL != "" {
 		welcome["direct"] = s.directURL + "?t=" + p.token
 	}
@@ -195,16 +202,24 @@ func (s *server) phone(ws *websocket.Conn) {
 		return
 	}
 
+	// Pas de délai de lecture sur le WebSocket : un TCP bloqué quelques secondes derrière Cloudflare ne coupe pas
+	// une manette dont la liaison directe passe. Muette sur les deux, on la ferme.
+	go func() {
+		s.linger(p)
+		ws.Close()
+	}()
 	var msg []byte
-	for {
-		ws.SetReadDeadline(time.Now().Add(phoneTimeout))
-		if websocket.Message.Receive(ws, &msg) != nil {
-			return
-		}
+	for websocket.Message.Receive(ws, &msg) == nil {
+		s.heard(p)
 		if st, ok := decode(msg); ok {
 			s.push(p, st)
 		}
 	}
+	// Coupure : on raccroche (le téléphone le voit et revient aussitôt), boutons relâchés tout de suite, place
+	// gardée le temps qu'il la reprenne.
+	ws.Close()
+	s.letGo(p)
+	s.linger(p)
 }
 
 // Profil Dolphin d'une Wiimote émulée lisant le téléphone du slot donné.
