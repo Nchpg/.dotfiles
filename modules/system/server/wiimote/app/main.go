@@ -78,6 +78,7 @@ func main() {
 		}
 	}
 	go func() { log.Fatal(s.serveDSU()) }()
+	go s.reportStats(statsEvery)
 
 	// Liaison directe (direct.go) : facultative, la manette passe sinon par le WebSocket.
 	if addr := os.Getenv("WIIMOTE_DIRECT_LISTEN"); addr != "" {
@@ -249,6 +250,7 @@ func (s *server) phone(ws *websocket.Conn) {
 	ws.SetReadDeadline(time.Time{})
 	// Une session encore là se reprend même si l'hôte a changé de lien depuis : le jeton de session suffit.
 	p := s.resume(h.Resume, h.Name, ws)
+	resumed := p != nil
 	if p == nil {
 		if !s.invited(h.Invite) {
 			websocket.JSON.Send(ws, map[string]any{"error": "Lien d'invitation invalide ou remplacé : scanne le QR code de l'hôte.", "retry": false})
@@ -263,6 +265,11 @@ func (s *server) phone(ws *websocket.Conn) {
 	s.mu.Lock()
 	slot := p.slot
 	s.mu.Unlock()
+	if resumed {
+		log.Printf("%s reprend sa place après une coupure (Wii Remote %d)", displayName(p.name), slot+1)
+	} else {
+		log.Printf("%s connecté (Wii Remote %d)", displayName(p.name), slot+1)
+	}
 	welcome := map[string]any{"slot": slot, "token": p.token, "version": webVersion}
 	if s.directURL != "" {
 		welcome["direct"] = s.directURL + "?t=" + p.token
@@ -281,6 +288,7 @@ func (s *server) phone(ws *websocket.Conn) {
 	for websocket.Message.Receive(ws, &msg) == nil {
 		s.heard(p)
 		if len(msg) == pingSize {
+			s.notePing(p, le.Uint32(msg))
 			websocket.Message.Send(ws, msg)
 			continue
 		}

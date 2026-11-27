@@ -68,15 +68,27 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
-		log.Printf("liaison directe ouverte : %s (%s)", p.name, r.RemoteAddr)
+		log.Printf("liaison directe ouverte : %s (%s)", displayName(p.name), r.RemoteAddr)
 		s.attachDirect(p, sess)
-		defer sess.CloseWithError(0, "")
+		defer func() {
+			sess.CloseWithError(0, "")
+			s.mu.Lock()
+			current := p.direct == sess
+			if current {
+				p.direct = nil
+			}
+			s.mu.Unlock()
+			if current {
+				log.Printf("liaison directe fermée : %s, la manette passe par le WebSocket", displayName(p.name))
+			}
+		}()
 		for {
 			msg, err := sess.ReceiveDatagram(sess.Context())
 			if err != nil {
 				return
 			}
 			if len(msg) == pingSize {
+				s.notePing(p, le.Uint32(msg))
 				sess.SendDatagram(msg)
 				continue
 			}
@@ -84,7 +96,7 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 				continue
 			}
 			if st, ok := decode(msg[directHeader:]); ok {
-				s.pushDirect(p, le.Uint32(msg), st)
+				s.pushDirect(p, le.Uint32(msg), le.Uint32(msg[4:]), st)
 			}
 		}
 	})
@@ -119,6 +131,8 @@ func (s *server) attachDirect(p *player, sess *webtransport.Session) {
 	s.mu.Lock()
 	old := p.direct
 	p.direct, p.seq = sess, 0
+	// Nouvelle liaison : ses numéros repartent de 1.
+	p.stats.last = 0
 	s.mu.Unlock()
 	if old != nil {
 		old.CloseWithError(0, "remplacée")
@@ -127,13 +141,14 @@ func (s *server) attachDirect(p *player, sess *webtransport.Session) {
 
 // pushDirect applique un état reçu en datagramme, sauf s'il est plus ancien que le dernier : les datagrammes
 // peuvent se doubler, et un état périmé relâcherait puis rappuierait un bouton.
-func (s *server) pushDirect(p *player, seq uint32, st padState) {
+func (s *server) pushDirect(p *player, seq, phone uint32, st padState) {
 	s.mu.Lock()
 	if p.slot < 0 {
 		s.mu.Unlock()
 		return
 	}
 	p.seen = time.Now()
+	p.stats.datagram(seq, phone, p.seen)
 	if seq <= p.seq {
 		s.mu.Unlock()
 		return

@@ -366,11 +366,14 @@ const pingSize = 8;
 const now32 = () => Math.round(performance.now()) >>> 0;
 let roundTrips = [];
 let lastPong = 0;
+// Dernier aller-retour mesuré (ms, 0 : aucun), glissé dans chaque mesure pour le journal du serveur.
+let lastRoundTrip = 0;
 function pong(data) {
   if (data.byteLength !== pingSize) return;
   lastPong = performance.now();
   roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
   const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
+  lastRoundTrip = ms;
   showDelay(Math.round(ms / 2));
 }
 // Délai d'un appui jusqu'au serveur (la moitié de l'aller-retour), dans les réglages et sur la manette : vert
@@ -395,9 +398,11 @@ async function readDatagrams(readable) {
 setInterval(() => {
   if (roundTrips.length && performance.now() - lastPong > 3000) {
     roundTrips = [];
+    lastRoundTrip = 0;
     showDelay(null);
   }
   const ping = new DataView(new ArrayBuffer(pingSize));
+  ping.setUint32(0, lastRoundTrip, true);
   ping.setUint32(4, now32(), true);
   if (direct) direct.writer.write(new Uint8Array(ping.buffer)).catch(() => {});
   else if (ws?.readyState === WebSocket.OPEN) ws.send(ping.buffer);

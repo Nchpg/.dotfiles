@@ -30,6 +30,8 @@ type player struct {
 	seq    uint32
 	// Dernières nouvelles, par l'une ou l'autre liaison, sous s.mu.
 	seen time.Time
+	// Mesure de sa liaison (stats.go), sous s.mu.
+	stats linkStats
 	// Vibration (0-255) transmise au téléphone, son début, la durée de la dernière finie et le numéro du dernier
 	// changement, cf. rumble ; sous s.mu.
 	rumble    uint8
@@ -159,7 +161,7 @@ func (s *server) rumble(slot int, level uint8) {
 	if level == 0 {
 		ms = p.rumbleMs
 	}
-	seq, sess, conn, name := p.rumbleSeq, p.direct, p.conn, p.name
+	seq, sess, conn, name := p.rumbleSeq, p.direct, p.conn, displayName(p.name)
 	s.mu.Unlock()
 
 	if sess != nil {
@@ -186,6 +188,7 @@ func (s *server) push(p *player, st padState) {
 		s.mu.Unlock()
 		return
 	}
+	p.stats.state(time.Now())
 	pkt, targets := s.stateLocked(p.slot, st)
 	s.mu.Unlock()
 	s.broadcast(pkt, targets)
@@ -205,6 +208,7 @@ func (s *server) release(p *player) {
 	pkt, targets := s.releasedLocked(slot)
 	sess := p.direct
 	s.mu.Unlock()
+	log.Printf("%s parti (Wii Remote %d)", displayName(p.name), slot+1)
 	s.broadcast(pkt, targets)
 	if sess != nil {
 		sess.CloseWithError(0, "manette partie")

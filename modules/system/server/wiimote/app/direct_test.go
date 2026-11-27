@@ -156,7 +156,7 @@ func TestDirectKeepsSessionAlive(t *testing.T) {
 		close(gone)
 	}()
 	for seq := range uint32(30) {
-		s.pushDirect(p, seq+1, padState{})
+		s.pushDirect(p, seq+1, 0, padState{})
 		time.Sleep(phoneTimeout / 20)
 	}
 	select {
