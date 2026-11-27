@@ -135,53 +135,6 @@ func pressesPlayed(h *buttonHold, st padState, from, to time.Time) int {
 	return count
 }
 
-func TestHoldShake(t *testing.T) {
-	shake := func(pressed bool, presses uint8) padState {
-		st := padState{counted: true}
-		st.presses[11] = presses
-		if pressed {
-			st.buttons = shakeBit
-		}
-		return st
-	}
-	// Une secousse entière par appui, l'une après l'autre ; au-delà d'une en attente, les appuis se fondent.
-	for _, c := range []struct {
-		taps, want int
-	}{{1, 1}, {2, 2}, {5, 2}} {
-		var h buttonHold
-		h.next(shake(false, 0), ms(0))
-		starts := 0
-		last := uint16(0)
-		var previous time.Time
-		at := ms(100)
-		out, wake := h.next(shake(false, uint8(c.taps)), at)
-		for {
-			if out&shakeBit != 0 && last&shakeBit == 0 {
-				if starts > 0 && at.Sub(previous) < shakeDuration+minRelease {
-					t.Fatalf("%d appuis : secousses superposées", c.taps)
-				}
-				starts, previous = starts+1, at
-			}
-			last = out
-			if wake.IsZero() {
-				break
-			}
-			at = wake
-			out, wake = h.next(shake(false, uint8(c.taps)), at)
-		}
-		if starts != c.want {
-			t.Fatalf("%d appuis rapides : %d secousses, attendu %d", c.taps, starts, c.want)
-		}
-	}
-	// Bouton tenu longtemps : une seule secousse.
-	var h buttonHold
-	h.next(shake(false, 0), ms(0))
-	h.next(shake(true, 1), ms(10))
-	if out, _ := h.next(shake(true, 1), ms(2000)); out != shakeBit {
-		t.Fatal("secousse tenue interrompue")
-	}
-}
-
 // Simulation de bout en bout : le joueur appuie au hasard, le téléphone envoie son état à 60 Hz et à chaque
 // changement, le réseau le malmène, le serveur le rejoue (buttonHold), et le jeu lit la manette une fois par image.
 
@@ -372,39 +325,6 @@ func TestButtonsSurviveNetwork(t *testing.T) {
 		if p(1) > nw.worst {
 			t.Errorf("%s : un appui vu %v après, au-delà de %v", nw.name, p(1), nw.worst)
 		}
-	}
-}
-
-func TestShakesSurviveNetwork(t *testing.T) {
-	// Secousses : jamais deux à la fois ; jamais sans appui ; chaque appui suivi d'une secousse qui démarre après
-	// lui (la sienne, ou celle qui attendait déjà), au plus une secousse et le retard du réseau plus tard.
-	for _, nw := range networks {
-		total, own := 0, 0
-		for seed := range uint64(20) {
-			r := rand.New(rand.NewPCG(seed, 11))
-			taps := human(r, 60*time.Second, 1500, [2]int{100, 300})
-			timeline := played(r, taps, 11, nw.ordered, nw.deliver)
-			var starts []time.Duration
-			for _, c := range timeline {
-				if c.pressed {
-					if len(starts) > 0 && c.at-starts[len(starts)-1] < shakeDuration+minRelease {
-						t.Fatalf("%s, graine %d : secousses superposées à %v", nw.name, seed, c.at)
-					}
-					starts = append(starts, c.at)
-				}
-			}
-			if len(starts) > len(taps) {
-				t.Fatalf("%s, graine %d : %d secousses pour %d appuis", nw.name, seed, len(starts), len(taps))
-			}
-			for _, tp := range taps {
-				i, _ := slices.BinarySearch(starts, tp[0])
-				if i == len(starts) || starts[i]-tp[0] > nw.worst+shakeDuration+minRelease {
-					t.Fatalf("%s, graine %d : appui à %v sans secousse ensuite", nw.name, seed, tp[0])
-				}
-			}
-			total, own = total+len(taps), own+len(starts)
-		}
-		t.Logf("%-32s %d appuis sur Secouer, %d secousses (les appuis pendant une secousse et celle en attente se fondent)", nw.name, total, own)
 	}
 }
 

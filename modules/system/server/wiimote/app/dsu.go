@@ -82,8 +82,6 @@ type server struct {
 	seats   [slots]*player
 	pads    [slots]padState
 	counter [slots]uint32
-	// Début de la dernière secousse de chaque slot, cf. shake.go.
-	shakeStart [slots]time.Time
 	// Appuis rejoués à Dolphin, et le réveil qui relâche un bouton sans attendre de message, cf. buttons.go.
 	hold  [slots]buttonHold
 	wakes [slots]*time.Timer
@@ -240,13 +238,7 @@ func (s *server) subscribe(from net.Addr, flags, slot byte, addr []byte) {
 func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.Addr) {
 	now := time.Now()
 	s.pads[slot] = st
-	before := s.hold[slot].out
 	buttons, wake := s.hold[slot].next(st, now)
-	// Chaque appui rejoué sur Secouer lance sa secousse.
-	if buttons&shakeBit != 0 && before&shakeBit == 0 {
-		s.shakeStart[slot] = now
-		go s.playShake(slot, now)
-	}
 	if !wake.IsZero() {
 		if t := s.wakes[slot]; t != nil {
 			t.Stop()
@@ -255,7 +247,6 @@ func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.A
 	}
 	st.buttons = buttons
 	s.counter[slot]++
-	st.motion = shaken(st.motion, now.Sub(s.shakeStart[slot]))
 	pkt = s.padData(slot, st, s.counter[slot])
 	for key, sub := range s.subs {
 		if now.After(sub.until) {
@@ -267,7 +258,7 @@ func (s *server) stateLocked(slot int, st padState) (pkt []byte, targets []net.A
 	return pkt, targets
 }
 
-// Renvoie l'état du slot tel quel : un bouton à relâcher ou un appui en attente (buttons.go), une secousse en cours.
+// Renvoie l'état du slot tel quel : un bouton à relâcher ou un appui en attente (buttons.go).
 func (s *server) replay(slot int) {
 	s.mu.Lock()
 	if s.seats[slot] == nil {

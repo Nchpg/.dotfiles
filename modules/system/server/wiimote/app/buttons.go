@@ -4,8 +4,7 @@ package main
 // l'appui et le relâché d'un tapotement peuvent arriver ensemble, ou jamais, et le jeu, qui lit la manette une fois
 // par image (16 ms), ne verrait pas le bouton enfoncé. Le téléphone compte donc ses appuis (un compteur par bouton,
 // dans chaque message) et le serveur rejoue chacun : au moins 50 ms enfoncé, puis 30 ms relâché avant le suivant,
-// et tant que le doigt reste dessus. Secouer reste enfoncé le temps de la secousse : chaque appui en joue une
-// entière (shake.go).
+// et tant que le doigt reste dessus.
 
 import "time"
 
@@ -13,11 +12,8 @@ const (
 	minPress   = 50 * time.Millisecond
 	minRelease = 30 * time.Millisecond
 	// Appuis en attente au plus (8 : 0,6 s de rejeu, de quoi tenir des rafales de 300 ms en tapotant vite) : au-delà
-	// (réseau coupé plusieurs secondes), les rejouer n'aurait plus de sens. Pour Secouer, un seul : des secousses en
-	// file partiraient de plus en plus tard (une figure de Mario Kart hors de propos) ; tapoter plus vite qu'une
-	// secousse en joue une, puis la suivante, pas davantage.
-	maxQueued      = 8
-	maxQueuedShake = 1
+	// (réseau coupé plusieurs secondes), les rejouer n'aurait plus de sens.
+	maxQueued = 8
 )
 
 type buttonHold struct {
@@ -44,15 +40,7 @@ func (h *buttonHold) next(st padState, now time.Time) (uint16, time.Time) {
 			// Premier message, ou page restée en cache sans compteurs : les fronts.
 			fresh = 1
 		}
-		limit := maxQueued
-		if bit == shakeBit {
-			// Celle qui part tout de suite si aucune ne joue, plus celles en attente.
-			limit = maxQueuedShake
-			if h.out&bit == 0 {
-				limit++
-			}
-		}
-		h.queued[b] = uint8(min(limit, int(h.queued[b])+fresh))
+		h.queued[b] = uint8(min(maxQueued, int(h.queued[b])+fresh))
 	}
 	h.in = st.buttons
 	if st.counted {
@@ -67,13 +55,9 @@ func (h *buttonHold) next(st padState, now time.Time) (uint16, time.Time) {
 	}
 	for b := range 16 {
 		bit := uint16(1) << b
-		hold := minPress
-		if bit == shakeBit {
-			hold = shakeDuration
-		}
 		// Relâcher quand le doigt est parti ou qu'un autre appui attend, l'appui ayant assez duré.
 		if h.out&bit != 0 && (h.in&bit == 0 || h.queued[b] > 0) {
-			if at := h.since[b].Add(hold); now.Before(at) {
+			if at := h.since[b].Add(minPress); now.Before(at) {
 				later(at)
 				continue
 			}
@@ -91,7 +75,7 @@ func (h *buttonHold) next(st padState, now time.Time) (uint16, time.Time) {
 			h.since[b] = now
 			// Le relâcher à temps, sans attendre de message, si le doigt est déjà parti ou qu'un autre appui attend.
 			if h.in&bit == 0 || h.queued[b] > 0 {
-				later(now.Add(hold))
+				later(now.Add(minPress))
 			}
 		}
 	}
