@@ -93,8 +93,9 @@ type server struct {
 	// Arrêt de la vibration de chaque slot si Dolphin se tait, cf. rumble.
 	rumbleStop [slots]*time.Timer
 	subs       map[string]*subscriber
-	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
-	invite string
+	// Jeton du lien d'invitation des téléphones, et le fichier qui le garde entre deux redémarrages (keepInvite).
+	invite     string
+	inviteFile string
 	// Adresse de la liaison directe donnée aux téléphones (direct.go), vide sans elle.
 	directURL string
 }

@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -418,5 +420,38 @@ func TestPhoneToDolphin(t *testing.T) {
 	}
 	if got := listPorts(); got[1] != 0 {
 		t.Fatal("slot toujours occupé après la déconnexion")
+	}
+}
+
+func TestInviteKept(t *testing.T) {
+	// Le lien survit aux redémarrages du serveur, « Nouveau lien » compris ; un fichier abîmé est remplacé.
+	path := filepath.Join(t.TempDir(), "invite")
+	restart := func() *server {
+		t.Helper()
+		s := newServer(nil)
+		if err := s.keepInvite(path); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	first := restart().currentInvite()
+	again := restart()
+	if again.currentInvite() != first {
+		t.Fatal("lien non repris après un redémarrage")
+	}
+	again.newInvite()
+	renewed := again.currentInvite()
+	if got := restart().currentInvite(); got != renewed || got == first {
+		t.Fatal("nouveau lien non gardé")
+	}
+	if err := os.WriteFile(path, []byte("abîmé"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fresh := restart().currentInvite()
+	if data, _ := os.ReadFile(path); strings.TrimSpace(string(data)) != fresh || fresh == renewed {
+		t.Fatal("fichier abîmé non remplacé")
+	}
+	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+		t.Fatalf("droits du fichier : %v", info.Mode().Perm())
 	}
 }

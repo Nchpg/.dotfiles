@@ -102,10 +102,13 @@ in
         WIIMOTE_DIRECT_CERT = "${directCert}/fullchain.pem";
         WIIMOTE_DIRECT_KEY = "${directCert}/key.pem";
         WIIMOTE_ORIGIN = "https://${host}";
+        # Lien d'invitation gardé entre deux redémarrages : les téléphones se reconnectent sans rescanner.
+        WIIMOTE_INVITE_FILE = "/var/lib/wiimote/invite";
       };
       serviceConfig = {
         ExecStart = lib.getExe package;
         DynamicUser = true;
+        StateDirectory = "wiimote";
         # Lecture de son seul certificat (relu à chaud au renouvellement).
         SupplementaryGroups = [ "wiimote-tls" ];
         Restart = "on-failure";

@@ -9,6 +9,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -71,6 +72,11 @@ func main() {
 		log.Fatal(err)
 	}
 	s := newServer(conn)
+	if path := os.Getenv("WIIMOTE_INVITE_FILE"); path != "" {
+		if err := s.keepInvite(path); err != nil {
+			log.Printf("lien d'invitation non gardé : %v", err)
+		}
+	}
 	go func() { log.Fatal(s.serveDSU()) }()
 
 	// Liaison directe (direct.go) : facultative, la manette passe sinon par le WebSocket.
@@ -181,6 +187,38 @@ func (s *server) newInvite() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.invite = cryptorand.Text()
+	if s.inviteFile != "" {
+		if err := saveInvite(s.inviteFile, s.invite); err != nil {
+			log.Printf("lien d'invitation non gardé : %v", err)
+		}
+	}
+}
+
+// keepInvite garde le lien d'invitation dans `path`, entre deux redémarrages : sans lui, chaque mise à jour du
+// serveur obligeait tous les téléphones à rescanner le QR code. Reprend celui du fichier s'il est valide, sinon y
+// écrit le lien actuel.
+func (s *server) keepInvite(path string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inviteFile = path
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	// Un jeton de cryptorand.Text() : 26 caractères de base32.
+	if kept := strings.TrimSpace(string(data)); len(kept) == 26 && strings.Trim(kept, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567") == "" {
+		s.invite = kept
+		return nil
+	}
+	return saveInvite(path, s.invite)
+}
+
+// saveInvite écrit le jeton d'un coup (fichier temporaire renommé) : jamais de fichier à moitié écrit.
+func saveInvite(path, invite string) error {
+	if err := os.WriteFile(path+".tmp", []byte(invite+"\n"), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".tmp", path)
 }
 
 func (s *server) currentInvite() string {
