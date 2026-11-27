@@ -154,8 +154,11 @@ const panel = document.getElementById('panel');
 const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
 const settings = {
   bByA: store('bByA') === '1',
-  // 0 à 3 (cf. RUMBLE_PATTERNS) ; légères par défaut. L'ancienne case cochée (« 1 ») devient légères.
-  vibrate: [0, 1, 2, 3].includes(Number(store('vibrate') ?? 1)) ? Number(store('vibrate') ?? 1) : 1,
+  // ms de vibration par période de 20 (cf. rumblePattern), 10 par défaut. L'ancien niveau (0 à 3) est repris.
+  rumble:
+    store('rumble') !== null
+      ? Math.min(20, Math.max(0, Math.round(Number(store('rumble'))) || 0))
+      : ([0, 10, 15, 20][Number(store('vibrate') ?? 1)] ?? 10),
   showLag: store('showLag') === '1',
   tilt: gain('tilt'),
   stick: gain('stick'),
@@ -166,17 +169,17 @@ const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 // navigator.vibrate (iPhone : Safari n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
 document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
 // Vibration jouée par tranches de RUMBLE_SLICE ms, renouvelées tant qu'elle dure : même si le téléphone ignore
-// l'arrêt, elle ne dépasse sa fin que d'une tranche au plus. Le navigateur ne règle pas l'intensité : dans chaque
-// tranche, le moteur vibre par bouffées (10 ou 15 ms sur 20 ; 5 sur 20 ne se sentait presque plus) et ne monte pas
-// à fond ; fortes, en continu.
+// l'arrêt, elle ne dépasse sa fin que d'une tranche au plus. Le navigateur ne règle pas l'intensité : le réglage
+// (⚙) fixe combien de ms le moteur vibre sur chaque période de 20 ms ; moins, il ne monte pas à fond. 20 : en
+// continu ; 0 : coupées.
 const RUMBLE_SLICE = 40;
-const RUMBLE_PATTERNS = [null, [10, 10, 10, 10], [15, 5, 15, 5], [RUMBLE_SLICE]];
-const RUMBLE_LABELS = ['aucune', 'légères', 'moyennes', 'fortes'];
+const rumblePattern = (on) => (on <= 0 ? null : on >= 20 ? [RUMBLE_SLICE] : [on, 20 - on, on, 20 - on]);
+const rumbleLabel = (on) => (on <= 0 ? 'coupées' : on >= 20 ? 'continues' : `${on} ms sur 20`);
 // Tester : une vibration de menu de Mario Kart (50 ms), à la force choisie. « Bloqué » : le navigateur refuse ;
 // « Envoyé » sans que rien ne vibre : un réglage du téléphone (vibrations coupées, mode silencieux).
 const vibrateTest = document.getElementById('vibrateTest');
 vibrateTest.addEventListener('click', () => {
-  const pattern = RUMBLE_PATTERNS[settings.vibrate];
+  const pattern = rumblePattern(settings.rumble);
   vibrateTest.textContent = !pattern ? 'Coupées' : navigator.vibrate(pattern) ? 'Envoyé' : 'Bloqué';
   if (pattern) setTimeout(() => navigator.vibrate(0), 50);
   setTimeout(() => {
@@ -193,7 +196,7 @@ let rumbleEnd = null;
 function rumble(level, ms = 0) {
   clearTimeout(rumbleEnd);
   rumbleEnd = null;
-  const pattern = RUMBLE_PATTERNS[settings.vibrate];
+  const pattern = rumblePattern(settings.rumble);
   if (level && pattern && 'vibrate' in navigator) {
     if (!rumbling) {
       rumbleStart = performance.now();
@@ -222,8 +225,8 @@ function rumbleMessage(level, seq, ms) {
 }
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
-  document.getElementById('vibrate').value = settings.vibrate;
-  document.getElementById('vibrateOut').textContent = RUMBLE_LABELS[settings.vibrate];
+  document.getElementById('rumble').value = settings.rumble;
+  document.getElementById('rumbleOut').textContent = rumbleLabel(settings.rumble);
   document.getElementById('showLag').checked = settings.showLag;
   document.getElementById('lag').hidden = !settings.showLag;
   document.body.classList.toggle('b-by-a', settings.bByA);
@@ -244,7 +247,7 @@ document.getElementById('settingsForm').addEventListener('input', (e) => {
     store(e.target.id, e.target.value);
   }
   if (e.target.id === 'smooth') aimFilters = null;
-  if (e.target.id === 'vibrate') rumble(0);
+  if (e.target.id === 'rumble') rumble(0);
   showSettings();
   send();
 });
