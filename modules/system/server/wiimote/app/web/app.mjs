@@ -1,4 +1,4 @@
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, toDSU, upFromOrientation } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
 // le serveur joue lui-même la secousse vers Dolphin.
@@ -388,7 +388,7 @@ function refreshButtons() {
       if (control === 'wheel' && mode === 'sideways') {
         // Volant : la course horizontale braque, progressivement ; seul un coup de pouce vertical franc fait une
         // flèche (objets de Mario Kart), sans quoi un pouce qui dérive en virage lancerait l'objet.
-        wheel = Math.abs(lx) < radius * 0.06 ? 0 : Math.max(-1, Math.min(1, lx / reach));
+        wheel = wheelSteer(lx, reach);
         flick = wheelItem(flick, ly, reach, performance.now());
         if (flick.item) next |= 1 << BIT[DPAD[mode][flick.item]];
       } else {

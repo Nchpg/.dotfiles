@@ -168,6 +168,16 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
+// Joystick en volant : braquage (−1 à 1) pour un pouce à `lx` du centre, sur une course `reach`. Zone morte au
+// centre (10 % de la course), sans saut à sa sortie ; courbe « expo » : deux fois moins sensible au centre, pour
+// doser les petites corrections en ligne droite, et plein braquage au bout de la course.
+const STEER_DEAD = 0.1;
+const STEER_EXPO = 0.5;
+export function wheelSteer(lx, reach) {
+  const t = Math.min(1, Math.max(0, (Math.abs(lx) / reach - STEER_DEAD) / (1 - STEER_DEAD)));
+  return Math.sign(lx) * ((1 - STEER_EXPO) * t + STEER_EXPO * t ** 3);
+}
+
 // Joystick en volant : la flèche (objet de Mario Kart) ne part que sur un coup de pouce franc, de la zone calme
 // (moins de 35 % de la course) au-delà de 75 % en moins de 180 ms ; elle reste tenue tant que le pouce n'est pas
 // revenu au calme (banane derrière soi). Un pouce qui dérive en braquant ne lance rien.

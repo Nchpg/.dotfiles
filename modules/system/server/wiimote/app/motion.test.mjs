@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
+import { G, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -141,6 +141,22 @@ test('croix tactile : direction la plus proche, centre mort, portée et interfac
   assert.equal(dpadDirection(300, 0, 100, 0, Infinity), 'right'); // posé sur la croix puis sorti : gardée
   // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
   assert.equal(dpadDirection(0, 50, 100, 90), 'right');
+});
+
+test('volant au joystick : braquage fin au centre, sans saut, plein au bout', () => {
+  const reach = 100;
+  assert.equal(wheelSteer(0, reach), 0);
+  assert.equal(wheelSteer(9, reach), 0); // zone morte
+  assert.ok(Math.abs(wheelSteer(10.5, reach)) < 0.005); // pas de saut à sa sortie
+  assert.equal(wheelSteer(100, reach), 1);
+  assert.equal(wheelSteer(-250, reach), -1); // pouce hors du socle : plein braquage
+  assert.equal(wheelSteer(-40, reach), -wheelSteer(40, reach));
+  // Au centre, deux fois moins sensible que la course linéaire ; au bout, plus.
+  const linear = (lx) => (lx / reach - 0.1) / 0.9;
+  assert.ok(Math.abs(wheelSteer(20, reach) / linear(20) - 0.5) < 0.01);
+  assert.ok(wheelSteer(95, reach) - wheelSteer(90, reach) > linear(95) - linear(90));
+  // Croissant partout.
+  for (let lx = 0; lx < 100; lx++) assert.ok(wheelSteer(lx + 1, reach) >= wheelSteer(lx, reach));
 });
 
 test('volant au joystick : la mesure du téléphone tourné en volant', () => {
