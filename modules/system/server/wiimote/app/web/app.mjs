@@ -1,5 +1,5 @@
 import { gameTags, layoutFor } from './layouts.mjs';
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, withShake, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
 // téléphone : l'accéléromètre part tel quel.
@@ -29,6 +29,8 @@ const packet = new DataView(new ArrayBuffer(30 + 16));
 const presses = new Uint8Array(packet.buffer, 30);
 let buttons = 0;
 let motion = [0, -1, 0, 0, 0, 0];
+// Accélération hors gravité (g, repère DSU), pour garder les secousses quand le joystick braque (withShake).
+let shake = [0, 0, 0];
 // Pointeur envoyé sur 16 bits (32768 : centre), calé par le calibrage du bouton ⌖.
 const AIM_CENTER = 1 << 15;
 let aim = [AIM_CENTER, AIM_CENTER];
@@ -334,7 +336,7 @@ function say(text) {
 
 function send() {
   packet.setUint16(0, buttons, true);
-  const out = steer !== null ? wheelMotion(steer * settings.stick)
+  const out = steer !== null ? withShake(wheelMotion(steer * settings.stick), shake)
     : mode === 'sideways' ? tiltGain(motion, settings.tilt)
     : motion;
   out.forEach((v, i) => packet.setFloat32(2 + 4 * i, v, true));
@@ -707,6 +709,10 @@ addEventListener('devicemotion', (e) => {
     hold,
     mode === 'sideways',
   );
+  // Sans gyroscope, le navigateur ne la donne pas : pas de secousse au joystick, comme avant.
+  const l = e.acceleration;
+  shake = l?.x == null ? [0, 0, 0]
+    : toDSU([l.x * accelSign, l.y * accelSign, l.z * accelSign], [0, 0, 0], hold, mode === 'sideways').slice(0, 3);
   send();
 });
 

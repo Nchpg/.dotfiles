@@ -168,6 +168,15 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
+// Volant au joystick : il remplace l'inclinaison, mais une secousse (figure en sortie de tremplin, wheelie) doit
+// passer. `shake` : accélération du téléphone hors gravité (g, repère DSU), ajoutée au-delà de SHAKE_MIN seulement,
+// pour que les petits à-coups d'une main qui tient le téléphone ne fassent pas bouger le volant.
+const SHAKE_MIN = 0.7;
+export function withShake(wheel, shake) {
+  if (Math.hypot(...shake) < SHAKE_MIN) return wheel;
+  return [wheel[0] + shake[0], wheel[1] + shake[1], wheel[2] + shake[2], ...wheel.slice(3)];
+}
+
 // Joystick en volant : braquage (−1 à 1) pour un pouce à `lx` du centre, sur une course `reach`. Zone morte au
 // centre (10 % de la course), sans saut à sa sortie ; courbe « expo » : deux fois moins sensible au centre, pour
 // doser les petites corrections en ligne droite, et plein braquage au bout de la course.
