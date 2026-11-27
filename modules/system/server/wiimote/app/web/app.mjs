@@ -330,8 +330,25 @@ function showLink() {
 }
 showLink();
 
+// Liaison directe perdue ou refusée en cours de session : on la retente, 1 s après puis en doublant l'écart jusqu'à
+// 10 s, sans quoi la manette resterait par Cloudflare jusqu'à la prochaine reconnexion. `directURL` : celle de la
+// session en cours (null : aucune, plus de nouvel essai).
+let directURL = null;
+let directTrying = false;
+let directRetry = null;
+let directDelay = 1000;
+function retryDirect() {
+  clearTimeout(directRetry);
+  if (!directURL || direct) return;
+  directRetry = setTimeout(() => {
+    if (directURL && !direct && !directTrying && ws?.readyState === WebSocket.OPEN) connectDirect(directURL);
+  }, directDelay);
+  directDelay = Math.min(directDelay * 2, 10000);
+}
+
 async function connectDirect(url) {
-  if (!('WebTransport' in window)) return;
+  if (!('WebTransport' in window) || directTrying) return;
+  directTrying = true;
   directIssue = 'essai du direct…';
   showLink();
   try {
@@ -344,20 +361,30 @@ async function connectDirect(url) {
     const datagrams = wt.datagrams.createWritable?.() ?? wt.datagrams.writable;
     direct = { wt, writer: datagrams.getWriter(), seq: 0, pending: 0 };
     directIssue = '';
+    directDelay = 1000;
     readDatagrams(wt.datagrams.readable);
     wt.closed.catch(() => {}).finally(() => {
-      if (direct?.wt === wt) direct = null;
+      if (direct?.wt !== wt) return;
+      direct = null;
       showLink();
+      retryDirect();
     });
   } catch (e) {
-    // Liaison directe refusée ou injoignable (réseau qui bloque l'UDP) : on reste sur le WebSocket.
+    // Liaison directe refusée ou injoignable (réseau qui bloque l'UDP) : par le WebSocket en attendant le prochain essai.
     console.warn('liaison directe', e);
     directIssue = 'UDP impossible';
+    retryDirect();
+  } finally {
+    directTrying = false;
   }
   showLink();
 }
 
+// Fin de la session : plus de liaison directe, ni de nouvel essai.
 function closeDirect() {
+  directURL = null;
+  clearTimeout(directRetry);
+  directDelay = 1000;
   direct?.wt.close();
   direct = null;
   showLink();
@@ -671,7 +698,10 @@ function connect() {
     lost = 0;
     document.body.classList.remove('searching');
     showPlayer(msg.slot);
-    if (msg.direct && !direct) connectDirect(msg.direct);
+    if (msg.direct) {
+      directURL = msg.direct;
+      if (!direct) connectDirect(msg.direct);
+    }
     overlay.hidden = true;
     send();
   };
