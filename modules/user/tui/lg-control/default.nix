@@ -17,6 +17,7 @@ let
       cfg.pkgs.gnugrep
       cfg.pkgs.power-profiles-daemon
       cfg.pkgs.gum
+      cfg.pkgs.iw
     ];
     text = ''
       SYS=/sys/devices/platform/lg-laptop
@@ -51,6 +52,24 @@ let
         if [ -z "$uw" ]; then printf '?'; return; fi
         printf '%s W' "$((uw / 1000000))"
         if [ -n "$floor" ]; then printf ' (min %s W)' "$((floor / 1000000))"; fi
+      }
+
+      # Économie d'énergie du Wi-Fi, coupée en performance-max : l'état réel de chaque carte, lu sur son pilote.
+      wifi_label() {
+        local wireless state
+        local -a states=()
+        for wireless in /sys/class/net/*/wireless; do
+          [ -e "$wireless" ] || continue
+          state=$(iw dev "$(basename "$(dirname "$wireless")")" get power_save 2>/dev/null || true)
+          case "$state" in
+            *on) states+=("économie d'énergie activée") ;;
+            *off) states+=("économie d'énergie coupée") ;;
+            *) states+=("?") ;;
+          esac
+        done
+        if [ "''${#states[@]}" -eq 0 ]; then printf 'aucune carte'; return; fi
+        local IFS=,
+        printf '%s' "''${states[*]}"
       }
 
       choose_fan() {
@@ -94,8 +113,8 @@ let
         fan=$(read_attr "$SYS/fan_mode")
         prof=$(powerprofilesctl get 2>/dev/null || true)
         gum style --bold --foreground "${c.base0D}" "  LG Power Control"
-        printf '  Ventilateur     %s (%s)\n  Profil          %s\n  Puissance max   %s\n\n' \
-          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "$(profile_label "$prof")" "$(power_label)"
+        printf '  Ventilateur     %s (%s)\n  Profil          %s\n  Puissance max   %s\n  Wi-Fi           %s\n\n' \
+          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "$(profile_label "$prof")" "$(power_label)" "$(wifi_label)"
         choice=$(gum choose "Ventilateur" "Profil d'alimentation" "Quitter") || break
         case "$choice" in
           "Ventilateur") choose_fan ;;

@@ -14,7 +14,7 @@ let
   pl1Micro = toString (cfg.powerLimit * 1000000);
 
   # Interrupteur du mode « performance-max » (lg-control), écrit par le groupe wheel : sans lui, le profil
-  # performance reste celui de power-profiles-daemon, sans plancher.
+  # performance reste celui de power-profiles-daemon, sans plancher ni Wi-Fi toujours éveillé.
   maxSwitch = "/var/lib/power-limit/performance-max";
 in
 {
@@ -86,21 +86,37 @@ in
         ];
 
         systemd.services.power-limit = {
-          description = "Limite de puissance longue durée du processeur (au moins ${toString cfg.powerLimit} W en performance-max)";
+          description = "Mode performance-max : PL1 d'au moins ${toString cfg.powerLimit} W, Wi-Fi sans économie d'énergie";
           after = [
             "thermald.service"
             "power-profiles-daemon.service"
           ];
           unitConfig.ConditionPathExists = pl1;
           serviceConfig.Type = "oneshot";
-          path = [ config.services.power-profiles-daemon.package ];
+          path = [
+            config.services.power-profiles-daemon.package
+            pkgs-stable.iw
+          ];
           script = ''
+            max=0
+            if [ "$(cat ${maxSwitch} 2>/dev/null)" = 1 ] && [ "$(powerprofilesctl get)" = performance ]; then
+              max=1
+            fi
+
+            # Wi-Fi : la carte qui s'endort entre deux balises livre les paquets reçus par rafales, jusqu'à ~100 ms
+            # en retard (manette de Dolphin par le VPN, jeux en ligne). Éveillée en performance-max, économe
+            # ailleurs. Réappliqué à chaque passage (30 s) : une reconnexion remet le réglage du pilote.
+            for wireless in /sys/class/net/*/wireless; do
+              [ -e "$wireless" ] || continue
+              iw dev "$(basename "$(dirname "$wireless")")" set power_save "$([ "$max" = 1 ] && echo off || echo on)" || true
+            done
+
             saved=/run/power-limit/thermald
             # Présent tant que le plancher s'applique : lu par les affichages (lg-control, barre).
             floor=/run/power-limit/floor
             mkdir -p /run/power-limit
             current=$(cat ${pl1})
-            if [ "$(cat ${maxSwitch} 2>/dev/null)" = 1 ] && [ "$(powerprofilesctl get)" = performance ]; then
+            if [ "$max" = 1 ]; then
               echo ${pl1Micro} > "$floor"
               if [ "$current" -lt ${pl1Micro} ]; then
                 echo "$current" > "$saved"
