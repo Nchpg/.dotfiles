@@ -551,11 +551,37 @@ function connect() {
   };
 }
 
-// Sans invitation : scanner le QR code de l'hôte. Le détecteur du navigateur suffit (Chrome sur Android) ;
-// ailleurs, l'appareil photo du téléphone ouvre le lien tout aussi bien.
+// Scanner le QR code de l'hôte dans l'appli : installée, elle ne reçoit pas le lien qu'ouvre l'appareil photo du
+// téléphone (il part dans le navigateur). Le détecteur du navigateur s'il en a un (Chrome sur Android), sinon jsQR
+// (Safari), chargé au premier scan.
 const scanButton = document.getElementById('scan');
 const camera = document.getElementById('camera');
-const canScan = 'BarcodeDetector' in window && navigator.mediaDevices?.getUserMedia;
+const canScan = Boolean(navigator.mediaDevices?.getUserMedia);
+
+async function qrReader() {
+  if ('BarcodeDetector' in window) {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    return async () => (await detector.detect(camera).catch(() => [])).map((code) => code.rawValue);
+  }
+  if (!window.jsQR) {
+    await new Promise((resolve, reject) => {
+      document.head.append(Object.assign(document.createElement('script'), { src: 'jsQR.js', onload: resolve, onerror: reject }));
+    });
+  }
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  return async () => {
+    // Image réduite : assez pour le QR code de l'hôte, et rapide même sur un vieux téléphone.
+    const scale = Math.min(1, 640 / Math.max(camera.videoWidth, camera.videoHeight, 1));
+    canvas.width = Math.round(camera.videoWidth * scale);
+    canvas.height = Math.round(camera.videoHeight * scale);
+    if (!canvas.width || !canvas.height) return [];
+    context.drawImage(camera, 0, 0, canvas.width, canvas.height);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    const code = window.jsQR(data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
+    return code ? [code.data] : [];
+  };
+}
 
 function idle(message) {
   const invited = Boolean(store('invite'));
@@ -567,7 +593,9 @@ function idle(message) {
   );
   startButton.hidden = !invited;
   nameInput.hidden = !invited;
-  scanButton.hidden = invited || !canScan;
+  // Toujours là : un lien remplacé par l'hôte se rescanne sans quitter l'appli.
+  scanButton.hidden = !canScan;
+  scanButton.classList.toggle('quiet', invited);
 }
 
 function stopCamera() {
@@ -591,9 +619,16 @@ scanButton.addEventListener('click', async () => {
   camera.hidden = false;
   scanButton.textContent = 'Annuler';
   await camera.play().catch(() => {});
-  const detector = new BarcodeDetector({ formats: ['qr_code'] });
+  let read;
+  try {
+    read = await qrReader();
+  } catch {
+    stopCamera();
+    idle('Lecteur de QR code indisponible : recharge la page.');
+    return;
+  }
   while (!camera.hidden) {
-    for (const { rawValue } of await detector.detect(camera).catch(() => [])) {
+    for (const rawValue of await read()) {
       const url = URL.canParse(rawValue) ? new URL(rawValue) : null;
       // Seulement un lien d'invitation de ce site : un autre QR code est ignoré.
       if (url?.origin === location.origin && url.hash.length > 1) {

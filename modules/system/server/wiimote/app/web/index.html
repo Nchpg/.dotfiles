@@ -294,7 +294,7 @@
   .panel input[type="checkbox"] { width: 1.3rem; height: 1.3rem; margin: 0; }
   .panel input[type="range"] { width: 100%; margin: 0; }
   .panel .link { margin: 0; color: var(--paper-soft); font-size: .9rem; }
-  .panel .start.quiet { background: transparent; border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); color: var(--paper-ink); }
+  .panel .start.quiet, .overlay .start.quiet { background: transparent; border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); color: var(--paper-ink); }
   /* Trop court pour tout tenir : le panneau défile (lui seul, malgré le touch-action du corps). */
   .panel { overflow-y: auto; place-content: safe center; touch-action: pan-y; }
   /* De côté, la hauteur manque (titre et OK sortaient de l'écran) : deux colonnes. */
