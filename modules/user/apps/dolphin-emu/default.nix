@@ -16,10 +16,19 @@ let
 
   # Vibration des manettes DSU (le téléphone comme Wiimote, module wiimote) : le client DSU de Dolphin ne
   # l'envoyait pas au serveur. Le correctif lui ajoute une sortie « Motor » et le message « Rumble controller
-  # motor » (0x110002) du protocole cemuhook. Dolphin est donc compilé ici, hors du cache.
-  package = cfg.pkgs.dolphin-emu.overrideAttrs (old: {
-    patches = (old.patches or [ ]) ++ [ ./dsu-rumble.patch ];
-  });
+  # motor » (0x110002) du protocole cemuhook. Dolphin est donc compilé ici, hors du cache. Un bump touchant ces
+  # fichiers fait échouer le build : refaire le patch sur les nouvelles sources.
+  package = myLib.packaging.mkGuardedPatch {
+    package = cfg.pkgs.dolphin-emu;
+    patch = ./dsu-rumble.patch;
+    files = {
+      "Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.cpp" =
+        "1991a1714891ee47dc9b208f320976562ce6bc1e6c49943210c5c2114a5ea051";
+      "Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPProto.h" =
+        "b775d2586d19fff6a10ab00118e224caeed0c2e25da37aabcc19994538edd420";
+    };
+    where = "modules/user/apps/dolphin-emu/default.nix";
+  };
 
   # Progression des jeux (mémoire de la Wii, cartes mémoire GameCube), synchronisée par Nextcloud.
   # Précondition : y déplacer Wii/, GC/ et Load/Riivolution/riivolution/save/ de ~/.local/share/dolphin-emu,
