@@ -148,11 +148,12 @@ document.getElementById('pad').addEventListener('click', () => {
 let steer = null;
 // Accélération automatique (de côté) : 2 reste enfoncé sans le pouce, libre pour B (l'objet, en dérapage
 // automatique). Allumée au bouton verrou après le départ : avant le « GO », accélérer fait caler, et dans les menus
-// un 2 toujours tenu validerait sans fin. Un nouvel appui sur 2, 1, + ou Home l'éteint, la page quittée aussi.
+// un 2 toujours tenu validerait sans fin. Seul un nouvel appui sur 2 ou 1 l'éteint, avec la fin de la course, le
+// passage à la verticale et la page quittée : lever tous les doigts ou changer croix/joystick le garde.
 let cruise = false;
 const cruiseButton = document.getElementById('cruise');
 const twoButton = document.querySelector('[data-btn="2"]');
-const CRUISE_STOP = (1 << BIT[2]) | (1 << BIT[1]) | (1 << BIT['+']) | (1 << BIT.Home);
+const CRUISE_STOP = (1 << BIT[2]) | (1 << BIT[1]);
 // En course, on tient 1 ou 2 : le joystick braque. Sinon (menus), il fait la croix, comme les flèches.
 const RACING = (1 << BIT[1]) | (1 << BIT[2]);
 // Boutons tenus par les doigts seuls, au dernier passage : un nouvel appui éteint l'accélération automatique.
@@ -660,13 +661,17 @@ addEventListener('contextmenu', (e) => e.preventDefault());
 function releaseAll() {
   pointers.clear();
   stickPointers.clear();
-  cruise = false;
   applyLayout();
   refreshButtons();
 }
+// Page quittée : le verrou aussi.
+function leave() {
+  cruise = false;
+  releaseAll();
+}
 for (const type of ['touchend', 'touchcancel']) addEventListener(type, (e) => e.touches.length === 0 && releaseAll());
-addEventListener('blur', releaseAll);
-document.addEventListener('visibilitychange', () => document.hidden && releaseAll());
+addEventListener('blur', leave);
+document.addEventListener('visibilitychange', () => document.hidden && leave());
 
 addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
