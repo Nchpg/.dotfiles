@@ -399,7 +399,6 @@ aimButton.addEventListener('click', () => {
   if (!aimed) {
     if (!tv) return calibrate();
     recentre = ((fix, before) => (v) => fix(before(v)))(turnTo(recentre(now), tv.center), recentre);
-    buzz(20);
     return;
   }
   aimed.push(now);
@@ -412,13 +411,13 @@ aimButton.addEventListener('click', () => {
     tv = calibrated;
     recentre = (v) => v;
     aimFilters = null;
-    buzz([20, 40, 20]);
-  } else {
-    // Coins confondus ou dans le désordre : calibrage refusé, l'ancien reste.
-    buzz(300);
   }
+  // Coins confondus ou dans le désordre : calibrage refusé, l'ancien reste. Affiché un instant sur ⌖.
   aimed = null;
-  aimButton.textContent = '⌖';
+  aimButton.textContent = calibrated ? '✓' : '✗';
+  setTimeout(() => {
+    if (!aimed) aimButton.textContent = '⌖';
+  }, 1000);
 });
 document.getElementById('calibrate').addEventListener('click', () => {
   panel.hidden = true;
@@ -487,7 +486,6 @@ function refreshButtons() {
     if (steered) send();
     return;
   }
-  if (next & ~buttons) buzz(12);
   for (let b = 0; b < 16; b++) if (next & ~buttons & (1 << b)) presses[b]++;
   buttons = next;
   send();
@@ -627,7 +625,6 @@ function connect() {
     showPlayer(msg.slot);
     if (msg.direct && !direct) connectDirect(msg.direct);
     overlay.hidden = true;
-    buzz([30, 60, 30]);
     send();
   };
   ws.onclose = () => {
@@ -760,7 +757,6 @@ scanButton.addEventListener('click', async () => {
       if (url?.origin === location.origin && url.hash.length > 1) {
         store('invite', url.hash.slice(1));
         stopCamera();
-        buzz(30);
         idle('Invitation reçue. Appuie sur Connecter.');
         return;
       }
