@@ -1,7 +1,8 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, gyroPointer, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
+import { gameTags, layoutFor } from './web/layouts.mjs';
+import { G, gyroPointer, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, wheelMotion, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -187,14 +188,17 @@ test('sensibilité : l’angle du volant multiplié, sans dépasser 85°', () =>
   near(wheelMotion(2), wheel(85)); // joystick à sensibilité ×2, à fond
 });
 
-test('volant : objet seulement sur un coup de pouce franc, tenu jusqu’au retour au calme', () => {
-  const run = (steps) => steps.reduce((s, [ly, t]) => wheelItem(s, ly, 100, t), { calm: 0, item: null }).item;
-  assert.equal(run([[0, 0], [-90, 80]]), 'up'); // coup franc vers le haut
-  assert.equal(run([[0, 0], [60, 60], [95, 120]]), 'down');
-  assert.equal(run([[0, 0], [-50, 150], [-90, 400]]), null); // montée lente
-  assert.equal(run([[0, 0], [-50, 50], [-60, 300], [-90, 320]]), null); // pouce resté à mi-course puis poussé
-  assert.equal(run([[0, 0], [-90, 80], [-50, 600]]), 'up'); // tenu tant qu'il n'est pas revenu au calme
-  assert.equal(run([[0, 0], [-90, 80], [-20, 600]]), null); // relâché
+test('dispositions : volant et verrou seulement en course de Mario Kart, toutes régions', () => {
+  const extras = (game, stage) => {
+    const l = layoutFor(gameTags(game, stage));
+    return [Boolean(l.volant), Boolean(l.verrou)];
+  };
+  assert.deepEqual(extras('RMCP01', 3), [true, true]);
+  assert.deepEqual(extras('RMCE01', 2), [true, true]); // décompte
+  assert.deepEqual(extras('RMCJ01', 0), [false, false]); // menus
+  assert.deepEqual(extras('RMCK01', 5), [false, false]); // course terminée : menus de fin
+  assert.deepEqual(extras('RSBE01', 3), [false, false]); // autre jeu
+  assert.deepEqual(extras('', 0), [false, false]); // pas de jeu, ou Dolphin sans le correctif
 });
 
 test('filtre du pointeur : tremblement gommé au repos, peu de retard en mouvement', () => {

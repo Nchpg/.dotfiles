@@ -396,6 +396,19 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("vibration %d après %d ms sans nouvelle de Dolphin, attendu 0 après %v", v, ms, rumbleTimeout)
 	}
 
+	// Jeu en cours : transmis au téléphone quand il change, oublié sans jeu.
+	game := func(id string, stage byte) { dolphin.Write(request(msgGame, append([]byte(id), stage)...)) }
+	game("RMCP01", 3)
+	game("RMCP01", 3)
+	game("\x00\x00\x00\x00\x00\x00", 3)
+	for _, want := range []gameInfo{{"RMCP01", 3}, {}} {
+		var got gameInfo
+		phone.SetReadDeadline(time.Now().Add(2 * time.Second))
+		if err := websocket.JSON.Receive(phone, &got); err != nil || got != want {
+			t.Fatalf("jeu %+v (%v), attendu %+v", got, err, want)
+		}
+	}
+
 	// Mesure du délai : renvoyée telle quelle.
 	ping := []byte{0, 0, 0, 0, 1, 2, 3, 4}
 	websocket.Message.Send(phone, ping)

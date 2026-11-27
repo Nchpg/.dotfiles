@@ -181,6 +181,41 @@ func (s *server) rumble(slot int, level uint8) {
 	}
 }
 
+// Jeu en cours dans Dolphin et, pour Mario Kart Wii, étape de la course : les téléphones affichent les boutons qui
+// vont avec (web/layouts.mjs).
+type gameInfo struct {
+	Game  string `json:"game"`
+	Stage uint8  `json:"stage"`
+}
+
+// setGame transmet aux téléphones le jeu que Dolphin annonce, quand il change. Sans nouvelle pendant gameTimeout
+// (Dolphin fermé, ou pas corrigé), plus de jeu.
+func (s *server) setGame(g gameInfo) {
+	s.mu.Lock()
+	if s.gameStop != nil {
+		s.gameStop.Stop()
+	}
+	if g.Game != "" {
+		s.gameStop = time.AfterFunc(gameTimeout, func() { s.setGame(gameInfo{}) })
+	}
+	if s.game == g {
+		s.mu.Unlock()
+		return
+	}
+	s.game = g
+	var conns []*websocket.Conn
+	for _, p := range s.seats {
+		if p != nil && p.conn != nil {
+			conns = append(conns, p.conn)
+		}
+	}
+	s.mu.Unlock()
+	log.Printf("jeu : %q, étape %d", g.Game, g.Stage)
+	for _, conn := range conns {
+		websocket.JSON.Send(conn, g)
+	}
+}
+
 // État reçu du téléphone, rediffusé sur la place qu'il occupe à cet instant (l'hôte a pu la changer).
 func (s *server) push(p *player, st padState) {
 	s.mu.Lock()

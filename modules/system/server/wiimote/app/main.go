@@ -264,14 +264,14 @@ func (s *server) phone(ws *websocket.Conn) {
 	}
 	defer s.release(p)
 	s.mu.Lock()
-	slot := p.slot
+	slot, game := p.slot, s.game
 	s.mu.Unlock()
 	if resumed {
 		log.Printf("%s reprend sa place après une coupure (Wii Remote %d)", displayName(p.name), slot+1)
 	} else {
 		log.Printf("%s connecté (Wii Remote %d)", displayName(p.name), slot+1)
 	}
-	welcome := map[string]any{"slot": slot, "token": p.token, "version": webVersion}
+	welcome := map[string]any{"slot": slot, "token": p.token, "version": webVersion, "game": game.Game, "stage": game.Stage}
 	if s.directURL != "" {
 		welcome["direct"] = s.directURL + "?t=" + p.token
 	}

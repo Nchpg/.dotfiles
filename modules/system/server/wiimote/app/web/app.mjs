@@ -1,4 +1,5 @@
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
+import { gameTags, layoutFor } from './layouts.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
 // téléphone : l'accéléromètre part tel quel.
@@ -130,12 +131,12 @@ document.getElementById('theme').addEventListener('click', () => {
   store('theme', theme);
 });
 
-// Croix ou volant (joystick qui remplace l'inclinaison, pour Mario Kart ; à la verticale, il fait la croix), au
-// choix, mémorisé. L'ancien joystick-croix devient le volant.
-const CONTROLS = ['dpad', 'wheel'];
-let control = store('control') === 'stick' ? 'wheel' : CONTROLS.includes(store('control')) ? store('control') : 'dpad';
+// Croix ou joystick, au choix, mémorisé. Le joystick fait la croix, sauf en course de Mario Kart, où il devient le
+// volant (layouts.mjs). L'ancienne valeur « wheel » est le joystick.
+const CONTROLS = ['dpad', 'stick'];
+let control = store('control') === 'wheel' ? 'stick' : CONTROLS.includes(store('control')) ? store('control') : 'dpad';
 function showControl() {
-  document.body.classList.toggle('wheel', control === 'wheel');
+  document.body.classList.toggle('stick', control === 'stick');
 }
 showControl();
 document.getElementById('pad').addEventListener('click', () => {
@@ -145,8 +146,38 @@ document.getElementById('pad').addEventListener('click', () => {
 });
 // Volant tenu : position du joystick (−1 à 1), qui remplace l'inclinaison ; null : l'inclinaison reprend.
 let steer = null;
-// Coup de pouce du joystick volant en cours (cf. `wheelItem`).
-let flick = { calm: 0, item: null };
+// Accélération automatique (de côté) : 2 reste enfoncé sans le pouce, libre pour B (l'objet, en dérapage
+// automatique). Allumée au bouton verrou après le départ : avant le « GO », accélérer fait caler, et dans les menus
+// un 2 toujours tenu validerait sans fin. Un nouvel appui sur 2, 1, + ou Home l'éteint, la page quittée aussi.
+let cruise = false;
+const cruiseButton = document.getElementById('cruise');
+const twoButton = document.querySelector('[data-btn="2"]');
+const CRUISE_STOP = (1 << BIT[2]) | (1 << BIT[1]) | (1 << BIT['+']) | (1 << BIT.Home);
+// En course, on tient 1 ou 2 : le joystick braque. Sinon (menus), il fait la croix, comme les flèches.
+const RACING = (1 << BIT[1]) | (1 << BIT[2]);
+// Boutons tenus par les doigts seuls, au dernier passage : un nouvel appui éteint l'accélération automatique.
+let fingers = 0;
+cruiseButton.addEventListener('click', () => {
+  cruise = !cruise;
+  refreshButtons();
+});
+
+// Disposition du jeu en cours (layouts.mjs), appliquée quand aucun doigt ne touche l'écran : un bouton ne se déplace
+// pas sous le pouce. Le verrou, lui, lâche 2 dès la fin de la course, pour ne pas valider sans fin les menus.
+let gameLayout = layoutFor([]);
+let wantedLayout = gameLayout;
+function showGame(game, stage) {
+  wantedLayout = layoutFor(gameTags(game, stage));
+  if (!wantedLayout.verrou) cruise = false;
+  applyLayout();
+  refreshButtons();
+}
+function applyLayout() {
+  if (pointers.size || gameLayout === wantedLayout) return;
+  gameLayout = wantedLayout;
+  document.body.classList.toggle('volant', Boolean(gameLayout.volant));
+  document.body.classList.toggle('verrou', Boolean(gameLayout.verrou));
+}
 
 // Réglages du panneau ⚙, mémorisés : B à côté de A, vibrations, sensibilités de l'inclinaison et du joystick volant.
 const panel = document.getElementById('panel');
@@ -286,6 +317,7 @@ panel.addEventListener('click', (e) => e.target === panel && (panel.hidden = tru
 modeButton.addEventListener('click', () => {
   mode = mode === 'sideways' ? 'vertical' : 'sideways';
   hold = mode === 'sideways' ? 90 : 0;
+  cruise = false;
   store('mode', mode);
   lockOrientation();
   layout();
@@ -499,6 +531,7 @@ document.getElementById('calibrate').addEventListener('click', () => {
 });
 
 const dpad = document.querySelector('.dpad');
+const itemButton = document.getElementById('item');
 
 // Recalculé à chaque contact, pour tous les doigts à la fois. La croix se lit à l'angle du doigt (direction la plus
 // proche), et le doigt la fait tourner en roulant dessus.
@@ -508,38 +541,29 @@ function refreshButtons() {
   const box = dpad.getBoundingClientRect();
   let thumb = [0, 0];
   let wheel = null;
+  // Les doigts sur les boutons d'abord : la course (1 ou 2 tenu) décide de ce que fait le joystick, et le joystick
+  // du sens du bouton Objet.
+  const thumbs = [];
+  const itemFingers = [];
+  let back = false;
   for (const [id, finger] of pointers) {
-    const { x, y } = finger;
     if (stickPointers.has(id)) {
-      const box = joystick.getBoundingClientRect();
-      const radius = box.width / 2;
-      const origin = stickPointers.get(id) ?? { x: box.left + radius, y: box.top + radius };
-      const [lx, ly] = toLocal(x - origin.x, y - origin.y, hold - liveAngle());
-      const reach = radius * 0.6;
-      if (mode === 'sideways') {
-        // Volant : la course horizontale braque, progressivement ; seul un coup de pouce vertical franc fait une
-        // flèche (objets de Mario Kart), sans quoi un pouce qui dérive en virage lancerait l'objet.
-        wheel = wheelSteer(lx, reach);
-        flick = wheelItem(flick, ly, reach, performance.now());
-        if (flick.item) next |= 1 << BIT[DPAD[mode][flick.item]];
-      } else {
-        // Debout, on ne conduit pas : le joystick fait la croix.
-        for (const dir of stickDirections(lx, ly, radius)) next |= 1 << BIT[DPAD[mode][dir]];
-      }
-      // Le bouton suit le pouce, sans sortir du socle.
-      const scale = Math.min(1, reach / (Math.hypot(lx, ly) || 1));
-      thumb = [lx * scale, ly * scale];
+      thumbs.push([id, finger]);
       continue;
     }
+    const { x, y } = finger;
     // Un doigt garde ce sur quoi il s'est posé (ou a glissé en premier) jusqu'à se lever, même s'il en sort : un
     // bouton reste appuyé, la croix continue de se lire à l'angle du doigt. Un bouton sous le doigt passe avant la
     // zone de la croix, plus large que son dessin.
     const dx = x - (box.left + box.width / 2);
     const dy = y - (box.top + box.height / 2);
     const rotation = hold - liveAngle();
-    finger.on ??= document.elementFromPoint(x, y)?.closest('[data-btn]')
+    finger.on ??= document.elementFromPoint(x, y)?.closest('[data-btn], [data-item]')
       ?? (control === 'dpad' && dpadDirection(dx, dy, box.width / 2, rotation) ? dpad : null);
-    if (finger.on === dpad) {
+    if (finger.on === itemButton) {
+      pressed.add(itemButton);
+      itemFingers.push(finger);
+    } else if (finger.on === dpad) {
       const dir = control === 'dpad' && dpadDirection(dx, dy, box.width / 2, rotation, Infinity);
       if (dir) {
         pressed.add(dpad.querySelector(`[data-dir="${dir}"]`));
@@ -550,8 +574,42 @@ function refreshButtons() {
       next |= 1 << BIT[finger.on.dataset.btn];
     }
   }
+  if (cruise && next & ~fingers & CRUISE_STOP) cruise = false;
+  fingers = next;
+  if (cruise) {
+    next |= 1 << BIT[2];
+    pressed.add(twoButton);
+  }
+  cruiseButton.classList.toggle('on', cruise);
+  const racing = (next & RACING) !== 0;
+  for (const [id, { x, y }] of thumbs) {
+    const box = joystick.getBoundingClientRect();
+    const radius = box.width / 2;
+    const origin = stickPointers.get(id) ?? { x: box.left + radius, y: box.top + radius };
+    const [lx, ly] = toLocal(x - origin.x, y - origin.y, hold - liveAngle());
+    const reach = radius * 0.6;
+    // Tiré vers soi (vers le bas) : le bouton Objet lance derrière.
+    if (ly > reach * 0.5) back = true;
+    if (mode === 'sideways' && gameLayout.volant && racing) {
+      // Volant : la course horizontale braque, progressivement ; la verticale ne fait rien, les objets passent par
+      // le bouton Objet.
+      wheel = wheelSteer(lx, reach);
+    } else {
+      // Hors course, debout, ou en pause (ni 1 ni 2 tenu) : le joystick fait la croix.
+      for (const dir of stickDirections(lx, ly, radius)) next |= 1 << BIT[DPAD[mode][dir]];
+    }
+    // Le bouton suit le pouce, sans sortir du socle.
+    const scale = Math.min(1, reach / (Math.hypot(lx, ly) || 1));
+    thumb = [lx * scale, ly * scale];
+  }
+  // Bouton Objet (mode volant) : une flèche de la croix, comme sur la Wiimote à l'horizontale. Devant, ou derrière si
+  // le joystick est tiré vers soi au moment de l'appui, gardée jusqu'au relâché (banane tenue derrière soi).
+  for (const finger of itemFingers) {
+    finger.item ??= back ? 'down' : 'up';
+    next |= 1 << BIT[DPAD[mode][finger.item]];
+  }
   knob.style.transform = `translate(${thumb[0]}px, ${thumb[1]}px)`;
-  for (const el of document.querySelectorAll('[data-btn], [data-dir]')) {
+  for (const el of document.querySelectorAll('[data-btn], [data-dir], [data-item]')) {
     el.classList.toggle('on', pressed.has(el));
   }
   const steered = wheel !== steer;
@@ -573,23 +631,22 @@ const track = (e) => {
 const untrack = (e) => {
   pointers.delete(e.pointerId);
   stickPointers.delete(e.pointerId);
+  applyLayout();
   refreshButtons();
 };
 // Joystick : le pouce posé dessus (ou tout près) le garde jusqu'à ce qu'il se lève, même en débordant. Posé sur le
 // bouton, il en devient le centre : un pouce posé un peu à côté ne fait pas dériver. Posé sur le bord, la direction
-// compte aussitôt (coup franc du volant).
+// compte aussitôt.
 const stickPointers = new Map();
 addEventListener('pointerdown', (e) => {
   // Panneau des réglages ouvert : la manette ne réagit pas.
   if (!panel.hidden) return;
-  if (control === 'wheel' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
+  if (control === 'stick' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
     const box = joystick.getBoundingClientRect();
     const r = box.width / 2;
     const d = Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r));
     if (d < r * 1.3) {
       stickPointers.set(e.pointerId, d < r * 0.4 ? { x: e.clientX, y: e.clientY } : null);
-      // Pouce posé : le calme commence là (posé directement tout en haut, c'est un coup franc).
-      flick = { calm: performance.now(), item: null };
     }
   }
   track(e);
@@ -603,6 +660,8 @@ addEventListener('contextmenu', (e) => e.preventDefault());
 function releaseAll() {
   pointers.clear();
   stickPointers.clear();
+  cruise = false;
+  applyLayout();
   refreshButtons();
 }
 for (const type of ['touchend', 'touchcancel']) addEventListener(type, (e) => e.touches.length === 0 && releaseAll());
@@ -687,6 +746,9 @@ function connect() {
     if (typeof e.data !== 'string') return pong(e.data);
     const msg = JSON.parse(e.data);
     if ('rumble' in msg) return rumbleMessage(msg.rumble, msg.seq, msg.ms);
+    // Jeu en cours : dans l'accueil, puis à chaque changement.
+    if ('game' in msg) showGame(msg.game, msg.stage);
+    if (!('slot' in msg) && !msg.error) return;
     if (msg.error) {
       lastError = msg.error;
       retry = msg.retry;

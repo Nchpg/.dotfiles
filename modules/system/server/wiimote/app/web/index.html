@@ -191,7 +191,7 @@
   @keyframes searching { 50% { background: var(--led); box-shadow: 0 0 calc(2 * var(--u)) var(--led); } }
 
   /* Changement de tenue et de thème, dans le coin où le pouce ne passe pas. */
-  .mode, .theme, .pad, .settings {
+  .mode, .theme, .pad, .settings, .cruise {
     position: absolute;
     top: calc(3.5 * var(--u));
     right: calc(3.5 * var(--u));
@@ -203,7 +203,7 @@
   /* Réglages et croix/joystick : à gauche à la verticale, où la croix (ou le joystick) laisse le coin libre. */
   .settings { right: auto; left: calc(3.5 * var(--u)); }
   .pad { right: auto; left: calc(15.5 * var(--u)); }
-  .mode svg, .theme svg, .pad svg, .settings svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
+  .mode svg, .theme svg, .pad svg, .settings svg, .cruise svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
 
   /* Joystick, à la place de la croix (bouton en haut) : le pouce glisse, la croix sort de la même manière. */
   .joystick {
@@ -224,11 +224,11 @@
     background: var(--btn);
     box-shadow: 0 calc(.6 * var(--u)) 0 var(--btn-edge), 0 calc(.8 * var(--u)) calc(1.6 * var(--u)) rgb(0 0 0 / .18);
   }
-  .wheel .dpad { display: none; }
-  .wheel .joystick { display: block; }
+  .stick .dpad { display: none; }
+  .stick .joystick { display: block; }
   /* Icône du mode en cours (croix ou volant). */
   .pad svg { display: none; }
-  body:not(.wheel) .pad .for-dpad, .wheel .pad .for-wheel { display: block; }
+  body:not(.stick) .pad .for-dpad, .stick .pad .for-stick { display: block; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 au-dessus de 2 sous le pouce
      droit : empilés, ils libèrent une colonne pour grossir le reste. Après les règles de base, qu'il remplace. */
@@ -251,6 +251,10 @@
   .sideways .theme { right: calc(3.5 * var(--u)); top: calc(15.5 * var(--u)); }
   .sideways .pad { left: auto; right: calc(3.5 * var(--u)); top: calc(27.5 * var(--u)); }
   .sideways .settings { left: auto; right: calc(3.5 * var(--u)); top: calc(39.5 * var(--u)); }
+  /* Accélération automatique : de côté seulement, en dessous, sous le pouce droit. */
+  .cruise { display: none; }
+  .sideways.verrou .cruise { display: block; right: calc(3.5 * var(--u)); top: calc(51.5 * var(--u)); }
+  .cruise.on { background: var(--accent); color: #121314; }
   .sideways .a { width: calc(26 * var(--u)); height: calc(26 * var(--u)); }
   .sideways .b { width: 90%; height: 78%; }
   .sideways .minus, .sideways .plus, .sideways .home { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
@@ -273,6 +277,41 @@
   .sideways.b-by-a .b.on { background: var(--btn-on); }
   .sideways.b-by-a .dpad { grid-template: repeat(3, calc(20 * var(--u))) / repeat(3, calc(20 * var(--u))); }
   .sideways.b-by-a .joystick { width: calc(62 * var(--u)); }
+  /* Volant (joystick en course de Mario Kart, layouts.mjs), de côté. Pouce gauche : le joystick. Pouce droit : quatre
+     gros boutons égaux en carré, ceux qu'on enchaîne en bas, sous le pouce au repos (B pour déraper, Objet), 1 et 2
+     au-dessus, dans l'ordre de la Wiimote. B y est toujours : sous le pouce qui dirige, on ne pourrait pas déraper.
+     Au milieu, comme dans les autres dispositions : A, gros, puis +, Home et −, petits, peu servis en course. */
+  .item { display: none; }
+  body.sideways.stick.volant .remote {
+    /* Le carré serré contre le bord droit, où pivote le pouce. */
+    grid-template-columns: 2.2fr 1fr .7fr repeat(2, calc(31 * var(--u))) .35fr;
+    grid-template-rows: repeat(6, 1fr);
+    grid-template-areas:
+      "dpad a plus  one two  leds"
+      "dpad a plus  one two  leds"
+      "dpad a home  one two  leds"
+      "dpad a home  b   item leds"
+      "dpad a minus b   item leds"
+      "dpad a minus b   item leds";
+  }
+  body.sideways.stick.volant .one, body.sideways.stick.volant .two, body.sideways.stick.volant .b, body.sideways.stick.volant .item {
+    display: block;
+    width: calc(29 * var(--u));
+    height: calc(29 * var(--u));
+    border-radius: 50%;
+    font-size: calc(9 * var(--u));
+  }
+  body.sideways.stick.volant .item { grid-area: item; font-size: calc(6 * var(--u)); }
+  /* B parmi les autres, de la même couleur (comme B à côté de A), pas en gâchette. */
+  body.sideways.stick.volant .b { background: var(--btn); }
+  body.sideways.stick.volant .b.on { background: var(--btn-on); }
+  body.sideways.stick.volant .a { width: calc(23 * var(--u)); height: calc(23 * var(--u)); font-size: calc(8 * var(--u)); }
+  body.sideways.stick.volant .plus, body.sideways.stick.volant .home, body.sideways.stick.volant .minus {
+    width: calc(12 * var(--u));
+    height: calc(12 * var(--u));
+    font-size: calc(6 * var(--u));
+  }
+  body.sideways.stick.volant .joystick { width: calc(60 * var(--u)); }
 
   /* Panneau des réglages (⚙), dans la scène comme l'écran d'accueil. */
   .panel {
@@ -413,9 +452,12 @@
     <button class="settings" id="settings" aria-label="Réglages">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
     </button>
-    <button class="pad" id="pad" aria-label="Croix ou volant">
+    <button class="cruise" id="cruise" aria-label="Accélération automatique : 2 reste enfoncé">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1zm2 0h6V8a3 3 0 0 0-6 0v2z"/></svg>
+    </button>
+    <button class="pad" id="pad" aria-label="Croix ou joystick">
       <svg class="for-dpad" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>
-      <svg class="for-wheel" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3.5 11.5h17M12 14v7"/><circle cx="12" cy="12" r="2.4"/></g></svg>
+      <svg class="for-stick" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="4.5"/></svg>
     </button>
     <div class="dpad" role="group" aria-label="Croix directionnelle">
       <button data-dir="up" aria-label="Haut"></button>
@@ -433,6 +475,7 @@
     <button class="plus" data-btn="+" aria-label="Plus">+</button>
     <button class="one" data-btn="1">1</button>
     <button class="two" data-btn="2">2</button>
+    <button class="item" id="item" data-item aria-label="Objet : devant, ou derrière avec le joystick tiré vers soi">Objet</button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
     <output class="lag" id="lag" aria-label="Délai de la liaison" hidden>—</output>
     <button class="recenter" id="aim" aria-label="Calibrer le pointeur aux coins de l'écran, puis le recentrer">⌖</button>

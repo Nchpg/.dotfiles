@@ -23,7 +23,10 @@ const (
 	// Dolphin la renvoie toutes les 200 ms : sans nouvelle pendant ce temps (Dolphin fermé, réseau coupé), le
 	// téléphone arrête de vibrer.
 	rumbleTimeout = time.Second
-	slots         = 4
+	// (Non officiel) jeu en cours dans le Dolphin corrigé, renvoyé chaque seconde, cf. setGame.
+	msgGame     = 0x110003
+	gameTimeout = 3 * time.Second
+	slots       = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
 	// Message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16), puis, à partir de
@@ -90,7 +93,10 @@ type server struct {
 	wakes [slots]*time.Timer
 	// Arrêt de la vibration de chaque slot si Dolphin se tait, cf. rumble.
 	rumbleStop [slots]*time.Timer
-	subs       map[string]*subscriber
+	// Jeu en cours, et son oubli si Dolphin se tait, cf. setGame.
+	game     gameInfo
+	gameStop *time.Timer
+	subs     map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones, et le fichier qui le garde entre deux redémarrages (keepInvite).
 	invite     string
 	inviteFile string
@@ -213,7 +219,27 @@ func (s *server) handleRequest(pkt []byte, from net.Addr) {
 			return
 		}
 		s.rumble(int(pkt[21]), pkt[29])
+	case msgGame:
+		// Identifiant du jeu (zéros sans jeu), puis étape de la course de Mario Kart Wii + 1 (0 hors course).
+		if len(pkt) < 27 {
+			return
+		}
+		var g gameInfo
+		if id := pkt[20:26]; validGameID(id) {
+			g = gameInfo{Game: string(id), Stage: pkt[26]}
+		}
+		s.setGame(g)
 	}
+}
+
+// validGameID : six lettres majuscules ou chiffres, comme RMCP01.
+func validGameID(id []byte) bool {
+	for _, c := range id {
+		if (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+			return false
+		}
+	}
+	return len(id) == 6
 }
 
 // flags : 0 tous les slots, bit 0 par numéro de slot, bit 1 par MAC.
