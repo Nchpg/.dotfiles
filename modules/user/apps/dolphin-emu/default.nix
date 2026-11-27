@@ -14,16 +14,30 @@ let
 
   cfg = config.userSettings.apps.dolphinEmu;
 
+  # Vibration des manettes DSU (le téléphone comme Wiimote, module wiimote) : le client DSU de Dolphin ne
+  # l'envoyait pas au serveur. Le correctif lui ajoute une sortie « Motor » et le message « Rumble controller
+  # motor » (0x110002) du protocole cemuhook. Dolphin est donc compilé ici, hors du cache.
+  package = cfg.pkgs.dolphin-emu.overrideAttrs (old: {
+    patches = (old.patches or [ ]) ++ [ ./dsu-rumble.patch ];
+  });
+
   # Progression des jeux (mémoire de la Wii, cartes mémoire GameCube), synchronisée par Nextcloud.
   # Précondition : y déplacer Wii/, GC/ et Load/Riivolution/riivolution/save/ de ~/.local/share/dolphin-emu,
   # Dolphin fermé, avant le premier rebuild ; sinon home-manager refuse d'écraser les dossiers existants.
   saves = "${config.home.homeDirectory}/Nextcloud/Jeux/Dolphin";
 in
 {
-  inherit (base) options;
+  options = lib.recursiveUpdate base.options {
+    userSettings.apps.dolphinEmu.package = lib.mkOption {
+      type = lib.types.package;
+      readOnly = true;
+      default = package;
+      description = "Dolphin installé, avec la vibration des manettes DSU.";
+    };
+  };
 
   config = lib.mkMerge [
-    base.config
+    (lib.mkIf cfg.enable { home.packages = [ package ]; })
 
     (lib.mkIf (cfg.enable && config.userSettings.apps.nextcloud.enable) {
       xdg.dataFile =
