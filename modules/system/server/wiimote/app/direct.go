@@ -8,6 +8,7 @@ package main
 import (
 	"crypto/subtle"
 	"crypto/tls"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -24,7 +25,16 @@ const directHeader = 4 + 4
 
 func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), origin string) error {
 	h3 := &http3.Server{
-		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{GetCertificate: getCert, MinVersion: tls.VersionTLS13}),
+		TLSConfig: http3.ConfigureTLSConfig(&tls.Config{
+			// Journal : un téléphone joint la box (sinon, son réseau ou le pare-feu bloquent l'UDP avant).
+			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				if hello.Conn != nil {
+					log.Printf("liaison directe : %s se présente", hello.Conn.RemoteAddr())
+				}
+				return getCert(hello)
+			},
+			MinVersion: tls.VersionTLS13,
+		}),
 		QUICConfig: &quic.Config{
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true,
@@ -35,21 +45,30 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 	wt := &webtransport.Server{
 		H3: h3,
 		// Seule la page de la manette ouvre la liaison (le jeton l'exige déjà).
-		CheckOrigin: func(r *http.Request) bool { return r.Header.Get("Origin") == origin },
+		CheckOrigin: func(r *http.Request) bool {
+			if got := r.Header.Get("Origin"); got != origin {
+				log.Printf("liaison directe refusée à %s : origine %q", r.RemoteAddr, got)
+				return false
+			}
+			return true
+		},
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/wt", func(w http.ResponseWriter, r *http.Request) {
 		p := s.byToken(r.URL.Query().Get("t"))
 		if p == nil {
+			log.Printf("liaison directe refusée à %s : jeton inconnu", r.RemoteAddr)
 			http.Error(w, "jeton inconnu", http.StatusForbidden)
 			return
 		}
 		sess, err := wt.Upgrade(w, r)
 		if err != nil {
+			log.Printf("liaison directe refusée à %s : %v", r.RemoteAddr, err)
 			// Sans réponse explicite, HTTP/3 répondrait 200 : le téléphone croirait la liaison ouverte.
 			http.Error(w, err.Error(), http.StatusForbidden)
 			return
 		}
+		log.Printf("liaison directe ouverte : %s (%s)", p.name, r.RemoteAddr)
 		s.attachDirect(p, sess)
 		defer sess.CloseWithError(0, "")
 		for {

@@ -240,22 +240,32 @@ function send() {
   ws.send(packet.buffer);
 }
 
+// Pourquoi la liaison directe manque, pour les réglages.
+let directIssue = 'WebTransport' in window ? '' : 'navigateur sans UDP (sur iPhone : iOS 26.4 minimum)';
 function showLink() {
-  document.getElementById('link').textContent = direct ? 'directe (UDP)' : 'par Cloudflare (WebSocket)';
+  document.getElementById('link').textContent = direct
+    ? 'directe (UDP)'
+    : `par Cloudflare (WebSocket)${directIssue && ` : ${directIssue}`}`;
 }
+showLink();
 
 async function connectDirect(url) {
   if (!('WebTransport' in window)) return;
+  directIssue = 'essai de la liaison directe…';
+  showLink();
   try {
     const wt = new WebTransport(url);
     await wt.ready;
     direct = { wt, writer: wt.datagrams.writable.getWriter(), seq: 0 };
+    directIssue = '';
     wt.closed.catch(() => {}).finally(() => {
       if (direct?.wt === wt) direct = null;
       showLink();
     });
-  } catch {
-    // Navigateur ou réseau sans UDP : on reste sur le WebSocket.
+  } catch (e) {
+    // Liaison directe refusée ou injoignable (réseau qui bloque l'UDP) : on reste sur le WebSocket. L'erreur du
+    // navigateur, telle quelle, aide à savoir pourquoi.
+    directIssue = `liaison directe impossible (${e?.message || e})`;
   }
   showLink();
 }
