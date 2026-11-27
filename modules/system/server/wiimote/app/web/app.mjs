@@ -260,6 +260,7 @@ async function connectDirect(url) {
     const datagrams = wt.datagrams.createWritable?.() ?? wt.datagrams.writable;
     direct = { wt, writer: datagrams.getWriter(), seq: 0 };
     directIssue = '';
+    readPongs(wt.datagrams.readable);
     wt.closed.catch(() => {}).finally(() => {
       if (direct?.wt === wt) direct = null;
       showLink();
@@ -277,6 +278,32 @@ function closeDirect() {
   direct = null;
   showLink();
 }
+
+// Délai (⚙) : une mesure datée par seconde sur la liaison en service, que le serveur renvoie telle quelle. Affiché :
+// l'aller-retour (médiane des 5 dernières), et sa moitié, le délai d'un appui jusqu'au serveur.
+const pingSize = 8;
+const now32 = () => Math.round(performance.now()) >>> 0;
+let roundTrips = [];
+function pong(data) {
+  if (data.byteLength !== pingSize) return;
+  roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
+  const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
+  document.getElementById('delay').textContent = `≈ ${Math.round(ms / 2)} ms (aller-retour ${ms} ms)`;
+}
+async function readPongs(readable) {
+  const reader = readable?.getReader();
+  for (;;) {
+    const { value, done } = (await reader?.read().catch(() => null)) ?? { done: true };
+    if (done) return;
+    pong(value);
+  }
+}
+setInterval(() => {
+  const ping = new DataView(new ArrayBuffer(pingSize));
+  ping.setUint32(4, now32(), true);
+  if (direct) direct.writer.write(new Uint8Array(ping.buffer)).catch(() => {});
+  else if (ws?.readyState === WebSocket.OPEN) ws.send(ping.buffer);
+}, 1000);
 
 // Liaison directe active : le WebSocket ne porte plus rien, un signe de vie lui évite d'être coupé (2 s).
 setInterval(() => {
@@ -521,9 +548,10 @@ let lost = 0;
 function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${scheme}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
   ws.onopen = () => ws.send(JSON.stringify({ invite: store('invite') ?? '', name: nameInput.value.trim(), resume: session }));
   ws.onmessage = (e) => {
-    if (typeof e.data !== 'string') return;
+    if (typeof e.data !== 'string') return pong(e.data);
     const msg = JSON.parse(e.data);
     if (msg.error) {
       lastError = msg.error;

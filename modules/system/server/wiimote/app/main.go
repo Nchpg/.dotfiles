@@ -32,6 +32,10 @@ var setupPage string
 // verrouillé ou le réseau perdu. C'est aussi le temps qu'un téléphone coupé a pour reprendre sa place.
 const phoneTimeout = 2 * time.Second
 
+// Mesure du délai (réglages de la manette) : 8 octets datés par le téléphone, renvoyés tels quels par la liaison
+// qui les a portés.
+const pingSize = 8
+
 func env(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -217,6 +221,10 @@ func (s *server) phone(ws *websocket.Conn) {
 	var msg []byte
 	for websocket.Message.Receive(ws, &msg) == nil {
 		s.heard(p)
+		if len(msg) == pingSize {
+			websocket.Message.Send(ws, msg)
+			continue
+		}
 		if st, ok := decode(msg); ok {
 			s.push(p, st)
 		}

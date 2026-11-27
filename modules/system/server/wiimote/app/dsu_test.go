@@ -352,6 +352,15 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("état mal relayé : %v", pkt[20:100])
 	}
 
+	// Mesure du délai : renvoyée telle quelle.
+	ping := []byte{0, 0, 0, 0, 1, 2, 3, 4}
+	websocket.Message.Send(phone, ping)
+	var echo []byte
+	phone.SetReadDeadline(time.Now().Add(2 * time.Second))
+	if err := websocket.Message.Receive(phone, &echo); err != nil || string(echo) != string(ping) {
+		t.Fatalf("mesure du délai : %v %v", echo, err)
+	}
+
 	// Téléphone parti : boutons relâchés tout de suite, slot gardé pour une reprise, puis libéré.
 	phone.Close()
 	if pkt := read(100); pkt[51] != 0 {

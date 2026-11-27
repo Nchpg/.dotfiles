@@ -76,6 +76,10 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 			if err != nil {
 				return
 			}
+			if len(msg) == pingSize {
+				sess.SendDatagram(msg)
+				continue
+			}
 			if len(msg) < directHeader {
 				continue
 			}

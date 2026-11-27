@@ -103,6 +103,17 @@ func TestDirectDatagrams(t *testing.T) {
 		t.Fatalf("boutons %b, attendu 100", got)
 	}
 
+	// Mesure du délai : renvoyée telle quelle.
+	ping := []byte{0, 0, 0, 0, 1, 2, 3, 4}
+	if err := sess.SendDatagram(ping); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if echo, err := sess.ReceiveDatagram(ctx); err != nil || string(echo) != string(ping) {
+		t.Fatalf("mesure du délai : %v %v", echo, err)
+	}
+
 	// La manette part : la liaison se ferme.
 	s.release(p)
 	select {
