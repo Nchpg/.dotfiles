@@ -50,6 +50,12 @@ let aimed = null;
 let recentre = (v) => v;
 let ws;
 let lastError = '';
+// Version de la page chargée, lue au chargement. Le serveur annonce la sienne à chaque connexion : si elle diffère
+// (serveur mis à jour depuis), la page se recharge et reprend sa place (jeton de session), au lieu de garder
+// l'ancien code.
+const loadedVersion = fetch('version', { cache: 'no-store' })
+  .then((r) => (r.ok ? r.text() : ''))
+  .catch(() => '');
 // Liaison directe (WebTransport, UDP) que donne le serveur : les états y partent en datagrammes numérotés, sans
 // Cloudflare ni TCP, qui retient tout derrière un paquet perdu. Le WebSocket reste en repli.
 let direct = null;
@@ -642,6 +648,7 @@ function connect() {
     }
     lastError = '';
     if (msg.token) keepSession(msg.token);
+    if (msg.version) loadedVersion.then((v) => v && v !== msg.version && location.reload());
     lost = 0;
     document.body.classList.remove('searching');
     showPlayer(msg.slot);

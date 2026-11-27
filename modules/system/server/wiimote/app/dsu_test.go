@@ -127,6 +127,9 @@ func TestHostPages(t *testing.T) {
 	if png := get("/dolphin/qr.png").Body.Bytes(); len(png) < 8 || string(png[1:4]) != "PNG" {
 		t.Fatal("QR code absent")
 	}
+	if v := get("/version"); v.Body.String() != webVersion || len(webVersion) != 12 || v.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("version de la page : %q (%s)", v.Body.String(), v.Header().Get("Cache-Control"))
+	}
 	if page := get("/app.mjs"); page.Code != http.StatusOK || page.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("page de la manette gardée en cache : %d %q", page.Code, page.Header().Get("Cache-Control"))
 	}
@@ -279,10 +282,11 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatal("origine étrangère acceptée")
 	}
 	var answer struct {
-		Slot  int
-		Token string
-		Error string
-		Retry bool
+		Slot    int
+		Token   string
+		Version string
+		Error   string
+		Retry   bool
 	}
 	connect := func(invite string, resume ...string) *websocket.Conn {
 		t.Helper()
@@ -317,6 +321,9 @@ func TestPhoneToDolphin(t *testing.T) {
 		t.Fatalf("premier téléphone sur le slot %d (%s)", answer.Slot, answer.Error)
 	}
 	firstToken := answer.Token
+	if answer.Version != webVersion {
+		t.Fatalf("version annoncée %q, attendu %q", answer.Version, webVersion)
+	}
 	phone := connect(s.currentInvite())
 	if answer.Error != "" || answer.Slot != 1 {
 		t.Fatalf("second téléphone sur le slot %d (%s)", answer.Slot, answer.Error)

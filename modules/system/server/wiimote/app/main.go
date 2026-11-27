@@ -4,8 +4,10 @@ package main
 
 import (
 	cryptorand "crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -27,6 +29,21 @@ var webFiles embed.FS
 
 //go:embed dolphin.html
 var setupPage string
+
+// Empreinte des fichiers de la page, annoncée aux téléphones (/version, et à chaque connexion) : une page chargée
+// avant une mise à jour du serveur se recharge d'elle-même, au lieu de garder l'ancien code.
+var webVersion = func() string {
+	h := sha256.New()
+	fs.WalkDir(webFiles, "web", func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			data, _ := webFiles.ReadFile(path)
+			h.Write([]byte(path))
+			h.Write(data)
+		}
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))[:12]
+}()
 
 // La PWA renvoie son état au moins toutes les 200 ms : muette plus longtemps sur ses deux liaisons, l'écran est
 // verrouillé ou le réseau perdu. C'est aussi le temps qu'un téléphone coupé a pour reprendre sa place.
@@ -88,6 +105,10 @@ func (s *server) routes(dsuHost, dsuPort string) http.Handler {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache")
 		files.ServeHTTP(w, r)
+	})
+	mux.HandleFunc("GET /version", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		fmt.Fprint(w, webVersion)
 	})
 	mux.Handle("/ws", websocket.Server{Handshake: sameOrigin, Handler: s.phone})
 	mux.HandleFunc("GET /dolphin", func(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +225,7 @@ func (s *server) phone(ws *websocket.Conn) {
 	s.mu.Lock()
 	slot := p.slot
 	s.mu.Unlock()
-	welcome := map[string]any{"slot": slot, "token": p.token}
+	welcome := map[string]any{"slot": slot, "token": p.token, "version": webVersion}
 	if s.directURL != "" {
 		welcome["direct"] = s.directURL + "?t=" + p.token
 	}
