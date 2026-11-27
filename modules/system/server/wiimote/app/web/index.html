@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#1d1f22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -295,10 +295,18 @@
   .panel input[type="range"] { width: 100%; margin: 0; }
   .panel .link { margin: 0; color: var(--paper-soft); font-size: .9rem; }
   .panel .start.quiet { background: transparent; border: 1px solid color-mix(in srgb, var(--paper-ink) 18%, transparent); color: var(--paper-ink); }
+  /* Trop court pour tout tenir : le panneau défile (lui seul, malgré le touch-action du corps). */
+  .panel { overflow-y: auto; place-content: safe center; touch-action: pan-y; }
+  /* De côté, la hauteur manque (titre et OK sortaient de l'écran) : deux colonnes. */
+  .sideways .panel { padding: 1rem; }
+  .sideways .panel form { display: block; columns: 2; column-gap: 1.6rem; width: min(100%, 44rem); }
+  .sideways .panel form > * { break-inside: avoid; margin: 0 0 1rem; }
+  .sideways .panel form > :last-child { margin-bottom: 0; }
+  .sideways .panel .start:not([hidden]) { display: block; margin-inline: auto; }
 
-  /* Dans la scène : tourne avec elle. */
+  /* Hors de la scène, dans le vrai sens de l'écran : celui du clavier qui s'ouvre pour le prénom. */
   .overlay {
-    position: absolute;
+    position: fixed;
     inset: 0;
     display: grid;
     place-content: center;
@@ -351,12 +359,14 @@
     background: #000;
   }
   /* À l'horizontale, la hauteur manque : la caméra passe à gauche du texte. */
-  .sideways .overlay:has(> video:not([hidden])) {
-    grid-template-columns: auto minmax(0, 22rem);
-    column-gap: 2rem;
-    align-items: center;
+  @media (orientation: landscape) {
+    .overlay:has(> video:not([hidden])) {
+      grid-template-columns: auto minmax(0, 22rem);
+      column-gap: 2rem;
+      align-items: center;
+    }
+    .overlay video { grid-column: 1; grid-row: 1 / span 3; width: min(62vmin, 22rem); }
   }
-  .sideways .overlay video { grid-column: 1; grid-row: 1 / span 3; width: min(62vmin, 22rem); }
 </style>
 <script type="module" src="app.mjs"></script>
 </head>
@@ -419,18 +429,20 @@
       <button class="start quiet" id="calibrate" type="button">Calibrer le pointeur</button>
       <p class="link">Vise chaque coin de la télé (↖ ↗ ↘ ↙) et appuie sur ⌖. Ensuite, ⌖ recentre : vise le milieu de l'écran et appuie.</p>
       <p class="link">Liaison : <b id="link">par Cloudflare (WebSocket)</b></p>
+      <button class="start quiet" id="install" type="button" hidden>Installer l'application</button>
+      <p class="link" id="installHint" hidden></p>
       <button class="start" id="closeSettings" type="button">OK</button>
     </form>
   </div>
+</div>
 
-  <div class="overlay" id="overlay">
-    <h1>Wiimote<i>.</i></h1>
-    <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
-    <video id="camera" playsinline muted hidden></video>
-    <input id="name" class="name" maxlength="24" placeholder="Ton prénom" autocomplete="nickname" enterkeyhint="go" aria-label="Ton prénom, affiché à l'hôte" hidden>
-    <button class="start" id="start">Connecter</button>
-    <button class="start" id="scan" hidden>Scanner le QR code</button>
-  </div>
+<div class="overlay" id="overlay">
+  <h1>Wiimote<i>.</i></h1>
+  <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
+  <video id="camera" playsinline muted hidden></video>
+  <input id="name" class="name" maxlength="24" placeholder="Ton prénom" autocomplete="nickname" enterkeyhint="go" aria-label="Ton prénom, affiché à l'hôte" hidden>
+  <button class="start" id="start">Connecter</button>
+  <button class="start" id="scan" hidden>Scanner le QR code</button>
 </div>
 </body>
 </html>

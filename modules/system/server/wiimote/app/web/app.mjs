@@ -84,14 +84,31 @@ function layout() {
   const live = liveAngle();
   hold = holdAngle(hold, live, mode === 'sideways');
   const turned = (hold - live) % 180 !== 0;
-  stage.style.width = `${turned ? innerHeight : innerWidth}px`;
-  stage.style.height = `${turned ? innerWidth : innerHeight}px`;
+  // Taille de la page, pas de la zone visible : zoomée (iOS), innerWidth rétrécit, et la scène avec.
+  const { clientWidth: width, clientHeight: height } = document.documentElement;
+  stage.style.width = `${turned ? height : width}px`;
+  stage.style.height = `${turned ? width : height}px`;
   stage.style.transform = `translate(-50%, -50%) rotate(${hold - live}deg)`;
   document.body.classList.toggle('sideways', mode === 'sideways');
 }
 addEventListener('resize', layout);
 screen.orientation?.addEventListener('change', layout);
 layout();
+
+// iOS ignore user-scalable=no : un pincement à deux pouces zoomait la page, et touch-action empêchait ensuite de
+// dézoomer. Les gestes de Safari sont bloqués ; un zoom qui passerait quand même est annulé en remettant la borne
+// d'échelle du viewport.
+for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, (e) => e.preventDefault());
+document.addEventListener('touchmove', (e) => e.touches.length > 1 && e.preventDefault(), { passive: false });
+const viewport = document.querySelector('meta[name="viewport"]');
+const viewportContent = viewport.content;
+window.visualViewport?.addEventListener('resize', () => {
+  if (visualViewport.scale < 1.01) return;
+  viewport.content = viewportContent.replace(', maximum-scale=1', '');
+  requestAnimationFrame(() => {
+    viewport.content = viewportContent;
+  });
+});
 
 // Android, en plein écran ou installée : l'écran ne bascule même plus. Ailleurs, `layout` compense.
 function lockOrientation() {
@@ -160,6 +177,34 @@ document.getElementById('settingsForm').addEventListener('input', (e) => {
   send();
 });
 document.getElementById('settings').addEventListener('click', () => { panel.hidden = false; });
+
+// Installation (⚙), tant que la manette ne l'est pas : la fenêtre du navigateur quand il en a une (Chrome, Samsung,
+// Edge sur Android), sinon le chemin à suivre (Safari sur iPhone, Firefox). Lu au chargement : le plein écran
+// demandé par Connecter passerait pour une appli installée.
+const installed = navigator.standalone || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+const installButton = document.getElementById('install');
+const installHint = document.getElementById('installHint');
+const apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+let installPrompt = null;
+function showInstall() {
+  installButton.hidden = installed || !installPrompt;
+  installHint.hidden = installed || Boolean(installPrompt);
+  installHint.textContent = apple
+    ? "Pour l'installer : menu Partager de Safari, puis « Sur l'écran d'accueil »."
+    : "Pour l'installer : menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
+}
+showInstall();
+addEventListener('beforeinstallprompt', (e) => {
+  // Pas de bandeau du navigateur en pleine partie : seulement le bouton des réglages.
+  e.preventDefault();
+  installPrompt = e;
+  showInstall();
+});
+installButton.addEventListener('click', () => {
+  installPrompt?.prompt();
+  installPrompt = null;
+  showInstall();
+});
 document.getElementById('closeSettings').addEventListener('click', () => { panel.hidden = true; });
 
 modeButton.addEventListener('click', () => {
@@ -303,7 +348,8 @@ function refreshButtons() {
     if (stickPointers.has(id)) {
       const box = joystick.getBoundingClientRect();
       const radius = box.width / 2;
-      const [lx, ly] = toLocal(x - (box.left + radius), y - (box.top + radius), hold - liveAngle());
+      const origin = stickPointers.get(id) ?? { x: box.left + radius, y: box.top + radius };
+      const [lx, ly] = toLocal(x - origin.x, y - origin.y, hold - liveAngle());
       const dirs = stickDirections(lx, ly, radius);
       const reach = radius * 0.6;
       if (control === 'wheel' && mode === 'sideways') {
@@ -357,16 +403,19 @@ const untrack = (e) => {
   stickPointers.delete(e.pointerId);
   refreshButtons();
 };
-// Joystick : le pouce posé dessus (ou tout près) le garde jusqu'à ce qu'il se lève, même en débordant.
-const stickPointers = new Set();
+// Joystick : le pouce posé dessus (ou tout près) le garde jusqu'à ce qu'il se lève, même en débordant. Posé sur le
+// bouton, il en devient le centre : un pouce posé un peu à côté ne fait pas dériver. Posé sur le bord, la direction
+// compte aussitôt (coup franc du volant).
+const stickPointers = new Map();
 addEventListener('pointerdown', (e) => {
   // Panneau des réglages ouvert : la manette ne réagit pas.
   if (!panel.hidden) return;
   if (control !== 'dpad' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
     const box = joystick.getBoundingClientRect();
     const r = box.width / 2;
-    if (Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r)) < r * 1.3) {
-      stickPointers.add(e.pointerId);
+    const d = Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r));
+    if (d < r * 1.3) {
+      stickPointers.set(e.pointerId, d < r * 0.4 ? { x: e.clientX, y: e.clientY } : null);
       // Pouce posé : le calme commence là (posé directement tout en haut, c'est un coup franc).
       flick = { calm: performance.now(), item: null };
     }
@@ -377,6 +426,16 @@ addEventListener('pointermove', (e) => pointers.has(e.pointerId) && track(e));
 addEventListener('pointerup', untrack);
 addEventListener('pointercancel', untrack);
 addEventListener('contextmenu', (e) => e.preventDefault());
+// Filets : un doigt levé dont le navigateur n'a pas signalé la fin (geste du système, iOS) laissait un bouton ou le
+// joystick enfoncé. Plus aucun doigt sur l'écran, ou la page quittée : tout est relâché.
+function releaseAll() {
+  pointers.clear();
+  stickPointers.clear();
+  refreshButtons();
+}
+for (const type of ['touchend', 'touchcancel']) addEventListener(type, (e) => e.touches.length === 0 && releaseAll());
+addEventListener('blur', releaseAll);
+document.addEventListener('visibilitychange', () => document.hidden && releaseAll());
 
 addEventListener('deviceorientation', (e) => {
   if (e.beta === null) return;
