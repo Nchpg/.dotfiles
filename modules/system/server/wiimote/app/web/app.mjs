@@ -190,7 +190,7 @@ function showInstall() {
   installButton.hidden = installed || !installPrompt;
   installHint.hidden = installed || Boolean(installPrompt);
   installHint.textContent = apple
-    ? "Pour l'installer : menu Partager de Safari, puis « Sur l'écran d'accueil »."
+    ? "Pour l'installer : menu Partager de Safari, « Sur l'écran d'accueil », avec « Ouvrir en tant qu'app web » activé."
     : "Pour l'installer : menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
 }
 showInstall();
