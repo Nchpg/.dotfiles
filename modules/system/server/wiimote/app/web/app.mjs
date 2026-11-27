@@ -256,7 +256,9 @@ async function connectDirect(url) {
   try {
     const wt = new WebTransport(url);
     await wt.ready;
-    direct = { wt, writer: wt.datagrams.writable.getWriter(), seq: 0 };
+    // Safari n'a que createWritable(), qui remplace l'attribut writable dans la spec ; Chrome a encore writable.
+    const datagrams = wt.datagrams.createWritable?.() ?? wt.datagrams.writable;
+    direct = { wt, writer: datagrams.getWriter(), seq: 0 };
     directIssue = '';
     wt.closed.catch(() => {}).finally(() => {
       if (direct?.wt === wt) direct = null;
