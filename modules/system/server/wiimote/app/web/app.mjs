@@ -229,11 +229,17 @@ function send() {
   packet.setUint16(26, aim[0], true);
   packet.setUint16(28, aim[1], true);
   if (direct) {
+    // Réseau qui n'écoule pas tout (4G chargée : QUIC y ralentit l'envoi) : on saute cet état plutôt que de l'empiler
+    // derrière les autres, ce qui retardait tout de plus d'une seconde. Le suivant le remplace, avec le compte des
+    // appuis : aucun ne se perd.
+    if (direct.pending >= 2) return;
     // Numéro croissant (le serveur jette un datagramme doublé par un plus récent) et instant du téléphone.
     datagram.setUint32(0, ++direct.seq, true);
     datagram.setUint32(4, Math.round(performance.now()) >>> 0, true);
     new Uint8Array(datagram.buffer, 8).set(new Uint8Array(packet.buffer));
-    direct.writer.write(new Uint8Array(datagram.buffer.slice(0))).catch(() => {});
+    const link = direct;
+    link.pending++;
+    link.writer.write(new Uint8Array(datagram.buffer.slice(0))).catch(() => {}).finally(() => link.pending--);
     return;
   }
   if (ws?.readyState !== WebSocket.OPEN || ws.bufferedAmount > 1024) return;
@@ -257,8 +263,11 @@ async function connectDirect(url) {
     const wt = new WebTransport(url);
     await wt.ready;
     // Safari n'a que createWritable(), qui remplace l'attribut writable dans la spec ; Chrome a encore writable.
+    // Dans la file du navigateur aussi : un datagramme qui attend depuis plus de 100 ms est jeté, le suivant est plus
+    // frais.
+    if ('outgoingMaxAge' in wt.datagrams) wt.datagrams.outgoingMaxAge = 100;
     const datagrams = wt.datagrams.createWritable?.() ?? wt.datagrams.writable;
-    direct = { wt, writer: datagrams.getWriter(), seq: 0 };
+    direct = { wt, writer: datagrams.getWriter(), seq: 0, pending: 0 };
     directIssue = '';
     readPongs(wt.datagrams.readable);
     wt.closed.catch(() => {}).finally(() => {
@@ -284,8 +293,10 @@ function closeDirect() {
 const pingSize = 8;
 const now32 = () => Math.round(performance.now()) >>> 0;
 let roundTrips = [];
+let lastPong = 0;
 function pong(data) {
   if (data.byteLength !== pingSize) return;
+  lastPong = performance.now();
   roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
   const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
   document.getElementById('delay').textContent = `≈ ${Math.round(ms / 2)} ms (aller-retour ${ms} ms)`;
@@ -299,6 +310,10 @@ async function readPongs(readable) {
   }
 }
 setInterval(() => {
+  if (roundTrips.length && performance.now() - lastPong > 3000) {
+    roundTrips = [];
+    document.getElementById('delay').textContent = 'pas de réponse';
+  }
   const ping = new DataView(new ArrayBuffer(pingSize));
   ping.setUint32(4, now32(), true);
   if (direct) direct.writer.write(new Uint8Array(ping.buffer)).catch(() => {});
