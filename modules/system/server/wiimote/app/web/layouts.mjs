@@ -3,9 +3,10 @@
 // la plus précise à la plus générale, la dernière, sans tag, est la manette de base. Une disposition allume des
 // options (classes du body), la mise en page elle-même reste dans le CSS (index.html) :
 //   volant : en mode joystick, de côté, le joystick braque (1 ou 2 tenu) et le bouton Objet apparaît ;
-//   verrou : de côté, le bouton qui garde 2 enfoncé (accélération automatique).
+//   verrou : de côté, le bouton qui garde 2 enfoncé (accélération automatique) ;
+//   horizontal : tenue horizontale imposée, sans retour à la verticale (la Wiimote seule se tient ainsi en course).
 export const LAYOUTS = [
-  { tags: ['mario-kart', 'course'], volant: true, verrou: true },
+  { tags: ['mario-kart', 'course'], volant: true, verrou: true, horizontal: true },
   { tags: [] },
 ];
 

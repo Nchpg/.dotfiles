@@ -188,17 +188,17 @@ test('sensibilité : l’angle du volant multiplié, sans dépasser 85°', () =>
   near(wheelMotion(2), wheel(85)); // joystick à sensibilité ×2, à fond
 });
 
-test('dispositions : volant et verrou seulement en course de Mario Kart, toutes régions', () => {
+test('dispositions : volant, verrou et tenue horizontale seulement en course de Mario Kart, toutes régions', () => {
   const extras = (game, stage) => {
     const l = layoutFor(gameTags(game, stage));
-    return [Boolean(l.volant), Boolean(l.verrou)];
+    return [Boolean(l.volant), Boolean(l.verrou), Boolean(l.horizontal)];
   };
-  assert.deepEqual(extras('RMCP01', 3), [true, true]);
-  assert.deepEqual(extras('RMCE01', 2), [true, true]); // décompte
-  assert.deepEqual(extras('RMCJ01', 0), [false, false]); // menus
-  assert.deepEqual(extras('RMCK01', 5), [false, false]); // course terminée : menus de fin
-  assert.deepEqual(extras('RSBE01', 3), [false, false]); // autre jeu
-  assert.deepEqual(extras('', 0), [false, false]); // pas de jeu, ou Dolphin sans le correctif
+  assert.deepEqual(extras('RMCP01', 3), [true, true, true]);
+  assert.deepEqual(extras('RMCE01', 2), [true, true, true]); // décompte
+  assert.deepEqual(extras('RMCJ01', 0), [false, false, false]); // menus
+  assert.deepEqual(extras('RMCK01', 5), [false, false, false]); // course terminée : menus de fin
+  assert.deepEqual(extras('RSBE01', 3), [false, false, false]); // autre jeu
+  assert.deepEqual(extras('', 0), [false, false, false]); // pas de jeu, ou Dolphin sans le correctif
 });
 
 test('filtre du pointeur : tremblement gommé au repos, peu de retard en mouvement', () => {

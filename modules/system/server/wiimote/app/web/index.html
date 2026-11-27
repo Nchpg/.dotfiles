@@ -203,6 +203,8 @@
   /* Réglages et croix/joystick : à gauche à la verticale, où la croix (ou le joystick) laisse le coin libre. */
   .settings { right: auto; left: calc(3.5 * var(--u)); }
   .pad { right: auto; left: calc(15.5 * var(--u)); }
+  /* Tenue imposée par le jeu (layouts.mjs). */
+  .mode:disabled { opacity: .35; }
   .mode svg, .theme svg, .pad svg, .settings svg, .cruise svg { width: calc(5.5 * var(--u)); height: calc(5.5 * var(--u)); display: block; margin: auto; fill: currentColor; }
 
   /* Joystick, à la place de la croix (bouton en haut) : le pouce glisse, la croix sort de la même manière. */

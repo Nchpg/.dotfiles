@@ -178,6 +178,8 @@ function applyLayout() {
   gameLayout = wantedLayout;
   document.body.classList.toggle('volant', Boolean(gameLayout.volant));
   document.body.classList.toggle('verrou', Boolean(gameLayout.verrou));
+  modeButton.disabled = Boolean(gameLayout.horizontal);
+  if (gameLayout.horizontal && mode !== 'sideways') setMode('sideways');
 }
 
 // Réglages du panneau ⚙, mémorisés : B à côté de A, vibrations, sensibilités de l'inclinaison et du joystick volant.
@@ -315,14 +317,15 @@ document.getElementById('closeSettings').addEventListener('click', () => { panel
 // Toucher à côté du panneau le ferme aussi.
 panel.addEventListener('click', (e) => e.target === panel && (panel.hidden = true));
 
-modeButton.addEventListener('click', () => {
-  mode = mode === 'sideways' ? 'vertical' : 'sideways';
+function setMode(next) {
+  mode = next;
   hold = mode === 'sideways' ? 90 : 0;
   cruise = false;
   store('mode', mode);
   lockOrientation();
   layout();
-});
+}
+modeButton.addEventListener('click', () => setMode(mode === 'sideways' ? 'vertical' : 'sideways'));
 
 function say(text) {
   status.textContent = text;
