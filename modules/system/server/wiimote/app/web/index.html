@@ -33,6 +33,8 @@
     --paper: #f4f3ef;
     --paper-ink: #121314;
     --paper-soft: #6b6c70;
+    /* Panneau des réglages : posé sur la manette assombrie, il doit s'en détacher. */
+    --panel: var(--paper);
     --accent: #c6f135;
     /* Unité de la manette : le vmin d'un téléphone (écran d'environ 2,1:1 ou plus allongé). Sur un écran plus
        carré (tablette), la longueur la borne aussi : sinon tout déborde en largeur. */
@@ -51,12 +53,13 @@
       --paper: #0f1012;
       --paper-ink: #f1f0eb;
       --paper-soft: #8d8e93;
+      --panel: #26272b;
     }
   }
   :root[data-theme="dark"] {
     --bg: #000; --body: #1c1c1e; --body-edge: #2c2c2f; --btn: #2e2e31;
     --btn-edge: #121214; --btn-on: #45454a; --ink: #9a9a9e; --led-off: #2a3138;
-    --paper: #0f1012; --paper-ink: #f1f0eb; --paper-soft: #8d8e93;
+    --paper: #0f1012; --paper-ink: #f1f0eb; --paper-soft: #8d8e93; --panel: #26272b;
   }
 
   * { box-sizing: border-box; }
@@ -278,7 +281,10 @@
     display: grid;
     place-content: center;
     padding: 1.5rem;
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    /* La manette derrière, assombrie et floutée : le panneau s'en détache nettement. */
+    background: rgb(0 0 0 / .62);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
     font-family: "Bricolage", system-ui, sans-serif;
     touch-action: manipulation;
   }
@@ -289,9 +295,9 @@
     width: min(88vw, 24rem);
     padding: 1.4rem 1.5rem;
     border-radius: 18px;
-    background: var(--paper);
+    background: var(--panel);
     color: var(--paper-ink);
-    box-shadow: 0 1rem 3rem rgb(0 0 0 / .35);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--paper-ink) 14%, transparent), 0 1.2rem 3.5rem rgb(0 0 0 / .55);
   }
   .panel h2 { margin: 0; font-size: 1.4rem; font-weight: 760; letter-spacing: -.02em; }
   .panel label { display: grid; gap: .45rem; font-weight: 500; }
