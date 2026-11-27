@@ -229,6 +229,8 @@ installButton.addEventListener('click', () => {
   showInstall();
 });
 document.getElementById('closeSettings').addEventListener('click', () => { panel.hidden = true; });
+// Toucher à côté du panneau le ferme aussi.
+panel.addEventListener('click', (e) => e.target === panel && (panel.hidden = true));
 
 modeButton.addEventListener('click', () => {
   mode = mode === 'sideways' ? 'vertical' : 'sideways';
