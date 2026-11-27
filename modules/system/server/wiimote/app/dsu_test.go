@@ -94,11 +94,11 @@ func TestDecodeRejectsBadInput(t *testing.T) {
 	if st, ok := decode(msg); !ok || st.motion[0] != 0 {
 		t.Fatal("NaN non neutralisé")
 	}
-	// PWA restée en cache : pointeur sur un octet, ramené sur 16 bits.
-	old := make([]byte, legacyPhoneMessageSize)
-	old[26], old[27] = 255, 128
-	if st, ok := decode(old); !ok || st.pointer != [2]uint16{0xFF00, 0x8000} {
-		t.Fatalf("ancien format mal lu : %v", st.pointer)
+	// Anciens formats (sans compteurs, pointeur sur un octet) : refusés, ces pages se rechargent d'elles-mêmes.
+	for _, size := range []int{countsOffset, countsOffset - 2} {
+		if _, ok := decode(make([]byte, size)); ok {
+			t.Fatalf("ancien format de %d octets accepté", size)
+		}
 	}
 }
 

@@ -55,7 +55,7 @@ func cleanName(name string) string {
 }
 
 // Toujours la première place libre : Dolphin lit les slots 0, 1… pour les Wii Remote 1, 2…, un trou laisserait
-// une manette sans Wii Remote. Un téléphone qui se reconnecte retrouve sa place une fois l'ancienne libérée.
+// une manette sans Wii Remote. Un téléphone qui se reconnecte, lui, reprend la sienne (resume).
 func (s *server) claim(name string, conn *websocket.Conn) *player {
 	s.mu.Lock()
 	defer s.mu.Unlock()

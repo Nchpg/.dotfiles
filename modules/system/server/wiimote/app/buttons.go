@@ -37,7 +37,7 @@ func (h *buttonHold) next(st padState, now time.Time) (uint16, time.Time) {
 		case st.counted && h.started:
 			fresh = int(st.presses[b] - h.count[b]) // modulo 256
 		case st.buttons&bit != 0 && h.in&bit == 0:
-			// Premier message, ou page restée en cache sans compteurs : les fronts.
+			// Premier message, dont les compteurs ne disent encore rien : les fronts.
 			fresh = 1
 		}
 		h.queued[b] = uint8(min(maxQueued, int(h.queued[b])+fresh))

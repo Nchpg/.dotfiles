@@ -26,12 +26,10 @@ const (
 	slots         = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
-	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16), puis
-	// le nombre d'appuis de chaque bouton (un octet par bit, modulo 256, cf. buttons.go).
-	phoneMessageSize = 2 + 6*4 + 4 + 16
-	// Ceux d'une PWA restée en cache sur un téléphone : sans les compteurs, puis avec le pointeur sur un octet.
-	uncountedMessageSize   = 2 + 6*4 + 4
-	legacyPhoneMessageSize = 2 + 6*4 + 2
+	// Message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16), puis, à partir de
+	// countsOffset, le nombre d'appuis de chaque bouton (un octet par bit, modulo 256, cf. buttons.go).
+	countsOffset     = 2 + 6*4 + 4
+	phoneMessageSize = countsOffset + 16
 	// Centre du pointeur sur 16 bits.
 	pointerCenter = 1 << 15
 	// Nom du serveur saisi dans Dolphin : il fait partie du nom du périphérique (DSUClient/<slot>/<nom>).
@@ -41,7 +39,7 @@ const (
 var le = binary.LittleEndian
 
 // Bouton de la Wiimote (bit i du message de la PWA) → entrée DSU que lit Dolphin, et contrôle du profil.
-// Dolphin lit les faces, la croix et L1 en analogique ; les bits numériques servent aux autres clients DSU.
+// Dolphin lit les faces et la croix en analogique ; les bits numériques servent aux autres clients DSU.
 var buttons = [...]struct {
 	control, input      string
 	analog, digitalByte int
@@ -315,7 +313,7 @@ func stickValue(b byte) float64 {
 
 func decode(msg []byte) (padState, bool) {
 	var st padState
-	if len(msg) != phoneMessageSize && len(msg) != uncountedMessageSize && len(msg) != legacyPhoneMessageSize {
+	if len(msg) != phoneMessageSize {
 		return st, false
 	}
 	st.buttons = le.Uint16(msg)
@@ -327,15 +325,9 @@ func decode(msg []byte) (padState, bool) {
 		st.motion[i] = v
 	}
 	for i := range st.pointer {
-		if len(msg) == legacyPhoneMessageSize {
-			st.pointer[i] = uint16(msg[2+6*4+i]) << 8
-		} else {
-			st.pointer[i] = le.Uint16(msg[2+6*4+2*i:])
-		}
+		st.pointer[i] = le.Uint16(msg[2+6*4+2*i:])
 	}
-	if len(msg) == phoneMessageSize {
-		copy(st.presses[:], msg[uncountedMessageSize:])
-		st.counted = true
-	}
+	copy(st.presses[:], msg[countsOffset:])
+	st.counted = true
 	return st, true
 }

@@ -1,5 +1,6 @@
-// Manette Wii depuis un téléphone : la PWA envoie boutons et capteurs par WebSocket, le serveur
-// les rediffuse en DSU (UDP) à Dolphin, qui y voit une manette à gyroscope à mapper sur une Wiimote.
+// Manette Wii depuis un téléphone : la PWA envoie boutons et capteurs par sa liaison directe (direct.go), ou par le
+// WebSocket qui porte la session, et le serveur les rediffuse en DSU (UDP) à Dolphin, qui y voit une manette à
+// gyroscope à mapper sur une Wiimote.
 package main
 
 import (

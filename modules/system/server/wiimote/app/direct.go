@@ -20,7 +20,8 @@ import (
 	"github.com/quic-go/webtransport-go"
 )
 
-// Datagramme : numéro (u32, croissant par session), instant du téléphone (u32, ms), puis l'état du WebSocket.
+// Datagramme : numéro (u32, croissant par session), instant du téléphone (u32, ms), puis l'état, comme par le
+// WebSocket.
 const directHeader = 4 + 4
 
 func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloInfo) (*tls.Certificate, error), origin string) error {
@@ -106,9 +107,6 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 
 // byToken retrouve la manette encore connectée dont le jeton est `token`.
 func (s *server) byToken(token string) *player {
-	if token == "" {
-		return nil
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.seatByTokenLocked(token)

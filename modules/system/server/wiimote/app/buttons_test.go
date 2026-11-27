@@ -377,15 +377,12 @@ func TestServerReleasesTapOnTime(t *testing.T) {
 }
 
 func TestDecodeCounts(t *testing.T) {
-	// Message de la PWA : les compteurs après les 30 octets ; une page restée en cache n'en envoie pas.
+	// Message de la PWA : les compteurs après les 30 premiers octets.
 	msg := make([]byte, phoneMessageSize)
-	msg[uncountedMessageSize] = 7
-	msg[uncountedMessageSize+11] = 2
+	msg[countsOffset] = 7
+	msg[countsOffset+11] = 2
 	st, ok := decode(msg)
 	if !ok || !st.counted || st.presses[0] != 7 || st.presses[11] != 2 {
 		t.Fatalf("compteurs mal lus : %v %v", st.counted, st.presses)
-	}
-	if st, ok := decode(make([]byte, uncountedMessageSize)); !ok || st.counted {
-		t.Fatal("message sans compteurs mal lu")
 	}
 }

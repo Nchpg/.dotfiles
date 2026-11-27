@@ -135,7 +135,6 @@ document.getElementById('theme').addEventListener('click', () => {
 const CONTROLS = ['dpad', 'wheel'];
 let control = store('control') === 'stick' ? 'wheel' : CONTROLS.includes(store('control')) ? store('control') : 'dpad';
 function showControl() {
-  document.body.classList.toggle('stick', control !== 'dpad');
   document.body.classList.toggle('wheel', control === 'wheel');
 }
 showControl();
@@ -438,10 +437,11 @@ setInterval(() => {
   else if (ws?.readyState === WebSocket.OPEN) ws.send(ping.buffer);
 }, 1000);
 
-// Liaison directe active : le WebSocket ne porte plus rien, un signe de vie lui évite d'être coupé (2 s).
+// Liaison directe active : le WebSocket ne porte presque plus rien. Un signe de vie le garde ouvert : nginx coupe un
+// WebSocket muet au bout de 60 s, Cloudflare au bout de 100 s. Le serveur, lui, suit les deux liaisons.
 setInterval(() => {
   if (direct && ws?.readyState === WebSocket.OPEN) ws.send(new Uint8Array([0]));
-}, 500);
+}, 15000);
 
 const toU16 = (v) => Math.round((Math.max(-1, Math.min(1, v)) + 1) / 2 * 0xFFFF);
 
@@ -515,16 +515,16 @@ function refreshButtons() {
       const radius = box.width / 2;
       const origin = stickPointers.get(id) ?? { x: box.left + radius, y: box.top + radius };
       const [lx, ly] = toLocal(x - origin.x, y - origin.y, hold - liveAngle());
-      const dirs = stickDirections(lx, ly, radius);
       const reach = radius * 0.6;
-      if (control === 'wheel' && mode === 'sideways') {
+      if (mode === 'sideways') {
         // Volant : la course horizontale braque, progressivement ; seul un coup de pouce vertical franc fait une
         // flèche (objets de Mario Kart), sans quoi un pouce qui dérive en virage lancerait l'objet.
         wheel = wheelSteer(lx, reach);
         flick = wheelItem(flick, ly, reach, performance.now());
         if (flick.item) next |= 1 << BIT[DPAD[mode][flick.item]];
       } else {
-        for (const dir of dirs) next |= 1 << BIT[DPAD[mode][dir]];
+        // Debout, on ne conduit pas : le joystick fait la croix.
+        for (const dir of stickDirections(lx, ly, radius)) next |= 1 << BIT[DPAD[mode][dir]];
       }
       // Le bouton suit le pouce, sans sortir du socle.
       const scale = Math.min(1, reach / (Math.hypot(lx, ly) || 1));
@@ -582,7 +582,7 @@ const stickPointers = new Map();
 addEventListener('pointerdown', (e) => {
   // Panneau des réglages ouvert : la manette ne réagit pas.
   if (!panel.hidden) return;
-  if (control !== 'dpad' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
+  if (control === 'wheel' && !document.elementFromPoint(e.clientX, e.clientY)?.closest('button')) {
     const box = joystick.getBoundingClientRect();
     const r = box.width / 2;
     const d = Math.hypot(e.clientX - (box.left + r), e.clientY - (box.top + r));
