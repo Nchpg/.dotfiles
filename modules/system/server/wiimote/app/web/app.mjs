@@ -368,22 +368,16 @@ document.getElementById('calibrate').addEventListener('click', () => {
 
 const dpad = document.querySelector('.dpad');
 
-// Recalculé à chaque contact : glisser d'un bouton à l'autre et appuyer à plusieurs doigts marchent.
-// La croix se lit à l'angle du doigt (direction la plus proche, zone plus large que son dessin) ; un autre
-// bouton sous le doigt garde la priorité.
+// Recalculé à chaque contact, pour tous les doigts à la fois. La croix se lit à l'angle du doigt (direction la plus
+// proche), et le doigt la fait tourner en roulant dessus.
 function refreshButtons() {
   const pressed = new Set();
   let next = 0;
   const box = dpad.getBoundingClientRect();
   let thumb = [0, 0];
   let wheel = null;
-  for (const [id, { x, y }] of pointers) {
-    const el = document.elementFromPoint(x, y)?.closest('[data-btn]');
-    if (el && !stickPointers.has(id)) {
-      pressed.add(el);
-      next |= 1 << BIT[el.dataset.btn];
-      continue;
-    }
+  for (const [id, finger] of pointers) {
+    const { x, y } = finger;
     if (stickPointers.has(id)) {
       const box = joystick.getBoundingClientRect();
       const radius = box.width / 2;
@@ -405,16 +399,23 @@ function refreshButtons() {
       thumb = [lx * scale, ly * scale];
       continue;
     }
-    if (control !== 'dpad') continue;
-    const dir = dpadDirection(
-      x - (box.left + box.width / 2),
-      y - (box.top + box.height / 2),
-      box.width / 2,
-      hold - liveAngle(),
-    );
-    if (dir) {
-      pressed.add(dpad.querySelector(`[data-dir="${dir}"]`));
-      next |= 1 << BIT[DPAD[mode][dir]];
+    // Un doigt garde ce sur quoi il s'est posé (ou a glissé en premier) jusqu'à se lever, même s'il en sort : un
+    // bouton reste appuyé, la croix continue de se lire à l'angle du doigt. Un bouton sous le doigt passe avant la
+    // zone de la croix, plus large que son dessin.
+    const dx = x - (box.left + box.width / 2);
+    const dy = y - (box.top + box.height / 2);
+    const rotation = hold - liveAngle();
+    finger.on ??= document.elementFromPoint(x, y)?.closest('[data-btn]')
+      ?? (control === 'dpad' && dpadDirection(dx, dy, box.width / 2, rotation) ? dpad : null);
+    if (finger.on === dpad) {
+      const dir = control === 'dpad' && dpadDirection(dx, dy, box.width / 2, rotation, Infinity);
+      if (dir) {
+        pressed.add(dpad.querySelector(`[data-dir="${dir}"]`));
+        next |= 1 << BIT[DPAD[mode][dir]];
+      }
+    } else if (finger.on) {
+      pressed.add(finger.on);
+      next |= 1 << BIT[finger.on.dataset.btn];
     }
   }
   knob.style.transform = `translate(${thumb[0]}px, ${thumb[1]}px)`;
@@ -434,7 +435,8 @@ function refreshButtons() {
 }
 
 const track = (e) => {
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  // Même objet d'un mouvement à l'autre : il garde ce que le doigt tient (`on`).
+  pointers.set(e.pointerId, Object.assign(pointers.get(e.pointerId) ?? {}, { x: e.clientX, y: e.clientY }));
   refreshButtons();
 };
 const untrack = (e) => {

@@ -221,9 +221,10 @@ const DIRECTIONS = ['right', 'down', 'left', 'up'];
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels
 // d'écran, y vers le bas. `radius` : demi-largeur de la croix ; `rotation` : rotation CSS de l'interface (°,
 // horaire). Une seule à la fois, pas de diagonale par mégarde ; rien au centre ni au-delà de 1,2 rayon.
-export function dpadDirection(dx, dy, radius, rotation) {
+// `reach` : portée, en rayons ; Infinity pour un doigt posé sur la croix, qu'il garde même en en sortant.
+export function dpadDirection(dx, dy, radius, rotation, reach = 1.2) {
   const distance = Math.hypot(dx, dy);
-  if (distance < radius * 0.16 || distance > radius * 1.2) return null;
+  if (distance < radius * 0.16 || distance > radius * reach) return null;
   const [x, y] = toLocal(dx, dy, rotation);
   return DIRECTIONS[(Math.round(Math.atan2(y, x) / (Math.PI / 2)) + 4) % 4];
 }

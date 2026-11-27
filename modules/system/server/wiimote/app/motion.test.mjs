@@ -138,6 +138,7 @@ test('croix tactile : direction la plus proche, centre mort, portée et interfac
   assert.equal(dpadDirection(5, 0, 100, 0), null); // pouce posé au centre
   assert.equal(dpadDirection(115, 0, 100, 0), 'right'); // un peu hors du dessin : toléré
   assert.equal(dpadDirection(130, 0, 100, 0), null); // trop loin
+  assert.equal(dpadDirection(300, 0, 100, 0, Infinity), 'right'); // posé sur la croix puis sorti : gardée
   // Interface tournée de 90° (horaire) : un doigt en bas de l'écran est à droite de la croix dessinée.
   assert.equal(dpadDirection(0, 50, 100, 90), 'right');
 });
