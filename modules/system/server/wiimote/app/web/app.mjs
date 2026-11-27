@@ -167,9 +167,10 @@ const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
 // Vibration jouée par tranches de RUMBLE_SLICE ms, renouvelées tant qu'elle dure : même si le téléphone ignore
 // l'arrêt, elle ne dépasse sa fin que d'une tranche au plus. Le navigateur ne règle pas l'intensité : dans chaque
-// tranche, le moteur vibre par bouffées (5 ou 10 ms sur 20) et ne monte pas à fond ; fortes, en continu.
+// tranche, le moteur vibre par bouffées (10 ou 15 ms sur 20 ; 5 sur 20 ne se sentait presque plus) et ne monte pas
+// à fond ; fortes, en continu.
 const RUMBLE_SLICE = 40;
-const RUMBLE_PATTERNS = [null, [5, 15, 5, 15], [10, 10, 10, 10], [RUMBLE_SLICE]];
+const RUMBLE_PATTERNS = [null, [10, 10, 10, 10], [15, 5, 15, 5], [RUMBLE_SLICE]];
 const RUMBLE_LABELS = ['aucune', 'légères', 'moyennes', 'fortes'];
 // Tester : une vibration de menu de Mario Kart (50 ms), à la force choisie. « Bloqué » : le navigateur refuse ;
 // « Envoyé » sans que rien ne vibre : un réglage du téléphone (vibrations coupées, mode silencieux).
