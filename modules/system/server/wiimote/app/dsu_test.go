@@ -127,6 +127,9 @@ func TestHostPages(t *testing.T) {
 	if png := get("/dolphin/qr.png").Body.Bytes(); len(png) < 8 || string(png[1:4]) != "PNG" {
 		t.Fatal("QR code absent")
 	}
+	if page := get("/app.mjs"); page.Code != http.StatusOK || page.Header().Get("Cache-Control") != "no-cache" {
+		t.Fatalf("page de la manette gardée en cache : %d %q", page.Code, page.Header().Get("Cache-Control"))
+	}
 
 	// Révocation depuis un autre site : refusée ; depuis la page : nouveau jeton.
 	old := s.currentInvite()

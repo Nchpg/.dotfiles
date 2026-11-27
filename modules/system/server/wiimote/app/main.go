@@ -78,7 +78,13 @@ func (s *server) routes(dsuHost, dsuPort string) http.Handler {
 	inviteURL := func(r *http.Request) string { return "https://" + r.Host + "/#" + s.currentInvite() }
 
 	mux := http.NewServeMux()
-	mux.Handle("/", http.FileServerFS(web))
+	// Revalidée à chaque chargement : sans date ni empreinte (fichiers embarqués), Safari gardait l'ancienne page
+	// après une mise à jour.
+	files := http.FileServerFS(web)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		files.ServeHTTP(w, r)
+	})
 	mux.Handle("/ws", websocket.Server{Handshake: sameOrigin, Handler: s.phone})
 	mux.HandleFunc("GET /dolphin", func(w http.ResponseWriter, r *http.Request) {
 		page.Execute(w, map[string]any{"Host": dsuHost, "Port": dsuPort, "Name": dsuName, "Players": []int{1, 2, 3, 4},
