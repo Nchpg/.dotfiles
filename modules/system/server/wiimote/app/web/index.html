@@ -105,7 +105,7 @@
       "one   one  one"
       "two   two  two"
       "leds  leds leds"
-      "shake .    rec";
+      ".     rec  .";
   }
   button {
     font: inherit;
@@ -163,10 +163,7 @@
   .one, .two { width: calc(24 * var(--u)); height: calc(24 * var(--u)); border-radius: 50%; font-size: calc(9 * var(--u)); }
   .one { grid-area: one; }
   .two { grid-area: two; }
-  .recenter, .shake { width: calc(24 * var(--u)); height: calc(9 * var(--u)); border-radius: calc(4.5 * var(--u)); font-size: calc(6 * var(--u)); }
-  .recenter { grid-area: rec; }
-  .shake { grid-area: shake; }
-  .shake svg { width: calc(6 * var(--u)); height: calc(6 * var(--u)); display: block; margin: auto; }
+  .recenter { grid-area: rec; width: calc(24 * var(--u)); height: calc(9 * var(--u)); border-radius: calc(4.5 * var(--u)); font-size: calc(6 * var(--u)); }
 
   .leds { grid-area: leds; place-self: center; display: flex; gap: calc(2.4 * var(--u)); }
   .leds i { width: calc(3.6 * var(--u)); height: calc(2 * var(--u)); border-radius: calc(.6 * var(--u)); background: var(--led-off); }
@@ -213,7 +210,7 @@
   .stick .joystick { display: block; }
   /* Icône du mode en cours (croix, joystick, volant). */
   .pad svg { display: none; }
-  body:not(.stick) .pad .for-dpad, .stick:not(.wheel) .pad .for-stick, .wheel .pad .for-wheel { display: block; }
+  body:not(.stick) .pad .for-dpad, .wheel .pad .for-wheel { display: block; }
 
   /* Wiimote de côté (Mario Kart) : la croix à gauche, B sous le pouce gauche, 1 au-dessus de 2 sous le pouce
      droit : empilés, ils libèrent une colonne pour grossir le reste. Après les règles de base, qu'il remplace. */
@@ -224,8 +221,8 @@
     grid-template-areas:
       "dpad a     plus  one leds"
       "dpad a     plus  one leds"
-      "dpad shake home  one leds"
-      "dpad shake home  two leds"
+      "dpad a     home  one leds"
+      "dpad a     home  two leds"
       "b    b     minus two leds"
       "b    b     minus two leds";
   }
@@ -239,20 +236,17 @@
   .sideways .a { width: calc(26 * var(--u)); height: calc(26 * var(--u)); }
   .sideways .b { width: 90%; height: 78%; }
   .sideways .minus, .sideways .plus, .sideways .home { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
-  /* Secouer (figure, saut) : sous le pouce gauche, libre quand le droit tient 2 pour accélérer. */
-  .sideways .shake { width: calc(23 * var(--u)); height: calc(23 * var(--u)); border-radius: 50%; }
-  .sideways .shake svg { width: calc(10 * var(--u)); height: calc(10 * var(--u)); }
   .sideways .one, .sideways .two { width: calc(39 * var(--u)); height: calc(39 * var(--u)); font-size: calc(13 * var(--u)); }
   /* Croix plus grande à l'horizontale, où elle sert à se déplacer (Mario). */
   .sideways .dpad { grid-template: repeat(3, calc(18 * var(--u))) / repeat(3, calc(18 * var(--u))); }
   .sideways .joystick { width: calc(55 * var(--u)); }
-  /* Option « B à côté de A » : B sous Secouer, la croix (ou le joystick) seule à gauche, centrée et agrandie. */
+  /* Option « B à côté de A » : B sous A, la croix (ou le joystick) seule à gauche, centrée et agrandie. */
   body.sideways.b-by-a .remote {
     grid-template-areas:
       "dpad a     plus  one leds"
       "dpad a     plus  one leds"
-      "dpad shake home  one leds"
-      "dpad shake home  two leds"
+      "dpad a     home  one leds"
+      "dpad b     home  two leds"
       "dpad b     minus two leds"
       "dpad b     minus two leds";
   }
@@ -336,7 +330,7 @@
     transform: none;
   }
   .overlay .start:active { transform: scale(.96); }
-  .overlay .start[hidden], .overlay video[hidden], .overlay .name[hidden] { display: none; }
+  .overlay .start[hidden], .overlay .viewfinder[hidden], .overlay .name[hidden] { display: none; }
   .overlay .name {
     justify-self: center;
     width: min(100%, 15rem);
@@ -351,22 +345,26 @@
     -webkit-user-select: text;
   }
   .overlay .name:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .overlay video {
+  .overlay .viewfinder {
+    position: relative;
     justify-self: center;
     width: min(70vmin, 22rem);
     aspect-ratio: 1;
-    object-fit: cover;
+    overflow: hidden;
     border-radius: 16px;
     background: #000;
   }
+  /* Zoom numérique (caméra sans zoom) : l'image agrandie depuis son centre. */
+  .viewfinder video { display: block; width: 100%; height: 100%; object-fit: cover; transform: scale(var(--zoom, 1)); }
+  .viewfinder input { position: absolute; left: 12%; bottom: .9rem; width: 76%; margin: 0; accent-color: var(--accent); }
   /* À l'horizontale, la hauteur manque : la caméra passe à gauche du texte. */
   @media (orientation: landscape) {
-    .overlay:has(> video:not([hidden])) {
+    .overlay:has(> .viewfinder:not([hidden])) {
       grid-template-columns: auto minmax(0, 22rem);
       column-gap: 2rem;
       align-items: center;
     }
-    .overlay video { grid-column: 1; grid-row: 1 / span 3; width: min(62vmin, 22rem); }
+    .overlay .viewfinder { grid-column: 1; grid-row: 1 / span 3; width: min(62vmin, 22rem); }
   }
 </style>
 <script type="module" src="app.mjs"></script>
@@ -383,9 +381,8 @@
     <button class="settings" id="settings" aria-label="Réglages">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
     </button>
-    <button class="pad" id="pad" aria-label="Croix, joystick ou volant">
+    <button class="pad" id="pad" aria-label="Croix ou volant">
       <svg class="for-dpad" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z"/></svg>
-      <svg class="for-stick" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm0 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
       <svg class="for-wheel" viewBox="0 0 24 24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M3.5 11.5h17M12 14v7"/><circle cx="12" cy="12" r="2.4"/></g></svg>
     </button>
     <div class="dpad" role="group" aria-label="Croix directionnelle">
@@ -404,9 +401,6 @@
     <button class="plus" data-btn="+" aria-label="Plus">+</button>
     <button class="one" data-btn="1">1</button>
     <button class="two" data-btn="2">2</button>
-    <button class="shake" data-btn="Shake" aria-label="Secouer">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l3-5 4 10 4-10 4 10 3-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
     <div class="leds" aria-label="Numéro de joueur"><i></i><i></i><i></i><i></i></div>
     <button class="recenter" id="aim" aria-label="Calibrer le pointeur aux coins de l'écran, puis le recentrer">⌖</button>
   </main>
@@ -421,7 +415,7 @@
         <input type="range" id="tilt" min="0.5" max="2" step="0.1">
       </label>
       <label>
-        <span>Joystick en mode volant <output id="stickOut"></output></span>
+        <span>Joystick <output id="stickOut"></output></span>
         <input type="range" id="stick" min="0.5" max="2" step="0.1">
       </label>
       <label>
@@ -429,9 +423,7 @@
         <input type="range" id="smooth" min="0" max="3" step="1">
       </label>
       <button class="start quiet" id="calibrate" type="button">Calibrer le pointeur</button>
-      <p class="link">Vise chaque coin de la télé (↖ ↗ ↘ ↙) et appuie sur ⌖. Ensuite, ⌖ recentre : vise le milieu de l'écran et appuie.</p>
-      <p class="link">Liaison : <b id="link">par Cloudflare (WebSocket)</b></p>
-      <p class="link">Délai : <b id="delay">—</b></p>
+      <p class="link">Liaison : <b id="link">Cloudflare</b> · <span id="delay">—</span></p>
       <button class="start quiet" id="install" type="button" hidden>Installer l'application</button>
       <p class="link" id="installHint" hidden></p>
       <button class="start" id="closeSettings" type="button">OK</button>
@@ -442,7 +434,10 @@
 <div class="overlay" id="overlay">
   <h1>Wiimote<i>.</i></h1>
   <p id="status">Tenue horizontale pour Mario Kart. Le bouton ⟲ en haut à droite passe à la verticale, pour pointer l'écran.</p>
-  <video id="camera" playsinline muted hidden></video>
+  <div class="viewfinder" id="viewfinder" hidden>
+    <video id="camera" playsinline muted></video>
+    <input type="range" id="zoom" min="1" max="4" step="0.1" value="1" aria-label="Zoom">
+  </div>
   <input id="name" class="name" maxlength="24" placeholder="Ton prénom" autocomplete="nickname" enterkeyhint="go" aria-label="Ton prénom, affiché à l'hôte" hidden>
   <button class="start" id="start">Connecter</button>
   <button class="start" id="scan" hidden>Scanner le QR code</button>

@@ -1,8 +1,8 @@
 import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
 
-// Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go, puis Secouer (`shakeBit`), dont
-// le serveur joue lui-même la secousse vers Dolphin.
-const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10, Shake: 11 };
+// Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
+// téléphone : l'accéléromètre part tel quel.
+const BIT = { A: 0, B: 1, 1: 2, 2: 3, '-': 4, '+': 5, Home: 6, Up: 7, Down: 8, Left: 9, Right: 10 };
 
 // Flèche vue à l'écran → bouton de la Wiimote. De côté, son haut (côté capteur) est à gauche.
 const DPAD = {
@@ -124,10 +124,10 @@ document.getElementById('theme').addEventListener('click', () => {
   store('theme', theme);
 });
 
-// Croix ou joystick, au choix, mémorisé.
-// Croix, joystick ou volant (joystick qui remplace l'inclinaison, pour Mario Kart), au choix, mémorisé.
-const CONTROLS = ['dpad', 'stick', 'wheel'];
-let control = CONTROLS.includes(store('control')) ? store('control') : 'dpad';
+// Croix ou volant (joystick qui remplace l'inclinaison, pour Mario Kart ; à la verticale, il fait la croix), au
+// choix, mémorisé. L'ancien joystick-croix devient le volant.
+const CONTROLS = ['dpad', 'wheel'];
+let control = store('control') === 'stick' ? 'wheel' : CONTROLS.includes(store('control')) ? store('control') : 'dpad';
 function showControl() {
   document.body.classList.toggle('stick', control !== 'dpad');
   document.body.classList.toggle('wheel', control === 'wheel');
@@ -213,8 +213,8 @@ function showInstall() {
   installButton.hidden = installed || !installPrompt;
   installHint.hidden = installed || Boolean(installPrompt);
   installHint.textContent = apple
-    ? "Pour l'installer : menu Partager de Safari, « Sur l'écran d'accueil », avec « Ouvrir en tant qu'app web » activé."
-    : "Pour l'installer : menu du navigateur, puis « Installer l'application » ou « Ajouter à l'écran d'accueil ».";
+    ? "Pour l'installer : Partager, puis « Sur l'écran d'accueil »."
+    : "Pour l'installer : menu du navigateur, puis « Ajouter à l'écran d'accueil ».";
 }
 showInstall();
 addEventListener('beforeinstallprompt', (e) => {
@@ -270,17 +270,15 @@ function send() {
 }
 
 // Pourquoi la liaison directe manque, pour les réglages.
-let directIssue = 'WebTransport' in window ? '' : 'navigateur sans UDP (sur iPhone : iOS 26.4 minimum)';
+let directIssue = 'WebTransport' in window ? '' : 'sans UDP';
 function showLink() {
-  document.getElementById('link').textContent = direct
-    ? 'directe (UDP)'
-    : `par Cloudflare (WebSocket)${directIssue && ` : ${directIssue}`}`;
+  document.getElementById('link').textContent = direct ? 'directe' : `Cloudflare${directIssue && ` (${directIssue})`}`;
 }
 showLink();
 
 async function connectDirect(url) {
   if (!('WebTransport' in window)) return;
-  directIssue = 'essai de la liaison directe…';
+  directIssue = 'essai du direct…';
   showLink();
   try {
     const wt = new WebTransport(url);
@@ -298,9 +296,9 @@ async function connectDirect(url) {
       showLink();
     });
   } catch (e) {
-    // Liaison directe refusée ou injoignable (réseau qui bloque l'UDP) : on reste sur le WebSocket. L'erreur du
-    // navigateur, telle quelle, aide à savoir pourquoi.
-    directIssue = `liaison directe impossible (${e?.message || e})`;
+    // Liaison directe refusée ou injoignable (réseau qui bloque l'UDP) : on reste sur le WebSocket.
+    console.warn('liaison directe', e);
+    directIssue = 'UDP impossible';
   }
   showLink();
 }
@@ -322,7 +320,7 @@ function pong(data) {
   lastPong = performance.now();
   roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
   const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
-  document.getElementById('delay').textContent = `≈ ${Math.round(ms / 2)} ms (aller-retour ${ms} ms)`;
+  document.getElementById('delay').textContent = `≈ ${Math.round(ms / 2)} ms`;
 }
 async function readPongs(readable) {
   const reader = readable?.getReader();
@@ -335,7 +333,7 @@ async function readPongs(readable) {
 setInterval(() => {
   if (roundTrips.length && performance.now() - lastPong > 3000) {
     roundTrips = [];
-    document.getElementById('delay').textContent = 'pas de réponse';
+    document.getElementById('delay').textContent = 'sans réponse';
   }
   const ping = new DataView(new ArrayBuffer(pingSize));
   ping.setUint32(4, now32(), true);
@@ -370,7 +368,7 @@ function updateAim(t) {
 const CORNERS = ['↖', '↗', '↘', '↙'];
 function calibrate() {
   aimed = [];
-  aimButton.textContent = `${CORNERS[0]} coin`;
+  aimButton.textContent = `Vise ${CORNERS[0]}`;
 }
 aimButton.addEventListener('click', () => {
   const now = pointer.direction(hold);
@@ -383,7 +381,7 @@ aimButton.addEventListener('click', () => {
   }
   aimed.push(now);
   if (aimed.length < CORNERS.length) {
-    aimButton.textContent = `${CORNERS[aimed.length]} coin`;
+    aimButton.textContent = `Vise ${CORNERS[aimed.length]}`;
     return;
   }
   const calibrated = screenFrom(aimed);
@@ -637,8 +635,19 @@ function connect() {
 // téléphone (il part dans le navigateur). Le détecteur du navigateur s'il en a un (Chrome sur Android), sinon jsQR
 // (Safari), chargé au premier scan.
 const scanButton = document.getElementById('scan');
+const viewfinder = document.getElementById('viewfinder');
 const camera = document.getElementById('camera');
 const canScan = Boolean(navigator.mediaDevices?.getUserMedia);
+
+// Zoom, pour scanner de loin : celui de la caméra quand elle en a un (Chrome sur Android, vraie définition), sinon
+// numérique : l'image agrandie à l'écran, et seul son centre analysé, en pleine définition.
+const zoom = document.getElementById('zoom');
+let lens = null;
+const digitalZoom = () => (lens ? 1 : Number(zoom.value));
+zoom.addEventListener('input', () => {
+  if (lens) lens.applyConstraints({ advanced: [{ zoom: Number(zoom.value) }] }).catch(() => {});
+  else camera.style.setProperty('--zoom', zoom.value);
+});
 
 async function qrReader() {
   if ('BarcodeDetector' in window) {
@@ -653,12 +662,15 @@ async function qrReader() {
   const canvas = document.createElement('canvas');
   const context = canvas.getContext('2d', { willReadFrequently: true });
   return async () => {
-    // Image réduite : assez pour le QR code de l'hôte, et rapide même sur un vieux téléphone.
-    const scale = Math.min(1, 640 / Math.max(camera.videoWidth, camera.videoHeight, 1));
-    canvas.width = Math.round(camera.videoWidth * scale);
-    canvas.height = Math.round(camera.videoHeight * scale);
+    // Le centre que montre le zoom, réduit à 640 px au plus : assez pour le QR code de l'hôte, et rapide même sur un
+    // vieux téléphone.
+    const z = digitalZoom();
+    const [w, h] = [camera.videoWidth / z, camera.videoHeight / z];
+    const scale = Math.min(1, 640 / Math.max(w, h, 1));
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
     if (!canvas.width || !canvas.height) return [];
-    context.drawImage(camera, 0, 0, canvas.width, canvas.height);
+    context.drawImage(camera, (camera.videoWidth - w) / 2, (camera.videoHeight - h) / 2, w, h, 0, 0, canvas.width, canvas.height);
     const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
     const code = window.jsQR(data, canvas.width, canvas.height, { inversionAttempts: 'dontInvert' });
     return code ? [code.data] : [];
@@ -683,22 +695,31 @@ function idle(message) {
 function stopCamera() {
   camera.srcObject?.getTracks().forEach((track) => track.stop());
   camera.srcObject = null;
-  camera.hidden = true;
+  viewfinder.hidden = true;
   scanButton.textContent = 'Scanner le QR code';
 }
 
 scanButton.addEventListener('click', async () => {
-  if (!camera.hidden) {
+  if (!viewfinder.hidden) {
     stopCamera();
     return;
   }
   try {
-    camera.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    // En haute définition : le zoom numérique a de quoi agrandir.
+    camera.srcObject = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
   } catch {
     idle("Caméra refusée : scanne le QR code avec l'appareil photo du téléphone.");
     return;
   }
-  camera.hidden = false;
+  const [track] = camera.srcObject.getVideoTracks();
+  const range = track?.getCapabilities?.().zoom;
+  lens = range ? track : null;
+  Object.assign(zoom, { min: range?.min ?? 1, max: range ? Math.min(range.max, 10) : 4, step: range?.step || 0.1 });
+  zoom.value = zoom.min;
+  camera.style.setProperty('--zoom', 1);
+  viewfinder.hidden = false;
   scanButton.textContent = 'Annuler';
   await camera.play().catch(() => {});
   let read;
@@ -709,7 +730,7 @@ scanButton.addEventListener('click', async () => {
     idle('Lecteur de QR code indisponible : recharge la page.');
     return;
   }
-  while (!camera.hidden) {
+  while (!viewfinder.hidden) {
     for (const rawValue of await read()) {
       const url = URL.canParse(rawValue) ? new URL(rawValue) : null;
       // Seulement un lien d'invitation de ce site : un autre QR code est ignoré.
