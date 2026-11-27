@@ -18,7 +18,12 @@ const (
 	protocolVersion = 1001
 	msgPorts        = 0x100001
 	msgPadData      = 0x100002
-	slots           = 4
+	// (Non officiel) vibration d'un moteur de la manette, envoyée par le Dolphin corrigé (module dolphin-emu).
+	msgRumble = 0x110002
+	// Dolphin la renvoie toutes les 200 ms : sans nouvelle pendant ce temps (Dolphin fermé, réseau coupé), le
+	// téléphone arrête de vibrer.
+	rumbleTimeout = time.Second
+	slots         = 4
 	// Dolphin se réabonne chaque seconde.
 	subscriptionTTL = 5 * time.Second
 	// Taille d'un message de la PWA : boutons (u16), 6 float32 déjà dans le repère DSU, pointeur x et y (u16), puis
@@ -85,6 +90,8 @@ type server struct {
 	// Appuis rejoués à Dolphin, et le réveil qui relâche un bouton sans attendre de message, cf. buttons.go.
 	hold  [slots]buttonHold
 	wakes [slots]*time.Timer
+	// Arrêt de la vibration de chaque slot si Dolphin se tait, cf. rumble.
+	rumbleStop [slots]*time.Timer
 	subs       map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones. En mémoire : un redémarrage le renouvelle.
 	invite string
@@ -201,6 +208,12 @@ func (s *server) handleRequest(pkt []byte, from net.Addr) {
 			return
 		}
 		s.subscribe(from, pkt[20], pkt[21], pkt[22:28])
+	case msgRumble:
+		// Manette désignée comme pour msgPadData, par son slot (Dolphin), puis moteur (un seul) et intensité.
+		if len(pkt) < 30 || pkt[20]&1 == 0 || pkt[21] >= slots || pkt[28] != 0 {
+			return
+		}
+		s.rumble(int(pkt[21]), pkt[29])
 	}
 }
 

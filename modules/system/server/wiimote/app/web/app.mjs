@@ -143,18 +143,40 @@ let steer = null;
 // Coup de pouce du joystick volant en cours (cf. `wheelItem`).
 let flick = { calm: 0, item: null };
 
-// Réglages du panneau ⚙, mémorisés : B à côté de A, sensibilités de l'inclinaison et du joystick volant.
+// Réglages du panneau ⚙, mémorisés : B à côté de A, vibrations, sensibilités de l'inclinaison et du joystick volant.
 const panel = document.getElementById('panel');
 const gain = (key) => Math.min(2, Math.max(0.5, Number(store(key)) || 1));
 const settings = {
   bByA: store('bByA') === '1',
+  vibrate: store('vibrate') !== '0',
   tilt: gain('tilt'),
   stick: gain('stick'),
   smooth: Math.min(3, Math.max(0, Math.round(Number(store('smooth')) || 0))),
 };
 const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
+// Vibrations (celles du jeu, et un petit retour au toucher), au choix. Sans navigator.vibrate (iPhone : Safari
+// n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
+const vibrateBox = document.getElementById('vibrate');
+vibrateBox.closest('label').hidden = !('vibrate' in navigator);
+// Vibration du jeu en cours (minuterie qui la prolonge), cf. rumble.
+let rumbling = null;
+// Retour au toucher, jamais par-dessus la vibration du jeu, qu'il couperait.
+const buzz = (pattern) => settings.vibrate && !rumbling && navigator.vibrate?.(pattern);
+// Vibration demandée par le jeu (Dolphin, par le serveur), tant qu'elle dure : navigator.vibrate ne tient qu'une
+// durée, renouvelée tant qu'elle n'est pas arrêtée. La Wiimote n'a qu'un moteur, tout ou rien.
+function rumble(level) {
+  clearInterval(rumbling);
+  rumbling = null;
+  if (!level || !settings.vibrate || !('vibrate' in navigator)) {
+    navigator.vibrate?.(0);
+    return;
+  }
+  navigator.vibrate(1000);
+  rumbling = setInterval(() => navigator.vibrate(1000), 900);
+}
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
+  vibrateBox.checked = settings.vibrate;
   document.body.classList.toggle('b-by-a', settings.bByA);
   for (const key of ['tilt', 'stick']) {
     document.getElementById(key).value = settings[key];
@@ -173,6 +195,7 @@ document.getElementById('settingsForm').addEventListener('input', (e) => {
     store(e.target.id, e.target.value);
   }
   if (e.target.id === 'smooth') aimFilters = null;
+  if (e.target.id === 'vibrate' && !e.target.checked) rumble(0);
   showSettings();
   send();
 });
@@ -355,7 +378,7 @@ aimButton.addEventListener('click', () => {
   if (!aimed) {
     if (!tv) return calibrate();
     recentre = ((fix, before) => (v) => fix(before(v)))(turnTo(recentre(now), tv.center), recentre);
-    navigator.vibrate?.(20);
+    buzz(20);
     return;
   }
   aimed.push(now);
@@ -368,10 +391,10 @@ aimButton.addEventListener('click', () => {
     tv = calibrated;
     recentre = (v) => v;
     aimFilters = null;
-    navigator.vibrate?.([20, 40, 20]);
+    buzz([20, 40, 20]);
   } else {
     // Coins confondus ou dans le désordre : calibrage refusé, l'ancien reste.
-    navigator.vibrate?.(300);
+    buzz(300);
   }
   aimed = null;
   aimButton.textContent = '⌖';
@@ -443,7 +466,7 @@ function refreshButtons() {
     if (steered) send();
     return;
   }
-  if (next & ~buttons) navigator.vibrate?.(12);
+  if (next & ~buttons) buzz(12);
   for (let b = 0; b < 16; b++) if (next & ~buttons & (1 << b)) presses[b]++;
   buttons = next;
   send();
@@ -570,6 +593,7 @@ function connect() {
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return pong(e.data);
     const msg = JSON.parse(e.data);
+    if ('rumble' in msg) return rumble(msg.rumble);
     if (msg.error) {
       lastError = msg.error;
       retry = msg.retry;
@@ -582,10 +606,11 @@ function connect() {
     showPlayer(msg.slot);
     if (msg.direct && !direct) connectDirect(msg.direct);
     overlay.hidden = true;
-    navigator.vibrate?.([30, 60, 30]);
+    buzz([30, 60, 30]);
     send();
   };
   ws.onclose = () => {
+    rumble(0);
     showPlayer(-1);
     closeDirect();
     if (retry) {
@@ -691,7 +716,7 @@ scanButton.addEventListener('click', async () => {
       if (url?.origin === location.origin && url.hash.length > 1) {
         store('invite', url.hash.slice(1));
         stopCamera();
-        navigator.vibrate?.(30);
+        buzz(30);
         idle('Invitation reçue. Appuie sur Connecter.');
         return;
       }

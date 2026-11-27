@@ -28,6 +28,8 @@ type player struct {
 	seq    uint32
 	// Dernières nouvelles, par l'une ou l'autre liaison, sous s.mu.
 	seen time.Time
+	// Vibration (0-255) dernièrement transmise au téléphone, sous s.mu.
+	rumble uint8
 }
 
 // Nom tapé sur le téléphone, affiché sur la page de l'hôte : sans caractères de contrôle, borné.
@@ -115,6 +117,27 @@ func (s *server) letGo(p *player) {
 	pkt, targets := s.releasedLocked(p.slot)
 	s.mu.Unlock()
 	s.broadcast(pkt, targets)
+}
+
+// rumble transmet au téléphone du slot la vibration que Dolphin demande, quand elle change pour lui : Dolphin la
+// renvoie toutes les 200 ms, et un téléphone arrivé sur la place (échange, reprise) l'apprend ainsi. Sans nouvelle
+// pendant rumbleTimeout, elle s'arrête.
+func (s *server) rumble(slot int, level uint8) {
+	s.mu.Lock()
+	if t := s.rumbleStop[slot]; t != nil {
+		t.Stop()
+	}
+	if level != 0 {
+		s.rumbleStop[slot] = time.AfterFunc(rumbleTimeout, func() { s.rumble(slot, 0) })
+	}
+	p := s.seats[slot]
+	if p == nil || p.rumble == level {
+		s.mu.Unlock()
+		return
+	}
+	p.rumble = level
+	s.mu.Unlock()
+	websocket.JSON.Send(p.conn, map[string]uint8{"rumble": level})
 }
 
 // État reçu du téléphone, rediffusé sur la place qu'il occupe à cet instant (l'hôte a pu la changer).

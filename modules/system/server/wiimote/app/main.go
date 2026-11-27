@@ -256,5 +256,7 @@ func profile(slot int) string {
 		fmt.Fprintf(&b, "IR/%s = `Right %s` + `Left %s` / 254\n", dir[0], dir[1], dir[1])
 	}
 	b.WriteString("IMUIR/Enabled = False\n")
+	// Vibration du jeu, renvoyée au téléphone (Dolphin corrigé, module dolphin-emu).
+	b.WriteString("Rumble/Motor = `Motor`\n")
 	return b.String()
 }

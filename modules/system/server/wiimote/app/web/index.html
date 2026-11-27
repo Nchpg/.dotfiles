@@ -286,6 +286,7 @@
   }
   .panel h2 { margin: 0; font-size: 1.4rem; font-weight: 760; letter-spacing: -.02em; }
   .panel label { display: grid; gap: .45rem; font-weight: 500; }
+  .panel label[hidden] { display: none; }
   .panel label span { display: flex; justify-content: space-between; gap: 1rem; }
   .panel label small { color: var(--paper-soft); font-weight: 400; }
   .panel output { font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -413,9 +414,10 @@
   <div class="panel" id="panel" hidden>
     <form id="settingsForm">
       <h2>Réglages</h2>
-      <label class="check"><input type="checkbox" id="bByA"><span>B à côté de A <small>croix seule à gauche</small></span></label>
+      <label class="check"><input type="checkbox" id="bByA"><span>B à côté de A</span></label>
+      <label class="check"><input type="checkbox" id="vibrate"><span>Vibrations</span></label>
       <label>
-        <span>Inclinaison pour tourner <output id="tiltOut"></output></span>
+        <span>Inclinaison <output id="tiltOut"></output></span>
         <input type="range" id="tilt" min="0.5" max="2" step="0.1">
       </label>
       <label>

@@ -104,7 +104,7 @@ func TestProfile(t *testing.T) {
 	p := profile(1)
 	for _, want := range []string{"Device = DSUClient/1/Telephone", "Buttons/2 = `Triangle`", "D-Pad/Up = `Pad N`", "IR/Up = `Right Y+` + `Left Y+` / 254",
 		"IMUAccelerometer/Forward = `Accel Forward`", "IMUGyroscope/Yaw Right = `Gyro Yaw Right`",
-		"IR/Up = `Right Y+`", "IR/Left = `Right X-`", "IMUIR/Enabled = False"} {
+		"IR/Up = `Right Y+`", "IR/Left = `Right X-`", "IMUIR/Enabled = False", "Rumble/Motor = `Motor`"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("profil sans %q :\n%s", want, p)
 		}
@@ -350,6 +350,38 @@ func TestPhoneToDolphin(t *testing.T) {
 	pkt := read(100)
 	if pkt[20] != 1 || pkt[51] != 255 || math.Float32frombits(le.Uint32(pkt[80:])) != -1 || pkt[42] != 255 || pkt[43] != 0 {
 		t.Fatalf("état mal relayé : %v", pkt[20:100])
+	}
+
+	// Vibration demandée par Dolphin pour le slot 1 : transmise au téléphone quand elle change, pas à chaque
+	// renvoi ; puis arrêtée si Dolphin se tait.
+	vibration := func() int {
+		t.Helper()
+		var got map[string]int
+		phone.SetReadDeadline(time.Now().Add(rumbleTimeout + time.Second))
+		if err := websocket.JSON.Receive(phone, &got); err != nil {
+			t.Fatal(err)
+		}
+		v, ok := got["rumble"]
+		if !ok {
+			t.Fatalf("message sans vibration : %v", got)
+		}
+		return v
+	}
+	rumble := func(slot, level byte) { dolphin.Write(request(msgRumble, 1, slot, 0, 0, 0, 0, 0, 0, 0, level)) }
+	rumble(1, 255)
+	rumble(1, 255)
+	rumble(0, 255) // place vide
+	rumble(1, 0)
+	if a, b := vibration(), vibration(); a != 255 || b != 0 {
+		t.Fatalf("vibrations transmises : %d puis %d, attendu 255 puis 0", a, b)
+	}
+	rumble(1, 128)
+	if v := vibration(); v != 128 {
+		t.Fatalf("vibration %d, attendu 128", v)
+	}
+	start := time.Now()
+	if v := vibration(); v != 0 || time.Since(start) < rumbleTimeout/2 {
+		t.Fatalf("vibration %d après %v sans nouvelle de Dolphin, attendu 0 après %v", v, time.Since(start), rumbleTimeout)
 	}
 
 	// Mesure du délai : renvoyée telle quelle.
