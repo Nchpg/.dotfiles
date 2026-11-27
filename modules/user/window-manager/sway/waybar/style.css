@@ -66,6 +66,8 @@ window#waybar {
 #custom-backlight  { color: @base09@; }
 #wireplumber       { color: @base0E@; }
 #custom-swaync     { color: @base0A@; }
+#idle_inhibitor             { color: @base04@; }
+#idle_inhibitor.activated   { color: @base09@; }
 #custom-disk       { color: @base0C@; }
 #custom-battery    { color: @base0B@; }
 #custom-weather    { color: @base0C@; }

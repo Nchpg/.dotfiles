@@ -279,6 +279,7 @@ in
             "custom/backlight"
             "wireplumber"
             "custom/swaync"
+            "idle_inhibitor"
             "custom/disk"
             "custom/battery"
             "custom/weather"
@@ -398,6 +399,17 @@ in
             on-click = "${swaync} -t -sw";
           }
           // withMenu "notifications";
+
+        # Caféine : inhibiteur Wayland, swayidle ne verrouille/éteint/met en veille plus tant qu'il est actif.
+        idle_inhibitor = {
+          format = "{icon}";
+          format-icons = {
+            activated = mkIcon "f0176"; # md-coffee
+            deactivated = mkIcon "f06ca"; # md-coffee-outline
+          };
+          tooltip-format-activated = "Caféine : pas de veille";
+          tooltip-format-deactivated = "Veille auto active";
+        };
 
         "custom/disk" = {
           exec = "${scriptDir}/disk.sh";
