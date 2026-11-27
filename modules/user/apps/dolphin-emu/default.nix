@@ -14,13 +14,14 @@ let
 
   cfg = config.userSettings.apps.dolphinEmu;
 
-  # Vibration des manettes DSU (le téléphone comme Wiimote, module wiimote) : le client DSU de Dolphin ne
-  # l'envoyait pas au serveur. Le correctif lui ajoute une sortie « Motor » et le message « Rumble controller
-  # motor » (0x110002) du protocole cemuhook. Dolphin est donc compilé ici, hors du cache. Un bump touchant ces
-  # fichiers fait échouer le build : refaire le patch sur les nouvelles sources.
+  # Client DSU (le téléphone comme Wiimote, module wiimote). Vibration : le client DSU de Dolphin ne l'envoyait pas
+  # au serveur ; le correctif lui ajoute une sortie « Motor » et le message « Rumble controller motor » (0x110002)
+  # du protocole cemuhook. Jeu en cours (0x110003, non officiel) : son identifiant et, pour Mario Kart Wii, l'étape
+  # de la course, lue dans sa mémoire ; la manette affiche les boutons qui vont avec. Dolphin est donc compilé ici,
+  # hors du cache. Un bump touchant ces fichiers fait échouer le build : refaire le patch sur les nouvelles sources.
   package = myLib.packaging.mkGuardedPatch {
     package = cfg.pkgs.dolphin-emu;
-    patch = ./dsu-rumble.patch;
+    patch = ./dsu-client.patch;
     files = {
       "Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.cpp" =
         "1991a1714891ee47dc9b208f320976562ce6bc1e6c49943210c5c2114a5ea051";
@@ -41,7 +42,7 @@ in
       type = lib.types.package;
       readOnly = true;
       default = package;
-      description = "Dolphin installé, avec la vibration des manettes DSU.";
+      description = "Dolphin installé, avec la vibration des manettes DSU et le jeu en cours.";
     };
   };
 

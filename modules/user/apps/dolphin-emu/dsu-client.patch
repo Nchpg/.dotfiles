@@ -1,0 +1,243 @@
+--- a/Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.cpp
++++ b/Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPClient.cpp
+@@ -5,7 +5,9 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <atomic>
+ #include <chrono>
++#include <cmath>
+ #include <tuple>
+ 
+ #include <SFML/Network/SocketSelector.hpp>
+@@ -20,6 +22,9 @@
+ #include "Common/ScopeGuard.h"
+ #include "Common/StringUtil.h"
+ #include "Common/Thread.h"
++#include "Core/ConfigManager.h"
++#include "Core/HW/Memmap.h"
++#include "Core/System.h"
+ #include "InputCommon/ControllerInterface/ControllerInterface.h"
+ #include "InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPProto.h"
+ #include "SFML/Network/IpAddress.hpp"
+@@ -97,6 +102,23 @@
+   using AccelerometerInput = MotionInput;
+   using GyroInput = MotionInput;
+ 
++  // Rumble motor of the server's controller. SetState comes from the emulation thread: the intensity is
++  // only stored here, UpdateInput sends it.
++  class Motor final : public Output
++  {
++  public:
++    explicit Motor(std::atomic<u8>& intensity) : m_intensity(intensity) {}
++    std::string GetName() const override { return "Motor"; }
++    void SetState(ControlState state) override
++    {
++      m_intensity.store(static_cast<u8>(std::lround(std::clamp(state, 0.0, 1.0) * 255)),
++                        std::memory_order_relaxed);
++    }
++
++  private:
++    std::atomic<u8>& m_intensity;
++  };
++
+   class BatteryInput final : public Input
+   {
+   public:
+@@ -137,6 +159,9 @@
+ 
+ private:
+   void ResetPadData();
++  void SendRumble(SteadyClock::time_point now);
++  void SendGameInfo(SteadyClock::time_point now);
++  u8 ReadRaceStage() const;
+ 
+   const std::string m_name;
+   const int m_index;
+@@ -156,10 +181,23 @@
+   s16 m_touch_y_max = 0;
+ 
+   const u32 m_client_uid;
++
++  std::atomic<u8> m_rumble{0};
++  u8 m_rumble_sent = 0;
++  SteadyClock::time_point m_next_rumble = SteadyClock::time_point::min();
++
++  // Address of Mario Kart Wii's Raceinfo::sInstance for the running region, 0 for another game.
++  u32 m_race_info = 0;
++  u8 m_race_stage = 0;
++  u8 m_race_stage_sent = 0;
++  SteadyClock::time_point m_next_game_info = SteadyClock::time_point::min();
+ };
+ 
+ using MathUtil::GRAVITY_ACCELERATION;
+ constexpr auto SERVER_REREGISTER_INTERVAL = std::chrono::seconds{1};
++// The protocol asks clients to re-send the rumble state two to ten times per second.
++constexpr auto RUMBLE_RESEND_INTERVAL = std::chrono::milliseconds{200};
++constexpr auto GAME_INFO_INTERVAL = std::chrono::seconds{1};
+ constexpr auto SERVER_LISTPORTS_INTERVAL = std::chrono::seconds{1};
+ constexpr int TOUCH_X_AXIS_MAX = 1000;
+ constexpr int TOUCH_Y_AXIS_MAX = 500;
+@@ -585,6 +623,8 @@
+ 
+   AddInput(new BatteryInput(m_pad_data.battery_status));
+ 
++  AddOutput(new Motor(m_rumble));
++
+   m_touch_x_min = 0;
+   m_touch_y_min = 0;
+   // DS4 touchpad max values
+@@ -639,6 +679,9 @@
+     }
+   }
+ 
++  SendRumble(now);
++  SendGameInfo(now);
++
+   // Receive and handle controller data
+   Proto::Message<Proto::MessageType::FromServer> msg;
+   std::size_t received_bytes;
+@@ -669,6 +712,107 @@
+   return Core::DeviceRemoval::Keep;
+ }
+ 
++// Sends the rumble intensity when it changes, and again every RUMBLE_RESEND_INTERVAL: a lost packet
++// must not leave the controller rumbling, or still.
++void Device::SendRumble(SteadyClock::time_point now)
++{
++  const u8 intensity = m_rumble.load(std::memory_order_relaxed);
++  if (intensity == m_rumble_sent && now < m_next_rumble)
++    return;
++  m_rumble_sent = intensity;
++  m_next_rumble = now + RUMBLE_RESEND_INTERVAL;
++
++  Proto::Message<Proto::MessageType::RumbleRequest> msg(m_client_uid);
++  auto& rumble = msg.m_message;
++  rumble.register_flags = Proto::RegisterFlags::PadID;
++  rumble.pad_id_to_register = m_index;
++  rumble.motor_id = 0;
++  rumble.intensity = intensity;
++  msg.Finish();
++  const std::optional<sf::IpAddress> server_ip = sf::IpAddress::resolve(m_server_address);
++  if (!server_ip ||
++      m_socket.send(&rumble, sizeof(rumble), *server_ip, m_server_port) != sf::Socket::Status::Done)
++  {
++    ERROR_LOG_FMT(CONTROLLERINTERFACE, "DualShockUDPClient SendRumble send failed");
++  }
++}
++
++// Mario Kart Wii's race stage plus one, 0 outside a race: Raceinfo::sInstance only exists during a race, and its
++// stage (offset 0x28) goes intro, countdown, race, finishing, finished. Addresses from SeekyCt/mkw-structures and
++// the region offsets of MKW-SP/Pulsar mods.
++u8 Device::ReadRaceStage() const
++{
++  if (m_race_info == 0)
++    return 0;
++  auto& memory = ::Core::System::GetInstance().GetMemory();
++  if (!memory.IsInitialized())
++    return 0;
++  // A pointer to MEM1 or MEM2, checked first: reading elsewhere would raise a panic alert.
++  const auto readable = [&memory](u32 address) {
++    const u32 offset = address & 0x0FFFFFFF;
++    return address % 4 == 0 &&
++           (((address >> 28) == 0x8 && offset + 4 <= memory.GetRamSizeReal()) ||
++            ((address >> 28) == 0x9 && offset + 4 <= memory.GetExRamSizeReal()));
++  };
++  if (!readable(m_race_info))
++    return 0;
++  const u32 race_info = memory.Read_U32(m_race_info);
++  if (race_info == 0 || !readable(race_info + 0x28))
++    return 0;
++  return static_cast<u8>(std::min<u32>(memory.Read_U32(race_info + 0x28), 0xFE) + 1);
++}
++
++// Tells the server which game runs and, for Mario Kart Wii, the race stage, so the phone shows the controls
++// that fit: on a stage change, and every GAME_INFO_INTERVAL (lost packet, server restarted).
++void Device::SendGameInfo(SteadyClock::time_point now)
++{
++  // Emulated memory is only read from the emulation thread, which polls the Wii Remotes and GameCube
++  // controllers; the host thread polls hotkeys.
++  const InputChannel channel = ControllerInterface::GetCurrentInputChannel();
++  if (channel == InputChannel::Bluetooth || channel == InputChannel::SerialInterface)
++    m_race_stage = ReadRaceStage();
++  if (m_race_stage == m_race_stage_sent && now < m_next_game_info)
++    return;
++  m_race_stage_sent = m_race_stage;
++  m_next_game_info = now + GAME_INFO_INTERVAL;
++
++  // "00000000" when no game runs.
++  const std::string game_id = SConfig::GetInstance().GetGameID();
++  const bool running = game_id.size() == 6;
++  m_race_info = 0;
++  if (running && game_id.starts_with("RMC"))
++  {
++    switch (game_id[3])
++    {
++    case 'P':
++      m_race_info = 0x809BD730;
++      break;
++    case 'E':
++      m_race_info = 0x809B8F70;
++      break;
++    case 'J':
++      m_race_info = 0x809BC790;
++      break;
++    case 'K':
++      m_race_info = 0x809ABD70;
++      break;
++    }
++  }
++
++  Proto::Message<Proto::MessageType::GameInfo> msg(m_client_uid);
++  auto& info = msg.m_message;
++  if (running)
++    std::copy(game_id.begin(), game_id.end(), info.game_id.begin());
++  info.race_stage = m_race_info != 0 ? m_race_stage : 0;
++  msg.Finish();
++  const std::optional<sf::IpAddress> server_ip = sf::IpAddress::resolve(m_server_address);
++  if (!server_ip ||
++      m_socket.send(&info, sizeof(info), *server_ip, m_server_port) != sf::Socket::Status::Done)
++  {
++    ERROR_LOG_FMT(CONTROLLERINTERFACE, "DualShockUDPClient SendGameInfo send failed");
++  }
++}
++
+ std::optional<int> Device::GetPreferredId() const
+ {
+   return m_index;
+--- a/Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPProto.h
++++ b/Source/Core/InputCommon/ControllerInterface/DualShockUDPClient/DualShockUDPProto.h
+@@ -186,6 +186,33 @@
+   float gyro_roll_deg_s;
+ };
+ 
++// (Unofficial) Rumble controller motor: intensity 0-255 of one motor of the controller identified as in
++// PadDataRequest. Clients re-send it regularly, servers stop the motor when it stops coming.
++struct RumbleRequest
++{
++  static constexpr auto FROM = CLIENT;
++  static constexpr auto TYPE = 0x110002U;
++  MessageHeader header;
++  u32 message_type;
++  RegisterFlags register_flags;
++  u8 pad_id_to_register;
++  std::array<u8, 6> mac_address_to_register;
++  u8 motor_id;
++  u8 intensity;
++};
++
++// (Unofficial) Game running in the client: its six-character ID (zeros when none) and, for Mario Kart Wii, the
++// race stage plus one (0 outside a race). Clients re-send it every second.
++struct GameInfo
++{
++  static constexpr auto FROM = CLIENT;
++  static constexpr auto TYPE = 0x110003U;
++  MessageHeader header;
++  u32 message_type;
++  std::array<char, 6> game_id;
++  u8 race_stage;
++};
++
+ struct FromServer
+ {
+   union
