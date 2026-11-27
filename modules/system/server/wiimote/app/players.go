@@ -6,6 +6,7 @@ package main
 import (
 	"crypto/rand"
 	"log"
+	"math"
 	"net"
 	"strings"
 	"time"
@@ -29,8 +30,12 @@ type player struct {
 	seq    uint32
 	// Dernières nouvelles, par l'une ou l'autre liaison, sous s.mu.
 	seen time.Time
-	// Vibration (0-255) dernièrement transmise au téléphone, sous s.mu.
-	rumble uint8
+	// Vibration (0-255) transmise au téléphone, son début, la durée de la dernière finie et le numéro du dernier
+	// changement, cf. rumble ; sous s.mu.
+	rumble    uint8
+	rumbleAt  time.Time
+	rumbleMs  uint16
+	rumbleSeq uint8
 }
 
 // Nom tapé sur le téléphone, affiché sur la page de l'hôte : sans caractères de contrôle, borné.
@@ -120,9 +125,12 @@ func (s *server) letGo(p *player) {
 	s.broadcast(pkt, targets)
 }
 
-// rumble transmet au téléphone du slot la vibration que Dolphin demande, quand elle change pour lui : Dolphin la
-// renvoie toutes les 200 ms, et un téléphone arrivé sur la place (échange, reprise) l'apprend ainsi. Sans nouvelle
-// pendant rumbleTimeout, elle s'arrête.
+// rumble transmet au téléphone du slot la vibration que Dolphin demande (il la renvoie toutes les 200 ms). Par la
+// liaison directe, à chaque paquet de Dolphin : un datagramme perdu est rattrapé au suivant. Par le WebSocket (par
+// Cloudflare), à chaque changement seulement : le secours si la liaison directe manque. Chaque changement est
+// numéroté, pour qu'un datagramme en retard ne relance pas une vibration finie, et l'arrêt porte la durée de la
+// vibration dans le jeu (souvent 15 à 50 ms), que le téléphone rejoue telle quelle même si le réseau lui livre le
+// début et la fin ensemble. Sans nouvelle de Dolphin pendant rumbleTimeout, elle s'arrête.
 func (s *server) rumble(slot int, level uint8) {
 	s.mu.Lock()
 	if t := s.rumbleStop[slot]; t != nil {
@@ -132,14 +140,43 @@ func (s *server) rumble(slot int, level uint8) {
 		s.rumbleStop[slot] = time.AfterFunc(rumbleTimeout, func() { s.rumble(slot, 0) })
 	}
 	p := s.seats[slot]
-	if p == nil || p.rumble == level {
+	if p == nil {
 		s.mu.Unlock()
 		return
 	}
-	p.rumble = level
+	changed := p.rumble != level
+	if changed {
+		switch {
+		case p.rumble == 0:
+			p.rumbleAt = time.Now()
+		case level == 0:
+			p.rumbleMs = uint16(min(time.Since(p.rumbleAt).Milliseconds(), math.MaxUint16))
+		}
+		p.rumble = level
+		p.rumbleSeq++
+	}
+	var ms uint16
+	if level == 0 {
+		ms = p.rumbleMs
+	}
+	seq, sess, conn, name := p.rumbleSeq, p.direct, p.conn, p.name
 	s.mu.Unlock()
-	log.Printf("vibration %d → %s (Wii Remote %d)", level, p.name, slot+1)
-	websocket.JSON.Send(p.conn, map[string]uint8{"rumble": level})
+
+	if sess != nil {
+		// Niveau, numéro, durée (ms, u16) : 4 octets, à part des mesures du délai (8).
+		sess.SendDatagram([]byte{level, seq, byte(ms), byte(ms >> 8)})
+	}
+	if !changed {
+		return
+	}
+	if level == 0 {
+		log.Printf("vibration 0 → %s (Wii Remote %d) après %d ms", name, slot+1, ms)
+	} else {
+		log.Printf("vibration %d → %s (Wii Remote %d)", level, name, slot+1)
+	}
+	if conn != nil {
+		websocket.JSON.Send(conn, map[string]int{"rumble": int(level), "seq": int(seq), "ms": int(ms)})
+	}
 }
 
 // État reçu du téléphone, rediffusé sur la place qu'il occupe à cet instant (l'hôte a pu la changer).

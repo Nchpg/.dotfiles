@@ -1,4 +1,4 @@
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelItem, wheelMotion, wheelSteer, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
 // téléphone : l'accéléromètre part tel quel.
@@ -155,8 +155,8 @@ const settings = {
   smooth: Math.min(3, Math.max(0, Math.round(Number(store('smooth')) || 0))),
 };
 const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
-// Vibrations (celles du jeu, et un petit retour au toucher), au choix. Sans navigator.vibrate (iPhone : Safari
-// n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
+// Vibrations du jeu, au choix, comme celles d'une vraie Wiimote : rien d'autre ne fait vibrer. Sans
+// navigator.vibrate (iPhone : Safari n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
 const vibrateBox = document.getElementById('vibrate');
 document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
 // Tester : le navigateur accepte-t-il de vibrer ? S'il accepte sans que le téléphone vibre, c'est un réglage du
@@ -170,19 +170,39 @@ vibrateTest.addEventListener('click', () => {
 });
 // Vibration du jeu en cours (minuterie qui la prolonge), cf. rumble.
 let rumbling = null;
-// Retour au toucher, jamais par-dessus la vibration du jeu, qu'il couperait.
-const buzz = (pattern) => settings.vibrate && !rumbling && navigator.vibrate?.(pattern);
-// Vibration demandée par le jeu (Dolphin, par le serveur), tant qu'elle dure : navigator.vibrate ne tient qu'une
-// durée, renouvelée tant qu'elle n'est pas arrêtée. La Wiimote n'a qu'un moteur, tout ou rien.
-function rumble(level) {
-  clearInterval(rumbling);
-  rumbling = null;
-  if (!level || !settings.vibrate || !('vibrate' in navigator)) {
-    navigator.vibrate?.(0);
+let rumbleStart = 0;
+let rumbleEnd = null;
+// Vibration demandée par le jeu (Dolphin, par le serveur) : navigator.vibrate ne tient qu'une durée, renouvelée
+// tant qu'elle n'est pas arrêtée. À l'arrêt, elle dure ce qu'elle a duré dans le jeu (`ms`, mesuré par le
+// serveur), même si le réseau a livré le début et la fin ensemble. La Wiimote n'a qu'un moteur, tout ou rien.
+function rumble(level, ms = 0) {
+  clearTimeout(rumbleEnd);
+  rumbleEnd = null;
+  if (level && settings.vibrate && 'vibrate' in navigator) {
+    if (!rumbling) {
+      rumbleStart = performance.now();
+      navigator.vibrate(1000);
+      rumbling = setInterval(() => navigator.vibrate(1000), 900);
+    }
     return;
   }
-  navigator.vibrate(1000);
-  rumbling = setInterval(() => navigator.vibrate(1000), 900);
+  if (!rumbling) return;
+  const left = ms - (performance.now() - rumbleStart);
+  if (left > 0) {
+    rumbleEnd = setTimeout(rumble, left, 0);
+    return;
+  }
+  clearInterval(rumbling);
+  rumbling = null;
+  navigator.vibrate(0);
+}
+// Message de vibration du serveur, par la liaison directe (renvoyé toutes les 200 ms) ou le WebSocket : le
+// numéro du changement écarte un datagramme arrivé en retard ; un renvoi ne change rien.
+let rumbleSeq = null;
+function rumbleMessage(level, seq, ms) {
+  if (!notOlder(seq, rumbleSeq)) return;
+  rumbleSeq = seq;
+  rumble(level, ms);
 }
 function showSettings() {
   document.getElementById('bByA').checked = settings.bByA;
@@ -304,7 +324,7 @@ async function connectDirect(url) {
     const datagrams = wt.datagrams.createWritable?.() ?? wt.datagrams.writable;
     direct = { wt, writer: datagrams.getWriter(), seq: 0, pending: 0 };
     directIssue = '';
-    readPongs(wt.datagrams.readable);
+    readDatagrams(wt.datagrams.readable);
     wt.closed.catch(() => {}).finally(() => {
       if (direct?.wt === wt) direct = null;
       showLink();
@@ -345,12 +365,14 @@ function showDelay(oneWay) {
   lag.textContent = oneWay === null ? '—' : `${oneWay} ms`;
   lag.className = `lag ${oneWay === null || oneWay > 80 ? 'bad' : oneWay > 40 ? 'fair' : 'good'}`;
 }
-async function readPongs(readable) {
+// Datagrammes du serveur : mesures du délai renvoyées (8 octets), vibrations (4 : niveau, numéro, durée en ms).
+async function readDatagrams(readable) {
   const reader = readable?.getReader();
   for (;;) {
     const { value, done } = (await reader?.read().catch(() => null)) ?? { done: true };
     if (done) return;
-    pong(value);
+    if (value.byteLength === 4) rumbleMessage(value[0], value[1], value[2] | (value[3] << 8));
+    else pong(value);
   }
 }
 setInterval(() => {
@@ -612,7 +634,7 @@ function connect() {
   ws.onmessage = (e) => {
     if (typeof e.data !== 'string') return pong(e.data);
     const msg = JSON.parse(e.data);
-    if ('rumble' in msg) return rumble(msg.rumble);
+    if ('rumble' in msg) return rumbleMessage(msg.rumble, msg.seq, msg.ms);
     if (msg.error) {
       lastError = msg.error;
       retry = msg.retry;
@@ -629,6 +651,8 @@ function connect() {
   };
   ws.onclose = () => {
     rumble(0);
+    // Nouvelle session : ses numéros repartent de zéro.
+    rumbleSeq = null;
     showPlayer(-1);
     closeDirect();
     if (retry) {

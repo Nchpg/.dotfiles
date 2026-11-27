@@ -114,6 +114,29 @@ func TestDirectDatagrams(t *testing.T) {
 		t.Fatalf("mesure du délai : %v %v", echo, err)
 	}
 
+	// Vibration : par la liaison directe à chaque paquet de Dolphin, renvois compris, numérotée ; l'arrêt porte sa
+	// durée.
+	next := func() []byte {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		d, err := sess.ReceiveDatagram(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	s.rumble(p.slot, 255)
+	s.rumble(p.slot, 255)
+	if a, b := next(), next(); string(a) != string([]byte{255, 1, 0, 0}) || string(b) != string(a) {
+		t.Fatalf("vibration directe : %v puis %v", a, b)
+	}
+	time.Sleep(30 * time.Millisecond)
+	s.rumble(p.slot, 0)
+	if d := next(); d[0] != 0 || d[1] != 2 || int(d[2])|int(d[3])<<8 < 30 {
+		t.Fatalf("arrêt direct : %v, attendu niveau 0, numéro 2, au moins 30 ms", d)
+	}
+
 	// La manette part : la liaison se ferme.
 	s.release(p)
 	select {

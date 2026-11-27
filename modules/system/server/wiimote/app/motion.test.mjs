@@ -1,7 +1,7 @@
 // node --test motion.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { G, gyroPointer, dpadDirection, holdAngle, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
+import { G, gyroPointer, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, wheelItem, wheelMotion, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -126,6 +126,16 @@ test('calibrage aux quatre coins : visée très loin de l’écran, le pointeur 
   for (const v of [[0, -1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0.6, 0.1, -0.8]]) {
     assert.ok(tv(v).every((c) => Number.isFinite(c) && Math.abs(c) <= 1), `${v}`);
   }
+});
+
+test('numéros de vibration : le même ou plus récent, modulo 256', () => {
+  assert.ok(notOlder(3, null));
+  assert.ok(notOlder(5, 5)); // renvoi
+  assert.ok(notOlder(6, 5));
+  assert.ok(!notOlder(4, 5)); // en retard
+  assert.ok(notOlder(0, 255)); // après 255 vient 0
+  assert.ok(!notOlder(255, 0));
+  assert.ok(notOlder(132, 5) && !notOlder(134, 5)); // au-delà de 127 d'avance : pris pour un retard
 });
 
 test('croix tactile : direction la plus proche, centre mort, portée et interface tournée', () => {

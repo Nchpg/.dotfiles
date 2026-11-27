@@ -231,6 +231,12 @@ const DIRECTIONS = ['right', 'down', 'left', 'up'];
 // Croix tactile : la direction (telle que dessinée) la plus proche d'un doigt à (dx, dy) du centre, en pixels
 // d'écran, y vers le bas. `radius` : demi-largeur de la croix ; `rotation` : rotation CSS de l'interface (°,
 // horaire). Une seule à la fois, pas de diagonale par mégarde ; rien au centre ni au-delà de 1,2 rayon.
+// Numéro de changement sur un octet (vibration) : `seq` est-il le dernier appliqué, `last`, ou plus récent ? Un plus
+// ancien est un datagramme arrivé en retard. Modulo 256 : jusqu'à 127 changements d'avance.
+export function notOlder(seq, last) {
+  return last === null || ((seq - last) & 0xff) < 128;
+}
+
 // `reach` : portée, en rayons ; Infinity pour un doigt posé sur la croix, qu'il garde même en en sortant.
 export function dpadDirection(dx, dy, radius, rotation, reach = 1.2) {
   const distance = Math.hypot(dx, dy);

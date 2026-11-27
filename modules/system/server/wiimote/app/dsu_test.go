@@ -354,34 +354,37 @@ func TestPhoneToDolphin(t *testing.T) {
 
 	// Vibration demandée par Dolphin pour le slot 1 : transmise au téléphone quand elle change, pas à chaque
 	// renvoi ; puis arrêtée si Dolphin se tait.
-	vibration := func() int {
+	// Chaque changement, numéroté à la suite ; l'arrêt porte la durée de la vibration.
+	seq := 0
+	vibration := func() (level, ms int) {
 		t.Helper()
 		var got map[string]int
 		phone.SetReadDeadline(time.Now().Add(rumbleTimeout + time.Second))
 		if err := websocket.JSON.Receive(phone, &got); err != nil {
 			t.Fatal(err)
 		}
-		v, ok := got["rumble"]
-		if !ok {
-			t.Fatalf("message sans vibration : %v", got)
+		if seq++; got["seq"] != seq {
+			t.Fatalf("message de vibration %v, numéro attendu %d", got, seq)
 		}
-		return v
+		return got["rumble"], got["ms"]
 	}
 	rumble := func(slot, level byte) { dolphin.Write(request(msgRumble, 1, slot, 0, 0, 0, 0, 0, 0, 0, level)) }
 	rumble(1, 255)
 	rumble(1, 255)
 	rumble(0, 255) // place vide
 	rumble(1, 0)
-	if a, b := vibration(), vibration(); a != 255 || b != 0 {
-		t.Fatalf("vibrations transmises : %d puis %d, attendu 255 puis 0", a, b)
+	if a, _ := vibration(); a != 255 {
+		t.Fatalf("vibration %d, attendu 255", a)
+	}
+	if b, _ := vibration(); b != 0 {
+		t.Fatalf("vibration %d, attendu 0", b)
 	}
 	rumble(1, 128)
-	if v := vibration(); v != 128 {
+	if v, _ := vibration(); v != 128 {
 		t.Fatalf("vibration %d, attendu 128", v)
 	}
-	start := time.Now()
-	if v := vibration(); v != 0 || time.Since(start) < rumbleTimeout/2 {
-		t.Fatalf("vibration %d après %v sans nouvelle de Dolphin, attendu 0 après %v", v, time.Since(start), rumbleTimeout)
+	if v, ms := vibration(); v != 0 || ms < int(rumbleTimeout.Milliseconds())*9/10 {
+		t.Fatalf("vibration %d après %d ms sans nouvelle de Dolphin, attendu 0 après %v", v, ms, rumbleTimeout)
 	}
 
 	// Mesure du délai : renvoyée telle quelle.
