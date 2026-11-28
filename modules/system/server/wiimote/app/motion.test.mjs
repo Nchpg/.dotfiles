@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { gameTags, layoutFor } from './web/layouts.mjs';
-import { G, gyroPointer, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, wheelMotion, withShake, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
+import { G, gyroPointer, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, wheelMotion, withShake, rumbleWave, wheelSteer, toDSU, screenFrom, turnTo, upFromOrientation } from './web/motion.mjs';
 
 const near = (got, want) =>
   want.forEach((w, i) => assert.ok(Math.abs(got[i] - w) < 1e-9, `${got} ≠ ${want}`));
@@ -186,6 +186,20 @@ test('sensibilité : l’angle du volant multiplié, sans dépasser 85°', () =>
   // Le téléphone penché (part hors du plan de l'écran) et le gyroscope ne bougent pas.
   near(tiltGain([-0.6, -0.8, 0, 1, 2, 3], 2).slice(1), [-0.8, 0, 1, 2, 3]);
   near(wheelMotion(2), wheel(85)); // joystick à sensibilité ×2, à fond
+});
+
+test('vibration : relancée en cours de route, elle reprend son rythme sans le casser', () => {
+  // Milliseconde par milliseconde : 1 si le moteur vibre.
+  const timeline = (pattern) => pattern.flatMap((ms, i) => Array(ms).fill(i % 2 === 0 ? 1 : 0));
+  assert.deepEqual(rumbleWave(10, 0, 40), [10, 10, 10, 10]);
+  assert.deepEqual(rumbleWave(20, 57, 300), [300]); // continue
+  assert.deepEqual(rumbleWave(10, 40.3, 40).slice(0, 2), [10, 10]); // phase de performance.now(), arrondie
+  const whole = timeline(rumbleWave(7, 0, 800));
+  for (const phase of [0, 3, 7, 13, 19, 40, 251]) {
+    const resumed = timeline(rumbleWave(7, phase, 300));
+    assert.ok(resumed.length >= 300, `couvre l'horizon (phase ${phase})`);
+    assert.deepEqual(resumed, whole.slice(phase, phase + resumed.length), `phase ${phase}`);
+  }
 });
 
 test('volant au joystick : une secousse franche passe, pas les petits à-coups de la main', () => {

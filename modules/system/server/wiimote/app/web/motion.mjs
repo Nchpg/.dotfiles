@@ -168,6 +168,20 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
+// Motif de navigator.vibrate ([vibre, pause, vibre, …] en ms) pour `on` ms de vibration par période de 20 (le
+// navigateur ne règle pas l'intensité), commencé `phase` ms après le début de la vibration et couvrant au moins
+// `horizon` ms. Une vibration longue est relancée en cours de route : reprise à sa phase, son rythme ne casse pas.
+export const RUMBLE_PERIOD = 20;
+export function rumbleWave(on, phase, horizon) {
+  if (on >= RUMBLE_PERIOD) return [horizon];
+  // navigator.vibrate prend des ms entières ; la phase vient de performance.now().
+  const p = Math.round(phase) % RUMBLE_PERIOD;
+  // La vibration ou la pause en cours, finie ; une pause en cours commence par 0 ms de vibration.
+  const out = p < on ? [on - p, RUMBLE_PERIOD - on] : [0, RUMBLE_PERIOD - p];
+  for (let t = RUMBLE_PERIOD - p; t < horizon; t += RUMBLE_PERIOD) out.push(on, RUMBLE_PERIOD - on);
+  return out;
+}
+
 // Volant au joystick : il remplace l'inclinaison, mais une secousse (figure en sortie de tremplin, wheelie) doit
 // passer. `shake` : accélération du téléphone hors gravité (g, repère DSU), ajoutée au-delà de SHAKE_MIN seulement,
 // pour que les petits à-coups d'une main qui tient le téléphone ne fassent pas bouger le volant.

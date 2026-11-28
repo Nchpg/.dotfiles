@@ -1,5 +1,5 @@
 import { gameTags, layoutFor } from './layouts.mjs';
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, withShake, toDSU, upFromOrientation } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, withShake, rumbleWave, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
 // téléphone : l'accéléromètre part tel quel.
@@ -203,12 +203,16 @@ const times = (k) => `×${k.toFixed(1).replace('.', ',')}`;
 // Vibrations du jeu, au choix, comme celles d'une vraie Wiimote : rien d'autre ne fait vibrer. Sans
 // navigator.vibrate (iPhone : Safari n'a rien qui vibre sans un toucher depuis iOS 26.5), le réglage n'apparaît pas.
 document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
-// Vibration jouée par tranches de RUMBLE_SLICE ms, renouvelées tant qu'elle dure : même si le téléphone ignore
-// l'arrêt, elle ne dépasse sa fin que d'une tranche au plus. Le navigateur ne règle pas l'intensité : le réglage
-// (⚙) fixe combien de ms le moteur vibre sur chaque période de 20 ms ; moins, il ne monte pas à fond. 20 : en
-// continu ; 0 : coupées.
+// Le navigateur ne règle pas l'intensité : le réglage (⚙) fixe combien de ms le moteur vibre sur chaque période de
+// 20 ms (rumbleWave) ; moins, il ne monte pas à fond. 20 : en continu ; 0 : coupées. Une vibration commence par
+// RUMBLE_SLICE ms : même si le téléphone ignorait l'arrêt, une courte (15 à 50 ms dans le jeu) n'en déborderait pas
+// plus. Plus longue, elle est relancée toutes les RUMBLE_REFRESH ms pour RUMBLE_HORIZON ms, reprise à sa phase :
+// relancée à chaque tranche (25 fois par seconde), le moteur redémarrait sans cesse, à des instants inégaux, et une
+// vibration de plusieurs secondes se sentait hachée.
 const RUMBLE_SLICE = 40;
-const rumblePattern = (on) => (on <= 0 ? null : on >= 20 ? [RUMBLE_SLICE] : [on, 20 - on, on, 20 - on]);
+const RUMBLE_REFRESH = 200;
+const RUMBLE_HORIZON = 300;
+const rumblePattern = (on) => (on <= 0 ? null : rumbleWave(on, 0, RUMBLE_SLICE));
 const rumbleLabel = (on) => (on <= 0 ? 'coupées' : on >= 20 ? 'continues' : `${on} ms sur 20`);
 // Tester : une vibration de menu de Mario Kart (50 ms), à la force choisie. « Bloqué » : le navigateur refuse ;
 // « Envoyé » sans que rien ne vibre : un réglage du téléphone (vibrations coupées, mode silencieux).
@@ -236,7 +240,11 @@ function rumble(level, ms = 0) {
     if (!rumbling) {
       rumbleStart = performance.now();
       navigator.vibrate(pattern);
-      rumbling = setInterval(() => navigator.vibrate(pattern), RUMBLE_SLICE);
+      const next = () => {
+        navigator.vibrate(rumbleWave(settings.rumble, performance.now() - rumbleStart, RUMBLE_HORIZON));
+        rumbling = setTimeout(next, RUMBLE_REFRESH);
+      };
+      rumbling = setTimeout(next, RUMBLE_SLICE);
     }
     return;
   }
@@ -246,7 +254,7 @@ function rumble(level, ms = 0) {
     rumbleEnd = setTimeout(rumble, left, 0);
     return;
   }
-  clearInterval(rumbling);
+  clearTimeout(rumbling);
   rumbling = null;
   navigator.vibrate(0);
 }
