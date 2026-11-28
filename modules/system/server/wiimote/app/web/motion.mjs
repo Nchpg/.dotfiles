@@ -168,34 +168,6 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
-// Motif de navigator.vibrate ([vibre, pause, vibre, …] en ms) pour `on` ms de vibration par période de 20 (le
-// navigateur ne règle pas l'intensité), commencé `phase` ms après le début de la vibration et couvrant au moins
-// `horizon` ms. Une vibration longue est relancée en cours de route : reprise à sa phase, son rythme ne casse pas.
-// `period` : 20 ms, ou un grain plus fin à la même part de vibration (15 sur 20 en 10 ms : 8 puis 7 ms, en
-// alternance, pour rester à 75 %).
-export const RUMBLE_PERIOD = 20;
-export function rumbleWave(on, phase, horizon, period = RUMBLE_PERIOD) {
-  if (on >= RUMBLE_PERIOD) return [horizon];
-  const duty = (on * period) / RUMBLE_PERIOD;
-  const onAt = (k) => Math.round((k + 1) * duty) - Math.round(k * duty);
-  // navigator.vibrate prend des ms entières ; la phase vient de performance.now().
-  const t = Math.round(phase);
-  let k = Math.floor(t / period);
-  const p = t - k * period;
-  // La vibration ou la pause en cours, finie ; une pause en cours commence par 0 ms de vibration.
-  const first = onAt(k);
-  const out = p < first ? [first - p, period - first] : [0, period - p];
-  for (let end = (k + 1) * period - t; end < horizon; end += period) {
-    const o = onAt(++k);
-    out.push(o, period - o);
-  }
-  return out;
-}
-
-// Grain d'une vibration longue : 10 ms, plus doux que 20 (le moteur a moins le temps de s'arrêter entre deux
-// impulsions), dès que les impulsions y durent au moins 4 ms ; en dessous, beaucoup de moteurs ne réagissent plus.
-export const rumbleGrain = (on) => (on >= 8 ? 10 : RUMBLE_PERIOD);
-
 // Volant au joystick : il remplace l'inclinaison, mais une secousse (figure en sortie de tremplin, wheelie) doit
 // passer. `shake` : accélération du téléphone hors gravité (g, repère DSU), ajoutée au-delà de SHAKE_MIN seulement,
 // pour que les petits à-coups d'une main qui tient le téléphone ne fassent pas bouger le volant.
