@@ -96,7 +96,9 @@ type server struct {
 	// Jeu en cours, et son oubli si Dolphin se tait, cf. setGame.
 	game     gameInfo
 	gameStop *time.Timer
-	subs     map[string]*subscriber
+	// Trajet serveur → Dolphin (ms, un sens ; 0 : inconnu), cf. pingDolphin.
+	dolphinDelay float64
+	subs         map[string]*subscriber
 	// Jeton du lien d'invitation des téléphones, et le fichier qui le garde entre deux redémarrages (keepInvite).
 	invite     string
 	inviteFile string

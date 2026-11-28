@@ -414,7 +414,8 @@ func TestPhoneToDolphin(t *testing.T) {
 	websocket.Message.Send(phone, ping)
 	var echo []byte
 	phone.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if err := websocket.Message.Receive(phone, &echo); err != nil || string(echo) != string(ping) {
+	// Renvoyée telle quelle, suivie du trajet serveur → Dolphin (µs, 0 ici : pas encore mesuré).
+	if err := websocket.Message.Receive(phone, &echo); err != nil || len(echo) != 12 || string(echo[:8]) != string(ping) {
 		t.Fatalf("mesure du délai : %v %v", echo, err)
 	}
 

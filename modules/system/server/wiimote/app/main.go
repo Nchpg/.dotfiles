@@ -80,6 +80,7 @@ func main() {
 	}
 	go func() { log.Fatal(s.serveDSU()) }()
 	go s.reportStats(statsEvery)
+	go s.pingDolphin()
 
 	// Liaison directe (direct.go) : facultative, la manette passe sinon par le WebSocket.
 	if addr := os.Getenv("WIIMOTE_DIRECT_LISTEN"); addr != "" {
@@ -290,7 +291,7 @@ func (s *server) phone(ws *websocket.Conn) {
 		s.heard(p)
 		if len(msg) == pingSize {
 			s.notePing(p, le.Uint32(msg))
-			websocket.Message.Send(ws, msg)
+			websocket.Message.Send(ws, s.pingReply(msg))
 			continue
 		}
 		if st, ok := decode(msg); ok {

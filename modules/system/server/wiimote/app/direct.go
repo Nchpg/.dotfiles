@@ -90,7 +90,7 @@ func (s *server) serveDirect(conn net.PacketConn, getCert func(*tls.ClientHelloI
 			}
 			if len(msg) == pingSize {
 				s.notePing(p, le.Uint32(msg))
-				sess.SendDatagram(msg)
+				sess.SendDatagram(s.pingReply(msg))
 				continue
 			}
 			if len(msg) < directHeader {

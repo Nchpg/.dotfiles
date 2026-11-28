@@ -20,7 +20,7 @@ let
     pname = "wiimote";
     version = "0.1.0";
     src = ./app;
-    vendorHash = "sha256-19X/XRsvCJzdy+J+KVVtgyzWQqpI5tm4Pv05kO6umng=";
+    vendorHash = "sha256-uoiNkURhZ3CLzBTcRBjtQRtQ5Yk0/MJN0dICUE/RWHQ=";
     env.CGO_ENABLED = 0;
     meta.mainProgram = "wiimote";
   };

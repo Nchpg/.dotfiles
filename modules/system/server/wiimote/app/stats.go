@@ -106,6 +106,7 @@ func (s *server) reportStats(every time.Duration) {
 	for range time.Tick(every) {
 		var lines []line
 		s.mu.Lock()
+		dolphin := s.dolphinDelay
 		for i, p := range s.seats {
 			if p == nil {
 				continue
@@ -121,6 +122,9 @@ func (s *server) reportStats(every time.Duration) {
 			if sum := l.stats.summary(every); sum != "" {
 				log.Printf("%s, liaison %s : %s", l.who, l.link, sum)
 			}
+		}
+		if len(lines) > 0 && dolphin > 0 {
+			log.Printf("trajet serveur → Dolphin : ≈ %.1f ms", dolphin)
 		}
 	}
 }

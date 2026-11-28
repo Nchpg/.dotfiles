@@ -437,8 +437,9 @@ function closeDirect() {
   showLink();
 }
 
-// Délai (⚙) : une mesure datée par seconde sur la liaison en service, que le serveur renvoie telle quelle. Affiché :
-// l'aller-retour (médiane des 5 dernières), et sa moitié, le délai d'un appui jusqu'au serveur.
+// Délai (⚙) : une mesure datée par seconde sur la liaison en service, que le serveur renvoie, suivie de son trajet
+// jusqu'à Dolphin (µs, qu'il mesure lui-même ; 0 : inconnu). Affichés : la moitié de l'aller-retour (médiane des 5
+// dernières), le délai d'un appui jusqu'au serveur, puis jusqu'à Dolphin.
 const pingSize = 8;
 const now32 = () => Math.round(performance.now()) >>> 0;
 let roundTrips = [];
@@ -446,21 +447,27 @@ let lastPong = 0;
 // Dernier aller-retour mesuré (ms, 0 : aucun), glissé dans chaque mesure pour le journal du serveur.
 let lastRoundTrip = 0;
 function pong(data) {
-  if (data.byteLength !== pingSize) return;
+  if (data.byteLength < pingSize) return;
+  const view = new DataView(data.buffer ?? data, data.byteOffset ?? 0, data.byteLength);
   lastPong = performance.now();
-  roundTrips = [...roundTrips.slice(-4), (now32() - new DataView(data.buffer ?? data, data.byteOffset ?? 0).getUint32(4, true)) >>> 0];
+  roundTrips = [...roundTrips.slice(-4), (now32() - view.getUint32(4, true)) >>> 0];
   const ms = [...roundTrips].sort((a, b) => a - b)[roundTrips.length >> 1];
   lastRoundTrip = ms;
-  showDelay(Math.round(ms / 2));
+  const dolphin = data.byteLength >= pingSize + 4 ? view.getUint32(pingSize, true) / 1000 : 0;
+  showDelay(Math.round(ms / 2), dolphin ? Math.round(dolphin) : null);
 }
-// Délai d'un appui jusqu'au serveur (la moitié de l'aller-retour), dans les réglages et sur la manette : vert
-// jusqu'à 40 ms, orange jusqu'à 80, rouge au-delà ou sans réponse.
-function showDelay(oneWay) {
-  const text = oneWay === null ? 'sans réponse' : `≈ ${oneWay} ms`;
-  document.getElementById('delay').textContent = text;
+// Délai d'un appui jusqu'au serveur (la moitié de l'aller-retour), puis du serveur jusqu'à Dolphin, séparés pour
+// voir lequel traîne, dans les réglages et sur la manette ; la couleur suit le total : vert jusqu'à 40 ms, orange
+// jusqu'à 80, rouge au-delà ou sans réponse.
+function showDelay(oneWay, dolphin = null) {
+  const total = oneWay === null ? null : oneWay + (dolphin ?? 0);
+  document.getElementById('delay').textContent =
+    oneWay === null ? 'sans réponse'
+      : dolphin === null ? `≈ ${oneWay} ms jusqu'au serveur`
+        : `≈ ${oneWay} ms jusqu'au serveur + ${dolphin} ms jusqu'à Dolphin = ${total} ms`;
   const lag = document.getElementById('lag');
-  lag.textContent = oneWay === null ? '—' : `${oneWay} ms`;
-  lag.className = `lag ${oneWay === null || oneWay > 80 ? 'bad' : oneWay > 40 ? 'fair' : 'good'}`;
+  lag.textContent = oneWay === null ? '—' : dolphin === null ? `${oneWay} ms` : `${oneWay} + ${dolphin} ms`;
+  lag.className = `lag ${total === null || total > 80 ? 'bad' : total > 40 ? 'fair' : 'good'}`;
 }
 // Datagrammes du serveur : mesures du délai renvoyées (8 octets), vibrations (4 : niveau, numéro, durée en ms).
 async function readDatagrams(readable) {
