@@ -35,15 +35,23 @@ let
 
       read_attr() { cat "$1" 2>/dev/null || true; }
 
-      # Mode performance-max : profil performance et plancher de puissance (cf. intelGraphics.powerLimit).
-      MAX=/var/lib/power-limit/performance-max
+      # Mode gaming : profil performance, plancher de puissance et plafond du processeur (cf. intelGraphics).
+      MAX=/var/lib/power-limit/gaming
       FLOOR=/run/power-limit/floor
 
       profile_label() {
-        if [ "$1" = performance ] && [ -e "$FLOOR" ]; then printf 'performance-max'; else printf '%s' "''${1:-?}"; fi
+        if [ "$1" = performance ] && [ -e "$FLOOR" ]; then printf 'gaming'; else printf '%s' "''${1:-?}"; fi
       }
 
-      # Plafond de puissance (PL1) que pose thermald selon la température, et en performance-max le plancher qui
+      # Plafond du processeur (% de sa fréquence max), posé en gaming pour laisser la puissance au GPU.
+      cpu_label() {
+        local pct
+        pct=$(read_attr /sys/devices/system/cpu/intel_pstate/max_perf_pct)
+        if [ -z "$pct" ]; then printf '?'; return; fi
+        if [ "$pct" -lt 100 ]; then printf '%s %% de sa fréquence max' "$pct"; else printf 'sans plafond'; fi
+      }
+
+      # Plafond de puissance (PL1) que pose thermald selon la température, et en gaming le plancher qui
       # l'empêche de descendre plus bas.
       power_label() {
         local uw floor
@@ -52,9 +60,10 @@ let
         if [ -z "$uw" ]; then printf '?'; return; fi
         printf '%s W' "$((uw / 1000000))"
         if [ -n "$floor" ]; then printf ' (min %s W)' "$((floor / 1000000))"; fi
+        if [ -e /run/power-limit/heat ]; then printf ' — min suspendu : capteur chaud, thermald décide'; fi
       }
 
-      # Économie d'énergie du Wi-Fi, coupée en performance-max : l'état réel de chaque carte, lu sur son pilote.
+      # Économie d'énergie du Wi-Fi, coupée en gaming : l'état réel de chaque carte, lu sur son pilote.
       wifi_label() {
         local wireless state
         local -a states=()
@@ -86,13 +95,13 @@ let
         mapfile -t profs < <(powerprofilesctl list 2>/dev/null \
           | grep -oP '^\s*\*?\s*\K[a-z-]+(?=:)')
         if [ "''${#profs[@]}" -eq 0 ]; then return 0; fi
-        if [ -w "$MAX" ]; then profs+=("performance-max"); fi
+        if [ -w "$MAX" ]; then profs+=("gaming"); fi
         local cur sel
         cur=$(profile_label "$(powerprofilesctl get 2>/dev/null || true)")
         sel=$(gum choose --header "Profil d'alimentation (actuel : $cur)" \
           "''${profs[@]}") || return 0
         [ -n "$sel" ] || return 0
-        if [ "$sel" = performance-max ]; then
+        if [ "$sel" = gaming ]; then
           printf '1\n' > "$MAX"
           sel=performance
         elif [ -w "$MAX" ]; then
@@ -113,8 +122,9 @@ let
         fan=$(read_attr "$SYS/fan_mode")
         prof=$(powerprofilesctl get 2>/dev/null || true)
         gum style --bold --foreground "${c.base0D}" "  LG Power Control"
-        printf '  Ventilateur     %s (%s)\n  Profil          %s\n  Puissance max   %s\n  Wi-Fi           %s\n\n' \
-          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "$(profile_label "$prof")" "$(power_label)" "$(wifi_label)"
+        printf '  Ventilateur     %s (%s)\n  Profil          %s\n  Puissance max   %s\n  Processeur      %s\n  Wi-Fi           %s\n\n' \
+          "''${fan:-?}" "$(fan_label "''${fan:-x}")" "$(profile_label "$prof")" "$(power_label)" "$(cpu_label)" \
+          "$(wifi_label)"
         choice=$(gum choose "Ventilateur" "Profil d'alimentation" "Quitter") || break
         case "$choice" in
           "Ventilateur") choose_fan ;;
