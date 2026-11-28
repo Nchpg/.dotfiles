@@ -2,8 +2,8 @@
   "anthropic.claude-code": {
     "publisher": "anthropic",
     "name": "claude-code",
-    "version": "2.1.322",
-    "hash": "sha256-5y+nUr4ZNdkzOXwYvbqDrj1KZ+x2zeWoQuh+Wh1aHPQ=",
+    "version": "2.1.332",
+    "hash": "sha256-bOVAP7LU448KLQzmg+FYX3Ad2E2N0FDeVjEdm+xa2mE=",
     "arch": "linux-x64"
   },
   "ahgood.shift-shift": {
@@ -27,8 +27,8 @@
   "cweijan.vscode-postgresql-client2": {
     "publisher": "cweijan",
     "name": "vscode-postgresql-client2",
-    "version": "9.0.2",
-    "hash": "sha256-BmcVzL8DV3E+oZ/ciIwChbzT/1kdXkovZ60nii09jfw="
+    "version": "9.0.3",
+    "hash": "sha256-Nt6MOCwalgVgPAi9HUC/dINJD7kO+syaEVJUjN9sOkY="
   },
   "ms-vscode.cpptools-themes": {
     "publisher": "ms-vscode",

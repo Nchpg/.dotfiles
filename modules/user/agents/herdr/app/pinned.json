@@ -1,8 +1,8 @@
 {
-  "version": "0.1.15",
-  "url": "https://releases.herdr.dev/app/0.1.15/herdr-app-linux-x86_64.tar.gz",
-  "hash": "sha256-+Z4eBL6CwOELL2nudAPKNDhvSA2SUR31hlr0cD52Vd0=",
-  "core_version": "0.1.20",
-  "core_url": "https://releases.herdr.dev/core/0.1.20/herdr-core-linux-x86_64.tar.gz",
-  "core_hash": "sha256-rGuGiQxFGjdYRiCqpDi3G8DQvUMKLnwdfglfBSxBTnQ="
+  "version": "0.1.18",
+  "url": "https://releases.herdr.dev/app/0.1.18/herdr-app-linux-x86_64.tar.gz",
+  "hash": "sha256-ihHt153UCzSfcobPUZELYuIRNtr48DAFqf0sTcWDD4M=",
+  "core_version": "0.1.22",
+  "core_url": "https://releases.herdr.dev/core/0.1.22/herdr-core-linux-x86_64.tar.gz",
+  "core_hash": "sha256-MFTsOZLOgMVxXXIcqp3O+mBWch0V3BE/R1CvznY7pd8="
 }
