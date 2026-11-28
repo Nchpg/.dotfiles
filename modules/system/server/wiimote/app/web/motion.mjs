@@ -168,6 +168,41 @@ export function wheelMotion(s) {
   return [-Math.cos(t), 0, Math.sin(t), 0, 0, 0];
 }
 
+// Vibration au rythme du moteur d'une vraie Wiimote. Le jeu envoie souvent des rafales d'impulsions (20 ms toutes
+// les ~100 ms) que l'inertie de ce moteur fond en un ronronnement, alors que celui d'un téléphone les rend une à une.
+// À fond (`on` ms par période de 20 : le navigateur ne règle pas l'intensité) tant que le jeu la demande, jusqu'à
+// `offAt` (Infinity tant qu'elle dure) ; puis une traîne qui s'éteint avec la constante de temps `tau` (0 : coupure
+// nette). Motif de navigator.vibrate ([vibre, pause, …] en ms) à partir de `now`, sur une grille de 20 ms partant de
+// `grid` (gardée d'un appel à l'autre : le rythme ne casse pas), couvrant au moins `horizon` ms ; null quand plus
+// rien ne vibre.
+const RUMBLE_PERIOD = 20;
+export function rumbleTail(on, tau, offAt, now, grid, horizon) {
+  const level = (t) => (t < offAt ? 1 : tau > 0 ? Math.exp(-(t - offAt) / tau) : 0);
+  const first = Math.floor((now - grid) / RUMBLE_PERIOD);
+  const phase = Math.round(now - grid - first * RUMBLE_PERIOD);
+  const segments = [];
+  let any = false;
+  for (let k = first; (k - first) * RUMBLE_PERIOD - phase < horizon; k++) {
+    let ms = Math.min(RUMBLE_PERIOD, Math.round(on * level(grid + (k + 0.5) * RUMBLE_PERIOD)));
+    // Moins de 2 ms : le moteur ne démarre pas.
+    if (ms < 2) ms = 0;
+    any ||= ms > 0;
+    if (k === first) segments.push(...(phase < ms ? [ms - phase, RUMBLE_PERIOD - ms] : [0, RUMBLE_PERIOD - phase]));
+    else segments.push(ms, RUMBLE_PERIOD - ms);
+  }
+  if (!any) return null;
+  // Segments de même nature fusionnés : une pause de 0 ms entre deux vibrations relancerait le moteur pour rien.
+  const out = [];
+  segments.forEach((ms, i) => {
+    if (ms === 0) return;
+    const vibrate = i % 2 === 0;
+    if (out.length && out.length % 2 === 1 === vibrate) out[out.length - 1] += ms;
+    else if (!out.length && !vibrate) out.push(0, ms);
+    else out.push(ms);
+  });
+  return out;
+}
+
 // Volant au joystick : il remplace l'inclinaison, mais une secousse (figure en sortie de tremplin, wheelie) doit
 // passer. `shake` : accélération du téléphone hors gravité (g, repère DSU), ajoutée au-delà de SHAKE_MIN seulement,
 // pour que les petits à-coups d'une main qui tient le téléphone ne fassent pas bouger le volant.
