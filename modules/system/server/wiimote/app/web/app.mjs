@@ -1,5 +1,5 @@
 import { gameTags, layoutFor } from './layouts.mjs';
-import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, withShake, rumbleWave, toDSU, upFromOrientation } from './motion.mjs';
+import { G, gyroPointer, screenFrom, turnTo, dpadDirection, holdAngle, notOlder, oneEuro, stickDirections, tiltGain, toLocal, wheelMotion, wheelSteer, withShake, rumbleGrain, rumbleWave, toDSU, upFromOrientation } from './motion.mjs';
 
 // Bit de chaque bouton dans le message : même ordre que `buttons` dans dsu.go. Secouer se fait en secouant le
 // téléphone : l'accéléromètre part tel quel.
@@ -208,7 +208,8 @@ document.getElementById('vibrateRow').hidden = !('vibrate' in navigator);
 // RUMBLE_SLICE ms : même si le téléphone ignorait l'arrêt, une courte (15 à 50 ms dans le jeu) n'en déborderait pas
 // plus. Plus longue, elle est relancée toutes les RUMBLE_REFRESH ms pour RUMBLE_HORIZON ms, reprise à sa phase :
 // relancée à chaque tranche (25 fois par seconde), le moteur redémarrait sans cesse, à des instants inégaux, et une
-// vibration de plusieurs secondes se sentait hachée.
+// vibration de plusieurs secondes se sentait hachée. Elle passe aussi à un grain plus fin (rumbleGrain), à la même
+// force : le 10 ms sur 20 se sentait encore en on/off sur plusieurs secondes.
 const RUMBLE_SLICE = 40;
 const RUMBLE_REFRESH = 200;
 const RUMBLE_HORIZON = 300;
@@ -241,7 +242,8 @@ function rumble(level, ms = 0) {
       rumbleStart = performance.now();
       navigator.vibrate(pattern);
       const next = () => {
-        navigator.vibrate(rumbleWave(settings.rumble, performance.now() - rumbleStart, RUMBLE_HORIZON));
+        const on = settings.rumble;
+        navigator.vibrate(rumbleWave(on, performance.now() - rumbleStart, RUMBLE_HORIZON, rumbleGrain(on)));
         rumbling = setTimeout(next, RUMBLE_REFRESH);
       };
       rumbling = setTimeout(next, RUMBLE_SLICE);
