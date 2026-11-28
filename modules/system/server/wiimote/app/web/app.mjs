@@ -149,21 +149,19 @@ document.getElementById('pad').addEventListener('click', () => {
 // Volant tenu : position du joystick (−1 à 1), qui remplace l'inclinaison ; null : l'inclinaison reprend.
 let steer = null;
 // Accélération automatique (de côté) : 2 reste enfoncé sans le pouce, libre pour B (l'objet, en dérapage
-// automatique). Allumée au bouton verrou après le départ : avant le « GO », accélérer fait caler, et dans les menus
-// un 2 toujours tenu validerait sans fin. Seul un nouvel appui sur 2 ou 1 l'éteint, avec la fin de la course, le
-// passage à la verticale et la page quittée : lever tous les doigts ou changer croix/joystick le garde.
+// automatique). En course seulement (layouts.mjs : dans les menus, un 2 toujours tenu validerait sans fin) : 2
+// appuyé, un cadenas apparaît à sa droite, et y glisser le doigt verrouille 2, qui reste enfoncé une fois lâché.
+// Seul un nouvel appui sur 2 ou 1 l'éteint, avec la fin de la course, le passage à la verticale et la page quittée :
+// lever tous les doigts ou changer croix/joystick le garde.
 let cruise = false;
-const cruiseButton = document.getElementById('cruise');
 const twoButton = document.querySelector('[data-btn="2"]');
+// Glissé qui verrouille : vers la droite de la manette, de plus de la moitié de la largeur de 2.
+const CRUISE_SLIDE = 0.5;
 const CRUISE_STOP = (1 << BIT[2]) | (1 << BIT[1]);
 // En course, on tient 1 ou 2 : le joystick braque. Sinon (menus), il fait la croix, comme les flèches.
 const RACING = (1 << BIT[1]) | (1 << BIT[2]);
 // Boutons tenus par les doigts seuls, au dernier passage : un nouvel appui éteint l'accélération automatique.
 let fingers = 0;
-cruiseButton.addEventListener('click', () => {
-  cruise = !cruise;
-  refreshButtons();
-});
 
 // Disposition du jeu en cours (layouts.mjs), appliquée quand aucun doigt ne touche l'écran : un bouton ne se déplace
 // pas sous le pouce. Le verrou, lui, lâche 2 dès la fin de la course, pour ne pas valider sans fin les menus.
@@ -562,6 +560,8 @@ function refreshButtons() {
   const thumbs = [];
   const itemFingers = [];
   let back = false;
+  let slidToLock = false;
+  let twoHeld = false;
   for (const [id, finger] of pointers) {
     if (stickPointers.has(id)) {
       thumbs.push([id, finger]);
@@ -588,15 +588,28 @@ function refreshButtons() {
     } else if (finger.on) {
       pressed.add(finger.on);
       next |= 1 << BIT[finger.on.dataset.btn];
+      if (finger.on === twoButton) {
+        twoHeld = true;
+        // Une fois par doigt : glissé vers le cadenas.
+        finger.start ??= { x, y };
+        const [lx] = toLocal(x - finger.start.x, y - finger.start.y, rotation);
+        if (!finger.slid && lx > twoButton.offsetWidth * CRUISE_SLIDE) {
+          finger.slid = true;
+          slidToLock = true;
+        }
+      }
     }
   }
   if (cruise && next & ~fingers & CRUISE_STOP) cruise = false;
+  if (slidToLock && gameLayout.verrou && mode === 'sideways') cruise = true;
   fingers = next;
   if (cruise) {
     next |= 1 << BIT[2];
     pressed.add(twoButton);
   }
-  cruiseButton.classList.toggle('on', cruise);
+  document.body.classList.toggle('cruise', cruise);
+  // Le cadenas à droite de 2 seulement sous le doigt : verrouillé et lâché, les réglages restent accessibles.
+  document.body.classList.toggle('lock-shown', Boolean(gameLayout.verrou) && mode === 'sideways' && twoHeld);
   const racing = (next & RACING) !== 0;
   for (const [id, { x, y }] of thumbs) {
     const box = joystick.getBoundingClientRect();
